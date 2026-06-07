@@ -1,0 +1,140 @@
+# .goreleaser.yml - Release automation configuration
+# See: https://goreleaser.com/customization/
+
+version: 2
+
+project_name: llms
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - id: llms-cli
+    main: ./cmd
+    binary: llms-cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/nocturnium/llm-go-sdk.Version={{.Version}}
+      - -X github.com/nocturnium/llm-go-sdk.Commit={{.Commit}}
+      - -X github.com/nocturnium/llm-go-sdk.Date={{.Date}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+
+archives:
+  - id: llms-cli
+    ids:
+      - llms-cli
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}-cli_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE*
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: '🚀 Features'
+      regexp: '^.*?feat(\([^)]+\))?\!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\([^)]+\))?\!?:.+$'
+      order: 1
+    - title: '📚 Documentation'
+      regexp: '^.*?docs(\([^)]+\))?\!?:.+$'
+      order: 2
+    - title: '🔧 Other Changes'
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: nocturnium
+    name: llm-go-sdk
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## LLMs Go SDK {{ .Tag }}
+
+    A lightweight, production-ready Go library providing a unified interface for multiple LLM providers.
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/{{ .Env.GITHUB_REPOSITORY }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ### Installation
+
+    ```bash
+    go get github.com/nocturnium/llm-go-sdk@{{ .Tag }}
+    ```
+
+announce:
+  skip: true
+
+sboms:
+  - artifacts: archive
+    documents:
+      - '${artifact}.sbom.json'
+
+# Signing (optional - requires cosign setup)
+# Uncomment when cosign is configured
+# signs:
+#   - cmd: cosign
+#     args:
+#       - sign-blob
+#       - '--output-signature=${signature}'
+#       - '${artifact}'
+#       - '--yes'
+#     artifacts: checksum
+#     output: true
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+# Source archive
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Version }}-source'
+
+# Universal binaries for macOS
+universal_binaries:
+  - id: llms-cli
+    replace: true
+    name_template: 'llms-cli'

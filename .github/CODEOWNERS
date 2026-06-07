@@ -1,0 +1,24 @@
+# CODEOWNERS file for llm-go-sdk
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything
+* @jdziat
+
+# CI/CD configuration
+/.github/ @jdziat
+.golangci.yml @jdziat
+.goreleaser.yml @jdziat
+Makefile @jdziat
+
+# Core library
+/*.go @jdziat
+
+# Provider implementations
+/providers/ @jdziat
+
+# Internal packages
+/internal/ @jdziat
+
+# Documentation
+/docs/ @jdziat
+README.md @jdziat

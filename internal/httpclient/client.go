@@ -1,0 +1,609 @@
+// Package httpclient provides HTTP utilities for LLM API calls.
+//
+// This package includes:
+//   - An HTTP client with configurable retry logic and exponential backoff
+//   - Server-Sent Events (SSE) parser for streaming responses
+//   - JSON request/response helpers
+//
+// Retries are OFF by default: a client created with NewClient does not retry.
+// Retry behavior is opt-in via WithRetryPolicy. This keeps the HTTP layer from
+// silently multiplying upstream calls when a resilience wrapper
+// (llms.NewResilientClient) is layered on top — that wrapper is the single retry
+// authority. When WithRetryPolicy is set, transient failures (429, 5xx) are
+// retried with exponential backoff. Streaming requests are never retried to
+// avoid duplicate content.
+package httpclient
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// maxErrorResponseSize is the maximum size of error response body to read.
+// This prevents memory exhaustion from malicious or misconfigured servers.
+const maxErrorResponseSize = 1 * 1024 * 1024 // 1MB
+
+// maxRedirects bounds the number of redirect hops the client will follow.
+// Each hop is re-validated against the same SSRF policy as the initial request.
+const maxRedirects = 10
+
+// Client is an HTTP client with retry support.
+type Client struct {
+	httpClient  *http.Client
+	retryPolicy *RetryPolicy
+
+	// SSRF validation policy. Both default to false (secure): requests to
+	// private/loopback IPs and plain HTTP are rejected unless explicitly allowed.
+	allowPrivateIPs bool
+	allowHTTP       bool
+}
+
+// ClientOption configures the client.
+type ClientOption func(*Client)
+
+// NewClient creates a new HTTP client with the given options.
+// Default timeout is 5 minutes, which can be overridden with WithTimeout or
+// the LLM_HTTP_TIMEOUT environment variable (e.g., "10m", "300s").
+//
+// Retries are disabled by default (NoRetryPolicy). Callers that want retries
+// should either wrap the provider with llms.NewResilientClient (the recommended
+// single retry authority) or opt in at the HTTP layer with WithRetryPolicy.
+func NewClient(opts ...ClientOption) *Client {
+	// Default timeout, can be overridden by LLM_HTTP_TIMEOUT env var
+	timeout := 5 * time.Minute
+	if envTimeout := getEnvTimeout("LLM_HTTP_TIMEOUT"); envTimeout > 0 {
+		timeout = envTimeout
+	}
+
+	c := &Client{
+		httpClient: &http.Client{
+			Timeout: timeout,
+		},
+		retryPolicy: NoRetryPolicy(),
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	// Install a redirect policy that re-validates every hop against the same
+	// SSRF rules as the initial request. This runs even when the caller
+	// supplied their own *http.Client via WithHTTPClient, so validation cannot
+	// be bypassed by a redirect to a private IP (e.g. 169.254.169.254).
+	c.installRedirectPolicy()
+
+	return c
+}
+
+// installRedirectPolicy wraps the underlying *http.Client.CheckRedirect so that
+// each redirect hop's URL is re-validated with the client's SSRF options. It
+// preserves the caller's Timeout/Transport and bounds redirects to maxRedirects.
+func (c *Client) installRedirectPolicy() {
+	if c.httpClient == nil {
+		c.httpClient = &http.Client{}
+	}
+	c.httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+		}
+		if err := c.validateURL(req.URL.String()); err != nil {
+			return fmt.Errorf("redirect blocked: %w", err)
+		}
+		return nil
+	}
+}
+
+// validationOptions builds the URL validation policy from the client's flags.
+// It starts from the secure defaults and relaxes only the requested aspects,
+// keeping AllowCustomPorts=true so ports like :11434 work and AllowedHosts nil
+// (any non-private host is permitted).
+func (c *Client) validationOptions() *URLValidationOptions {
+	opts := DefaultURLValidationOptions()
+	opts.AllowPrivateIPs = c.allowPrivateIPs
+	opts.AllowHTTP = c.allowHTTP
+	return opts
+}
+
+// validateURL checks a single URL against the client's SSRF policy.
+func (c *Client) validateURL(rawURL string) error {
+	return ValidateURL(rawURL, c.validationOptions())
+}
+
+// getEnvTimeout reads a duration from an environment variable.
+func getEnvTimeout(key string) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if d, err := time.ParseDuration(value); err == nil {
+			return d
+		}
+	}
+	return 0
+}
+
+// debugEnabled returns true if LLM_DEBUG_REQUESTS environment variable is set.
+// Set LLM_DEBUG_REQUESTS=1 to enable detailed request/response logging.
+func debugEnabled() bool {
+	return os.Getenv("LLM_DEBUG_REQUESTS") != ""
+}
+
+// WithTimeout sets the HTTP client timeout.
+func WithTimeout(timeout time.Duration) ClientOption {
+	return func(c *Client) {
+		c.httpClient.Timeout = timeout
+	}
+}
+
+// WithRetryPolicy sets a custom retry policy, opting this client into HTTP-layer
+// retries. Retries are off by default (see NewClient); pass DefaultRetryPolicy()
+// to enable standard 429/5xx exponential backoff. Prefer wrapping the provider
+// with llms.NewResilientClient instead, so retries have a single authority.
+func WithRetryPolicy(policy *RetryPolicy) ClientOption {
+	return func(c *Client) {
+		c.retryPolicy = policy
+	}
+}
+
+// WithHTTPClient sets a custom HTTP client.
+//
+// The client's redirect policy is still wrapped after options are applied so
+// SSRF validation runs on every redirect hop; the supplied client's Timeout and
+// Transport are preserved.
+func WithHTTPClient(client *http.Client) ClientOption {
+	return func(c *Client) {
+		c.httpClient = client
+	}
+}
+
+// WithAllowPrivateIPs allows (true) or rejects (false) requests to
+// private/loopback/link-local IP addresses and internal hostnames. Default is
+// false (secure) to guard against SSRF.
+func WithAllowPrivateIPs(allow bool) ClientOption {
+	return func(c *Client) {
+		c.allowPrivateIPs = allow
+	}
+}
+
+// WithAllowHTTP allows (true) or rejects (false) plain-HTTP (non-HTTPS) URLs.
+// Default is false (secure); required for self-hosted/local endpoints.
+func WithAllowHTTP(allow bool) ClientOption {
+	return func(c *Client) {
+		c.allowHTTP = allow
+	}
+}
+
+// Request represents an HTTP request configuration.
+type Request struct {
+	Method  string
+	URL     string
+	Headers map[string]string
+	Body    any
+}
+
+// DoJSON performs an HTTP request with JSON body and unmarshals the response.
+func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
+	var bodyBytes []byte
+	var err error
+
+	if req.Body != nil {
+		bodyBytes, err = json.Marshal(req.Body)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request body: %w", err)
+		}
+	}
+
+	// Debug logging when LLM_DEBUG_REQUESTS is set
+	if debugEnabled() {
+		fmt.Printf("[DEBUG] LLM Request URL: %s %s\n", req.Method, req.URL)
+		if len(bodyBytes) > 0 {
+			// Pretty print the JSON for readability (truncate if too large)
+			var prettyJSON bytes.Buffer
+			if err := json.Indent(&prettyJSON, bodyBytes, "", "  "); err == nil {
+				body := prettyJSON.String()
+				if len(body) > 5000 {
+					body = body[:5000] + "...[truncated]"
+				}
+				fmt.Printf("[DEBUG] LLM Request Body:\n%s\n", body)
+			}
+		}
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set GetBody to enable retries - the body bytes are captured in the closure
+	if len(bodyBytes) > 0 {
+		httpReq.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+		}
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	for k, v := range req.Headers {
+		httpReq.Header.Set(k, v)
+	}
+
+	resp, err := c.doWithRetry(ctx, httpReq)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		return c.handleErrorResponse(resp)
+	}
+
+	if response != nil {
+		if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DoRaw performs an HTTP request with an optional JSON body and returns the raw
+// response body. It uses the same retry, timeout, and error handling path as
+// DoJSON.
+func (c *Client) DoRaw(ctx context.Context, req Request) ([]byte, error) {
+	var bodyBytes []byte
+	var err error
+
+	if req.Body != nil {
+		bodyBytes, err = json.Marshal(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if len(bodyBytes) > 0 {
+		httpReq.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+		}
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	for k, v := range req.Headers {
+		httpReq.Header.Set(k, v)
+	}
+
+	resp, err := c.doWithRetry(ctx, httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		return nil, c.handleErrorResponse(resp)
+	}
+
+	return io.ReadAll(resp.Body)
+}
+
+// DoStream performs an HTTP request and returns the response body for streaming.
+// The caller is responsible for closing the response body.
+func (c *Client) DoStream(ctx context.Context, req Request) (io.ReadCloser, error) {
+	var bodyReader io.Reader
+	if req.Body != nil {
+		bodyBytes, err := json.Marshal(req.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	for k, v := range req.Headers {
+		httpReq.Header.Set(k, v)
+	}
+
+	// SSRF guard: validate the destination before issuing the request.
+	if err := c.validateURL(httpReq.URL.String()); err != nil {
+		return nil, fmt.Errorf("URL validation failed: %w", err)
+	}
+
+	// For streaming, we don't retry on non-error responses
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		defer func() { _ = resp.Body.Close() }()
+		return nil, c.handleErrorResponse(resp)
+	}
+
+	return resp.Body, nil
+}
+
+func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
+	// SSRF guard: validate the destination before issuing the request. This is
+	// the central choke point for DoJSON and DoRaw; DoStream validates inline.
+	if err := c.validateURL(req.URL.String()); err != nil {
+		return nil, fmt.Errorf("URL validation failed: %w", err)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= c.retryPolicy.MaxRetries; attempt++ {
+		// Check context before each attempt to fail fast
+		select {
+		case <-ctx.Done():
+			if lastErr != nil {
+				return nil, fmt.Errorf("context canceled after %d attempts: %w (last error: %w)", attempt, ctx.Err(), lastErr)
+			}
+			return nil, ctx.Err()
+		default:
+		}
+
+		if attempt > 0 {
+			delay := c.retryPolicy.GetDelay(attempt)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		attemptReq := req.Clone(ctx)
+		if req.Body != nil {
+			if req.GetBody == nil {
+				if attempt > 0 {
+					return nil, fmt.Errorf("cannot retry request with body that cannot be re-read")
+				}
+				attemptReq.Body = req.Body
+			} else {
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, fmt.Errorf("failed to get request body for attempt %d: %w", attempt+1, err)
+				}
+				attemptReq.Body = body
+			}
+		}
+
+		resp, err := c.httpClient.Do(attemptReq)
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			lastErr = err
+			if !IsRetryable(0, err) {
+				return nil, fmt.Errorf("request failed: %w", err)
+			}
+			continue
+		}
+
+		// Check if we should retry based on status code
+		if IsRetryable(resp.StatusCode, nil) && c.retryPolicy.ShouldRetry(resp.StatusCode) {
+			if req.Body != nil && req.GetBody == nil {
+				return resp, nil
+			}
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("received retryable status code: %d", resp.StatusCode)
+			continue
+		}
+
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("request failed after %d retries: %w", c.retryPolicy.MaxRetries, lastErr)
+}
+
+// IsRetryable returns true when a status code or error represents a transient
+// HTTP failure. Context cancellation and deadline errors are never retryable.
+func IsRetryable(statusCode int, err error) bool {
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return false
+		}
+		return true
+	}
+
+	switch statusCode {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError,
+		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+func (c *Client) handleErrorResponse(resp *http.Response) error {
+	// Extract request context for debugging (if available)
+	var reqURL, reqMethod string
+	if resp.Request != nil {
+		reqMethod = resp.Request.Method
+		if resp.Request.URL != nil {
+			reqURL = resp.Request.URL.String()
+		}
+	}
+
+	// Check Content-Length if present to fail fast on oversized responses
+	if resp.ContentLength > maxErrorResponseSize {
+		return &APIError{
+			StatusCode:    resp.StatusCode,
+			Message:       fmt.Sprintf("error response too large: %d bytes exceeds limit of %d bytes", resp.ContentLength, maxErrorResponseSize),
+			RequestURL:    reqURL,
+			RequestMethod: reqMethod,
+		}
+	}
+
+	// Use LimitReader to prevent unbounded memory allocation from malicious servers
+	limitedReader := io.LimitReader(resp.Body, maxErrorResponseSize+1)
+	body, readErr := io.ReadAll(limitedReader)
+	if readErr != nil {
+		return &APIError{
+			StatusCode:    resp.StatusCode,
+			Message:       fmt.Sprintf("failed to read error response: %v", readErr),
+			RequestURL:    reqURL,
+			RequestMethod: reqMethod,
+		}
+	}
+
+	// Debug logging for error responses
+	if debugEnabled() {
+		fmt.Printf("[DEBUG] LLM Error Response (status %d) from %s %s:\n%s\n", resp.StatusCode, reqMethod, reqURL, string(body))
+	}
+
+	// Check if we hit the limit (response was truncated)
+	if len(body) > maxErrorResponseSize {
+		return &APIError{
+			StatusCode:    resp.StatusCode,
+			Message:       fmt.Sprintf("error response truncated: exceeded maximum size of %d bytes", maxErrorResponseSize),
+			RequestURL:    reqURL,
+			RequestMethod: reqMethod,
+		}
+	}
+
+	// Extract request ID from headers if present
+	requestID := resp.Header.Get("X-Request-Id")
+	if requestID == "" {
+		requestID = resp.Header.Get("Request-Id")
+	}
+
+	// Extract retry-after header for rate limiting
+	var retryAfter time.Duration
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if seconds, err := strconv.Atoi(ra); err == nil {
+			retryAfter = time.Duration(seconds) * time.Second
+		}
+	}
+
+	// Try to parse as JSON error
+	var errResp struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    string `json:"code"`
+			Param   string `json:"param"`
+		} `json:"error"`
+		// Anthropic format
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	}
+
+	if err := json.Unmarshal(body, &errResp); err == nil {
+		if errResp.Error.Message != "" {
+			return &APIError{
+				StatusCode:    resp.StatusCode,
+				Message:       errResp.Error.Message,
+				Type:          errResp.Error.Type,
+				Code:          errResp.Error.Code,
+				Param:         errResp.Error.Param,
+				RequestID:     requestID,
+				RetryAfter:    retryAfter,
+				RequestURL:    reqURL,
+				RequestMethod: reqMethod,
+			}
+		}
+		if errResp.Message != "" {
+			return &APIError{
+				StatusCode:    resp.StatusCode,
+				Message:       errResp.Message,
+				Type:          errResp.Type,
+				RequestID:     requestID,
+				RetryAfter:    retryAfter,
+				RequestURL:    reqURL,
+				RequestMethod: reqMethod,
+			}
+		}
+	}
+
+	return &APIError{
+		StatusCode:    resp.StatusCode,
+		Message:       string(body),
+		RequestID:     requestID,
+		RetryAfter:    retryAfter,
+		RequestURL:    reqURL,
+		RequestMethod: reqMethod,
+	}
+}
+
+// APIError represents an error from the LLM API with full request context
+// for debugging and troubleshooting.
+type APIError struct {
+	StatusCode int
+	Message    string
+	Type       string
+	Code       string
+	Param      string        // The parameter that caused the error
+	RequestID  string        // Request ID for debugging
+	RetryAfter time.Duration // Suggested retry delay for rate limiting
+
+	// Request context for debugging
+	RequestURL    string // The URL that was called
+	RequestMethod string // The HTTP method used
+}
+
+// Error implements the error interface.
+func (e *APIError) Error() string {
+	var sb strings.Builder
+	sb.WriteString("API error")
+
+	// Add status code
+	sb.WriteString(fmt.Sprintf(" (status %d", e.StatusCode))
+
+	// Add type and code if present
+	if e.Type != "" {
+		sb.WriteString(", type ")
+		sb.WriteString(e.Type)
+	}
+	if e.Code != "" {
+		sb.WriteString(", code ")
+		sb.WriteString(e.Code)
+	}
+
+	sb.WriteString("): ")
+	sb.WriteString(e.Message)
+
+	// Add request context if available
+	if e.RequestMethod != "" || e.RequestURL != "" {
+		sb.WriteString(" [")
+		if e.RequestMethod != "" {
+			sb.WriteString(e.RequestMethod)
+			sb.WriteString(" ")
+		}
+		if e.RequestURL != "" {
+			sb.WriteString(e.RequestURL)
+		}
+		sb.WriteString("]")
+	}
+
+	// Add request ID if available
+	if e.RequestID != "" {
+		sb.WriteString(" (request_id: ")
+		sb.WriteString(e.RequestID)
+		sb.WriteString(")")
+	}
+
+	return sb.String()
+}
+
+// IsRetryable returns true if the error is likely transient and can be retried.
+func (e *APIError) IsRetryable() bool {
+	switch e.StatusCode {
+	case 429, 500, 502, 503, 504:
+		return true
+	}
+	return false
+}

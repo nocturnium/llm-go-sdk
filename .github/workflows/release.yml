@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+env:
+  GO_VERSION: '1.25'
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verify tag format
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Invalid tag format: $TAG"
+            echo "Expected format: vX.Y.Z or vX.Y.Z-prerelease"
+            exit 1
+          fi
+          echo "Releasing version: ${TAG}"
+
+      - name: Run tests
+        run: go test -race ./...
+
+      # GoReleaser's SBOM step shells out to `syft`, which is not preinstalled
+      # on the runner. Install it so `sboms:` in .goreleaser.yml can run.
+      - name: Install Syft (SBOM generation)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*
+          retention-days: 30
+
+  # Verify the release artifacts
+  verify:
+    name: Verify Release
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+
+      - name: Verify checksums
+        run: |
+          cd dist
+          if [ -f checksums.txt ]; then
+            sha256sum -c checksums.txt
+          fi
+
+  # Generate and publish changelog
+  changelog:
+    name: Changelog
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit changelog
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update CHANGELOG.md for ${{ github.ref_name }}"
+          file_pattern: CHANGELOG.md
+          branch: main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Announce release (optional)
+  announce:
+    name: Announce
+    runs-on: ubuntu-latest
+    needs: [release, verify]
+    if: success() && !contains(github.ref, '-')
+    steps:
+      - name: Announce release
+        run: |
+          echo "Release ${{ github.ref_name }} completed successfully!"
+          echo "View at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

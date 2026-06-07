@@ -1,0 +1,188 @@
+# .golangci.yml - Linter configuration for llm-go-sdk
+# See: https://golangci-lint.run/usage/configuration/
+# Schema: golangci-lint v2 (validate with `golangci-lint config verify`).
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/nocturnium/llm-go-sdk
+
+linters:
+  enable:
+    # Default linters
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Additional linters
+    - bodyclose
+    - copyloopvar
+    - dupl
+    - durationcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - forcetypeassert
+    - gocognit
+    - goconst
+    - gocyclo
+    - goprintffuncname
+    - gosec
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - noctx
+    - nolintlint
+    - predeclared
+    - revive
+    - unconvert
+    - unparam
+    - wastedassign
+  disable:
+    - exhaustruct      # Too strict for most codebases
+    - funlen           # Function length checks
+    - gochecknoglobals # Globals are sometimes necessary
+    - gochecknoinits   # Init functions are sometimes necessary
+    - godox            # TODO/FIXME comments
+    - err113           # Error wrapping (too strict)
+    - ireturn          # Interface returns
+    - lll              # Line length
+    - nlreturn         # Blank line before return
+    - nonamedreturns   # Named returns
+    - paralleltest     # Parallel tests (not always needed)
+    - tagliatelle      # Struct tag casing
+    - varnamelen       # Variable name length
+    - wrapcheck        # Error wrapping (too strict)
+    - mnd              # Magic number detector
+    - gocritic         # Style suggestions (too opinionated)
+    - prealloc         # Pre-allocation suggestions (often not applicable)
+    - godot            # Comment punctuation (too strict)
+  settings:
+    dupl:
+      threshold: 150
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocognit:
+      min-complexity: 80
+    goconst:
+      min-len: 3
+      min-occurrences: 4
+    gocyclo:
+      min-complexity: 35
+    gosec:
+      excludes:
+        - G101  # Hardcoded credentials (false positives on metric/env-var name constants)
+        - G104  # Unhandled errors (covered by errcheck)
+        - G304  # File path as taint input (acceptable in the CLI)
+        - G602  # Slice index out of range (false positives; indices are length-guarded)
+    misspell:
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    nestif:
+      min-complexity: 15
+    revive:
+      # Note: the `exported` rule is intentionally omitted. With the package
+      # re-export / alias layout (pkg/types, pkg/errors, pkg/providers shims),
+      # its comment-form and stutter checks produce noise without value;
+      # exported-symbol documentation is enforced by review instead.
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    generated: lax
+    rules:
+      # Test files have relaxed rules
+      - path: '_test\.go'
+        linters:
+          - dupl
+          - goconst
+          - errcheck
+          - forcetypeassert
+          - gosec
+          - noctx
+          - gocognit
+          - nestif
+          - gocyclo
+      # CMD files have relaxed complexity rules
+      - path: 'cmd/'
+        linters:
+          - gocognit
+          - gocyclo
+      # Internal packages: some duplication and complex stream processing
+      - path: 'internal/'
+        linters:
+          - dupl
+          - gocognit
+          - nestif
+          - gocyclo
+          - goconst
+      # Provider implementations share structure and stream processing
+      - path: 'providers/'
+        linters:
+          - dupl
+          - gocognit
+          - nestif
+          - gocyclo
+          - goconst
+      # Examples favour clarity over lint strictness
+      - path: 'examples/'
+        linters:
+          - gosec
+          - goconst
+          - gocognit
+          - nestif
+      # Package doc.go files contain illustrative example snippets
+      - path: 'doc\.go'
+        linters:
+          - revive
+      # ValidationErrors is a deliberate plural collection-of-errors type
+      - linters:
+          - errname
+        text: 'ValidationErrors'
+      # Alias packages use deliberate names (errors, types) that mirror the
+      # root package surface; revive's package-name heuristics don't apply here.
+      - linters:
+          - revive
+        text: 'package names'
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 10

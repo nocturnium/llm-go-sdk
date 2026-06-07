@@ -1,0 +1,226 @@
+package httpclient
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"net/url"
+	"strings"
+)
+
+const (
+	schemeHTTP = "http"
+)
+
+// DefaultAllowedHosts contains the default list of allowed API hosts.
+var DefaultAllowedHosts = []string{
+	"api.openai.com",
+	"api.anthropic.com",
+	"generativelanguage.googleapis.com",
+	"api.together.xyz",
+	"api.featherless.ai",
+}
+
+// URLValidationOptions configures URL validation behavior
+type URLValidationOptions struct {
+	// AllowedHosts is a list of allowed hostnames (empty allows all non-private)
+	AllowedHosts []string
+
+	// AllowPrivateIPs allows requests to private/internal IP addresses
+	AllowPrivateIPs bool
+
+	// AllowHTTP allows non-HTTPS URLs (not recommended)
+	AllowHTTP bool
+
+	// AllowCustomPorts allows non-standard ports (not 443 for HTTPS, 80 for HTTP)
+	AllowCustomPorts bool
+}
+
+// DefaultURLValidationOptions returns secure default validation options
+func DefaultURLValidationOptions() *URLValidationOptions {
+	return &URLValidationOptions{
+		AllowedHosts:     nil, // Allow any non-private host by default
+		AllowPrivateIPs:  false,
+		AllowHTTP:        false,
+		AllowCustomPorts: true, // Allow custom ports for testing
+	}
+}
+
+// StrictURLValidationOptions returns strict validation options with only known API hosts
+func StrictURLValidationOptions() *URLValidationOptions {
+	return &URLValidationOptions{
+		AllowedHosts:     DefaultAllowedHosts,
+		AllowPrivateIPs:  false,
+		AllowHTTP:        false,
+		AllowCustomPorts: false,
+	}
+}
+
+// ValidateURL checks if a URL is safe to use for API requests.
+// It returns an error if the URL is invalid, uses an unsafe scheme,
+// or points to a private/internal address.
+func ValidateURL(rawURL string, opts *URLValidationOptions) error {
+	if opts == nil {
+		opts = DefaultURLValidationOptions()
+	}
+
+	if rawURL == "" {
+		return errors.New("URL cannot be empty")
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Check scheme
+	if u.Scheme == "" {
+		return errors.New("URL must have a scheme (https://)")
+	}
+
+	if u.Scheme != "https" {
+		if u.Scheme == schemeHTTP && !opts.AllowHTTP {
+			return errors.New("URL must use HTTPS (HTTP not allowed)")
+		}
+		if u.Scheme != schemeHTTP {
+			return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+		}
+	}
+
+	// Check host
+	host := u.Hostname()
+	if host == "" {
+		return errors.New("URL must have a host")
+	}
+
+	// Check port
+	if !opts.AllowCustomPorts {
+		port := u.Port()
+		if port != "" {
+			expectedPort := "443"
+			if u.Scheme == "http" {
+				expectedPort = "80"
+			}
+			if port != expectedPort {
+				return fmt.Errorf("custom ports not allowed (port %s)", port)
+			}
+		}
+	}
+
+	// Check against allowed hosts if specified
+	if len(opts.AllowedHosts) > 0 {
+		allowed := false
+		for _, allowedHost := range opts.AllowedHosts {
+			if strings.EqualFold(host, allowedHost) {
+				allowed = true
+				break
+			}
+			// Allow subdomains of allowed hosts
+			if strings.HasSuffix(strings.ToLower(host), "."+strings.ToLower(allowedHost)) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return fmt.Errorf("host %q not in allowed list", host)
+		}
+	}
+
+	// Check for private/internal IPs
+	if !opts.AllowPrivateIPs {
+		if err := validateNotPrivateHost(host); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateNotPrivateHost checks if a host resolves to a private or internal IP
+func validateNotPrivateHost(host string) error {
+	// Check if it's a direct IP address
+	if ip := net.ParseIP(host); ip != nil {
+		return validateNotPrivateIP(ip)
+	}
+
+	// Check for localhost variations
+	lowerHost := strings.ToLower(host)
+	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
+		return errors.New("localhost not allowed")
+	}
+
+	// Check for common internal hostnames
+	if strings.HasSuffix(lowerHost, ".local") ||
+		strings.HasSuffix(lowerHost, ".internal") ||
+		strings.HasSuffix(lowerHost, ".localdomain") {
+		return fmt.Errorf("internal hostname not allowed: %s", host)
+	}
+
+	// Note: We don't resolve DNS here to check the IP because:
+	// 1. It adds latency to every request
+	// 2. DNS can change between validation and request (TOCTOU)
+	// 3. The HTTP client should be configured to not follow redirects to private IPs
+
+	return nil
+}
+
+// validateNotPrivateIP checks if an IP is private, loopback, or otherwise internal
+func validateNotPrivateIP(ip net.IP) error {
+	if ip == nil {
+		return errors.New("invalid IP address")
+	}
+
+	if ip.IsLoopback() {
+		return errors.New("loopback addresses not allowed")
+	}
+
+	if ip.IsPrivate() {
+		return errors.New("private IP addresses not allowed")
+	}
+
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return errors.New("link-local addresses not allowed")
+	}
+
+	if ip.IsUnspecified() {
+		return errors.New("unspecified addresses not allowed")
+	}
+
+	// Check for IPv6-mapped IPv4 addresses that are private
+	if ip4 := ip.To4(); ip4 != nil {
+		if ip4.IsLoopback() || ip4.IsPrivate() {
+			return errors.New("private/loopback IPv4 addresses not allowed")
+		}
+	}
+
+	// Check for common internal IP ranges not covered by IsPrivate
+	// 100.64.0.0/10 (Carrier-grade NAT)
+	cgnat := net.IPNet{
+		IP:   net.ParseIP("100.64.0.0"),
+		Mask: net.CIDRMask(10, 32),
+	}
+	if cgnat.Contains(ip) {
+		return errors.New("carrier-grade NAT addresses not allowed")
+	}
+
+	return nil
+}
+
+// SanitizeModelName removes potentially dangerous characters from model names
+// that could be used in URL path traversal attacks
+func SanitizeModelName(model string) string {
+	// Remove path traversal sequences
+	model = strings.ReplaceAll(model, "..", "")
+	model = strings.ReplaceAll(model, "/", "-")
+	model = strings.ReplaceAll(model, "\\", "-")
+
+	// Remove null bytes and other control characters
+	var sanitized strings.Builder
+	for _, r := range model {
+		if r >= 32 && r != 127 { // Printable ASCII and valid UTF-8
+			sanitized.WriteRune(r)
+		}
+	}
+
+	return sanitized.String()
+}
