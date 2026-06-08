@@ -38,6 +38,10 @@ type stdioTransport struct {
 // The provided context governs the subprocess lifetime: canceling it kills the
 // process. A nil env inherits the current environment.
 func newStdioTransport(ctx context.Context, command string, args, env []string, dir string) (*stdioTransport, error) {
+	// The command is the MCP server the application developer chose to launch (the
+	// whole point of a stdio MCP client), not untrusted input — analogous to a
+	// configured binary path. Launching it from a variable is by design.
+	// #nosec G204 -- caller-specified MCP server command, not untrusted input
 	cmd := exec.CommandContext(ctx, command, args...)
 	if env != nil {
 		cmd.Env = env
