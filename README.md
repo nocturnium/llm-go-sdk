@@ -21,10 +21,12 @@ Ollama server by changing a single import and constructor — everything else
 - **Streaming** — real-time token streaming over channels
 - **Tool / function calling** — consistent tool-calling API across providers, plus an
   automatic `RunTools` agent loop
+- **MCP client** — connect to Model Context Protocol servers (`pkg/mcp`) and use their tools
+- **Reasoning** — cross-provider thinking controls (`WithReasoningEffort`, `WithReasoningBudget`)
 - **Structured outputs** — typed JSON via JSON Schema (`GenerateTyped[T]`, `WithJSONSchema`)
 - **Vision** — multi-modal image input (PNG, JPEG, GIF, WebP)
 - **Embeddings & reranking** — for semantic search and RAG
-- **Prompt caching** — Anthropic `cache_control` support with cache-token accounting
+- **Prompt caching** — cross-provider caching (`WithCache`) with discounted cache-token cost accounting
 - **Web search** — native provider search plus external Brave / Tavily backends
 - **Cost tracking** — token usage and cost estimation with built-in pricing
 - **Resilience** — circuit breaker, retries with backoff, rate limiting, fallback chains
@@ -252,6 +254,9 @@ See [examples/](./examples/) for runnable programs:
 - **basic** — simple chat completion
 - **streaming** — real-time streaming responses
 - **tools** — function / tool calling
+- **reasoning** — reasoning / "thinking" models
+- **caching** — cross-provider prompt caching
+- **mcp** — Model Context Protocol tools via `RunTools`
 - **vision** — image analysis
 - **embeddings** — text embeddings
 - **resilience** — circuit breakers and retry
@@ -333,26 +338,31 @@ resp, err := client.GenerateContent(ctx, messages,
 | `WithToolChoiceNone()` | Prevent the model from calling tools |
 | `WithToolChoiceRequired()` | Force the model to call some tool |
 | `WithToolChoiceTool(name)` | Force the model to call the named tool |
+| `WithReasoningEffort(ReasoningEffort)` | Request reasoning at a qualitative effort level (see [Reasoning](docs/guides/reasoning.md)) |
+| `WithReasoningBudget(int)` | Cap reasoning ("thinking") tokens (Anthropic/Gemini) |
+| `WithReasoning(ReasoningConfig)` | Full reasoning configuration |
+| `WithCache()` / `WithCacheTTL(d)` / `WithoutCache()` | Control prompt caching (see [Prompt Caching](docs/guides/caching.md)) |
 | `WithTrace(TraceOptions)` | Attach per-call trace context (trace/user/session IDs, tags, metadata) |
 
 ### Response
 
 ```go
 type Response struct {
-    Content       string           // Generated text
-    Thinking      *ThinkingContent // Reasoning/chain-of-thought (nil if unsupported)
-    FinishReason  FinishReason     // "stop", "length", "tool_calls", "content_filter"
-    Usage         Usage            // Token usage statistics
-    ToolCalls     []ToolCall       // Tool calls requested by the model
-    SearchResults []SearchResult   // Web search results (when requested)
+    Content       string            // Generated text
+    Reasoning     *ReasoningContent // Reasoning/chain-of-thought (nil if unsupported)
+    FinishReason  FinishReason      // "stop", "length", "tool_calls", "content_filter"
+    Usage         Usage             // Token usage statistics
+    ToolCalls     []ToolCall        // Tool calls requested by the model
+    SearchResults []SearchResult    // Web search results (when requested)
 }
 
 type Usage struct {
-    PromptTokens        int
-    CompletionTokens    int
+    PromptTokens        int // Input tokens billed at the standard rate (excludes cache tokens)
+    CompletionTokens    int // Output tokens (includes ReasoningTokens)
     TotalTokens         int
-    CacheReadTokens     int // Cached prompt tokens read (e.g. Anthropic prompt caching)
+    CacheReadTokens     int // Prompt tokens read from cache (discounted)
     CacheCreationTokens int // Prompt tokens written to cache
+    ReasoningTokens     int // Reasoning tokens (subset of CompletionTokens), when reported
 }
 ```
 
@@ -383,13 +393,13 @@ for chunk := range chunks {
 
 ```go
 type StreamChunk struct {
-    Content      string           // Text content in this chunk
-    Thinking     *ThinkingContent // Reasoning content in this chunk (if any)
-    ToolCalls    []ToolCall       // Tool calls (accumulated, sent on final chunk)
-    FinishReason FinishReason     // Set on final chunk
-    Usage        *Usage           // Token usage (final chunk only, if available)
-    Error        error            // Error if streaming failed
-    Done         bool             // True for the final chunk
+    Content      string            // Text content in this chunk
+    Reasoning    *ReasoningContent // Reasoning content in this chunk (if any)
+    ToolCalls    []ToolCall        // Tool calls (accumulated, sent on final chunk)
+    FinishReason FinishReason      // Set on final chunk
+    Usage        *Usage            // Token usage (final chunk only, if available)
+    Error        error             // Error if streaming failed
+    Done         bool              // True for the final chunk
 }
 ```
 

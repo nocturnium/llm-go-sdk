@@ -11,51 +11,89 @@ import (
 type Pricing struct {
 	PromptPerMillion     float64 // Cost per 1M prompt tokens in USD
 	CompletionPerMillion float64 // Cost per 1M completion tokens in USD
+	// CacheReadPerMillion is the cost per 1M cache-read (cache-hit) tokens. Zero
+	// falls back to the standard prompt rate (a conservative estimate).
+	CacheReadPerMillion float64
+	// CacheWritePerMillion is the cost per 1M cache-write (cache-creation) tokens.
+	// Zero falls back to the standard prompt rate.
+	CacheWritePerMillion float64
 }
 
-// DefaultPricing contains known pricing for common models (as of Dec 2024).
-// Prices are in USD per 1 million tokens.
+// cacheReadRate returns the effective cache-read rate, defaulting to the prompt
+// rate when no cache-specific rate is configured.
+func (p Pricing) cacheReadRate() float64 {
+	if p.CacheReadPerMillion > 0 {
+		return p.CacheReadPerMillion
+	}
+	return p.PromptPerMillion
+}
+
+// cacheWriteRate returns the effective cache-write rate, defaulting to the prompt
+// rate when no cache-specific rate is configured.
+func (p Pricing) cacheWriteRate() float64 {
+	if p.CacheWritePerMillion > 0 {
+		return p.CacheWritePerMillion
+	}
+	return p.PromptPerMillion
+}
+
+// cost computes the total USD cost for the given usage under this pricing,
+// accounting for discounted cache-read and cache-write tokens. PromptTokens is
+// assumed to exclude cache tokens (see the Usage contract).
+func (p Pricing) cost(usage Usage) float64 {
+	const perMillion = 1_000_000.0
+	return float64(usage.PromptTokens)/perMillion*p.PromptPerMillion +
+		float64(usage.CompletionTokens)/perMillion*p.CompletionPerMillion +
+		float64(usage.CacheReadTokens)/perMillion*p.cacheReadRate() +
+		float64(usage.CacheCreationTokens)/perMillion*p.cacheWriteRate()
+}
+
+// DefaultPricing contains known pricing for common models.
+// Prices are in USD per 1 million tokens. Cache rates are set where the provider
+// charges a distinct cache-read/cache-write rate (e.g. Anthropic read ≈0.1×,
+// write ≈1.25×; OpenAI cached read ≈0.5×); when omitted, cache reads/writes fall
+// back to the prompt rate.
 var DefaultPricing = map[string]Pricing{
-	// OpenAI
-	"openai:gpt-4o":                 {2.50, 10.00},
-	"openai:gpt-4o-2024-11-20":      {2.50, 10.00},
-	"openai:gpt-4o-2024-08-06":      {2.50, 10.00},
-	"openai:gpt-4o-mini":            {0.15, 0.60},
-	"openai:gpt-4o-mini-2024-07-18": {0.15, 0.60},
-	"openai:gpt-4-turbo":            {10.00, 30.00},
-	"openai:gpt-4":                  {30.00, 60.00},
-	"openai:gpt-3.5-turbo":          {0.50, 1.50},
-	"openai:o1":                     {15.00, 60.00},
-	"openai:o1-mini":                {3.00, 12.00},
+	// OpenAI (cached input billed at ~0.5×; automatic caching has no write cost).
+	"openai:gpt-4o":                 {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
+	"openai:gpt-4o-2024-11-20":      {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
+	"openai:gpt-4o-2024-08-06":      {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
+	"openai:gpt-4o-mini":            {PromptPerMillion: 0.15, CompletionPerMillion: 0.60, CacheReadPerMillion: 0.075},
+	"openai:gpt-4o-mini-2024-07-18": {PromptPerMillion: 0.15, CompletionPerMillion: 0.60, CacheReadPerMillion: 0.075},
+	"openai:gpt-4-turbo":            {PromptPerMillion: 10.00, CompletionPerMillion: 30.00},
+	"openai:gpt-4":                  {PromptPerMillion: 30.00, CompletionPerMillion: 60.00},
+	"openai:gpt-3.5-turbo":          {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"openai:o1":                     {PromptPerMillion: 15.00, CompletionPerMillion: 60.00, CacheReadPerMillion: 7.50},
+	"openai:o1-mini":                {PromptPerMillion: 3.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 1.50},
 
 	// OpenAI Embeddings
-	"openai:text-embedding-3-small": {0.02, 0.0},
-	"openai:text-embedding-3-large": {0.13, 0.0},
-	"openai:text-embedding-ada-002": {0.10, 0.0},
+	"openai:text-embedding-3-small": {PromptPerMillion: 0.02},
+	"openai:text-embedding-3-large": {PromptPerMillion: 0.13},
+	"openai:text-embedding-ada-002": {PromptPerMillion: 0.10},
 
-	// Anthropic
-	"anthropic:claude-3-5-sonnet-20241022": {3.00, 15.00},
-	"anthropic:claude-3-5-sonnet-20240620": {3.00, 15.00},
-	"anthropic:claude-3-5-haiku-20241022":  {0.80, 4.00},
-	"anthropic:claude-3-opus-20240229":     {15.00, 75.00},
-	"anthropic:claude-3-sonnet-20240229":   {3.00, 15.00},
-	"anthropic:claude-3-haiku-20240307":    {0.25, 1.25},
+	// Anthropic (cache read ≈0.1× prompt, cache write ≈1.25× prompt).
+	"anthropic:claude-3-5-sonnet-20241022": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-3-5-sonnet-20240620": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-3-5-haiku-20241022":  {PromptPerMillion: 0.80, CompletionPerMillion: 4.00, CacheReadPerMillion: 0.08, CacheWritePerMillion: 1.00},
+	"anthropic:claude-3-opus-20240229":     {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
+	"anthropic:claude-3-sonnet-20240229":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-3-haiku-20240307":    {PromptPerMillion: 0.25, CompletionPerMillion: 1.25, CacheReadPerMillion: 0.03, CacheWritePerMillion: 0.30},
 
-	// Google Gemini
-	"gemini:gemini-2.0-flash-exp": {0.0, 0.0}, // Free during preview
-	"gemini:gemini-2.0-flash":     {0.075, 0.30},
-	"gemini:gemini-1.5-flash":     {0.075, 0.30},
-	"gemini:gemini-1.5-flash-8b":  {0.0375, 0.15},
-	"gemini:gemini-1.5-pro":       {1.25, 5.00},
-	"gemini:gemini-1.0-pro":       {0.50, 1.50},
-	"gemini:text-embedding-004":   {0.0, 0.0}, // Free
+	// Google Gemini (cached content billed at ~0.25× prompt).
+	"gemini:gemini-2.0-flash-exp": {}, // Free during preview
+	"gemini:gemini-2.0-flash":     {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash":     {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash-8b":  {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
+	"gemini:gemini-1.5-pro":       {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.0-pro":       {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:text-embedding-004":   {}, // Free
 
 	// TogetherAI (varies by model, these are examples)
-	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {0.88, 0.88},
-	"togetherai:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {3.50, 3.50},
-	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {0.88, 0.88},
-	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {0.18, 0.18},
-	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {0.60, 0.60},
+	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},
+	"togetherai:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {PromptPerMillion: 3.50, CompletionPerMillion: 3.50},
+	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},
+	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {PromptPerMillion: 0.18, CompletionPerMillion: 0.18},
+	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {PromptPerMillion: 0.60, CompletionPerMillion: 0.60},
 }
 
 // ModelUsage tracks usage for a specific model.
@@ -122,9 +160,7 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) {
 	var cost float64
 	t.mu.RLock()
 	if pricing, ok := t.pricing[key]; ok {
-		promptCost := float64(usage.PromptTokens) / 1_000_000 * pricing.PromptPerMillion
-		completionCost := float64(usage.CompletionTokens) / 1_000_000 * pricing.CompletionPerMillion
-		cost = promptCost + completionCost
+		cost = pricing.cost(usage)
 	}
 	t.mu.RUnlock()
 
@@ -350,10 +386,7 @@ func EstimateCost(provider Provider, model string, usage Usage) float64 {
 	if !ok {
 		return 0
 	}
-
-	promptCost := float64(usage.PromptTokens) / 1_000_000 * pricing.PromptPerMillion
-	completionCost := float64(usage.CompletionTokens) / 1_000_000 * pricing.CompletionPerMillion
-	return promptCost + completionCost
+	return pricing.cost(usage)
 }
 
 // FormatCost formats a cost value as a USD string.

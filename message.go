@@ -14,6 +14,11 @@ type Message struct {
 	ToolCalls  []ToolCall    `json:"tool_calls,omitempty"`   // Tool calls requested by the assistant
 	ToolCallID string        `json:"tool_call_id,omitempty"` // ID of the tool call this message responds to (for tool role)
 	Name       string        `json:"name,omitempty"`         // Name of the tool (for tool role)
+
+	// CacheControl, when set, marks a prompt-caching breakpoint at this message.
+	// Honored by providers with explicit cache breakpoints (Anthropic); ignored by
+	// providers that cache automatically. See WithCache for call-level caching.
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // Role represents the role of a message sender
@@ -173,6 +178,12 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 			// Merge tool calls
 			if len(msg.ToolCalls) > 0 {
 				current.ToolCalls = append(current.ToolCalls, msg.ToolCalls...)
+			}
+
+			// A cache breakpoint on any merged message marks the combined message
+			// (the breakpoint belongs at the end of the cached prefix).
+			if msg.CacheControl != nil {
+				current.CacheControl = msg.CacheControl
 			}
 		} else {
 			// Start new message group

@@ -26,6 +26,11 @@ type Content struct {
 type Part struct {
 	Text string `json:"text,omitempty"`
 
+	// Thought marks this part as model reasoning ("thinking") rather than answer
+	// content. ThoughtSignature authenticates a thought for multi-turn replay.
+	Thought          bool   `json:"thought,omitempty"`
+	ThoughtSignature string `json:"thoughtSignature,omitempty"`
+
 	// Inline data for images
 	InlineData *InlineData `json:"inlineData,omitempty"`
 
@@ -70,13 +75,22 @@ type FunctionDeclaration struct {
 type GenerationConfig struct {
 	// Temperature and TopP are pointers so an explicit 0.0 is serialized while an
 	// unset (nil) value is omitted, letting the model apply its own default.
-	Temperature      *float64 `json:"temperature,omitempty"`
-	TopP             *float64 `json:"topP,omitempty"`
-	TopK             int      `json:"topK,omitempty"`
-	MaxOutputTokens  int      `json:"maxOutputTokens,omitempty"`
-	StopSequences    []string `json:"stopSequences,omitempty"`
-	ResponseMimeType string   `json:"responseMimeType,omitempty"`
-	ResponseSchema   any      `json:"responseSchema,omitempty"`
+	Temperature      *float64        `json:"temperature,omitempty"`
+	TopP             *float64        `json:"topP,omitempty"`
+	TopK             int             `json:"topK,omitempty"`
+	MaxOutputTokens  int             `json:"maxOutputTokens,omitempty"`
+	StopSequences    []string        `json:"stopSequences,omitempty"`
+	ResponseMimeType string          `json:"responseMimeType,omitempty"`
+	ResponseSchema   any             `json:"responseSchema,omitempty"`
+	ThinkingConfig   *ThinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
+// ThinkingConfig configures Gemini 2.5+ thinking. ThinkingBudget caps thinking
+// tokens (0 disables, -1 lets the model decide dynamically); a nil budget uses
+// the model default. IncludeThoughts asks the API to return thought summaries.
+type ThinkingConfig struct {
+	ThinkingBudget  *int `json:"thinkingBudget,omitempty"`
+	IncludeThoughts bool `json:"includeThoughts,omitempty"`
 }
 
 // SafetySetting configures safety filters
@@ -108,9 +122,11 @@ type SafetyRating struct {
 
 // UsageMetadata contains token usage information
 type UsageMetadata struct {
-	PromptTokenCount     int `json:"promptTokenCount"`
-	CandidatesTokenCount int `json:"candidatesTokenCount"`
-	TotalTokenCount      int `json:"totalTokenCount"`
+	PromptTokenCount        int `json:"promptTokenCount"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+	TotalTokenCount         int `json:"totalTokenCount"`
 }
 
 // StreamChunk represents a streaming response chunk
@@ -120,11 +136,27 @@ type StreamChunk struct {
 	ModelVersion  string         `json:"modelVersion,omitempty"`
 }
 
-// ExtractTextContent extracts all text from parts
+// ExtractTextContent extracts the answer text from parts, skipping thought
+// (reasoning) parts. Use ExtractThoughtContent for the reasoning text.
 func ExtractTextContent(parts []Part) string {
 	var text string
 	for _, part := range parts {
+		if part.Thought {
+			continue
+		}
 		if part.Text != "" {
+			text += part.Text
+		}
+	}
+	return text
+}
+
+// ExtractThoughtContent extracts the model's reasoning ("thought") text from
+// parts, returning "" if none are present.
+func ExtractThoughtContent(parts []Part) string {
+	var text string
+	for _, part := range parts {
+		if part.Thought && part.Text != "" {
 			text += part.Text
 		}
 	}

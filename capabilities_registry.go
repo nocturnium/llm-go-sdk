@@ -9,12 +9,14 @@ import (
 // This allows accurate per-model capability reporting instead of static
 // provider-level defaults.
 type ModelCapabilities struct {
-	MaxContextTokens  int  // Maximum input context window
-	MaxOutputTokens   int  // Maximum output tokens
-	SupportsVision    bool // Can process images
-	SupportsTools     bool // Supports function/tool calling
-	SupportsStreaming bool // Supports streaming responses
-	SupportsJSON      bool // Supports JSON mode output
+	MaxContextTokens      int  // Maximum input context window
+	MaxOutputTokens       int  // Maximum output tokens
+	SupportsVision        bool // Can process images
+	SupportsTools         bool // Supports function/tool calling
+	SupportsStreaming     bool // Supports streaming responses
+	SupportsJSON          bool // Supports JSON mode output
+	SupportsReasoning     bool // Supports reasoning ("thinking") output
+	SupportsPromptCaching bool // Supports prompt caching
 }
 
 // CapabilityRegistry provides per-model capability lookups.
@@ -488,6 +490,61 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
+
+	r.registerReasoningAndCaching()
+}
+
+// registerReasoningAndCaching flips the SupportsReasoning / SupportsPromptCaching
+// flags on the model and provider entries registered above. These are applied as
+// a post-pass so the per-model literals stay focused on the core capabilities.
+func (r *CapabilityRegistry) registerReasoningAndCaching() {
+	// Reasoning ("thinking") is model-specific. Mark known reasoning models...
+	reasoningModels := []string{
+		"openai:o1", "openai:o1-mini", "openai:o3", "openai:o4-mini",
+		"anthropic:claude-sonnet-4", "anthropic:claude-sonnet-4-20250514",
+		"gemini:gemini-2.5-pro", "gemini:gemini-2.5-flash",
+	}
+	for _, key := range reasoningModels {
+		if caps, ok := r.capabilities[key]; ok {
+			caps.SupportsReasoning = true
+			r.capabilities[key] = caps
+		}
+	}
+	// ...and providers whose chat surface is reasoning-capable as a whole. Only
+	// providers represented solely by a default (no per-model entries) belong here:
+	// reasoning is model-specific, so marking a default for a provider that also
+	// has exact entries (Anthropic, Gemini, OpenAI) would disagree with those exact
+	// entries (e.g. claude-3-5-sonnet does not support extended thinking). Those
+	// providers' reasoning models are flagged explicitly in reasoningModels above.
+	reasoningProviders := []Provider{ProviderZAI, ProviderDeepSeek}
+	for _, p := range reasoningProviders {
+		if caps, ok := r.defaults[p]; ok {
+			caps.SupportsReasoning = true
+			r.defaults[p] = caps
+		}
+	}
+
+	// Prompt caching: Anthropic (explicit breakpoints), OpenAI/Azure/DeepSeek
+	// (automatic), and Gemini (implicit on 2.5) all report cache token usage.
+	cachingProviders := map[Provider]bool{
+		ProviderAnthropic: true, ProviderOpenAI: true, ProviderAzure: true,
+		ProviderDeepSeek: true, ProviderGemini: true,
+	}
+	for p := range cachingProviders {
+		if caps, ok := r.defaults[p]; ok {
+			caps.SupportsPromptCaching = true
+			r.defaults[p] = caps
+		}
+	}
+	// Propagate the caching flag to per-model entries of those providers, since an
+	// exact model match in Get does not inherit the provider default.
+	for key, caps := range r.capabilities {
+		provider := Provider(key[:strings.IndexByte(key, ':')])
+		if cachingProviders[provider] {
+			caps.SupportsPromptCaching = true
+			r.capabilities[key] = caps
+		}
+	}
 }
 
 // GetModelCapabilities is a convenience function to get capabilities from the global registry.
@@ -508,6 +565,8 @@ func (mc ModelCapabilities) ToCapabilities() Capabilities {
 		Tools:            mc.SupportsTools,
 		Vision:           mc.SupportsVision,
 		JSONMode:         mc.SupportsJSON,
+		Reasoning:        mc.SupportsReasoning,
+		PromptCaching:    mc.SupportsPromptCaching,
 		MaxContextTokens: mc.MaxContextTokens,
 		MaxOutputTokens:  mc.MaxOutputTokens,
 	}

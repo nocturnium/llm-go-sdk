@@ -68,7 +68,10 @@ nav:
       - Chat & Messages: guides/chat.md
       - Streaming: guides/streaming.md
       - Tool Calling & Agents: guides/tools.md
+      - MCP (Model Context Protocol): guides/mcp.md
       - Structured Outputs: guides/structured-outputs.md
+      - Reasoning: guides/reasoning.md
+      - Prompt Caching: guides/caching.md
       - Embeddings & Reranking: guides/embeddings.md
       - Vision: guides/vision.md
       - Resilience: guides/resilience.md

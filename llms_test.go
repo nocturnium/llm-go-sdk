@@ -259,7 +259,7 @@ func TestMessageMarshal_OmitsOptionalFields(t *testing.T) {
 func TestResponseMarshal_SnakeCase(t *testing.T) {
 	resp := Response{
 		Content: "answer",
-		Thinking: &ThinkingContent{
+		Reasoning: &ReasoningContent{
 			Content:  "reasoning",
 			Tokens:   7,
 			Metadata: map[string]any{"mode": "enabled"},
@@ -274,6 +274,8 @@ func TestResponseMarshal_SnakeCase(t *testing.T) {
 		},
 		ToolCalls: []ToolCall{{ID: "call-1", Type: ToolTypeFunction}},
 	}
+	// The deprecated Thinking alias points at the same value but is not serialized.
+	resp.Thinking = resp.Reasoning
 
 	data, err := json.Marshal(resp)
 	if err != nil {
@@ -281,11 +283,11 @@ func TestResponseMarshal_SnakeCase(t *testing.T) {
 	}
 
 	assertNoJSONKeys(t, data,
-		"Content", "Thinking", "FinishReason", "Usage", "ToolCalls", "SearchResults",
+		"Content", "Reasoning", "Thinking", "thinking", "FinishReason", "Usage", "ToolCalls", "SearchResults",
 		"PromptTokens", "CompletionTokens", "TotalTokens",
 	)
 	assertHasJSONKeys(t, data,
-		"content", "thinking", "finish_reason", "usage", "tool_calls",
+		"content", "reasoning", "finish_reason", "usage", "tool_calls",
 		"prompt_tokens", "completion_tokens", "total_tokens", "cache_read_tokens", "cache_creation_tokens",
 	)
 }

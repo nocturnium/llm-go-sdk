@@ -51,8 +51,8 @@ func TestNewCostTracker_Defaults(t *testing.T) {
 
 func TestNewCostTracker_CustomPricing(t *testing.T) {
 	customPricing := map[string]Pricing{
-		"openai:custom-model": {1.00, 2.00},
-		"openai:gpt-4o":       {5.00, 20.00}, // Override default
+		"openai:custom-model": {PromptPerMillion: 1.00, CompletionPerMillion: 2.00},
+		"openai:gpt-4o":       {PromptPerMillion: 5.00, CompletionPerMillion: 20.00}, // Override default
 	}
 
 	tracker := NewCostTracker(customPricing)
@@ -232,7 +232,7 @@ func TestCostTracker_Reset(t *testing.T) {
 func TestCostTracker_SetPricing(t *testing.T) {
 	tracker := NewCostTracker()
 
-	tracker.SetPricing(ProviderOpenAI, "custom-model", Pricing{1.00, 2.00})
+	tracker.SetPricing(ProviderOpenAI, "custom-model", Pricing{PromptPerMillion: 1.00, CompletionPerMillion: 2.00})
 
 	pricing, ok := tracker.GetPricing(ProviderOpenAI, "custom-model")
 	if !ok {

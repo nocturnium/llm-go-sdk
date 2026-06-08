@@ -581,11 +581,11 @@ func TestConvertResponse_WithReasoningContent(t *testing.T) {
 	if result.Content != "The answer is 42." {
 		t.Errorf("expected content 'The answer is 42.', got %s", result.Content)
 	}
-	if result.Thinking == nil {
-		t.Fatal("expected Thinking to be populated")
+	if result.Reasoning == nil {
+		t.Fatal("expected Reasoning to be populated")
 	}
-	if result.Thinking.Content != "Let me calculate step by step..." {
-		t.Errorf("expected reasoning content, got %s", result.Thinking.Content)
+	if result.Reasoning.Content != "Let me calculate step by step..." {
+		t.Errorf("expected reasoning content, got %s", result.Reasoning.Content)
 	}
 }
 
@@ -604,8 +604,91 @@ func TestConvertResponse_NoReasoningContent(t *testing.T) {
 
 	result := ConvertResponse(resp)
 
-	if result.Thinking != nil {
-		t.Error("expected Thinking to be nil when no reasoning content")
+	if result.Reasoning != nil {
+		t.Error("expected Reasoning to be nil when no reasoning content")
+	}
+}
+
+func TestConvertResponse_ReasoningTokens(t *testing.T) {
+	resp := &ChatCompletionResponse{
+		Choices: []Choice{{
+			Message:      &ChatMessage{Role: "assistant", ContentValue: "ok", Reasoning: "deliberating"},
+			FinishReason: "stop",
+		}},
+		Usage: &Usage{
+			PromptTokens:     10,
+			CompletionTokens: 40,
+			TotalTokens:      50,
+			CompletionTokensDetails: &struct {
+				ReasoningTokens int `json:"reasoning_tokens"`
+			}{ReasoningTokens: 25},
+		},
+	}
+
+	result := ConvertResponse(resp)
+
+	if result.Usage.ReasoningTokens != 25 {
+		t.Errorf("expected Usage.ReasoningTokens=25, got %d", result.Usage.ReasoningTokens)
+	}
+	if result.Reasoning == nil || result.Reasoning.Tokens != 25 {
+		t.Errorf("expected Reasoning.Tokens=25, got %+v", result.Reasoning)
+	}
+}
+
+func TestBuildChatRequest_ReasoningEffort(t *testing.T) {
+	opts := llms.ApplyOptions(llms.WithReasoningEffort(llms.ReasoningEffortHigh))
+	req := BuildChatRequest("gpt-5", nil, opts, false)
+
+	if req.ReasoningEffort != "high" {
+		t.Errorf("expected reasoning_effort=high, got %q", req.ReasoningEffort)
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m["reasoning_effort"] != "high" {
+		t.Errorf("expected reasoning_effort=high in JSON, got %v", m["reasoning_effort"])
+	}
+}
+
+func TestBuildChatRequest_ThinkingToggle(t *testing.T) {
+	// An enabled reasoning toggle maps to the boolean "thinking" extension, which
+	// BuildChatRequest flattens into the top-level request JSON (Z.AI/Qwen style).
+	enabled := true
+	opts := llms.ApplyOptions(llms.WithReasoning(llms.ReasoningConfig{Enabled: &enabled}))
+	req := BuildChatRequest("glm-4.6", nil, opts, false)
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	thinking, ok := m["thinking"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected thinking object in request JSON, got %v", m["thinking"])
+	}
+	if thinking["type"] != "enabled" {
+		t.Errorf("expected thinking.type=enabled, got %v", thinking["type"])
+	}
+}
+
+func TestBuildChatRequest_ReasoningDoesNotMutateOptions(t *testing.T) {
+	// Translating reasoning into ExtraBody must not mutate the caller's option map.
+	enabled := true
+	opts := llms.ApplyOptions(
+		llms.WithExtraBodyParam("foo", "bar"),
+		llms.WithReasoning(llms.ReasoningConfig{Enabled: &enabled}),
+	)
+	_ = BuildChatRequest("glm-4.6", nil, opts, false)
+	if _, exists := opts.ExtraBody["thinking"]; exists {
+		t.Error("BuildChatRequest leaked the thinking key into the caller's ExtraBody")
 	}
 }
 

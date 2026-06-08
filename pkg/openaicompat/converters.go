@@ -221,27 +221,39 @@ func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
 		response.Content = choice.Message.Content()
 		response.ToolCalls = convertToolCallsToLLMs(choice.Message.ToolCalls)
 
-		// Populate Thinking if reasoning content is present
-		// Handles both "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic/Qwen Thinking)
+		// Surface reasoning content if present. Providers use different field names:
+		// "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic/Qwen Thinking).
 		if reasoning := choice.Message.ReasoningText(); reasoning != "" {
-			response.Thinking = &llms.ThinkingContent{
-				Content: reasoning,
-			}
+			response.SetReasoning(&llms.ReasoningContent{Content: reasoning})
 		}
 	}
 
 	if resp.Usage != nil {
-		response.Usage = llms.Usage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
-		}
-		if resp.Usage.PromptTokensDetails != nil {
-			response.Usage.CacheReadTokens = resp.Usage.PromptTokensDetails.CachedTokens
+		response.Usage = convertUsage(resp.Usage)
+		if response.Reasoning != nil && response.Usage.ReasoningTokens > 0 {
+			response.Reasoning.Tokens = response.Usage.ReasoningTokens
 		}
 	}
 
 	return response
+}
+
+// convertUsage maps an OpenAI-compatible usage payload to the neutral llms.Usage,
+// normalizing so PromptTokens EXCLUDES cache-read tokens (OpenAI/DeepSeek report
+// prompt_tokens inclusive of the cached subset).
+func convertUsage(u *Usage) llms.Usage {
+	cacheRead := u.cacheReadTokens()
+	prompt := u.PromptTokens - cacheRead
+	if prompt < 0 {
+		prompt = 0
+	}
+	return llms.Usage{
+		PromptTokens:     prompt,
+		CompletionTokens: u.CompletionTokens,
+		TotalTokens:      u.TotalTokens,
+		CacheReadTokens:  cacheRead,
+		ReasoningTokens:  u.reasoningTokens(),
+	}
 }
 
 // ConvertEmbeddingResponse converts an OpenAI-compatible embedding response to llms.EmbeddingResponse.
@@ -291,12 +303,51 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 		req.ResponseFormat = convertResponseFormat(opts.ResponseFormat)
 	}
 
-	// Pass through ExtraBody for provider-specific extensions (e.g., LoRAX adapter_id)
+	// Pass through ExtraBody for provider-specific extensions (e.g., LoRAX adapter_id).
+	// Copy so reasoning translation below never mutates the caller's option map.
 	if len(opts.ExtraBody) > 0 {
-		req.ExtraBody = opts.ExtraBody
+		eb := make(map[string]any, len(opts.ExtraBody)+1)
+		for k, v := range opts.ExtraBody {
+			eb[k] = v
+		}
+		req.ExtraBody = eb
 	}
 
+	applyReasoning(req, opts.Reasoning)
+
 	return req
+}
+
+// applyReasoning translates a neutral ReasoningConfig onto an OpenAI-compatible
+// request. OpenAI reasoning models read the top-level reasoning_effort field;
+// providers exposing a boolean "thinking" toggle (Z.AI GLM, Qwen) read a
+// {"type":"enabled"|"disabled"} object, which we inject via ExtraBody so it is
+// flattened at the top level. A caller-supplied "thinking" key is left untouched.
+func applyReasoning(req *ChatCompletionRequest, rc *llms.ReasoningConfig) {
+	if rc == nil {
+		return
+	}
+	if rc.Effort != "" {
+		req.ReasoningEffort = string(rc.Effort)
+	}
+	// Emit the boolean thinking toggle only when the caller set Enabled explicitly.
+	// A bare BudgetTokens is an Anthropic/Gemini concept; injecting a "thinking"
+	// field from it could make a strict OpenAI-compatible server reject the request.
+	var mode string
+	switch {
+	case rc.Enabled != nil && *rc.Enabled:
+		mode = "enabled"
+	case rc.Enabled != nil && !*rc.Enabled:
+		mode = "disabled"
+	}
+	if mode != "" {
+		if req.ExtraBody == nil {
+			req.ExtraBody = make(map[string]any, 1)
+		}
+		if _, exists := req.ExtraBody["thinking"]; !exists {
+			req.ExtraBody["thinking"] = map[string]any{"type": mode}
+		}
+	}
 }
 
 // convertResponseFormat converts an llms response format to the OpenAI-compatible wire format.
@@ -391,16 +442,18 @@ func ProcessStream(
 				finalUsage = &estimated
 			}
 
-			// Build final thinking if we accumulated any
-			var finalThinking *llms.ThinkingContent
+			// Build final reasoning if we accumulated any
+			var finalReasoning *llms.ReasoningContent
 			if accumulatedReasoning != "" {
-				finalThinking = &llms.ThinkingContent{
-					Content: accumulatedReasoning,
+				finalReasoning = &llms.ReasoningContent{Content: accumulatedReasoning}
+				if finalUsage != nil {
+					finalReasoning.Tokens = finalUsage.ReasoningTokens
 				}
 			}
 
 			sender.SendFinal(llms.StreamChunk{
-				Thinking:     finalThinking,
+				Reasoning:    finalReasoning,
+				Thinking:     finalReasoning,
 				ToolCalls:    accumulatedToolCalls,
 				FinishReason: finishReason,
 				Usage:        finalUsage,
@@ -438,10 +491,10 @@ func ProcessStream(
 				if reasoning := choice.Delta.ReasoningText(); reasoning != "" {
 					accumulatedReasoning += reasoning
 					// Send reasoning in chunks for real-time display
+					rc := &llms.ReasoningContent{Content: reasoning}
 					if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{
-						Thinking: &llms.ThinkingContent{
-							Content: reasoning,
-						},
+						Reasoning: rc,
+						Thinking:  rc,
 					})) {
 						return
 					}
@@ -460,14 +513,8 @@ func ProcessStream(
 		}
 
 		if chunk.Usage != nil {
-			usage = &llms.Usage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
-			}
-			if chunk.Usage.PromptTokensDetails != nil {
-				usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
-			}
+			u := convertUsage(chunk.Usage)
+			usage = &u
 		}
 	}
 }

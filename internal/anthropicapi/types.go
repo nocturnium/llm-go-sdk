@@ -16,12 +16,20 @@ type MessagesRequest struct {
 	System    []SystemBlock `json:"system,omitempty"`
 	// Temperature and TopP are pointers so an explicit 0.0 is serialized while an
 	// unset (nil) value is omitted, letting the model apply its own default.
-	Temperature   *float64 `json:"temperature,omitempty"`
-	TopP          *float64 `json:"top_p,omitempty"`
-	StopSequences []string `json:"stop_sequences,omitempty"`
-	Stream        bool     `json:"stream,omitempty"`
-	Tools         []Tool   `json:"tools,omitempty"`
-	ToolChoice    any      `json:"tool_choice,omitempty"`
+	Temperature   *float64        `json:"temperature,omitempty"`
+	TopP          *float64        `json:"top_p,omitempty"`
+	StopSequences []string        `json:"stop_sequences,omitempty"`
+	Stream        bool            `json:"stream,omitempty"`
+	Tools         []Tool          `json:"tools,omitempty"`
+	ToolChoice    any             `json:"tool_choice,omitempty"`
+	Thinking      *ThinkingConfig `json:"thinking,omitempty"`
+}
+
+// ThinkingConfig enables Anthropic extended thinking with an explicit token
+// budget. When set, the model emits thinking content blocks before its answer.
+type ThinkingConfig struct {
+	Type         string `json:"type"`          // "enabled"
+	BudgetTokens int    `json:"budget_tokens"` // tokens the model may spend thinking
 }
 
 // Message represents a message in the conversation.
@@ -49,6 +57,16 @@ type ContentPart struct {
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   string `json:"content,omitempty"`
 	IsError   bool   `json:"is_error,omitempty"`
+
+	// For thinking content (extended thinking). Signature authenticates the
+	// thinking block and must be echoed back on a follow-up turn. Data carries an
+	// encrypted redacted_thinking block.
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	Data      string `json:"data,omitempty"`
+
+	// CacheControl marks this block as a prompt-caching breakpoint.
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // ImageSource represents the source of an image for Anthropic's vision API.
@@ -60,14 +78,16 @@ type ImageSource struct {
 
 // Tool represents a tool definition for Anthropic.
 type Tool struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	InputSchema any    `json:"input_schema"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description"`
+	InputSchema  any           `json:"input_schema"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 // CacheControl marks a content block as a prompt-caching breakpoint.
 type CacheControl struct {
-	Type string `json:"type"` // "ephemeral"
+	Type string `json:"type"`          // "ephemeral"
+	TTL  string `json:"ttl,omitempty"` // "" (5m default) or "1h"
 }
 
 // SystemBlock is a system-prompt text block that can carry a cache breakpoint.
@@ -123,6 +143,10 @@ type StreamDelta struct {
 	Type        string `json:"type"`
 	Text        string `json:"text,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
+	// Thinking and Signature carry extended-thinking deltas (delta types
+	// "thinking_delta" and "signature_delta").
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
 // MessageDelta represents message-level delta in a stream.
