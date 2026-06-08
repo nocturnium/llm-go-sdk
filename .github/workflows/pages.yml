@@ -1,15 +1,15 @@
 name: Pages
 
-# Deploys the project landing page to GitHub Pages (Actions source).
-# Pages is configured with build_type=workflow, so this workflow is what
-# publishes https://nocturnium.github.io/llm-go-sdk/.
+# Builds the MkDocs (Material) documentation site and deploys it to GitHub Pages.
+# Pages is configured with build_type=workflow, so this workflow publishes
+# https://nocturnium.github.io/llm-go-sdk/.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'README.md'
       - 'docs/**'
+      - 'mkdocs.yml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -24,29 +24,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs Material
+        run: pip install "mkdocs-material>=9.5"
+
+      - name: Build site
+        run: mkdocs build --strict
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
   deploy:
     name: Deploy
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Assemble site
-        run: |
-          mkdir -p _site
-          cp docs/site/index.html _site/index.html
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

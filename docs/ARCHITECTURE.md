@@ -9,7 +9,7 @@ streaming fit together.
 
 It is written for SDK consumers and contributors. For the step-by-step recipe to
 add a provider (including coding standards and required tests), see
-[`AGENTS.md`](../AGENTS.md).
+[`AGENTS.md`](https://github.com/nocturnium/llm-go-sdk/blob/main/AGENTS.md).
 
 - Module path: `github.com/nocturnium/llm-go-sdk`
 - License: Apache-2.0 (see `LICENSE` and `NOTICE`)
@@ -545,7 +545,7 @@ can reason about failures uniformly. `ProviderFromError(err)` extracts the origi
 
 ### Adding a provider
 
-The supported, documented workflow lives in [`AGENTS.md`](../AGENTS.md) under
+The supported, documented workflow lives in [`AGENTS.md`](https://github.com/nocturnium/llm-go-sdk/blob/main/AGENTS.md) under
 "Adding a New Provider". In short:
 
 - **If the provider is OpenAI-compatible**, create

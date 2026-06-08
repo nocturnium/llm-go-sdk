@@ -1,0 +1,80 @@
+site_name: llm-go-sdk
+site_description: A unified, dependency-light Go SDK for 18 LLM providers.
+site_url: https://nocturnium.github.io/llm-go-sdk/
+repo_url: https://github.com/nocturnium/llm-go-sdk
+repo_name: nocturnium/llm-go-sdk
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Nocturnium, Inc. — Apache-2.0
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.instant
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/nocturnium/llm-go-sdk
+    - icon: fontawesome/brands/golang
+      link: https://pkg.go.dev/github.com/nocturnium/llm-go-sdk
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Providers: providers.md
+  - Configuration: configuration.md
+  - Guides:
+      - Chat & Messages: guides/chat.md
+      - Streaming: guides/streaming.md
+      - Tool Calling & Agents: guides/tools.md
+      - Structured Outputs: guides/structured-outputs.md
+      - Embeddings & Reranking: guides/embeddings.md
+      - Vision: guides/vision.md
+      - Resilience: guides/resilience.md
+      - Observability & Cost: guides/observability.md
+      - Provider Registry: guides/registry.md
+      - Custom Providers: guides/custom-providers.md
+  - Architecture: ARCHITECTURE.md
+  - Package Layout: migration-guide.md
+  - API Reference (pkg.go.dev): https://pkg.go.dev/github.com/nocturnium/llm-go-sdk
