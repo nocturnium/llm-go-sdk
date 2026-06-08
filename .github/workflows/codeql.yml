@@ -17,6 +17,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default permissions for every job. gosec/trivy upload SARIF and therefore need
+# security-events: write (the analyze job additionally declares its own block).
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 jobs:
   analyze:
     name: Analyze
@@ -37,16 +44,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: go
           queries: +security-extended,security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:go"
 
@@ -66,7 +73,7 @@ jobs:
           args: '-no-fail -fmt sarif -out results.sarif ./...'
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
 
@@ -90,6 +97,6 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'

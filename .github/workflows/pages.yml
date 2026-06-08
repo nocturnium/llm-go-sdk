@@ -1,0 +1,52 @@
+name: Pages
+
+# Deploys the project landing page to GitHub Pages (Actions source).
+# Pages is configured with build_type=workflow, so this workflow is what
+# publishes https://nocturnium.github.io/llm-go-sdk/.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; do not cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp docs/site/index.html _site/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -242,13 +242,7 @@ func TestWithTools(t *testing.T) {
 			Function: &llms.FunctionDefinition{
 				Name:        "get_weather",
 				Description: "Get the current weather",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"location": map[string]any{"type": "string"},
-					},
-					"required": []string{"location"},
-				},
+				Parameters:  json.RawMessage(`{"type":"object","properties":{"location":{"type":"string"}},"required":["location"]}`),
 			},
 		},
 	}
