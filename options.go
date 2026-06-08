@@ -71,6 +71,14 @@ type CallOptions struct {
 	ToolChoice       *ToolChoice
 	ResponseFormat   *ResponseFormat
 
+	// Reasoning requests model reasoning ("thinking") for this call. Nil uses the
+	// model's default behavior. See WithReasoning / WithReasoningEffort.
+	Reasoning *ReasoningConfig
+
+	// Cache controls the SDK's automatic prompt caching for this call. Nil uses
+	// the provider default. See WithCache / WithCacheTTL / WithoutCache.
+	Cache *CacheConfig
+
 	// Message preprocessing options
 	DisableMessageMerging bool // If true, consecutive same-role messages won't be merged (default: false, merging enabled)
 
@@ -316,22 +324,6 @@ func WithExtraBodyParam(key string, value any) CallOption {
 //	llms.WithAdapterID("predibase/sql-lora")
 func WithAdapterID(adapterID string) CallOption {
 	return WithExtraBodyParam("adapter_id", adapterID)
-}
-
-// WithThinkingMode enables or disables the model's reasoning/thinking mode.
-// Supported by Z.AI (GLM), OpenAI (o1), DeepSeek, and similar models.
-// When enabled, the model's reasoning is returned in Response.Thinking.
-func WithThinkingMode(enabled bool) CallOption {
-	return func(o *CallOptions) {
-		if o.ExtraBody == nil {
-			o.ExtraBody = make(map[string]any)
-		}
-		mode := "disabled"
-		if enabled {
-			mode = "enabled"
-		}
-		o.ExtraBody["thinking"] = map[string]any{"type": mode}
-	}
 }
 
 // WithWebSearch configures web search grounding for the request.

@@ -286,26 +286,54 @@ func TestCallOptions_Validate_ValidTool(t *testing.T) {
 }
 
 func TestWithThinkingMode_Enabled(t *testing.T) {
+	// WithThinkingMode is deprecated; it now forwards to ReasoningConfig.Enabled.
 	opts := ApplyOptions(WithThinkingMode(true))
 
-	thinking, ok := opts.ExtraBody["thinking"].(map[string]any)
-	if !ok {
-		t.Fatal("expected thinking in ExtraBody")
+	if opts.Reasoning == nil || opts.Reasoning.Enabled == nil {
+		t.Fatal("expected Reasoning.Enabled to be set")
 	}
-	if thinking["type"] != "enabled" {
-		t.Errorf("expected type=enabled, got %v", thinking["type"])
+	if !*opts.Reasoning.Enabled {
+		t.Error("expected Reasoning.Enabled == true")
+	}
+	if !opts.Reasoning.IsEnabled() {
+		t.Error("expected IsEnabled() == true")
 	}
 }
 
 func TestWithThinkingMode_Disabled(t *testing.T) {
 	opts := ApplyOptions(WithThinkingMode(false))
 
-	thinking, ok := opts.ExtraBody["thinking"].(map[string]any)
-	if !ok {
-		t.Fatal("expected thinking in ExtraBody")
+	if opts.Reasoning == nil || opts.Reasoning.Enabled == nil {
+		t.Fatal("expected Reasoning.Enabled to be set")
 	}
-	if thinking["type"] != "disabled" {
-		t.Errorf("expected type=disabled, got %v", thinking["type"])
+	if *opts.Reasoning.Enabled {
+		t.Error("expected Reasoning.Enabled == false")
+	}
+	if opts.Reasoning.IsEnabled() {
+		t.Error("expected IsEnabled() == false")
+	}
+}
+
+func TestWithReasoningEffort(t *testing.T) {
+	opts := ApplyOptions(WithReasoningEffort(ReasoningEffortHigh))
+	if opts.Reasoning == nil {
+		t.Fatal("expected Reasoning to be set")
+	}
+	if opts.Reasoning.Effort != ReasoningEffortHigh {
+		t.Errorf("expected effort=high, got %v", opts.Reasoning.Effort)
+	}
+	if !opts.Reasoning.IsEnabled() {
+		t.Error("expected IsEnabled() == true when an effort is set")
+	}
+}
+
+func TestWithReasoningBudget(t *testing.T) {
+	opts := ApplyOptions(WithReasoningBudget(8192))
+	if opts.Reasoning == nil || opts.Reasoning.BudgetTokens != 8192 {
+		t.Fatalf("expected budget=8192, got %+v", opts.Reasoning)
+	}
+	if !opts.Reasoning.IsEnabled() {
+		t.Error("expected IsEnabled() == true when a budget is set")
 	}
 }
 

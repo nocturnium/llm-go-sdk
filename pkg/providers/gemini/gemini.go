@@ -165,6 +165,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 		var accumulatedToolCalls []llms.ToolCall
 		var accumulatedContent string // Full content for token estimation
+		var accumulatedReasoning string
 		var finishReason llms.FinishReason
 		var usage *llms.Usage
 		var bytesRead int64
@@ -191,7 +192,17 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					finalUsage = &estimated
 				}
 
+				var finalReasoning *llms.ReasoningContent
+				if accumulatedReasoning != "" {
+					finalReasoning = &llms.ReasoningContent{Content: accumulatedReasoning}
+					if finalUsage != nil {
+						finalReasoning.Tokens = finalUsage.ReasoningTokens
+					}
+				}
+
 				sender.SendFinal(llms.StreamChunk{
+					Reasoning:    finalReasoning,
+					Thinking:     finalReasoning,
 					ToolCalls:    accumulatedToolCalls,
 					FinishReason: finishReason,
 					Usage:        finalUsage,
@@ -214,6 +225,15 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				candidate := chunk.Candidates[0]
 
 				if candidate.Content != nil {
+					// Emit reasoning ("thought") content as it streams.
+					if thought := geminiapi.ExtractThoughtContent(candidate.Content.Parts); thought != "" {
+						accumulatedReasoning += thought
+						rc := &llms.ReasoningContent{Content: thought}
+						if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
+							return
+						}
+					}
+
 					// Extract text content
 					text := geminiapi.ExtractTextContent(candidate.Content.Parts)
 					if text != "" {
@@ -249,11 +269,8 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 			}
 
 			if chunk.UsageMetadata != nil {
-				usage = &llms.Usage{
-					PromptTokens:     chunk.UsageMetadata.PromptTokenCount,
-					CompletionTokens: chunk.UsageMetadata.CandidatesTokenCount,
-					TotalTokens:      chunk.UsageMetadata.TotalTokenCount,
-				}
+				u := convertUsageMetadata(chunk.UsageMetadata)
+				usage = &u
 			}
 		}
 	}()
@@ -288,6 +305,27 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) *
 		case llms.ResponseFormatJSONObject:
 			config.ResponseMimeType = "application/json"
 		case llms.ResponseFormatText:
+		}
+	}
+
+	// Thinking config: enable thought summaries and apply a budget when reasoning
+	// is requested, or explicitly disable thinking (budget 0) when asked.
+	if rc := opts.Reasoning; rc != nil {
+		switch {
+		case rc.IsEnabled():
+			tcfg := &geminiapi.ThinkingConfig{IncludeThoughts: true}
+			budget := rc.BudgetTokens
+			if budget <= 0 {
+				budget = llms.ReasoningBudgetForEffort(rc.Effort)
+			}
+			if budget > 0 {
+				b := budget
+				tcfg.ThinkingBudget = &b
+			}
+			config.ThinkingConfig = tcfg
+		case rc.Enabled != nil && !*rc.Enabled:
+			zero := 0
+			config.ThinkingConfig = &geminiapi.ThinkingConfig{ThinkingBudget: &zero}
 		}
 	}
 

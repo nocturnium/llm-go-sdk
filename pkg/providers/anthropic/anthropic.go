@@ -175,6 +175,8 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 		var accumulatedToolCalls []llms.ToolCall
 		var accumulatedContent string // Full content for token estimation
+		var accumulatedReasoning string
+		var reasoningSignature string
 		var currentToolCall *llms.ToolCall
 		var currentToolArgs string
 		var finishReason llms.FinishReason
@@ -249,6 +251,18 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 						if event.Delta.PartialJSON != "" && currentToolCall != nil {
 							currentToolArgs += event.Delta.PartialJSON
 						}
+					case "thinking_delta":
+						if event.Delta.Thinking != "" {
+							accumulatedReasoning += event.Delta.Thinking
+							rc := &llms.ReasoningContent{Content: event.Delta.Thinking}
+							if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
+								return
+							}
+						}
+					case "signature_delta":
+						if event.Delta.Signature != "" {
+							reasoningSignature += event.Delta.Signature
+						}
 					}
 				}
 
@@ -269,8 +283,14 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 						usage = &llms.Usage{}
 					}
 					usage.CompletionTokens = event.Usage.OutputTokens
-					usage.CacheReadTokens = event.Usage.CacheReadInputTokens
-					usage.CacheCreationTokens = event.Usage.CacheCreationInputTokens
+					// Cache counts arrive at message_start; message_delta usually omits
+					// them, so only overwrite when present to avoid zeroing them out.
+					if event.Usage.CacheReadInputTokens > 0 {
+						usage.CacheReadTokens = event.Usage.CacheReadInputTokens
+					}
+					if event.Usage.CacheCreationInputTokens > 0 {
+						usage.CacheCreationTokens = event.Usage.CacheCreationInputTokens
+					}
 					usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 				}
 
@@ -282,7 +302,17 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					finalUsage = &estimated
 				}
 
+				var finalReasoning *llms.ReasoningContent
+				if accumulatedReasoning != "" || reasoningSignature != "" {
+					finalReasoning = &llms.ReasoningContent{
+						Content:   accumulatedReasoning,
+						Signature: reasoningSignature,
+					}
+				}
+
 				sender.SendFinal(llms.StreamChunk{
+					Reasoning:    finalReasoning,
+					Thinking:     finalReasoning,
 					ToolCalls:    accumulatedToolCalls,
 					FinishReason: finishReason,
 					Usage:        finalUsage,
@@ -336,15 +366,50 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 		}
 	}
 
+	// Extended thinking: when reasoning is requested (and we're not forcing a
+	// single structured-output tool, which Anthropic rejects alongside thinking),
+	// send a thinking budget. The model emits thinking content blocks before its
+	// answer. Anthropic requires budget_tokens >= 1024, max_tokens > budget_tokens,
+	// and that temperature/top_p be omitted, so we normalize those here.
+	if opts.Reasoning.IsEnabled() && structuredOutputToolNameFor(opts) == "" {
+		budget := opts.Reasoning.BudgetTokens
+		if budget <= 0 {
+			budget = llms.ReasoningBudgetForEffort(opts.Reasoning.Effort)
+		}
+		if budget <= 0 {
+			budget = 4096 // Enabled with no effort/budget hint: a sensible default.
+		}
+		if budget < 1024 {
+			budget = 1024 // Anthropic minimum.
+		}
+		if req.MaxTokens <= budget {
+			req.MaxTokens = budget + 4096
+		}
+		req.Thinking = &anthropicapi.ThinkingConfig{Type: "enabled", BudgetTokens: budget}
+		req.Temperature = nil
+		req.TopP = nil
+	}
+
+	// Prompt caching. Caching the system prompt is on by default (preserving prior
+	// behavior); WithCache/WithCacheTTL additionally cache the tool definitions,
+	// and WithoutCache disables automatic caching. Per-message CacheControl marks
+	// are applied in convertMessages regardless of this call-level setting.
+	cacheEnabled := opts.Cache == nil || !opts.Cache.Disabled
+	explicitCache := opts.Cache != nil && !opts.Cache.Disabled
+	var cacheTTL string
+	if opts.Cache != nil {
+		cacheTTL = llms.AnthropicTTL(opts.Cache.TTL)
+	}
+
 	// Extract system message if present. Use Text so a system message
 	// built from Parts (rather than the simple Content field) is not dropped.
 	for _, msg := range messages {
 		if msg.Role == llms.RoleSystem {
-			req.System = []anthropicapi.SystemBlock{{
-				Type:         "text",
-				Text:         msg.Text(),
-				CacheControl: &anthropicapi.CacheControl{Type: "ephemeral"},
-			}}
+			sb := anthropicapi.SystemBlock{Type: "text", Text: msg.Text()}
+			if cacheEnabled {
+				sb.CacheControl = &anthropicapi.CacheControl{Type: "ephemeral", TTL: cacheTTL}
+			}
+			req.System = []anthropicapi.SystemBlock{sb}
 			break
 		}
 	}
@@ -361,20 +426,64 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 			Type: "tool",
 			Name: name,
 		}
+		enforceCacheLimit(req)
 		return req, nil
 	}
 
 	// Add tools if specified
 	if len(opts.Tools) > 0 {
 		req.Tools = convertTools(opts.Tools)
+		// Cache the (stable) tool definitions by marking the last tool when the
+		// caller explicitly enabled caching for this call.
+		if explicitCache && len(req.Tools) > 0 {
+			req.Tools[len(req.Tools)-1].CacheControl = &anthropicapi.CacheControl{Type: "ephemeral", TTL: cacheTTL}
+		}
 	}
 
-	// Add tool choice if specified
+	// Add tool choice if specified. Anthropic rejects extended thinking combined
+	// with a forcing tool_choice (type "any" or "tool") — only "auto"/"none" are
+	// allowed — so soften a forcing choice to "auto" when thinking is enabled,
+	// keeping the request valid rather than failing with HTTP 400.
 	if opts.ToolChoice != nil {
-		req.ToolChoice = convertToolChoice(opts.ToolChoice)
+		if req.Thinking != nil && (opts.ToolChoice.Type == llms.ToolChoiceRequired || opts.ToolChoice.Function != nil) {
+			req.ToolChoice = anthropicapi.ToolChoiceAuto{Type: "auto"}
+		} else {
+			req.ToolChoice = convertToolChoice(opts.ToolChoice)
+		}
 	}
 
+	enforceCacheLimit(req)
 	return req, nil
+}
+
+// enforceCacheLimit caps the number of cache_control breakpoints at Anthropic's
+// maximum of four. Breakpoints are kept in priority order — system block, tool
+// definitions, then message content top-to-bottom — and any beyond the limit are
+// dropped so the request never fails with "too many cache breakpoints".
+func enforceCacheLimit(req *anthropicapi.MessagesRequest) {
+	const maxBreakpoints = 4
+	count := 0
+	keep := func(cc **anthropicapi.CacheControl) {
+		if *cc == nil {
+			return
+		}
+		if count >= maxBreakpoints {
+			*cc = nil
+			return
+		}
+		count++
+	}
+	for i := range req.System {
+		keep(&req.System[i].CacheControl)
+	}
+	for i := range req.Tools {
+		keep(&req.Tools[i].CacheControl)
+	}
+	for i := range req.Messages {
+		for j := range req.Messages[i].Content {
+			keep(&req.Messages[i].Content[j].CacheControl)
+		}
+	}
 }
 
 func structuredOutputToolNameFor(opts *llms.CallOptions) string {

@@ -3,6 +3,7 @@ package anthropic
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk"
 	"github.com/nocturnium/llm-go-sdk/internal/anthropicapi"
@@ -51,12 +52,131 @@ func TestOpenAICompatConvertResponse_CacheUsage(t *testing.T) {
 
 	result := openaicompat.ConvertResponse(&resp)
 
+	// OpenAI reports prompt_tokens inclusive of cached tokens; the SDK normalizes
+	// PromptTokens to exclude them (10 - 7 = 3) so cost is computed uniformly.
 	assertUsage(t, result.Usage, llms.Usage{
-		PromptTokens:     10,
+		PromptTokens:     3,
 		CompletionTokens: 5,
 		TotalTokens:      15,
 		CacheReadTokens:  7,
 	})
+}
+
+func newCacheTestClient(t *testing.T) *Client {
+	t.Helper()
+	client, err := New(WithAPIKey("test-key"), WithModel("claude-3-5-sonnet-20241022"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return client
+}
+
+func TestBuildRequest_SystemCacheDefaultOn(t *testing.T) {
+	client := newCacheTestClient(t)
+	messages := []llms.Message{
+		{Role: llms.RoleSystem, Content: "system prompt"},
+		{Role: llms.RoleUser, Content: "hi"},
+	}
+	req, err := client.buildRequest(messages, llms.DefaultCallOptions(), false)
+	if err != nil {
+		t.Fatalf("buildRequest error: %v", err)
+	}
+	if len(req.System) != 1 || req.System[0].CacheControl == nil {
+		t.Fatal("expected system block to be cached by default")
+	}
+	if req.System[0].CacheControl.Type != "ephemeral" || req.System[0].CacheControl.TTL != "" {
+		t.Errorf("expected ephemeral/default TTL, got %+v", req.System[0].CacheControl)
+	}
+}
+
+func TestBuildRequest_WithoutCacheDisablesSystem(t *testing.T) {
+	client := newCacheTestClient(t)
+	messages := []llms.Message{
+		{Role: llms.RoleSystem, Content: "system prompt"},
+		{Role: llms.RoleUser, Content: "hi"},
+	}
+	opts := llms.ApplyOptions(llms.WithoutCache())
+	req, err := client.buildRequest(messages, opts, false)
+	if err != nil {
+		t.Fatalf("buildRequest error: %v", err)
+	}
+	if len(req.System) != 1 || req.System[0].CacheControl != nil {
+		t.Errorf("expected system caching disabled, got %+v", req.System[0].CacheControl)
+	}
+}
+
+func TestBuildRequest_WithCacheCachesTools(t *testing.T) {
+	client := newCacheTestClient(t)
+	messages := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+	tool := llms.Tool{Type: llms.ToolTypeFunction, Function: &llms.FunctionDefinition{Name: "get_weather"}}
+	opts := llms.ApplyOptions(llms.WithCacheTTL(time.Hour), llms.WithTools([]llms.Tool{tool}))
+	req, err := client.buildRequest(messages, opts, false)
+	if err != nil {
+		t.Fatalf("buildRequest error: %v", err)
+	}
+	if len(req.Tools) != 1 || req.Tools[0].CacheControl == nil {
+		t.Fatal("expected last tool to be cached when WithCache is set")
+	}
+	if req.Tools[0].CacheControl.TTL != "1h" {
+		t.Errorf("expected 1h TTL, got %q", req.Tools[0].CacheControl.TTL)
+	}
+}
+
+func TestConvertMessages_PerMessageCacheBreakpoint(t *testing.T) {
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "cached context", CacheControl: &llms.CacheControl{TTL: time.Hour}},
+		{Role: llms.RoleUser, Content: "question"},
+	}
+	result, err := convertMessages(messages)
+	if err != nil {
+		t.Fatalf("convertMessages error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	last := result[0].Content[len(result[0].Content)-1]
+	if last.CacheControl == nil || last.CacheControl.TTL != "1h" {
+		t.Errorf("expected cache breakpoint with 1h TTL on first message, got %+v", last.CacheControl)
+	}
+	// The unmarked message must not carry a breakpoint.
+	if result[1].Content[0].CacheControl != nil {
+		t.Error("expected no breakpoint on the unmarked message")
+	}
+}
+
+func TestEnforceCacheLimit(t *testing.T) {
+	cc := func() *anthropicapi.CacheControl { return &anthropicapi.CacheControl{Type: "ephemeral"} }
+	req := &anthropicapi.MessagesRequest{
+		System: []anthropicapi.SystemBlock{{CacheControl: cc()}},
+		Tools:  []anthropicapi.Tool{{CacheControl: cc()}},
+		Messages: []anthropicapi.Message{
+			{Content: []anthropicapi.ContentPart{{CacheControl: cc()}, {CacheControl: cc()}}},
+			{Content: []anthropicapi.ContentPart{{CacheControl: cc()}}}, // 5th — must be dropped
+		},
+	}
+	enforceCacheLimit(req)
+
+	count := 0
+	if req.System[0].CacheControl != nil {
+		count++
+	}
+	if req.Tools[0].CacheControl != nil {
+		count++
+	}
+	for _, m := range req.Messages {
+		for _, p := range m.Content {
+			if p.CacheControl != nil {
+				count++
+			}
+		}
+	}
+	if count != 4 {
+		t.Errorf("expected breakpoints capped at 4, got %d", count)
+	}
+	// The 5th breakpoint (last message) must have been dropped.
+	if req.Messages[1].Content[0].CacheControl != nil {
+		t.Error("expected the 5th breakpoint to be dropped")
+	}
 }
 
 func assertUsage(t *testing.T, got, want llms.Usage) {

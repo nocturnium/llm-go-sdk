@@ -205,6 +205,14 @@ type Capabilities struct {
 	// JSONMode indicates the provider supports structured JSON output
 	JSONMode bool
 
+	// Reasoning indicates the model supports reasoning ("thinking") output and
+	// the WithReasoning* options.
+	Reasoning bool
+
+	// PromptCaching indicates the provider supports prompt caching (and reports
+	// cache token usage).
+	PromptCaching bool
+
 	// MaxContextTokens is the maximum context length (0 = unknown)
 	MaxContextTokens int
 

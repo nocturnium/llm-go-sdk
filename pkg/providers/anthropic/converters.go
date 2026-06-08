@@ -36,9 +36,11 @@ func convertResponse(resp *anthropicapi.MessagesResponse, structuredToolName ...
 		},
 	}
 
-	// Extract tool calls
+	// Extract tool calls and extended-thinking blocks.
+	var reasoningText, reasoningSignature string
 	for _, part := range resp.Content {
-		if part.Type == contentTypeToolUse {
+		switch part.Type {
+		case contentTypeToolUse:
 			if structuredOutputTool != "" && part.Name == structuredOutputTool && response.Content == "" {
 				response.Content = string(part.Input)
 			}
@@ -51,7 +53,18 @@ func convertResponse(resp *anthropicapi.MessagesResponse, structuredToolName ...
 				},
 			}
 			response.ToolCalls = append(response.ToolCalls, tc)
+		case "thinking":
+			reasoningText += part.Thinking
+			if part.Signature != "" {
+				reasoningSignature = part.Signature
+			}
 		}
+	}
+	if reasoningText != "" || reasoningSignature != "" {
+		response.SetReasoning(&llms.ReasoningContent{
+			Content:   reasoningText,
+			Signature: reasoningSignature,
+		})
 	}
 
 	return response
@@ -113,6 +126,15 @@ func convertMessages(messages []llms.Message) ([]anthropicapi.Message, error) {
 					Name:  tc.Function.Name,
 					Input: json.RawMessage(tc.Function.Arguments),
 				})
+			}
+		}
+
+		// Apply a per-message cache breakpoint to the last content block so the
+		// prompt prefix up to this message is cached.
+		if msg.CacheControl != nil && len(content) > 0 {
+			content[len(content)-1].CacheControl = &anthropicapi.CacheControl{
+				Type: "ephemeral",
+				TTL:  llms.AnthropicTTL(msg.CacheControl.TTL),
 			}
 		}
 

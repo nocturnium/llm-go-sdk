@@ -53,7 +53,8 @@ func TestEngineGenerateContent(t *testing.T) {
 				Content:      "engine response",
 				FinishReason: "stop",
 				Usage: llms.Usage{
-					PromptTokens:     11,
+					// PromptTokens excludes the 3 cache-read tokens (11 - 3 = 8).
+					PromptTokens:     8,
 					CompletionTokens: 7,
 					TotalTokens:      18,
 					CacheReadTokens:  3,

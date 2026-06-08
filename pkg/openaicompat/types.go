@@ -26,6 +26,9 @@ type ChatCompletionRequest struct {
 	Tools            []Tool          `json:"tools,omitempty"`
 	ToolChoice       any             `json:"tool_choice,omitempty"`
 	ResponseFormat   *ResponseFormat `json:"response_format,omitempty"`
+	// ReasoningEffort maps to the OpenAI reasoning_effort parameter
+	// ("minimal"/"low"/"medium"/"high") for reasoning models. Empty omits it.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 
 	// ExtraBody contains additional parameters merged at the top level of the JSON request.
 	// Used for provider-specific extensions like LoRAX adapter_id.
@@ -86,6 +89,9 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 	}
 	if r.ResponseFormat != nil {
 		m["response_format"] = r.ResponseFormat
+	}
+	if r.ReasoningEffort != "" {
+		m["reasoning_effort"] = r.ReasoningEffort
 	}
 
 	// Merge ExtraBody fields at the top level
@@ -191,6 +197,31 @@ type Usage struct {
 	PromptTokensDetails *struct {
 		CachedTokens int `json:"cached_tokens"`
 	} `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"completion_tokens_details,omitempty"`
+	// PromptCacheHitTokens is DeepSeek's cache-hit count (its alternative to
+	// prompt_tokens_details.cached_tokens).
+	PromptCacheHitTokens int `json:"prompt_cache_hit_tokens,omitempty"`
+}
+
+// cacheReadTokens returns the number of prompt tokens served from cache,
+// reconciling the OpenAI (prompt_tokens_details.cached_tokens) and DeepSeek
+// (prompt_cache_hit_tokens) shapes.
+func (u *Usage) cacheReadTokens() int {
+	if u.PromptTokensDetails != nil && u.PromptTokensDetails.CachedTokens > 0 {
+		return u.PromptTokensDetails.CachedTokens
+	}
+	return u.PromptCacheHitTokens
+}
+
+// reasoningTokens returns the number of reasoning tokens reported in
+// completion_tokens_details, or zero.
+func (u *Usage) reasoningTokens() int {
+	if u.CompletionTokensDetails != nil {
+		return u.CompletionTokensDetails.ReasoningTokens
+	}
+	return 0
 }
 
 // StreamChunk represents a streaming response chunk

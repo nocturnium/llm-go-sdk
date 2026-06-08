@@ -23,6 +23,11 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 	if candidate.Content != nil {
 		response.Content = geminiapi.ExtractTextContent(candidate.Content.Parts)
 
+		// Extract reasoning ("thought") content.
+		if thought := geminiapi.ExtractThoughtContent(candidate.Content.Parts); thought != "" {
+			response.SetReasoning(&llms.ReasoningContent{Content: thought})
+		}
+
 		// Extract function calls
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil {
@@ -42,14 +47,31 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 	response.FinishReason = llms.FinishReason(geminiapi.GetFinishReason(candidate.FinishReason))
 
 	if resp.UsageMetadata != nil {
-		response.Usage = llms.Usage{
-			PromptTokens:     resp.UsageMetadata.PromptTokenCount,
-			CompletionTokens: resp.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      resp.UsageMetadata.TotalTokenCount,
+		response.Usage = convertUsageMetadata(resp.UsageMetadata)
+		if response.Reasoning != nil {
+			response.Reasoning.Tokens = response.Usage.ReasoningTokens
 		}
 	}
 
 	return response
+}
+
+// convertUsageMetadata maps Gemini usage metadata to the neutral llms.Usage.
+// On the Gemini API, candidatesTokenCount already includes thought tokens, so
+// CompletionTokens is candidatesTokenCount (which thus already includes
+// ReasoningTokens, per the Usage contract). PromptTokens excludes cached tokens.
+func convertUsageMetadata(um *geminiapi.UsageMetadata) llms.Usage {
+	prompt := um.PromptTokenCount - um.CachedContentTokenCount
+	if prompt < 0 {
+		prompt = 0
+	}
+	return llms.Usage{
+		PromptTokens:     prompt,
+		CompletionTokens: um.CandidatesTokenCount,
+		TotalTokens:      um.TotalTokenCount,
+		CacheReadTokens:  um.CachedContentTokenCount,
+		ReasoningTokens:  um.ThoughtsTokenCount,
+	}
 }
 
 // convertMessages converts llms.Message slice to geminiapi.Content slice.
