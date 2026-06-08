@@ -304,6 +304,17 @@ func truncateString(s string, maxLength int) string {
 	return s[:maxLength] + "..."
 }
 
+// logValueReplacer neutralizes the carriage-return and line-feed characters that
+// an attacker could use to forge additional log entries (CWE-117 log injection).
+var logValueReplacer = strings.NewReplacer("\r", "\\r", "\n", "\\n")
+
+// sanitizeLogValue escapes CR/LF in user-controlled content (prompts, responses)
+// so it cannot break out of its log field and inject forged log lines. It is
+// applied at the point such values are formatted for logging.
+func sanitizeLogValue(s string) string {
+	return logValueReplacer.Replace(s)
+}
+
 // LoggingMiddleware wraps an LLM with logging capabilities
 type LoggingMiddleware struct {
 	llm    LLM

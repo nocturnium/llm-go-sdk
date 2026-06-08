@@ -94,7 +94,7 @@ func (l *SlogLogger) buildRequestAttrs(entry *LogEntry) []slog.Attr {
 		attrs = append(attrs, slog.Int("message_count", len(entry.Messages)))
 		if len(entry.Messages) > 0 {
 			lastMsg := entry.Messages[len(entry.Messages)-1]
-			content := l.truncate(lastMsg.Content)
+			content := sanitizeLogValue(l.truncate(lastMsg.Content))
 			attrs = append(attrs, slog.String("last_message", content))
 		}
 	}
@@ -127,7 +127,7 @@ func (l *SlogLogger) buildResponseAttrs(entry *LogEntry) []slog.Attr {
 	}
 
 	if !l.redact {
-		content := l.truncate(entry.Content)
+		content := sanitizeLogValue(l.truncate(entry.Content))
 		attrs = append(attrs, slog.String("content", content))
 	}
 

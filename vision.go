@@ -99,6 +99,9 @@ func NewImageBase64Part(data, mediaType string) ContentPart {
 // It reads the file, encodes it as base64, and detects the media type from the extension.
 // Returns an error if the file exceeds MaxImageSize (20MB).
 func NewImageFromFile(path string) (ContentPart, error) {
+	// Normalize the caller-supplied path (collapses ./ and ../ segments).
+	path = filepath.Clean(path)
+
 	// Check file size before reading to prevent OOM on large files
 	fileInfo, err := os.Stat(path)
 	if err != nil {
@@ -109,6 +112,7 @@ func NewImageFromFile(path string) (ContentPart, error) {
 		return ContentPart{}, fmt.Errorf("image file size %d bytes exceeds maximum allowed size of %d bytes", fileInfo.Size(), MaxImageSize)
 	}
 
+	// #nosec G304 -- reading a caller-supplied local image path is the documented purpose of NewImageFromFile.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ContentPart{}, fmt.Errorf("failed to read image file: %w", err)

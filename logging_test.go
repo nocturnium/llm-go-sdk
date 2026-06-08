@@ -685,3 +685,29 @@ func TestLogEntry_PopulateFromCallOptions_Nil(t *testing.T) {
 		t.Errorf("UserID = %s, want existing-user", entry.UserID)
 	}
 }
+
+func TestSanitizeLogValue(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "hello world", "hello world"},
+		{"newline", "line1\nline2", "line1\\nline2"},
+		{"carriage_return", "a\rb", "a\\rb"},
+		{"crlf", "a\r\nb", "a\\r\\nb"},
+		{"forged_entry", "ok\nERROR forged log line", "ok\\nERROR forged log line"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sanitizeLogValue(tt.in); got != tt.want {
+				t.Errorf("sanitizeLogValue(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+			// A sanitized value must never contain a raw CR or LF.
+			if got := sanitizeLogValue(tt.in); strings.ContainsAny(got, "\r\n") {
+				t.Errorf("sanitizeLogValue(%q) = %q still contains a raw CR/LF", tt.in, got)
+			}
+		})
+	}
+}

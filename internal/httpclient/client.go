@@ -133,6 +133,18 @@ func debugEnabled() bool {
 	return os.Getenv("LLM_DEBUG_REQUESTS") != ""
 }
 
+// logValueReplacer neutralizes the carriage-return and line-feed characters that
+// could be used to forge log entries (CWE-117) when untrusted values (URLs,
+// server error bodies) are printed by the debug logger.
+var logValueReplacer = strings.NewReplacer("\r", "\\r", "\n", "\\n")
+
+// sanitizeLogValue escapes CR/LF in a value before it is written to the debug
+// log. Duplicated (unexported, three lines) from package llms to avoid coupling
+// this internal HTTP client to the root package.
+func sanitizeLogValue(s string) string {
+	return logValueReplacer.Replace(s)
+}
+
 // WithTimeout sets the HTTP client timeout.
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
@@ -200,7 +212,7 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 
 	// Debug logging when LLM_DEBUG_REQUESTS is set
 	if debugEnabled() {
-		fmt.Printf("[DEBUG] LLM Request URL: %s %s\n", req.Method, req.URL)
+		fmt.Printf("[DEBUG] LLM Request URL: %s %s\n", sanitizeLogValue(req.Method), sanitizeLogValue(req.URL))
 		if len(bodyBytes) > 0 {
 			// Pretty print the JSON for readability (truncate if too large)
 			var prettyJSON bytes.Buffer
@@ -462,7 +474,7 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 
 	// Debug logging for error responses
 	if debugEnabled() {
-		fmt.Printf("[DEBUG] LLM Error Response (status %d) from %s %s:\n%s\n", resp.StatusCode, reqMethod, reqURL, string(body))
+		fmt.Printf("[DEBUG] LLM Error Response (status %d) from %s %s:\n%s\n", resp.StatusCode, sanitizeLogValue(reqMethod), sanitizeLogValue(reqURL), sanitizeLogValue(string(body)))
 	}
 
 	// Check if we hit the limit (response was truncated)
