@@ -9,5 +9,10 @@ queries:
 # Exclude demonstration programs from analysis. The example binaries under
 # examples/ intentionally print LLM provider responses to stdout, which trips
 # go/log-injection; they are runnable docs, not shipped library code.
+#
+# The Go extractor filters via LGTM_INDEX_FILTERS, whose globs are file-based:
+# a bare "examples" does NOT match "examples/basic/main.go", so the "/**" form
+# is required (verified from the analyze run log).
 paths-ignore:
   - examples
+  - examples/**
