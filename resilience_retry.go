@@ -84,6 +84,6 @@ func calculateDelay(baseDelay time.Duration, jitter float64) time.Duration {
 	// Using math/rand/v2 for proper randomness to avoid thundering herd
 	// Note: math/rand is acceptable here for jitter (not cryptographic use)
 	jitterRange := float64(baseDelay) * jitter
-	jitterValue := (rand.Float64() - 0.5) * 2 * jitterRange //nolint:gosec // Weak random is acceptable for jitter
+	jitterValue := (rand.Float64() - 0.5) * 2 * jitterRange // #nosec G404 -- non-cryptographic jitter for thundering-herd spread; math/rand/v2 is intentional
 	return time.Duration(float64(baseDelay) + jitterValue)
 }
