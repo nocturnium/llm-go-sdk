@@ -13,6 +13,29 @@ const (
 	testCostModel         = "test-model"
 )
 
+func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
+	// The current default/flagship models must be priced so CostTracker does not
+	// silently report $0 out of the box.
+	cases := []struct {
+		provider Provider
+		model    string
+	}{
+		{ProviderAnthropic, "claude-sonnet-4-20250514"},
+		{ProviderOpenAI, "gpt-4.1"},
+		{ProviderOpenAI, "o3"},
+		{ProviderOpenAI, "o4-mini"},
+		{ProviderGemini, "gemini-2.5-pro"},
+		{ProviderGemini, "gemini-2.5-flash"},
+		{ProviderDeepSeek, "deepseek-chat"},
+	}
+	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
+	for _, c := range cases {
+		if got := EstimateCost(c.provider, c.model, u); got <= 0 {
+			t.Errorf("%s:%s estimated at $%v, expected > 0", c.provider, c.model, got)
+		}
+	}
+}
+
 func TestPricing_DefaultPricing(t *testing.T) {
 	// Verify key models have pricing defined
 	expectedModels := []string{

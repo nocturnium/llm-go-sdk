@@ -65,13 +65,24 @@ var DefaultPricing = map[string]Pricing{
 	"openai:gpt-3.5-turbo":          {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
 	"openai:o1":                     {PromptPerMillion: 15.00, CompletionPerMillion: 60.00, CacheReadPerMillion: 7.50},
 	"openai:o1-mini":                {PromptPerMillion: 3.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 1.50},
+	"openai:o3":                     {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
+	"openai:o4-mini":                {PromptPerMillion: 1.10, CompletionPerMillion: 4.40, CacheReadPerMillion: 0.275},
+	"openai:gpt-4.1":                {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
+	"openai:gpt-4.1-mini":           {PromptPerMillion: 0.40, CompletionPerMillion: 1.60, CacheReadPerMillion: 0.10},
+	"openai:gpt-4.1-nano":           {PromptPerMillion: 0.10, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.025},
 
 	// OpenAI Embeddings
 	"openai:text-embedding-3-small": {PromptPerMillion: 0.02},
 	"openai:text-embedding-3-large": {PromptPerMillion: 0.13},
 	"openai:text-embedding-ada-002": {PromptPerMillion: 0.10},
 
-	// Anthropic (cache read ≈0.1× prompt, cache write ≈1.25× prompt).
+	// Anthropic (cache read ≈0.1× prompt, cache write ≈1.25× prompt). The Sonnet
+	// tier has held at $3/$15 across generations; Opus 4/4.1 at $15/$75.
+	"anthropic:claude-sonnet-4-20250514":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-sonnet-4":            {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-3-7-sonnet-20250219": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-opus-4-20250514":     {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
+	"anthropic:claude-opus-4":              {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
 	"anthropic:claude-3-5-sonnet-20241022": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-3-5-sonnet-20240620": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-3-5-haiku-20241022":  {PromptPerMillion: 0.80, CompletionPerMillion: 4.00, CacheReadPerMillion: 0.08, CacheWritePerMillion: 1.00},
@@ -79,14 +90,22 @@ var DefaultPricing = map[string]Pricing{
 	"anthropic:claude-3-sonnet-20240229":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-3-haiku-20240307":    {PromptPerMillion: 0.25, CompletionPerMillion: 1.25, CacheReadPerMillion: 0.03, CacheWritePerMillion: 0.30},
 
-	// Google Gemini (cached content billed at ~0.25× prompt).
-	"gemini:gemini-2.0-flash-exp": {}, // Free during preview
-	"gemini:gemini-2.0-flash":     {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash":     {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash-8b":  {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
-	"gemini:gemini-1.5-pro":       {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.0-pro":       {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:text-embedding-004":   {}, // Free
+	// Google Gemini (cached content billed at ~0.25× prompt). 2.5 Pro uses tiered
+	// pricing (≤200K context shown here).
+	"gemini:gemini-2.5-pro":        {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-2.5-flash":      {PromptPerMillion: 0.30, CompletionPerMillion: 2.50, CacheReadPerMillion: 0.075},
+	"gemini:gemini-2.5-flash-lite": {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
+	"gemini:gemini-2.0-flash-exp":  {}, // Free during preview
+	"gemini:gemini-2.0-flash":      {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash":      {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash-8b":   {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
+	"gemini:gemini-1.5-pro":        {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.0-pro":        {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:text-embedding-004":    {}, // Free
+
+	// DeepSeek (cache hits billed at a steep discount).
+	"deepseek:deepseek-chat":     {PromptPerMillion: 0.27, CompletionPerMillion: 1.10, CacheReadPerMillion: 0.07},
+	"deepseek:deepseek-reasoner": {PromptPerMillion: 0.55, CompletionPerMillion: 2.19, CacheReadPerMillion: 0.14},
 
 	// TogetherAI (varies by model, these are examples)
 	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},

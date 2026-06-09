@@ -28,6 +28,23 @@ All notable changes to this project will be documented in this file.
 - `Usage.PromptTokens` now excludes cache-read tokens for all providers so cost is
   computed uniformly; cache reads/writes are billed at their discounted rates.
 
+### Hardened (pre-release review)
+
+- Streaming tool-call accumulation rejects malformed indices (negative → no panic,
+  absurd → no unbounded allocation); stream processing and the `RunTools` loop
+  recover from panics instead of crashing the host.
+- OpenAI reasoning models (o-series, gpt-5) send `max_completion_tokens` and omit
+  unsupported sampling params instead of failing with HTTP 400.
+- Added pricing for current default/flagship models (Claude Sonnet/Opus 4,
+  Gemini 2.5, GPT-4.1, o3/o4-mini, DeepSeek) so cost tracking is no longer $0 by
+  default; Gemini token accounting reconciles reasoning tokens correctly.
+- HTTP client validates the resolved IP at dial time (blocks DNS-rebinding and
+  redirect-to-private SSRF) and caps non-streaming response bodies.
+- Resilience and fallback now observe streaming outcomes: a failed stream trips the
+  circuit breaker and fails the chain over to the next client.
+- Fixed a sliding-window metrics counter corruption; corrected DeepSeek reasoning
+  capability and context window; Gemini reports `tool_calls` finish reason.
+
 ### Deprecated
 
 - `WithThinkingMode` (use `WithReasoning`), `Response.Thinking` /

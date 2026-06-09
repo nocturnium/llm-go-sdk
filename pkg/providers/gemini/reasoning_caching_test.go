@@ -7,36 +7,82 @@ import (
 	"github.com/nocturnium/llm-go-sdk/internal/geminiapi"
 )
 
-// TestConvertUsageMetadata_TokenConsistency guards against double-counting thought
-// tokens: on the Gemini API candidatesTokenCount already includes thoughts, so
-// CompletionTokens must equal candidatesTokenCount (not candidates+thoughts), and
-// PromptTokens must exclude cached tokens.
+// TestConvertUsageMetadata_TokenConsistency verifies reasoning tokens are counted
+// exactly once across both Gemini accounting backends, that PromptTokens excludes
+// cache, and that prompt+completion+cache reconciles with the reported total.
 func TestConvertUsageMetadata_TokenConsistency(t *testing.T) {
-	um := &geminiapi.UsageMetadata{
-		PromptTokenCount:        100,
-		CandidatesTokenCount:    550, // includes 500 thought tokens
-		ThoughtsTokenCount:      500,
-		CachedContentTokenCount: 40,
-		TotalTokenCount:         650,
+	cases := []struct {
+		name           string
+		um             geminiapi.UsageMetadata
+		wantPrompt     int
+		wantCompletion int
+		wantReasoning  int
+	}{
+		{
+			// Separate accounting (Vertex / Gemini-API-in-practice): candidates
+			// EXCLUDES thoughts; total = prompt + candidates + thoughts.
+			name: "thoughts separate from candidates",
+			um: geminiapi.UsageMetadata{
+				PromptTokenCount: 100, CachedContentTokenCount: 40,
+				CandidatesTokenCount: 50, ThoughtsTokenCount: 500, TotalTokenCount: 650,
+			},
+			wantPrompt: 60, wantCompletion: 550, wantReasoning: 500,
+		},
+		{
+			// Folded accounting (Gemini API as documented): candidates INCLUDES
+			// thoughts; total = prompt + candidates.
+			name: "thoughts folded into candidates",
+			um: geminiapi.UsageMetadata{
+				PromptTokenCount: 100, CachedContentTokenCount: 40,
+				CandidatesTokenCount: 550, ThoughtsTokenCount: 500, TotalTokenCount: 650,
+			},
+			wantPrompt: 60, wantCompletion: 550, wantReasoning: 500,
+		},
+		{
+			name: "no thoughts",
+			um: geminiapi.UsageMetadata{
+				PromptTokenCount: 100, CandidatesTokenCount: 50, TotalTokenCount: 150,
+			},
+			wantPrompt: 100, wantCompletion: 50, wantReasoning: 0,
+		},
 	}
-	u := convertUsageMetadata(um)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			u := convertUsageMetadata(&tc.um)
+			if u.PromptTokens != tc.wantPrompt {
+				t.Errorf("PromptTokens = %d, want %d", u.PromptTokens, tc.wantPrompt)
+			}
+			if u.CompletionTokens != tc.wantCompletion {
+				t.Errorf("CompletionTokens = %d, want %d", u.CompletionTokens, tc.wantCompletion)
+			}
+			if u.ReasoningTokens != tc.wantReasoning {
+				t.Errorf("ReasoningTokens = %d, want %d", u.ReasoningTokens, tc.wantReasoning)
+			}
+			if u.PromptTokens+u.CompletionTokens+u.CacheReadTokens != u.TotalTokens {
+				t.Errorf("prompt(%d)+completion(%d)+cache(%d) != total(%d)",
+					u.PromptTokens, u.CompletionTokens, u.CacheReadTokens, u.TotalTokens)
+			}
+		})
+	}
+}
 
-	if u.CompletionTokens != 550 {
-		t.Errorf("CompletionTokens = %d, want 550 (no double-count)", u.CompletionTokens)
+func TestConvertResponse_ToolCallFinishReason(t *testing.T) {
+	// Gemini returns STOP even with function calls; convertResponse must normalize
+	// to FinishReasonToolCalls so cross-provider callers keying on it work.
+	resp := &geminiapi.GenerateContentResponse{
+		Candidates: []geminiapi.Candidate{{
+			FinishReason: "STOP",
+			Content: &geminiapi.Content{Parts: []geminiapi.Part{{
+				FunctionCall: &geminiapi.FunctionCall{Name: "get_weather", Args: map[string]any{"q": "NYC"}},
+			}}},
+		}},
 	}
-	if u.ReasoningTokens != 500 {
-		t.Errorf("ReasoningTokens = %d, want 500", u.ReasoningTokens)
+	got := convertResponse(resp)
+	if got.FinishReason != llms.FinishReasonToolCalls {
+		t.Errorf("FinishReason = %q, want %q", got.FinishReason, llms.FinishReasonToolCalls)
 	}
-	if u.PromptTokens != 60 {
-		t.Errorf("PromptTokens = %d, want 60 (100 - 40 cached)", u.PromptTokens)
-	}
-	if u.CacheReadTokens != 40 {
-		t.Errorf("CacheReadTokens = %d, want 40", u.CacheReadTokens)
-	}
-	// Prompt + completion must reconcile with the reported total.
-	if u.PromptTokens+u.CompletionTokens+u.CacheReadTokens != u.TotalTokens {
-		t.Errorf("prompt(%d)+completion(%d)+cache(%d) != total(%d)",
-			u.PromptTokens, u.CompletionTokens, u.CacheReadTokens, u.TotalTokens)
+	if len(got.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(got.ToolCalls))
 	}
 }
 

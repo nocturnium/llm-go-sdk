@@ -515,6 +515,25 @@ func TestAppendOrMergeToolCallIndexWithNilFunction(t *testing.T) {
 	}
 }
 
+func TestAppendOrMergeToolCall_NegativeIndexNoPanic(t *testing.T) {
+	neg := -1
+	// A negative index must NOT panic on calls[-1]; it falls through to ID-based
+	// matching and is appended as a new call.
+	calls := appendOrMergeToolCall(nil, ToolCall{Index: &neg, ID: "x", Function: &FunctionCall{Name: "a"}})
+	if len(calls) != 1 || calls[0].ID != "x" {
+		t.Fatalf("expected one call via ID fallback, got %+v", calls)
+	}
+}
+
+func TestAppendOrMergeToolCall_HugeIndexBounded(t *testing.T) {
+	huge := 1 << 30
+	// An absurd index must be rejected, not back-filled (OOM guard).
+	calls := appendOrMergeToolCall(nil, ToolCall{Index: &huge, ID: "x"})
+	if len(calls) != 0 {
+		t.Fatalf("expected absurd index rejected, got %d calls", len(calls))
+	}
+}
+
 func TestConvertResponse(t *testing.T) {
 	resp := &ChatCompletionResponse{
 		Choices: []Choice{
@@ -632,6 +651,54 @@ func TestConvertResponse_ReasoningTokens(t *testing.T) {
 	}
 	if result.Reasoning == nil || result.Reasoning.Tokens != 25 {
 		t.Errorf("expected Reasoning.Tokens=25, got %+v", result.Reasoning)
+	}
+}
+
+func TestBuildChatRequest_OpenAIReasoningModel(t *testing.T) {
+	opts := llms.ApplyOptions(llms.WithMaxTokens(1000), llms.WithTemperature(0.7))
+	req := BuildChatRequest("o3-mini", nil, opts, false)
+
+	if req.MaxTokens != nil {
+		t.Error("o-series: max_tokens must be omitted")
+	}
+	if req.MaxCompletionTokens == nil || *req.MaxCompletionTokens != 1000 {
+		t.Errorf("o-series: expected max_completion_tokens=1000, got %v", req.MaxCompletionTokens)
+	}
+	if req.Temperature != nil {
+		t.Error("o-series: temperature must be dropped")
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := m["max_tokens"]; ok {
+		t.Error("o-series wire: max_tokens must not appear")
+	}
+	if m["max_completion_tokens"] != float64(1000) {
+		t.Errorf("o-series wire: max_completion_tokens=%v", m["max_completion_tokens"])
+	}
+	if _, ok := m["temperature"]; ok {
+		t.Error("o-series wire: temperature must not appear")
+	}
+}
+
+func TestBuildChatRequest_NonReasoningModelUnchanged(t *testing.T) {
+	opts := llms.ApplyOptions(llms.WithMaxTokens(1000), llms.WithTemperature(0.7))
+	req := BuildChatRequest("gpt-4o", nil, opts, false)
+
+	if req.MaxTokens == nil || *req.MaxTokens != 1000 {
+		t.Error("gpt-4o must keep max_tokens")
+	}
+	if req.MaxCompletionTokens != nil {
+		t.Error("gpt-4o must not use max_completion_tokens")
+	}
+	if req.Temperature == nil {
+		t.Error("gpt-4o must keep temperature")
 	}
 }
 

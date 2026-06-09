@@ -155,6 +155,17 @@ func runToolCalls(ctx context.Context, registry *ToolRegistry, calls []ToolCall,
 
 		go func(index int, call ToolCall) {
 			defer func() { <-sem }()
+			// A panicking tool handler must not crash the host; turn it into a
+			// tool-error message the model can react to.
+			defer func() {
+				if r := recover(); r != nil {
+					results <- runToolResult{
+						index: index,
+						message: ToolResultError(call.ID, toolCallName(call),
+							fmt.Errorf("tool %q panicked: %v", toolCallName(call), r)),
+					}
+				}
+			}()
 
 			msg, err := registry.Handle(call)
 			if err != nil {

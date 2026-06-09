@@ -45,6 +45,11 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 	}
 
 	response.FinishReason = llms.FinishReason(geminiapi.GetFinishReason(candidate.FinishReason))
+	// Gemini returns STOP even when the response contains function calls; normalize
+	// to the cross-provider tool-calls finish reason so callers keying on it work.
+	if len(response.ToolCalls) > 0 {
+		response.FinishReason = llms.FinishReasonToolCalls
+	}
 
 	if resp.UsageMetadata != nil {
 		response.Usage = convertUsageMetadata(resp.UsageMetadata)
@@ -57,17 +62,27 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 }
 
 // convertUsageMetadata maps Gemini usage metadata to the neutral llms.Usage.
-// On the Gemini API, candidatesTokenCount already includes thought tokens, so
-// CompletionTokens is candidatesTokenCount (which thus already includes
-// ReasoningTokens, per the Usage contract). PromptTokens excludes cached tokens.
+// PromptTokens excludes cached tokens; CompletionTokens must include reasoning
+// tokens (Usage contract). Whether candidatesTokenCount already includes
+// thoughtsTokenCount is backend- and model-dependent: Vertex reports them
+// separately, and while the Gemini API is documented to fold thoughts into
+// candidates it frequently does not in practice. So we detect the
+// separate-accounting case via the reported total and fold thoughts in only
+// then — counting reasoning tokens exactly once and keeping
+// PromptTokens + CompletionTokens + CacheReadTokens == TotalTokenCount.
 func convertUsageMetadata(um *geminiapi.UsageMetadata) llms.Usage {
 	prompt := um.PromptTokenCount - um.CachedContentTokenCount
 	if prompt < 0 {
 		prompt = 0
 	}
+	completion := um.CandidatesTokenCount
+	if um.ThoughtsTokenCount > 0 &&
+		um.PromptTokenCount+um.CandidatesTokenCount+um.ThoughtsTokenCount == um.TotalTokenCount {
+		completion += um.ThoughtsTokenCount
+	}
 	return llms.Usage{
 		PromptTokens:     prompt,
-		CompletionTokens: um.CandidatesTokenCount,
+		CompletionTokens: completion,
 		TotalTokens:      um.TotalTokenCount,
 		CacheReadTokens:  um.CachedContentTokenCount,
 		ReasoningTokens:  um.ThoughtsTokenCount,

@@ -511,17 +511,20 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 		}
 	}
 	// ...and providers whose chat surface is reasoning-capable as a whole. Only
-	// providers represented solely by a default (no per-model entries) belong here:
-	// reasoning is model-specific, so marking a default for a provider that also
-	// has exact entries (Anthropic, Gemini, OpenAI) would disagree with those exact
-	// entries (e.g. claude-3-5-sonnet does not support extended thinking). Those
-	// providers' reasoning models are flagged explicitly in reasoningModels above.
-	reasoningProviders := []Provider{ProviderZAI, ProviderDeepSeek}
-	for _, p := range reasoningProviders {
-		if caps, ok := r.defaults[p]; ok {
-			caps.SupportsReasoning = true
-			r.defaults[p] = caps
-		}
+	// ZAI qualifies: its GLM-4.x chat models broadly expose a thinking toggle, and
+	// it is represented solely by a default. Reasoning is otherwise model-specific,
+	// so flagging a provider default that also has exact model entries (Anthropic,
+	// Gemini, OpenAI) would disagree with those entries. DeepSeek is mixed —
+	// deepseek-reasoner reasons but the default deepseek-chat does not — so it is
+	// handled as a per-model entry below rather than a provider default.
+	if caps, ok := r.defaults[ProviderZAI]; ok {
+		caps.SupportsReasoning = true
+		r.defaults[ProviderZAI] = caps
+	}
+	if caps, ok := r.defaults[ProviderDeepSeek]; ok {
+		rc := caps // full copy of the provider defaults...
+		rc.SupportsReasoning = true
+		r.capabilities[r.makeKey(ProviderDeepSeek, "deepseek-reasoner")] = rc // ...with reasoning on
 	}
 
 	// Prompt caching: Anthropic (explicit breakpoints), OpenAI/Azure/DeepSeek

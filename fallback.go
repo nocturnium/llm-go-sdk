@@ -249,10 +249,116 @@ func (fc *FallbackChain) GenerateContent(ctx context.Context, messages []Message
 }
 
 // Stream tries each client in order until one succeeds
+// Stream attempts each client in order. Because streaming failures surface as a
+// terminal error chunk rather than the synchronous return value, it inspects the
+// first chunk: if a client errors before emitting any content, it fails over to
+// the next client; once content flows, that client is committed and streamed
+// through (a later mid-stream error marks it unhealthy but cannot fail over).
 func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
-	return executeWithFallback(fc, func(client LLM) (<-chan StreamChunk, error) {
-		return client.Stream(ctx, messages, options...)
-	})
+	fc.mu.RLock()
+	clients := fc.clients
+	fc.mu.RUnlock()
+	if len(clients) == 0 {
+		return nil, ErrNoClientsAvailable
+	}
+
+	opts := ApplyOptions(options...)
+	candidates := fc.candidateIndexes(len(clients))
+	var lastErr error
+
+	for pos, i := range candidates {
+		client := clients[i]
+		src, err := client.Stream(ctx, messages, options...)
+		if err != nil {
+			lastErr = err
+			fc.markUnhealthy(i)
+			if !fc.selector.ShouldFallback(err) {
+				return nil, err
+			}
+			fc.fireFallback(pos, candidates, clients, err)
+			continue
+		}
+
+		first, ok := <-src
+		switch {
+		case !ok:
+			// Stream closed without any chunk; treat as an (empty) success.
+			fc.markHealthy(i)
+			return forwardStream(ctx, opts, StreamChunk{Done: true}, src, nil), nil
+		case first.Error != nil:
+			lastErr = first.Error
+			fc.markUnhealthy(i)
+			if !fc.selector.ShouldFallback(first.Error) {
+				// Committed to this client by contract (chan already returned); deliver its error.
+				return forwardStream(ctx, opts, first, src, nil), nil
+			}
+			fc.fireFallback(pos, candidates, clients, first.Error)
+			go drainStream(src) // let the abandoned producer finish without blocking
+			continue
+		default:
+			fc.markHealthy(i)
+			if fc.onSuccess != nil {
+				fc.onSuccess(i, client)
+			}
+			idx := i
+			return forwardStream(ctx, opts, first, src, func(failed bool) {
+				if failed {
+					fc.markUnhealthy(idx)
+				}
+			}), nil
+		}
+	}
+
+	return nil, lastErr
+}
+
+// fireFallback invokes the onFallback callback (if set) for a transition from the
+// candidate at position pos to the next candidate.
+func (fc *FallbackChain) fireFallback(pos int, candidates []int, clients []LLM, err error) {
+	if fc.onFallback == nil || pos >= len(candidates)-1 {
+		return
+	}
+	from := candidates[pos]
+	to := candidates[pos+1]
+	fc.onFallback(from, to, clients[from], clients[to], err)
+}
+
+// drainStream consumes a stream to completion so its producer goroutine is not
+// left blocked when the chain abandons it to fail over.
+func drainStream(src <-chan StreamChunk) {
+	for range src { //nolint:revive // intentionally draining to unblock the producer
+	}
+}
+
+// forwardStream emits first, then forwards src to a new channel with StreamSender
+// timeout protection and the terminal-chunk guarantee. onDone (if set) is invoked
+// once with whether a terminal error chunk was observed.
+func forwardStream(ctx context.Context, opts *CallOptions, first StreamChunk, src <-chan StreamChunk, onDone func(failed bool)) <-chan StreamChunk {
+	out := make(chan StreamChunk, GetBufferSize(opts))
+	sender := NewStreamSender(ctx, out, opts.StreamSendTimeout)
+
+	go func() {
+		defer close(out)
+		failed := first.Error != nil
+		if onDone != nil {
+			defer func() { onDone(failed) }()
+		}
+		defer sender.EnsureTerminal()
+
+		if sender.ForwardTerminalOnEarlyExit(sender.Send(first)) {
+			return
+		}
+		for chunk := range src {
+			if chunk.Error != nil {
+				failed = true
+			}
+			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+				return
+			}
+		}
+	}()
+
+	return out
 }
 
 // Provider returns the first client's provider

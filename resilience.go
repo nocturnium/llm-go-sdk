@@ -96,16 +96,44 @@ func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []Messa
 	return result, err
 }
 
-// Stream wraps the LLM's Stream method with resilience
-// Note: Streaming has limited retry capability - only the initial connection is retried
+// Stream wraps the LLM's Stream method with resilience.
+//
+// Streaming failures surface as a terminal error chunk on the returned channel
+// rather than as the synchronous return value, so the circuit breaker is updated
+// from the stream's actual outcome (success/failure) once it completes. Mid-stream
+// retry is not possible once chunks have been emitted; only the initial connect
+// error is handled synchronously.
 func (rc *ResilientClient) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
-	var result <-chan StreamChunk
-	err := rc.execute(ctx, func() error {
-		var streamErr error
-		result, streamErr = rc.llm.Stream(ctx, messages, options...)
-		return streamErr
-	})
-	return result, err
+	if !rc.breaker.Allow() {
+		return nil, ErrCircuitOpen
+	}
+	src, err := rc.llm.Stream(ctx, messages, options...)
+	if err != nil {
+		if isProviderUnhealthy(err) {
+			rc.breaker.RecordFailure()
+		}
+		return nil, err
+	}
+
+	opts := ApplyOptions(options...)
+	var termErr error
+	return WrapStreamWithFinalizer(ctx, src, opts,
+		func(chunk StreamChunk) StreamChunk {
+			if chunk.Error != nil {
+				termErr = chunk.Error
+			}
+			return chunk
+		},
+		func() {
+			switch {
+			case termErr == nil:
+				rc.breaker.RecordSuccess()
+			case isProviderUnhealthy(termErr):
+				rc.breaker.RecordFailure()
+				// Cancellation / client-side errors leave the breaker untouched.
+			}
+		},
+	), nil
 }
 
 func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
