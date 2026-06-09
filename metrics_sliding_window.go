@@ -81,7 +81,11 @@ func (w *slidingWindow) Record(success bool) {
 // cleanupLocked removes expired entries. Must be called with lock held.
 func (w *slidingWindow) cleanupLocked(now time.Time) {
 	cutoff := now.Add(-w.window)
-	newStart := 0
+	// Default to "all entries expired": if the loop never finds a live entry, the
+	// whole slice is dropped. Using 0 here was the bug — counters were decremented
+	// for every expired entry but the slice was never trimmed, so a later cleanup
+	// decremented the same entries again into negative counts.
+	newStart := len(w.entries)
 	for i, e := range w.entries {
 		if e.timestamp.After(cutoff) {
 			newStart = i
@@ -93,7 +97,11 @@ func (w *slidingWindow) cleanupLocked(now time.Time) {
 			w.failures--
 		}
 	}
-	if newStart > 0 {
+	switch {
+	case newStart >= len(w.entries):
+		// Every entry expired; drop them all (counters already decremented to 0).
+		w.entries = w.entries[:0]
+	case newStart > 0:
 		// Reclaim memory by creating a new slice if we're removing many entries
 		remaining := len(w.entries) - newStart
 		if remaining < len(w.entries)/2 && remaining > 0 {

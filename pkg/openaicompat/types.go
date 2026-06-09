@@ -16,16 +16,18 @@ type ChatCompletionRequest struct {
 	Messages []ChatMessage `json:"messages"`
 	// Temperature and TopP are pointers so an explicit 0.0 is serialized while an
 	// unset (nil) value is omitted, letting the provider apply its own default.
-	Temperature      *float64        `json:"temperature,omitempty"`
-	MaxTokens        *int            `json:"max_tokens,omitempty"`
-	TopP             *float64        `json:"top_p,omitempty"`
-	FrequencyPenalty float64         `json:"frequency_penalty,omitempty"`
-	PresencePenalty  float64         `json:"presence_penalty,omitempty"`
-	Stop             []string        `json:"stop,omitempty"`
-	Stream           bool            `json:"stream,omitempty"`
-	Tools            []Tool          `json:"tools,omitempty"`
-	ToolChoice       any             `json:"tool_choice,omitempty"`
-	ResponseFormat   *ResponseFormat `json:"response_format,omitempty"`
+	Temperature *float64 `json:"temperature,omitempty"`
+	MaxTokens   *int     `json:"max_tokens,omitempty"`
+	// MaxCompletionTokens is the OpenAI reasoning-model replacement for max_tokens.
+	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
+	TopP                *float64        `json:"top_p,omitempty"`
+	FrequencyPenalty    float64         `json:"frequency_penalty,omitempty"`
+	PresencePenalty     float64         `json:"presence_penalty,omitempty"`
+	Stop                []string        `json:"stop,omitempty"`
+	Stream              bool            `json:"stream,omitempty"`
+	Tools               []Tool          `json:"tools,omitempty"`
+	ToolChoice          any             `json:"tool_choice,omitempty"`
+	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
 	// ReasoningEffort maps to the OpenAI reasoning_effort parameter
 	// ("minimal"/"low"/"medium"/"high") for reasoning models. Empty omits it.
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
@@ -65,6 +67,9 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 	}
 	if r.MaxTokens != nil {
 		m["max_tokens"] = *r.MaxTokens
+	}
+	if r.MaxCompletionTokens != nil {
+		m["max_completion_tokens"] = *r.MaxCompletionTokens
 	}
 	if r.TopP != nil {
 		m["top_p"] = *r.TopP

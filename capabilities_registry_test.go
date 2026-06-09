@@ -184,6 +184,27 @@ func TestGetModelCapabilities(t *testing.T) {
 	}
 }
 
+func TestReasoningCapability_ModelSpecific(t *testing.T) {
+	// DeepSeek is mixed: the default chat model does not reason, only the reasoner.
+	if GetModelCapabilities(ProviderDeepSeek, "deepseek-chat").SupportsReasoning {
+		t.Error("deepseek-chat must NOT report reasoning support")
+	}
+	if !GetModelCapabilities(ProviderDeepSeek, "deepseek-reasoner").SupportsReasoning {
+		t.Error("deepseek-reasoner must report reasoning support")
+	}
+	// The per-model reasoner entry must still carry the provider's other caps.
+	if GetModelCapabilities(ProviderDeepSeek, "deepseek-reasoner").MaxContextTokens == 0 {
+		t.Error("deepseek-reasoner entry lost MaxContextTokens")
+	}
+	// Anthropic: extended-thinking model yes, older Sonnet 3.5 no (exact entry).
+	if !GetModelCapabilities(ProviderAnthropic, "claude-sonnet-4-20250514").SupportsReasoning {
+		t.Error("claude-sonnet-4 must report reasoning support")
+	}
+	if GetModelCapabilities(ProviderAnthropic, "claude-3-5-sonnet-20241022").SupportsReasoning {
+		t.Error("claude-3-5-sonnet must NOT report reasoning support")
+	}
+}
+
 func TestDefaultCapabilityRegistry(t *testing.T) {
 	// Verify global registry has defaults
 	r := DefaultCapabilityRegistry()

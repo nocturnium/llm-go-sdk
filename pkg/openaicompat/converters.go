@@ -5,10 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk"
 	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
 )
+
+// isOpenAIReasoningModel reports whether model is an OpenAI reasoning model that
+// requires max_completion_tokens and rejects temperature/top_p/penalties. Matches
+// the o-series (o1/o3/o4/o5…) and the gpt-5 family by name. Other providers'
+// reasoning models (e.g. deepseek-reasoner, qwen) do not use this OpenAI-specific
+// wire shape, so name-matching here does not affect them.
+func isOpenAIReasoningModel(model string) bool {
+	m := strings.ToLower(model)
+	if i := strings.LastIndexByte(m, '/'); i >= 0 {
+		m = m[i+1:] // strip a vendor prefix like "openai/"
+	}
+	switch {
+	case strings.HasPrefix(m, "o1"), strings.HasPrefix(m, "o3"),
+		strings.HasPrefix(m, "o4"), strings.HasPrefix(m, "o5"):
+		return true
+	case strings.HasPrefix(m, "gpt-5"):
+		return true
+	default:
+		return false
+	}
+}
 
 // ConvertMessages converts llms.Message slice to openaicompat.ChatMessage slice.
 // This is used by all OpenAI-compatible providers (OpenAI, TogetherAI, Featherless, Synthetic).
@@ -142,43 +164,53 @@ func convertToolCallsToLLMs(toolCalls []ToolCall) []llms.ToolCall {
 // OpenAI streaming sends tool call deltas with an index field to identify which
 // tool call to update. The first delta has the id/name, subsequent deltas only
 // have the index and arguments to append.
-func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCall {
-	// First try to match by index (OpenAI streaming format)
-	if delta.Index != nil {
-		idx := *delta.Index
-		if idx < len(calls) {
-			// Merge with existing tool call at this index
-			if delta.ID != "" {
-				calls[idx].ID = delta.ID
-			}
-			if delta.Type != "" {
-				calls[idx].Type = llms.ToolType(delta.Type)
-			}
-			if delta.Function != nil {
-				if calls[idx].Function == nil {
-					calls[idx].Function = &llms.FunctionCall{}
-				}
-				if delta.Function.Name != "" {
-					calls[idx].Function.Name = delta.Function.Name
-				}
-				calls[idx].Function.Arguments += delta.Function.Arguments
-			}
-			return calls
-		}
-		// Index is beyond current slice - this is a new tool call
-		// Extend the slice to accommodate the new index
+// mergeIndexedToolCall merges delta into the tool call at idx (0 <= idx < cap),
+// extending the slice with empty entries if idx is beyond the current length.
+func mergeIndexedToolCall(calls []llms.ToolCall, idx int, delta ToolCall) []llms.ToolCall {
+	if idx >= len(calls) {
+		// New tool call beyond the current slice; grow to fit.
 		for len(calls) <= idx {
 			calls = append(calls, llms.ToolCall{})
 		}
-		calls[idx] = llms.ToolCall{
-			ID:   delta.ID,
-			Type: llms.ToolType(delta.Type),
-		}
+		calls[idx] = llms.ToolCall{ID: delta.ID, Type: llms.ToolType(delta.Type)}
 		if delta.Function != nil {
 			calls[idx].Function = &llms.FunctionCall{
 				Name:      delta.Function.Name,
 				Arguments: delta.Function.Arguments,
 			}
+		}
+		return calls
+	}
+
+	// Merge with the existing tool call at this index.
+	if delta.ID != "" {
+		calls[idx].ID = delta.ID
+	}
+	if delta.Type != "" {
+		calls[idx].Type = llms.ToolType(delta.Type)
+	}
+	if delta.Function != nil {
+		if calls[idx].Function == nil {
+			calls[idx].Function = &llms.FunctionCall{}
+		}
+		if delta.Function.Name != "" {
+			calls[idx].Function.Name = delta.Function.Name
+		}
+		calls[idx].Function.Arguments += delta.Function.Arguments
+	}
+	return calls
+}
+
+func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCall {
+	// First try to match by index (OpenAI streaming format). A negative index is
+	// malformed (a hostile/buggy server could send -1 to panic calls[-1]); fall
+	// through to ID-based matching for it.
+	if delta.Index != nil && *delta.Index >= 0 {
+		// Cap the index so a malicious/buggy server can't force an unbounded
+		// back-fill (OOM) via an absurd index; OpenAI only ever increments by one.
+		const maxStreamedToolCalls = 1024
+		if idx := *delta.Index; idx < maxStreamedToolCalls {
+			return mergeIndexedToolCall(calls, idx, delta)
 		}
 		return calls
 	}
@@ -289,6 +321,19 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 		PresencePenalty:  opts.PresencePenalty,
 		Stop:             opts.StopWords,
 		Stream:           stream,
+	}
+
+	// OpenAI reasoning models (o-series, gpt-5) reject `max_tokens` (they require
+	// `max_completion_tokens`) and reject `temperature`/`top_p`/penalties with an
+	// HTTP 400. Normalize the request for them. reasoning_effort (set via
+	// applyReasoning below) remains valid and is preserved.
+	if isOpenAIReasoningModel(model) {
+		req.MaxCompletionTokens = opts.MaxTokens
+		req.MaxTokens = nil
+		req.Temperature = nil
+		req.TopP = nil
+		req.FrequencyPenalty = 0
+		req.PresencePenalty = 0
 	}
 
 	if len(opts.Tools) > 0 {
@@ -412,6 +457,16 @@ func ProcessStream(
 	}
 
 	defer func() { _ = stream.Close() }()
+
+	// A malformed/hostile provider response must never crash the host process.
+	// Convert any panic in stream processing into a terminal error chunk.
+	defer func() {
+		if r := recover(); r != nil {
+			sender.DeliverTerminal(llms.StreamChunk{
+				Error: fmt.Errorf("%s: panic during stream processing: %v", provider, r),
+			})
+		}
+	}()
 
 	var accumulatedToolCalls []llms.ToolCall
 	var accumulatedContent string   // Full content for token estimation

@@ -21,16 +21,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 // maxErrorResponseSize is the maximum size of error response body to read.
 // This prevents memory exhaustion from malicious or misconfigured servers.
 const maxErrorResponseSize = 1 * 1024 * 1024 // 1MB
+
+// maxResponseSize bounds non-streaming response bodies (DoJSON/DoRaw) to prevent
+// memory exhaustion from a hostile or misconfigured server.
+const maxResponseSize = 100 * 1024 * 1024 // 100MB
 
 // maxRedirects bounds the number of redirect hops the client will follow.
 // Each hop is re-validated against the same SSRF policy as the initial request.
@@ -80,7 +86,58 @@ func NewClient(opts ...ClientOption) *Client {
 	// be bypassed by a redirect to a private IP (e.g. 169.254.169.254).
 	c.installRedirectPolicy()
 
+	// Validate the *resolved* IP at connect time. The hostname-based checks above
+	// (and on redirects) cannot stop a name that resolves to a private IP or a
+	// DNS-rebinding attack; the dialer Control hook closes that gap by rejecting
+	// connections to private/loopback/link-local addresses.
+	c.installSSRFDialer()
+
 	return c
+}
+
+// installSSRFDialer sets a dialer Control hook that rejects connections to
+// private/internal IPs based on the address actually resolved at dial time. It is
+// a no-op when private IPs are allowed, or when the client uses a non-standard
+// RoundTripper that cannot accept a dialer (the URL/redirect host checks still
+// apply in that case).
+func (c *Client) installSSRFDialer() {
+	if c.allowPrivateIPs {
+		return
+	}
+	tr, ok := c.httpClient.Transport.(*http.Transport)
+	if !ok {
+		if c.httpClient.Transport != nil {
+			return // custom RoundTripper; cannot inject a dialer
+		}
+		// No transport configured: start from a clone of the default.
+		if base, baseOK := http.DefaultTransport.(*http.Transport); baseOK {
+			tr = base.Clone()
+		} else {
+			tr = &http.Transport{}
+		}
+		c.httpClient.Transport = tr
+	}
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   ssrfDialControl,
+	}
+	tr.DialContext = dialer.DialContext
+}
+
+// ssrfDialControl is a net.Dialer Control hook that rejects connections whose
+// resolved address is a private/internal IP. The dialer resolves the hostname
+// before invoking Control, so address is the concrete IP:port being dialed —
+// closing the DNS-rebinding / redirect-to-private gap that hostname checks miss.
+func ssrfDialControl(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return validateNotPrivateIP(ip)
+	}
+	return nil
 }
 
 // installRedirectPolicy wraps the underlying *http.Client.CheckRedirect so that
@@ -254,7 +311,8 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	}
 
 	if response != nil {
-		if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+		// Bound the body so a hostile server can't exhaust memory.
+		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(response); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
 	}
@@ -302,7 +360,16 @@ func (c *Client) DoRaw(ctx context.Context, req Request) ([]byte, error) {
 		return nil, c.handleErrorResponse(resp)
 	}
 
-	return io.ReadAll(resp.Body)
+	// Bound the body so a hostile server can't exhaust memory; reading one byte
+	// past the cap lets us detect and reject an over-limit response explicitly.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxResponseSize {
+		return nil, fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
+	}
+	return data, nil
 }
 
 // DoStream performs an HTTP request and returns the response body for streaming.

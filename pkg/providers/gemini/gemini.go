@@ -200,6 +200,11 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					}
 				}
 
+				// Gemini reports STOP even with function calls; normalize.
+				if len(accumulatedToolCalls) > 0 {
+					finishReason = llms.FinishReasonToolCalls
+				}
+
 				sender.SendFinal(llms.StreamChunk{
 					Reasoning:    finalReasoning,
 					Thinking:     finalReasoning,

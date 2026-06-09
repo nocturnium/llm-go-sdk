@@ -19,7 +19,7 @@ var providerConfig = openaicompat.ProviderConfig{
 		Embeddings:       false,
 		Batch:            false,
 		JSONMode:         true,
-		MaxContextTokens: 64000, // 64k for chat models
+		MaxContextTokens: 128000, // DeepSeek V3/R1 context window
 		MaxOutputTokens:  8192,
 	},
 }
