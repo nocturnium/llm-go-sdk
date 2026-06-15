@@ -417,8 +417,11 @@ func main() {
 
 - **Tools are injected automatically.** `RunTools` calls `GenerateContent` with
   `WithTools(registry.Tools())` on every turn — you do not pass `WithTools`
-  yourself. Add other `CallOption`s by wrapping the client or setting them on the
-  registry's tools; per-call options are not forwarded through `RunTools`.
+  yourself. Forward per-turn options with `WithCallOptions`. `RunTools` prepends
+  them before `WithTools(registry.Tools())`, so options like model, temperature,
+  max tokens, reasoning, and response format are honored, while registry tools
+  always take precedence for the tools field. Example:
+  `llms.RunTools(ctx, client, messages, registry, llms.WithCallOptions(llms.WithModel("gpt-4o"), llms.WithTemperature(0)))`.
 - **Concurrent, deterministic tool execution.** Within a single model turn, tool
   calls run concurrently (bounded by `WithToolConcurrency`, default 8), but the
   resulting `RoleTool` messages are appended in the same order as
@@ -429,7 +432,11 @@ func main() {
   model recover.
 - **Context cancellation is respected.** If `ctx` is cancelled, `RunTools`
   returns promptly with `ctx.Err()`, the last response, and the transcript built
-  so far.
+  so far. `RunTools` checks `ctx` before model calls and while
+  scheduling/awaiting tool results, but a `ToolHandler` already running when
+  cancellation occurs runs to completion — `ToolHandler` receives no context.
+  Handlers that must abort on cancellation should capture a context via closure
+  and check it themselves.
 
 ### `RunTools` options
 
@@ -437,6 +444,7 @@ func main() {
 |--------|---------|-------------|
 | `llms.WithMaxIterations(n)` | `10` | Max model-tool loop iterations. Values `<= 0` use the default. |
 | `llms.WithToolConcurrency(n)` | `8` | Max tool calls executed concurrently per turn. Values `<= 0` use the default. |
+| `llms.WithCallOptions(opts...)` | none | CallOptions applied to every model turn (model, temperature, max tokens, reasoning, response format, etc.). Applied before `WithTools(registry.Tools())`, so registry tools always take precedence for the tools field. |
 | `llms.WithOnStep(fn)` | none | Callback `func(iteration int, resp *Response)` invoked once after each model response. `iteration` is 1-based. |
 
 ### Handling the iteration guard

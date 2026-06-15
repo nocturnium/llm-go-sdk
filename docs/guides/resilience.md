@@ -131,21 +131,28 @@ The fields of `RetryConfig` are:
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `MaxAttempts` | `int` | Total attempts **including** the first call. |
+| `MaxAttempts` | `int` | Total attempts **including** the first call. Values `< 1` are clamped to 1, so at least one attempt always runs. |
 | `InitialDelay` | `time.Duration` | Delay before the first retry. |
 | `MaxDelay` | `time.Duration` | Upper bound on any single delay. |
 | `BackoffFactor` | `float64` | Multiplier applied to the delay after each attempt. |
 | `Jitter` | `float64` | Random jitter factor in `[0,1]` applied to each delay. |
 | `ShouldRetry` | `func(error) bool` | Predicate deciding whether an error is retryable. |
 
+When a provider returns a Retry-After value (surfaced on `*llms.APIError` as
+`RetryAfter`), the retry waits at least that long — it overrides the computed
+backoff when larger, still bounded by `MaxDelay`.
+
 You can supply your own `ShouldRetry` to broaden or narrow what counts as
 retryable. Note that the circuit breaker's notion of a "provider-health failure" is
-always based on `llms.DefaultShouldRetry` (429/5xx), independent of any custom
-predicate you install here.
+determined internally (it counts 429/5xx responses and transport-level failures
+such as connection refused, connection reset, EOF, and timeouts), independent of
+any custom `ShouldRetry` predicate you install here.
 
-!!! note "Streaming retries only the initial connection"
-    For `Stream`, only the act of opening the stream is retried. Once the channel is
-    returned and chunks begin flowing, a mid-stream failure is **not** retried.
+!!! note "Streaming is not retried"
+    Retries apply only to `Call`/`GenerateContent`. For `Stream`, the underlying
+    client is invoked once: a failed open returns its error immediately (and
+    records a breaker failure on transient errors), and a mid-stream failure is
+    not retried. The breaker is still updated from the stream's final outcome.
 
 ---
 
@@ -191,7 +198,8 @@ client := llms.NewResilientClient(base,
 
 !!! note "Only transient failures trip the breaker"
     The breaker counts a failure toward opening **only** when the error indicates the
-    provider itself is unhealthy (429/5xx). Context cancellation, deadlines, other
+    provider itself is unhealthy (429/5xx responses, or transport-level failures
+    such as connection refused, connection reset, EOF, and timeouts). Context cancellation, deadlines, other
     4xx errors, and `ErrCircuitOpen` do **not** trip it — so a burst of bad requests
     or canceled calls will not needlessly open the circuit on a healthy provider.
 
@@ -222,7 +230,8 @@ resp, err := client.GenerateContent(ctx, messages)
 
 ### How token limiting works
 
-- The **request** limiter is always active (default 60 req/min).
+- The **request** limiter is always active (default 60 req/min with a burst of 1,
+  so requests are paced instead of releasing a full minute's quota immediately).
 - The **token** limiter is only active when you set `WithTokensPerMinute(n)` with
   `n > 0`. Before each call it reserves an *estimate* of the tokens the request will
   consume (`WithTokenEstimate`, default 1000). After the call completes, the wrapper
@@ -232,8 +241,10 @@ resp, err := client.GenerateContent(ctx, messages)
 
 | Option | Default | Effect |
 |--------|---------|--------|
-| `WithRequestsPerMinute(n int)` | 60 | Max requests per minute (also the burst size). |
+| `WithRequestsPerMinute(n int)` | 60 | Max requests per minute. |
+| `WithRequestBurst(n int)` | 1 | Requests allowed to burst at once. Default 1 paces requests instead of releasing a full minute's quota immediately. |
 | `WithTokensPerMinute(n int)` | 0 (off) | Max tokens per minute; `0` disables token limiting. |
+| `WithTokenBurst(n int)` | a full minute's budget (= TokensPerMinute) | Tokens allowed to burst at once; lower it for tighter client-side token pacing. |
 | `WithTokenEstimate(n int)` | 1000 | Tokens reserved per request before the actual count is known. |
 | `WithBlocking(b bool)` | `true` | If `true`, wait for capacity; if `false`, return an error immediately. |
 | `WithWaitTimeout(d time.Duration)` | 30s | Max time to block when `WithBlocking(true)`. |
@@ -299,6 +310,8 @@ errors that suggest the current provider is the problem:
 - HTTP 500 / 502 / 503 / 504 (server errors)
 - HTTP 529 (overloaded — Anthropic)
 - API error types `rate_limit_error`, `overloaded_error`, `server_error`
+- Transport-level failures: connection refused, connection reset, EOF /
+  unexpected EOF, and network timeouts (any net.Error)
 - `llms.ErrCircuitOpen` (the wrapped client's breaker is open)
 
 On any **other** error (e.g. a 400 bad request), the chain stops and returns that
@@ -447,7 +460,6 @@ func main() {
 | Error | Source | Meaning |
 |-------|--------|---------|
 | `llms.ErrCircuitOpen` | circuit breaker | Requests blocked while the circuit is open. |
-| `llms.ErrCircuitTimeout` | circuit breaker | Circuit breaker timeout. |
 | `llms.ErrRateLimitExceeded` | rate limiter | Non-blocking limiter had no capacity. |
 | `llms.ErrRateLimitTimeout` | rate limiter | Blocking limiter exceeded `WithWaitTimeout`. |
 | `llms.ErrNoClientsAvailable` | fallback chain | The chain was constructed with no clients. |

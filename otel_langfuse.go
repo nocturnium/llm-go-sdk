@@ -307,9 +307,8 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 
 	// Record cost if tracker available
 	if m.costTracker != nil {
-		m.costTracker.Record(m.llm.Provider(), m.resolveModel(opts), resp.Usage)
-		cost := m.calculateCost(resp.Usage)
-		if cost > 0 {
+		cost, known := m.costTracker.Record(m.llm.Provider(), m.resolveModel(opts), resp.Usage)
+		if known {
 			m.costEstimate.Add(ctx, cost, metric.WithAttributes(attrs...))
 			span.SetAttributes(keyGenAIUsageCost.Float64(cost))
 		}
@@ -404,9 +403,8 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 				)
 
 				if m.costTracker != nil {
-					m.costTracker.Record(m.llm.Provider(), m.resolveModel(opts), *usage)
-					cost := m.calculateCost(*usage)
-					if cost > 0 {
+					cost, known := m.costTracker.Record(m.llm.Provider(), m.resolveModel(opts), *usage)
+					if known {
 						m.costEstimate.Add(ctx, cost, metric.WithAttributes(attrs...))
 						span.SetAttributes(keyGenAIUsageCost.Float64(cost))
 					}
@@ -427,6 +425,13 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 			}
 
 			if !hadError {
+				if err := ctx.Err(); err != nil {
+					hadError = true
+					m.recordError(ctx, span, err, attrs)
+				}
+			}
+
+			if !hadError {
 				span.SetStatus(codes.Ok, "")
 			}
 		}()
@@ -439,7 +444,10 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 
 			// On early exit a terminal chunk is forwarded so the consumer never
 			// sees a silent close.
-			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+			sendResult := sender.Send(chunk)
+			if sender.ForwardTerminalOnEarlyExit(sendResult) {
+				hadError = true
+				m.recordError(ctx, span, streamSendResultError(ctx, sendResult), attrs)
 				return
 			}
 
@@ -454,7 +462,7 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 				if len(chunk.Content) <= remaining {
 					contentBuilder.WriteString(chunk.Content)
 				} else {
-					contentBuilder.WriteString(chunk.Content[:remaining])
+					contentBuilder.WriteString(truncateUTF8(chunk.Content, remaining, ""))
 					contentTruncated = true
 				}
 			}
@@ -645,21 +653,6 @@ func (m *LangfuseOTelMiddleware) getMetricAttributes(opts *CallOptions) []attrib
 		keyGenAISystem.String(ProviderToGenAISystem(m.llm.Provider())),
 		keyGenAIRequestModel.String(m.resolveModel(opts)),
 	}
-}
-
-func (m *LangfuseOTelMiddleware) calculateCost(usage Usage) float64 {
-	if m.costTracker == nil {
-		return 0
-	}
-
-	pricing, ok := m.costTracker.GetPricing(m.llm.Provider(), m.llm.Model())
-	if !ok {
-		return 0
-	}
-
-	promptCost := float64(usage.PromptTokens) / 1_000_000 * pricing.PromptPerMillion
-	completionCost := float64(usage.CompletionTokens) / 1_000_000 * pricing.CompletionPerMillion
-	return promptCost + completionCost
 }
 
 func (m *LangfuseOTelMiddleware) recordError(ctx context.Context, span trace.Span, err error, attrs []attribute.KeyValue) {

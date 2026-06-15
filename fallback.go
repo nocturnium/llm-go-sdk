@@ -32,13 +32,13 @@ func (s DefaultFallbackSelector) ShouldFallback(err error) bool {
 		return false
 	}
 
+	if isProviderUnhealthy(err) {
+		return true
+	}
+
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
-		case 429: // Rate limited
-			return true
-		case 500, 502, 503, 504: // Server errors
-			return true
 		case 529: // Overloaded (Anthropic)
 			return true
 		}
@@ -179,7 +179,9 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...Cal
 		}
 
 		lastErr = err
-		fc.markUnhealthy(i)
+		if isProviderUnhealthy(err) {
+			fc.markUnhealthy(i)
+		}
 
 		// Check if we should fallback
 		if !fc.selector.ShouldFallback(err) {
@@ -193,7 +195,7 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...Cal
 		}
 	}
 
-	return "", lastErr
+	return "", allClientsFailedError(lastErr)
 }
 
 // executeWithFallback executes an operation across clients with fallback logic.
@@ -224,7 +226,9 @@ func executeWithFallback[T any](fc *FallbackChain, operation func(client LLM) (T
 		}
 
 		lastErr = err
-		fc.markUnhealthy(i)
+		if isProviderUnhealthy(err) {
+			fc.markUnhealthy(i)
+		}
 
 		// Check if we should fallback
 		if !fc.selector.ShouldFallback(err) {
@@ -238,7 +242,7 @@ func executeWithFallback[T any](fc *FallbackChain, operation func(client LLM) (T
 		}
 	}
 
-	return zero, lastErr
+	return zero, allClientsFailedError(lastErr)
 }
 
 // GenerateContent tries each client in order until one succeeds
@@ -271,7 +275,9 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options
 		src, err := client.Stream(ctx, messages, options...)
 		if err != nil {
 			lastErr = err
-			fc.markUnhealthy(i)
+			if isProviderUnhealthy(err) {
+				fc.markUnhealthy(i)
+			}
 			if !fc.selector.ShouldFallback(err) {
 				return nil, err
 			}
@@ -287,7 +293,9 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options
 			return forwardStream(ctx, opts, StreamChunk{Done: true}, src, nil), nil
 		case first.Error != nil:
 			lastErr = first.Error
-			fc.markUnhealthy(i)
+			if isProviderUnhealthy(first.Error) {
+				fc.markUnhealthy(i)
+			}
 			if !fc.selector.ShouldFallback(first.Error) {
 				// Committed to this client by contract (chan already returned); deliver its error.
 				return forwardStream(ctx, opts, first, src, nil), nil
@@ -301,15 +309,22 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options
 				fc.onSuccess(i, client)
 			}
 			idx := i
-			return forwardStream(ctx, opts, first, src, func(failed bool) {
-				if failed {
+			return forwardStream(ctx, opts, first, src, func(err error) {
+				if isProviderUnhealthy(err) {
 					fc.markUnhealthy(idx)
 				}
 			}), nil
 		}
 	}
 
-	return nil, lastErr
+	return nil, allClientsFailedError(lastErr)
+}
+
+func allClientsFailedError(err error) error {
+	if err == nil {
+		return ErrAllClientsFailed
+	}
+	return fmt.Errorf("%w: %w", ErrAllClientsFailed, err)
 }
 
 // fireFallback invokes the onFallback callback (if set) for a transition from the
@@ -332,16 +347,16 @@ func drainStream(src <-chan StreamChunk) {
 
 // forwardStream emits first, then forwards src to a new channel with StreamSender
 // timeout protection and the terminal-chunk guarantee. onDone (if set) is invoked
-// once with whether a terminal error chunk was observed.
-func forwardStream(ctx context.Context, opts *CallOptions, first StreamChunk, src <-chan StreamChunk, onDone func(failed bool)) <-chan StreamChunk {
+// once with the terminal stream error, if one was observed.
+func forwardStream(ctx context.Context, opts *CallOptions, first StreamChunk, src <-chan StreamChunk, onDone func(error)) <-chan StreamChunk {
 	out := make(chan StreamChunk, GetBufferSize(opts))
 	sender := NewStreamSender(ctx, out, opts.StreamSendTimeout)
 
 	go func() {
 		defer close(out)
-		failed := first.Error != nil
+		termErr := first.Error
 		if onDone != nil {
-			defer func() { onDone(failed) }()
+			defer func() { onDone(termErr) }()
 		}
 		defer sender.EnsureTerminal()
 
@@ -350,7 +365,7 @@ func forwardStream(ctx context.Context, opts *CallOptions, first StreamChunk, sr
 		}
 		for chunk := range src {
 			if chunk.Error != nil {
-				failed = true
+				termErr = chunk.Error
 			}
 			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
 				return

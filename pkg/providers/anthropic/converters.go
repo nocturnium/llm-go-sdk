@@ -214,7 +214,9 @@ func convertToolChoice(choice *llms.ToolChoice) any {
 	case llms.ToolChoiceRequired:
 		return anthropicapi.ToolChoiceAny{Type: "any"}
 	case llms.ToolChoiceNone:
-		return nil
+		return struct {
+			Type string `json:"type"`
+		}{Type: "none"}
 	default:
 		return anthropicapi.ToolChoiceAuto{Type: "auto"}
 	}

@@ -1,11 +1,16 @@
 package openaicompat
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk"
+	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
 )
 
 func mustMarshalRawMessage(t *testing.T, v any) json.RawMessage {
@@ -608,6 +613,32 @@ func TestConvertResponse_WithReasoningContent(t *testing.T) {
 	}
 }
 
+func TestConvertResponse_ReasoningOnlyDoesNotDuplicateIntoContent(t *testing.T) {
+	resp := &ChatCompletionResponse{
+		Choices: []Choice{
+			{
+				Message: &ChatMessage{
+					Role:             "assistant",
+					ReasoningContent: "SECRET",
+				},
+				FinishReason: "stop",
+			},
+		},
+	}
+
+	result := ConvertResponse(resp)
+
+	if result.Content != "" {
+		t.Errorf("expected empty visible content, got %q", result.Content)
+	}
+	if result.Reasoning == nil {
+		t.Fatal("expected Reasoning to be populated")
+	}
+	if result.Reasoning.Content != "SECRET" {
+		t.Errorf("expected reasoning SECRET, got %q", result.Reasoning.Content)
+	}
+}
+
 func TestConvertResponse_NoReasoningContent(t *testing.T) {
 	resp := &ChatCompletionResponse{
 		Choices: []Choice{
@@ -846,6 +877,88 @@ func TestBuildChatRequestWithTools(t *testing.T) {
 	}
 	if !req.Stream {
 		t.Error("expected stream to be true")
+	}
+}
+
+func testStreamReader(body io.ReadCloser) *StreamReader {
+	return &StreamReader{sseReader: httpclient.NewSSEReader(body)}
+}
+
+func testSSEStream(t *testing.T, chunks ...StreamChunk) *StreamReader {
+	t.Helper()
+
+	var b strings.Builder
+	for _, chunk := range chunks {
+		data, err := json.Marshal(chunk)
+		if err != nil {
+			t.Fatalf("marshal stream chunk: %v", err)
+		}
+		b.WriteString("data: ")
+		b.Write(data)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("data: [DONE]\n\n")
+
+	return testStreamReader(io.NopCloser(strings.NewReader(b.String())))
+}
+
+func TestProcessStream_ReasoningNotVisibleAndNotDoubled(t *testing.T) {
+	stream := testSSEStream(t,
+		StreamChunk{Choices: []Choice{{Delta: &ChatMessage{ReasoningContent: "SECRET"}}}},
+		StreamChunk{Choices: []Choice{{Delta: &ChatMessage{ContentValue: "Hello"}}}},
+		StreamChunk{Choices: []Choice{{FinishReason: "stop"}}},
+	)
+	chunks := make(chan llms.StreamChunk, 8)
+	sender := llms.NewStreamSender(context.Background(), chunks, time.Second)
+
+	ProcessStream(context.Background(), stream, chunks, sender, "test", nil)
+
+	var content strings.Builder
+	var reasoning strings.Builder
+	var final llms.StreamChunk
+	for chunk := range chunks {
+		content.WriteString(chunk.Content)
+		if chunk.Reasoning != nil {
+			reasoning.WriteString(chunk.Reasoning.Content)
+		}
+		if chunk.Done || chunk.Error != nil {
+			final = chunk
+		}
+	}
+
+	if got := content.String(); got != "Hello" {
+		t.Errorf("expected visible content Hello, got %q", got)
+	}
+	if strings.Contains(content.String(), "SECRET") {
+		t.Fatalf("reasoning leaked into visible content: %q", content.String())
+	}
+	if got := reasoning.String(); got != "SECRET" {
+		t.Errorf("expected reasoning once, got %q", got)
+	}
+	if final.Reasoning != nil {
+		t.Errorf("expected final chunk not to resend reasoning, got %+v", final.Reasoning)
+	}
+}
+
+func TestProcessStream_ContextCancelUnblocksRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, _ := io.Pipe()
+	stream := testStreamReader(pr)
+	chunks := make(chan llms.StreamChunk, 2)
+	sender := llms.NewStreamSender(ctx, chunks, time.Second)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		ProcessStream(ctx, stream, chunks, sender, "test", nil)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ProcessStream did not exit after context cancellation")
 	}
 }
 

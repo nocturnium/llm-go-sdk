@@ -197,6 +197,24 @@ func TestValidateURL_CarrierGradeNAT(t *testing.T) {
 	}
 }
 
+func TestValidateURL_ObfuscatedIPv4Literals(t *testing.T) {
+	opts := DefaultURLValidationOptions()
+
+	tests := []string{
+		"https://2130706433/api",
+		"https://0177.0.0.1/api",
+		"https://0x7f.0.0.1/api",
+		"https://0x7f000001/api",
+	}
+
+	for _, url := range tests {
+		err := ValidateURL(url, opts)
+		if err == nil {
+			t.Errorf("expected obfuscated loopback URL %q to be blocked", url)
+		}
+	}
+}
+
 func TestSanitizeModelName(t *testing.T) {
 	tests := []struct {
 		input    string

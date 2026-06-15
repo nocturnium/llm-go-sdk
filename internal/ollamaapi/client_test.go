@@ -1,10 +1,13 @@
 package ollamaapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -326,6 +329,80 @@ func TestChat(t *testing.T) {
 
 	if resp.Message.Content == "" {
 		t.Error("expected non-empty message content")
+	}
+}
+
+func TestStreamReader_Read_InStreamError(t *testing.T) {
+	reader := &StreamReader{
+		body:   io.NopCloser(strings.NewReader(`{"error":"model requires more system memory"}` + "\n")),
+		reader: bufio.NewReader(strings.NewReader(`{"error":"model requires more system memory"}` + "\n")),
+	}
+	defer func() { _ = reader.Close() }()
+
+	resp, err := reader.Read()
+	if err == nil {
+		t.Fatal("expected stream error")
+	}
+	if resp != nil {
+		t.Fatalf("expected nil response, got %#v", resp)
+	}
+	if !strings.Contains(err.Error(), "model requires more system memory") {
+		t.Fatalf("expected Ollama error message, got %v", err)
+	}
+}
+
+func TestStreamReader_Read_LargeLine(t *testing.T) {
+	largeResponse := strings.Repeat("x", 70*1024)
+	line := `{"model":"llama3.2","response":"` + largeResponse + `","done":false}` + "\n"
+	reader := &StreamReader{
+		body:   io.NopCloser(strings.NewReader(line)),
+		reader: bufio.NewReader(strings.NewReader(line)),
+	}
+	defer func() { _ = reader.Close() }()
+
+	resp, err := reader.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if resp.Response != largeResponse {
+		t.Fatalf("expected response length %d, got %d", len(largeResponse), len(resp.Response))
+	}
+}
+
+func TestChatStreamReader_Read_InStreamError(t *testing.T) {
+	reader := &ChatStreamReader{
+		body:   io.NopCloser(strings.NewReader(`{"error":"model requires more system memory"}` + "\n")),
+		reader: bufio.NewReader(strings.NewReader(`{"error":"model requires more system memory"}` + "\n")),
+	}
+	defer func() { _ = reader.Close() }()
+
+	resp, err := reader.Read()
+	if err == nil {
+		t.Fatal("expected stream error")
+	}
+	if resp != nil {
+		t.Fatalf("expected nil response, got %#v", resp)
+	}
+	if !strings.Contains(err.Error(), "model requires more system memory") {
+		t.Fatalf("expected Ollama error message, got %v", err)
+	}
+}
+
+func TestChatStreamReader_Read_LargeLine(t *testing.T) {
+	largeContent := strings.Repeat("x", 70*1024)
+	line := `{"model":"llama3.2","message":{"role":"assistant","content":"` + largeContent + `"},"done":false}` + "\n"
+	reader := &ChatStreamReader{
+		body:   io.NopCloser(strings.NewReader(line)),
+		reader: bufio.NewReader(strings.NewReader(line)),
+	}
+	defer func() { _ = reader.Close() }()
+
+	resp, err := reader.Read()
+	if err != nil {
+		t.Fatalf("Read failed: %v", err)
+	}
+	if resp.Message.Content != largeContent {
+		t.Fatalf("expected content length %d, got %d", len(largeContent), len(resp.Message.Content))
 	}
 }
 

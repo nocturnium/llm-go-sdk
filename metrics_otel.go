@@ -138,9 +138,8 @@ func (m *MetricsMiddleware) recordUsage(ctx context.Context, span trace.Span, pr
 
 	// Track and record cost
 	if m.recordCost {
-		m.costTracker.Record(provider, model, usage)
-		cost := EstimateCost(provider, model, usage)
-		if cost > 0 {
+		cost, known := m.costTracker.Record(provider, model, usage)
+		if known {
 			m.costEstimate.Add(ctx, cost, metric.WithAttributes(attrs...))
 			span.SetAttributes(attribute.Float64("llm.cost.estimate", cost))
 		}
@@ -152,13 +151,9 @@ func (m *MetricsMiddleware) recordError(ctx context.Context, span trace.Span, er
 	span.RecordError(err)
 	span.SetStatus(codes.Error, err.Error())
 
-	errorType := "unknown"
+	errorType := normalizeErrorType(err)
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
-		errorType = apiErr.Type
-		if errorType == "" {
-			errorType = apiErr.Code
-		}
 		span.SetAttributes(
 			attribute.Int("llm.error.status_code", apiErr.StatusCode),
 			attrErrorType.String(errorType),

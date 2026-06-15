@@ -10,9 +10,14 @@ import (
 
 // Common batch errors.
 var (
+	// ErrBatchNotSupported is a sentinel that a Batcher implementation may return
+	// from ProcessBatch when it does not support batch processing. The built-in
+	// ConcurrentBatcher always supports batching and never returns it.
 	ErrBatchNotSupported = errors.New("batch requests not supported by this provider")
 	ErrBatchEmpty        = errors.New("batch is empty")
-	ErrBatchTooLarge     = errors.New("batch exceeds maximum size")
+	// ErrBatchTooLarge is returned by ProcessBatch when the number of requests
+	// exceeds the limit configured via WithMaxBatchSize.
+	ErrBatchTooLarge = errors.New("batch exceeds maximum size")
 )
 
 // BatchProcessor is an interface for providers that support batch processing.
@@ -82,6 +87,10 @@ type BatchOptions struct {
 
 	// ProgressCallback is called after each request completes
 	ProgressCallback func(completed, total int)
+
+	// MaxBatchSize, when > 0, caps the number of requests accepted by a single
+	// ProcessBatch call; exceeding it returns ErrBatchTooLarge. Default 0 (no limit).
+	MaxBatchSize int
 }
 
 // BatchOption is a function that modifies BatchOptions.
@@ -105,6 +114,17 @@ func WithMaxConcurrency(n int) BatchOption {
 	return func(o *BatchOptions) {
 		if n > 0 {
 			o.MaxConcurrency = n
+		}
+	}
+}
+
+// WithMaxBatchSize caps how many requests a single ProcessBatch call accepts.
+// When the limit is exceeded, ProcessBatch returns ErrBatchTooLarge. A value of
+// 0 (the default) means no limit.
+func WithMaxBatchSize(n int) BatchOption {
+	return func(o *BatchOptions) {
+		if n > 0 {
+			o.MaxBatchSize = n
 		}
 	}
 }
@@ -146,8 +166,14 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	if len(requests) == 0 {
 		return nil, ErrBatchEmpty
 	}
+	if err := validateBatchRequestIDs(requests); err != nil {
+		return nil, err
+	}
 
 	opts := ApplyBatchOptions(options...)
+	if opts.MaxBatchSize > 0 && len(requests) > opts.MaxBatchSize {
+		return nil, fmt.Errorf("%w: %d requests exceeds limit of %d", ErrBatchTooLarge, len(requests), opts.MaxBatchSize)
+	}
 	start := time.Now()
 
 	results := make(map[string]*BatchResult)
@@ -161,6 +187,40 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 
 	completed := 0
 	var completedMu sync.Mutex
+	reportProgress := func() {
+		if opts.ProgressCallback == nil {
+			return
+		}
+		completedMu.Lock()
+		completed++
+		currentCompleted := completed
+		completedMu.Unlock()
+		// Call callback outside lock to prevent deadlock.
+		opts.ProgressCallback(currentCompleted, len(requests))
+	}
+	recordFailure := func(id string, duration time.Duration, err error) {
+		resultsMu.Lock()
+		results[id] = &BatchResult{
+			ID:       id,
+			Error:    err,
+			Duration: duration,
+		}
+		failureCount++
+		resultsMu.Unlock()
+	}
+	recordSuccess := func(id string, duration time.Duration, resp *Response) {
+		resultsMu.Lock()
+		results[id] = &BatchResult{
+			ID:       id,
+			Response: resp,
+			Duration: duration,
+		}
+		successCount++
+		totalUsage.PromptTokens += resp.Usage.PromptTokens
+		totalUsage.CompletionTokens += resp.Usage.CompletionTokens
+		totalUsage.TotalTokens += resp.Usage.TotalTokens
+		resultsMu.Unlock()
+	}
 
 	// Create a cancellable context for stopping all goroutines when ContinueOnError=false
 	batchCtx, cancelBatch := context.WithCancel(ctx)
@@ -169,7 +229,23 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	for _, req := range requests {
 		wg.Add(1)
 		go func(r BatchRequest) {
+			reqStart := time.Now()
+			progressReported := false
+			resultRecorded := false
 			defer wg.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					if !resultRecorded {
+						recordFailure(r.ID, time.Since(reqStart), fmt.Errorf("panic: %v", recovered))
+					}
+					if !opts.ContinueOnError {
+						cancelBatch()
+					}
+					if !progressReported {
+						reportProgress()
+					}
+				}
+			}()
 
 			// Check if batch has been canceled (due to error with ContinueOnError=false)
 			select {
@@ -210,21 +286,12 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 			default:
 			}
 
-			reqStart := time.Now()
 			resp, err := b.llm.GenerateContent(reqCtx, r.Messages, r.Options...)
 			duration := time.Since(reqStart)
 
-			result := &BatchResult{
-				ID:       r.ID,
-				Duration: duration,
-			}
-
 			if err != nil {
-				result.Error = err
-				resultsMu.Lock()
-				results[r.ID] = result
-				failureCount++
-				resultsMu.Unlock()
+				recordFailure(r.ID, duration, err)
+				resultRecorded = true
 
 				if !opts.ContinueOnError {
 					// Cancel all pending requests
@@ -232,25 +299,12 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 					return
 				}
 			} else {
-				result.Response = resp
-				resultsMu.Lock()
-				results[r.ID] = result
-				successCount++
-				totalUsage.PromptTokens += resp.Usage.PromptTokens
-				totalUsage.CompletionTokens += resp.Usage.CompletionTokens
-				totalUsage.TotalTokens += resp.Usage.TotalTokens
-				resultsMu.Unlock()
+				recordSuccess(r.ID, duration, resp)
+				resultRecorded = true
 			}
 
-			// Progress callback - get count while holding lock, call callback after releasing
-			if opts.ProgressCallback != nil {
-				completedMu.Lock()
-				completed++
-				currentCompleted := completed
-				completedMu.Unlock()
-				// Call callback outside lock to prevent deadlock
-				opts.ProgressCallback(currentCompleted, len(requests))
-			}
+			progressReported = true
+			reportProgress()
 		}(req)
 	}
 
@@ -263,6 +317,17 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 		SuccessCount: successCount,
 		FailureCount: failureCount,
 	}, nil
+}
+
+func validateBatchRequestIDs(requests []BatchRequest) error {
+	seen := make(map[string]struct{}, len(requests))
+	for _, req := range requests {
+		if _, ok := seen[req.ID]; ok {
+			return fmt.Errorf("duplicate batch request ID: %s", req.ID)
+		}
+		seen[req.ID] = struct{}{}
+	}
+	return nil
 }
 
 // NewBatchRequest creates a new batch request with the given ID and messages.

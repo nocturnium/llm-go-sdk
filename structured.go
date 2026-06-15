@@ -2,18 +2,20 @@ package llms
 
 import (
 	"context"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 var schemaCache sync.Map
 
 // SchemaFrom returns a JSON Schema derived from T using reflection.
 // Struct fields are mapped from their JSON tags; fields tagged "-" are skipped.
-// Fields without omitempty and non-pointer fields are marked required.
+// All non-skipped fields are marked required for strict JSON Schema mode.
 func SchemaFrom[T any]() (json.RawMessage, error) {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	if cached, ok := schemaCache.Load(typ); ok {
@@ -40,6 +42,12 @@ func SchemaFrom[T any]() (json.RawMessage, error) {
 // GenerateTyped generates content with a JSON Schema response format and unmarshals
 // the response content into T. If opts already include a json_schema response
 // format, that schema is used; otherwise SchemaFrom[T] is applied automatically.
+//
+// The auto-generated schema is emitted in OpenAI strict mode. Fields whose Go type
+// has no closed JSON Schema shape — json.RawMessage, interface{}, and maps with
+// arbitrary values — are mapped to an unconstrained schema ({}), which some strict
+// validators reject. For structs containing such fields, supply a hand-authored
+// schema via WithJSONSchema instead of relying on the auto-strict path.
 func GenerateTyped[T any](ctx context.Context, llm LLM, messages []Message, opts ...CallOption) (T, *Response, error) {
 	var zero T
 
@@ -71,6 +79,10 @@ func GenerateTyped[T any](ctx context.Context, llm LLM, messages []Message, opts
 func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any, error) {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
+	}
+
+	if schema, ok := specialSchemaForType(typ); ok {
+		return schema, nil
 	}
 
 	if seen[typ] {
@@ -121,7 +133,7 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			continue
 		}
 
-		name, omitEmpty, skip := jsonFieldName(field)
+		name, skip := jsonFieldName(field)
 		if skip {
 			continue
 		}
@@ -131,15 +143,13 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			return nil, err
 		}
 		properties[name] = fieldSchema
-
-		if !omitEmpty && field.Type.Kind() != reflect.Pointer {
-			required = append(required, name)
-		}
+		required = append(required, name)
 	}
 
 	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
+		"type":                 "object",
+		"properties":           properties,
+		"additionalProperties": false,
 	}
 	if len(required) > 0 {
 		schema["required"] = required
@@ -147,13 +157,38 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 	return schema, nil
 }
 
-func jsonFieldName(field reflect.StructField) (string, bool, bool) {
+func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
+	if typ == reflect.TypeOf(json.RawMessage{}) {
+		return map[string]any{}, true
+	}
+	if typ.Kind() == reflect.Slice && typ.Elem().Kind() == reflect.Uint8 {
+		return map[string]any{"type": "string"}, true
+	}
+	if typ == reflect.TypeOf(time.Time{}) {
+		return map[string]any{"type": "string", "format": "date-time"}, true
+	}
+	if implementsMarshaler(typ) {
+		return map[string]any{"type": "string"}, true
+	}
+	return nil, false
+}
+
+func implementsMarshaler(typ reflect.Type) bool {
+	jsonMarshaler := reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+	textMarshaler := reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+	return typ.Implements(jsonMarshaler) ||
+		reflect.PointerTo(typ).Implements(jsonMarshaler) ||
+		typ.Implements(textMarshaler) ||
+		reflect.PointerTo(typ).Implements(textMarshaler)
+}
+
+func jsonFieldName(field reflect.StructField) (string, bool) {
 	tag := field.Tag.Get("json")
 	if tag == "-" {
-		return "", false, true
+		return "", true
 	}
 	if tag == "" {
-		return field.Name, false, false
+		return field.Name, false
 	}
 
 	parts := strings.Split(tag, ",")
@@ -161,15 +196,7 @@ func jsonFieldName(field reflect.StructField) (string, bool, bool) {
 	if name == "" {
 		name = field.Name
 	}
-
-	omitEmpty := false
-	for _, part := range parts[1:] {
-		if part == "omitempty" {
-			omitEmpty = true
-			break
-		}
-	}
-	return name, omitEmpty, false
+	return name, false
 }
 
 func schemaNameForType(typ reflect.Type) string {

@@ -22,8 +22,8 @@ type StreamChunk struct {
 	// Content is the text content in this chunk.
 	Content string
 
-	// Thinking contains reasoning content in this chunk (nil if none).
-	Thinking *ThinkingContent
+	// Reasoning contains reasoning content in this chunk (nil if none).
+	Reasoning *ReasoningContent
 
 	// ToolCalls contains any tool calls in this chunk (may be partial).
 	ToolCalls []ToolCall
@@ -47,7 +47,7 @@ Most chunks carry only an incremental `Content` fragment. The **terminal chunk**
 | Field | When populated |
 |-------|----------------|
 | `Content` | Most non-terminal chunks; the incremental text fragment to append |
-| `Thinking` | Chunks from reasoning-capable providers (o1, DeepSeek, GLM); nil otherwise |
+| `Reasoning` | Chunks from reasoning-capable providers (o1, DeepSeek, GLM); nil otherwise |
 | `ToolCalls` | When the model is emitting a tool call; may be partial across chunks |
 | `FinishReason` | The terminal chunk |
 | `Usage` | The terminal chunk, when the provider reports token counts |
@@ -242,15 +242,19 @@ func collect(stream <-chan llms.StreamChunk) (text string, finish llms.FinishRea
 
 Beyond plain text, chunks can carry reasoning content and tool calls.
 
-**Reasoning** (`Thinking`) arrives on providers that expose chain-of-thought (OpenAI o1, DeepSeek, Z.AI GLM). It is delivered as `*llms.ThinkingContent`; nil on providers that do not support it.
+**Reasoning** (`Reasoning`) arrives on providers that expose chain-of-thought
+(OpenAI o1, DeepSeek, Z.AI GLM). It is delivered as
+`*llms.ReasoningContent`; nil on providers that do not support it.
+`Thinking`/`ThinkingContent` is a deprecated alias retained for backward
+compatibility.
 
 ```go
 for chunk := range stream {
 	if chunk.Error != nil {
 		break
 	}
-	if chunk.Thinking != nil && chunk.Thinking.Content != "" {
-		fmt.Print("[thinking] ", chunk.Thinking.Content)
+	if chunk.Reasoning != nil && chunk.Reasoning.Content != "" {
+		fmt.Print("[thinking] ", chunk.Reasoning.Content)
 	}
 	if chunk.Content != "" {
 		fmt.Print(chunk.Content)

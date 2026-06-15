@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.25']
+        go-version: ['1.25.x', '1.26.x']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,16 +32,16 @@ jobs:
           cache: true
 
       - name: Download dependencies
-        run: go mod download
+        run: GOWORK=off go mod download
 
       - name: Verify dependencies
-        run: go mod verify
+        run: GOWORK=off go mod verify
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: GOWORK=off go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage to Codecov
-        if: matrix.go-version == '1.25'
+        if: matrix.go-version == '1.25.x'
         uses: codecov/codecov-action@v4
         with:
           files: coverage.out
@@ -65,10 +65,10 @@ jobs:
           cache: true
 
       - name: Build library
-        run: go build -v ./...
+        run: GOWORK=off go build -v ./...
 
       - name: Build CLI
-        run: go build -v -o llms-cli ./cmd
+        run: GOWORK=off go build -v -o llms-cli ./cmd
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -115,7 +115,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows" ]; then
             BINARY_NAME="llms-cli.exe"
           fi
-          go build -v -trimpath -ldflags="-s -w" -o "${BINARY_NAME}" ./cmd
+          GOWORK=off go build -v -trimpath -ldflags="-s -w" -o "${BINARY_NAME}" ./cmd
 
   benchmark:
     name: Benchmark
@@ -133,7 +133,7 @@ jobs:
           cache: true
 
       - name: Run benchmarks
-        run: go test -bench=. -benchmem -run=^$ ./... | tee benchmark.txt
+        run: GOWORK=off go test -bench=. -benchmem -run=^$ ./... | tee benchmark.txt
 
       # Persists benchmark history to a `gh-pages` branch. That branch must be
       # created (and GitHub Pages enabled) for storage to succeed; until then,
@@ -166,7 +166,7 @@ jobs:
           cache: true
 
       - name: Run integration tests
-        run: go test -v -tags=integration ./...
+        run: GOWORK=off go test -v -tags=integration ./...
         env:
           # Provider API keys for integration tests (optional)
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

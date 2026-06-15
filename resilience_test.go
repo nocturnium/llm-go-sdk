@@ -3,8 +3,11 @@ package llms
 import (
 	"context"
 	"errors"
+	"io"
+	"net/url"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -287,6 +290,36 @@ func TestDefaultShouldRetry(t *testing.T) {
 	}
 }
 
+func TestIsProviderUnhealthy(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"rate limited", &APIError{StatusCode: 429}, true},
+		{"server error", &APIError{StatusCode: 503}, true},
+		{"client error", &APIError{StatusCode: 400}, false},
+		{"context canceled", context.Canceled, false},
+		{"context deadline", context.DeadlineExceeded, false},
+		{"circuit open", ErrCircuitOpen, false},
+		{"eof", io.EOF, true},
+		{"unexpected eof", io.ErrUnexpectedEOF, true},
+		{"connection refused", syscall.ECONNREFUSED, true},
+		{"connection reset", syscall.ECONNRESET, true},
+		{"url wrapped connection refused", &url.Error{Op: "Post", URL: "http://127.0.0.1", Err: syscall.ECONNREFUSED}, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isProviderUnhealthy(tc.err)
+			if result != tc.expected {
+				t.Errorf("isProviderUnhealthy(%v) = %v, want %v", tc.err, result, tc.expected)
+			}
+		})
+	}
+}
+
 // mockResilientLLM is a mock LLM for testing resilient client
 type mockResilientLLM struct {
 	provider    Provider
@@ -487,6 +520,125 @@ func TestResilientClient_CircuitBreakerOpens(t *testing.T) {
 	}
 }
 
+func TestResilientClient_CircuitBreakerOpensOnConnectionRefused(t *testing.T) {
+	llm := &mockResilientLLM{
+		responses: []mockResponse{{err: &url.Error{Op: "Post", URL: "http://127.0.0.1", Err: syscall.ECONNREFUSED}}},
+	}
+
+	breaker := NewCircuitBreaker(WithMaxFailures(2))
+	client := NewResilientClient(llm,
+		WithCircuitBreaker(breaker),
+		WithRetryConfig(&RetryConfig{
+			MaxAttempts:  1,
+			InitialDelay: time.Millisecond,
+			ShouldRetry:  func(error) bool { return false },
+		}),
+	)
+
+	for i := 0; i < 10; i++ {
+		_, _ = client.Call(context.Background(), "test")
+	}
+
+	if breaker.State() != CircuitOpen {
+		t.Fatalf("breaker state = %v, want Open", breaker.State())
+	}
+	if llm.CallCount() != 2 {
+		t.Errorf("call count = %d, want 2", llm.CallCount())
+	}
+}
+
+func TestResilientClient_PreservesLastErrorWhenRetriesExhausted(t *testing.T) {
+	llm := &mockResilientLLM{
+		responses: []mockResponse{{err: &APIError{StatusCode: 500}}},
+	}
+	breaker := NewCircuitBreaker(WithMaxFailures(1))
+	client := NewResilientClient(llm,
+		WithCircuitBreaker(breaker),
+		WithRetryConfig(&RetryConfig{
+			MaxAttempts:   3,
+			InitialDelay:  time.Millisecond,
+			BackoffFactor: 1,
+			ShouldRetry:   DefaultShouldRetry,
+		}),
+	)
+
+	_, err := client.Call(context.Background(), "test")
+	if !errors.Is(err, ErrServerError) {
+		t.Fatalf("err = %v, want preserved server error", err)
+	}
+	if breaker.State() != CircuitOpen {
+		t.Fatalf("breaker state = %v, want Open after terminal provider failure", breaker.State())
+	}
+}
+
+func TestResilientClient_CircuitBreakerCountsFailingCallsNotAttempts(t *testing.T) {
+	llm := &mockResilientLLM{
+		responses: []mockResponse{{err: &APIError{StatusCode: 500}}},
+	}
+	breaker := NewCircuitBreaker(WithMaxFailures(2))
+	client := NewResilientClient(llm,
+		WithCircuitBreaker(breaker),
+		WithRetryConfig(&RetryConfig{
+			MaxAttempts:   3,
+			InitialDelay:  time.Millisecond,
+			BackoffFactor: 1,
+			ShouldRetry:   DefaultShouldRetry,
+		}),
+	)
+
+	_, err := client.Call(context.Background(), "test1")
+	if err == nil {
+		t.Fatal("expected first call to fail")
+	}
+	if breaker.State() != CircuitClosed {
+		t.Fatalf("breaker state after one failed call = %v, want Closed", breaker.State())
+	}
+	if llm.CallCount() != 3 {
+		t.Fatalf("call count after one logical call = %d, want 3 attempts", llm.CallCount())
+	}
+
+	_, err = client.Call(context.Background(), "test2")
+	if err == nil {
+		t.Fatal("expected second call to fail")
+	}
+	if breaker.State() != CircuitOpen {
+		t.Fatalf("breaker state after two failed calls = %v, want Open", breaker.State())
+	}
+	if llm.CallCount() != 6 {
+		t.Fatalf("call count after two logical calls = %d, want 6 attempts", llm.CallCount())
+	}
+}
+
+func TestResilientClient_RetryConfigCopyOnWrite(t *testing.T) {
+	cfg := &RetryConfig{
+		MaxAttempts:   3,
+		InitialDelay:  time.Millisecond,
+		BackoffFactor: 1,
+		ShouldRetry:   DefaultShouldRetry,
+	}
+
+	client1 := NewResilientClient(&mockResilientLLM{}, WithRetryConfig(cfg), WithMaxRetries(1))
+	client2 := NewResilientClient(&mockResilientLLM{}, WithRetryConfig(cfg), WithMaxRetries(4))
+
+	if cfg.MaxAttempts != 3 {
+		t.Fatalf("shared retry config MaxAttempts = %d, want unchanged 3", cfg.MaxAttempts)
+	}
+	if client1.retry.MaxAttempts != 2 {
+		t.Fatalf("client1 MaxAttempts = %d, want 2", client1.retry.MaxAttempts)
+	}
+	if client2.retry.MaxAttempts != 5 {
+		t.Fatalf("client2 MaxAttempts = %d, want 5", client2.retry.MaxAttempts)
+	}
+}
+
+func TestCalculateDelay_ClampsJitter(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		if delay := calculateDelay(time.Millisecond, 2); delay < 0 {
+			t.Fatalf("delay = %v, want non-negative", delay)
+		}
+	}
+}
+
 // TestResilientClient_BreakerIgnoresContextCanceled verifies that non-provider
 // failures (context cancellation) never trip the circuit breaker, while
 // retryable provider failures (503) do.
@@ -566,6 +718,68 @@ func TestResilientClient_OnRetryCallback(t *testing.T) {
 
 	if len(retryAttempts) != 1 {
 		t.Errorf("retry attempts = %v, want [1]", retryAttempts)
+	}
+}
+
+func TestResilientClient_HonorsRetryAfter(t *testing.T) {
+	retryAfter := 30 * time.Millisecond
+	llm := &mockResilientLLM{
+		responses: []mockResponse{
+			{err: &APIError{StatusCode: 429, RetryAfter: retryAfter}},
+			{content: "success"},
+		},
+	}
+
+	var observedDelay time.Duration
+	client := NewResilientClient(llm,
+		WithRetryConfig(&RetryConfig{
+			MaxAttempts:   2,
+			InitialDelay:  time.Millisecond,
+			MaxDelay:      time.Second,
+			BackoffFactor: 1,
+			Jitter:        0,
+			ShouldRetry:   DefaultShouldRetry,
+		}),
+		WithOnRetry(func(_ int, _ error, delay time.Duration) {
+			observedDelay = delay
+		}),
+	)
+
+	start := time.Now()
+	result, err := client.Call(context.Background(), "test")
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "success" {
+		t.Errorf("result = %s, want success", result)
+	}
+	if observedDelay < retryAfter {
+		t.Errorf("retry delay = %v, want at least %v", observedDelay, retryAfter)
+	}
+	if elapsed < retryAfter {
+		t.Errorf("elapsed = %v, want at least %v", elapsed, retryAfter)
+	}
+}
+
+func TestResilientClient_MaxAttemptsZeroAttemptsOnce(t *testing.T) {
+	llm := &mockResilientLLM{
+		responses: []mockResponse{{err: &APIError{StatusCode: 429}}},
+	}
+	client := NewResilientClient(llm,
+		WithRetryConfig(&RetryConfig{
+			MaxAttempts:  0,
+			InitialDelay: time.Millisecond,
+			ShouldRetry:  DefaultShouldRetry,
+		}),
+	)
+
+	_, err := client.Call(context.Background(), "test")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if llm.CallCount() != 1 {
+		t.Errorf("call count = %d, want 1", llm.CallCount())
 	}
 }
 

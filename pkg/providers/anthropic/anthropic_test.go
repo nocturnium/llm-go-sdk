@@ -259,3 +259,15 @@ func TestBuildRequest_EffortDerivesBudget(t *testing.T) {
 		t.Errorf("expected derived budget %d, got %+v", llms.ReasoningBudgetForEffort(llms.ReasoningEffortLow), req.Thinking)
 	}
 }
+
+// TestConvertToolChoice_NonePreserved covers #16: tool_choice "none" must not be
+// silently coerced to "auto".
+func TestConvertToolChoice_NonePreserved(t *testing.T) {
+	got := convertToolChoice(&llms.ToolChoice{Type: llms.ToolChoiceNone})
+	if got == nil {
+		t.Fatal("tool_choice none produced nil")
+	}
+	if _, isAuto := got.(anthropicapi.ToolChoiceAuto); isAuto {
+		t.Fatal("tool_choice none was coerced to auto (regression of #16)")
+	}
+}

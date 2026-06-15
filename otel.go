@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -29,6 +30,31 @@ const (
 	// MaxOTelContentCapture limits the amount of streaming content captured
 	// to prevent unbounded memory growth in long-running streams.
 	maxOTelContentCapture = 100_000 // 100KB
+
+	errorCategoryAuthentication        = "authentication"
+	errorCategoryContentFiltered       = "content_filtered"
+	errorCategoryContextLengthExceeded = apiErrorCodeContextLengthExceeded
+	errorCategoryInvalidRequest        = "invalid_request"
+	errorCategoryModelNotFound         = apiErrorCodeModelNotFound
+	errorCategoryOther                 = "other"
+	errorCategoryPermissionDenied      = "permission_denied"
+	errorCategoryQuotaExceeded         = apiErrorCodeQuotaExceeded
+	errorCategoryRateLimited           = "rate_limited"
+	errorCategoryServerError           = apiErrorTypeServer
+	errorCategoryServiceUnavailable    = "service_unavailable"
+	errorCategoryStreamTimeout         = "stream_timeout"
+	errorCategoryTimeout               = "timeout"
+	errorCategoryUnknown               = "unknown"
+	apiErrorCodeBadRequest             = "bad_request"
+	apiErrorCodeForbidden              = "forbidden"
+	apiErrorCodeInternalServerError    = "internal_server_error"
+	apiErrorCodeInvalidAPIKey          = "invalid_api_key"
+	apiErrorCodeNotFound               = "not_found"
+	apiErrorCodeOverloaded             = "overloaded"
+	apiErrorCodeRequestTimeout         = "request_timeout"
+	apiErrorCodeSafety                 = "safety"
+	apiErrorCodeTooManyRequests        = "too_many_requests"
+	apiErrorCodeUnauthorized           = "unauthorized"
 )
 
 // Attribute keys for spans and metrics
@@ -375,6 +401,13 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options
 			}
 
 			if !hadError {
+				if err := ctx.Err(); err != nil {
+					hadError = true
+					m.recordError(ctx, span, err, attrs)
+				}
+			}
+
+			if !hadError {
 				span.SetStatus(codes.Ok, "")
 			}
 		}()
@@ -384,7 +417,10 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options
 
 			// Use StreamSender to handle backpressure. On early exit a terminal
 			// chunk is forwarded so the consumer never sees a silent close.
-			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+			sendResult := sender.Send(chunk)
+			if sender.ForwardTerminalOnEarlyExit(sendResult) {
+				hadError = true
+				m.recordError(ctx, span, streamSendResultError(ctx, sendResult), attrs)
 				return
 			}
 
@@ -402,7 +438,7 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options
 				if len(chunk.Content) <= remaining {
 					contentBuilder.WriteString(chunk.Content)
 				} else {
-					contentBuilder.WriteString(chunk.Content[:remaining])
+					contentBuilder.WriteString(truncateUTF8(chunk.Content, remaining, ""))
 					contentTruncated = true
 				}
 			}
@@ -441,13 +477,9 @@ func (m *OTelMiddleware) recordError(ctx context.Context, span trace.Span, err e
 	span.RecordError(err)
 	span.SetStatus(codes.Error, err.Error())
 
-	errorType := "unknown"
+	errorType := normalizeErrorType(err)
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
-		errorType = apiErr.Type
-		if errorType == "" {
-			errorType = apiErr.Code
-		}
 		span.SetAttributes(
 			attribute.Int("llm.error.status_code", apiErr.StatusCode),
 			attrErrorType.String(errorType),
@@ -459,10 +491,144 @@ func (m *OTelMiddleware) recordError(ctx context.Context, span trace.Span, err e
 }
 
 func truncateForSpan(s string, maxLen int) string {
+	return truncateUTF8(s, maxLen, "...")
+}
+
+func truncateUTF8(s string, maxLen int, suffix string) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+
+	end := 0
+	for i := range s {
+		if i > maxLen {
+			break
+		}
+		end = i
+	}
+	if end == 0 {
+		_, size := utf8.DecodeRuneInString(s)
+		firstRune := s[:size]
+		if len(firstRune) <= maxLen {
+			return firstRune + suffix
+		}
+		return suffix
+	}
+	return s[:end] + suffix
+}
+
+func streamSendResultError(ctx context.Context, result SendResult) error {
+	switch result {
+	case SendContextCanceled:
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return ErrStreamInterrupted
+	case SendTimeout:
+		return ErrStreamTimeout
+	default:
+		return ErrStreamInterrupted
+	}
+}
+
+func normalizeErrorType(err error) string {
+	switch {
+	case err == nil:
+		return errorCategoryUnknown
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrTimeout):
+		return errorCategoryTimeout
+	case errors.Is(err, ErrStreamTimeout):
+		return errorCategoryStreamTimeout
+	case errors.Is(err, ErrRateLimited):
+		return errorCategoryRateLimited
+	case errors.Is(err, ErrQuotaExceeded):
+		return errorCategoryQuotaExceeded
+	case errors.Is(err, ErrAuthenticationFailed):
+		return errorCategoryAuthentication
+	case errors.Is(err, ErrPermissionDenied):
+		return errorCategoryPermissionDenied
+	case errors.Is(err, ErrModelNotFound):
+		return errorCategoryModelNotFound
+	case errors.Is(err, ErrContextLengthExceeded):
+		return errorCategoryContextLengthExceeded
+	case errors.Is(err, ErrContentFiltered):
+		return errorCategoryContentFiltered
+	case errors.Is(err, ErrServiceUnavailable):
+		return errorCategoryServiceUnavailable
+	case errors.Is(err, ErrServerError):
+		return errorCategoryServerError
+	case errors.Is(err, ErrInvalidParameters), errors.Is(err, ErrEmptyMessages):
+		return errorCategoryInvalidRequest
+	}
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return errorCategoryUnknown
+	}
+	typeCategory := normalizeAPIErrorType(apiErr.Type)
+	codeCategory := normalizeAPIErrorType(apiErr.Code)
+	if typeCategory != "" {
+		return typeCategory
+	}
+	if codeCategory != "" {
+		return codeCategory
+	}
+	switch apiErr.StatusCode {
+	case 400:
+		return errorCategoryInvalidRequest
+	case 401:
+		return errorCategoryAuthentication
+	case 403:
+		return errorCategoryPermissionDenied
+	case 404:
+		return errorCategoryModelNotFound
+	case 408:
+		return errorCategoryTimeout
+	case 413:
+		return errorCategoryContextLengthExceeded
+	case 429:
+		return errorCategoryRateLimited
+	case 500, 502:
+		return errorCategoryServerError
+	case 503, 504:
+		return errorCategoryServiceUnavailable
+	}
+	if apiErr.Type != "" || apiErr.Code != "" {
+		return errorCategoryOther
+	}
+	return errorCategoryUnknown
+}
+
+func normalizeAPIErrorType(value string) string {
+	switch strings.ToLower(value) {
+	case "":
+		return ""
+	case apiErrorTypeRateLimit, errorCategoryRateLimited, apiErrorCodeTooManyRequests:
+		return errorCategoryRateLimited
+	case apiErrorTypeAuthentication, apiErrorCodeUnauthorized, apiErrorCodeInvalidAPIKey:
+		return errorCategoryAuthentication
+	case apiErrorTypePermission, errorCategoryPermissionDenied, apiErrorCodeForbidden:
+		return errorCategoryPermissionDenied
+	case apiErrorCodeQuotaExceeded, apiErrorCodeInsufficientQuota:
+		return errorCategoryQuotaExceeded
+	case apiErrorCodeContentFilter, errorCategoryContentFiltered, apiErrorCodeSafety:
+		return errorCategoryContentFiltered
+	case apiErrorCodeModelNotFound, apiErrorCodeNotFound:
+		return errorCategoryModelNotFound
+	case apiErrorCodeContextLengthExceeded:
+		return errorCategoryContextLengthExceeded
+	case apiErrorTypeInvalidRequest, errorCategoryInvalidRequest, apiErrorCodeBadRequest:
+		return errorCategoryInvalidRequest
+	case errorCategoryTimeout, apiErrorCodeRequestTimeout:
+		return errorCategoryTimeout
+	case apiErrorTypeServer, apiErrorCodeInternalServerError:
+		return errorCategoryServerError
+	case errorCategoryServiceUnavailable, apiErrorCodeOverloaded:
+		return errorCategoryServiceUnavailable
+	}
+	return ""
 }
 
 // Ensure OTelMiddleware implements LLM

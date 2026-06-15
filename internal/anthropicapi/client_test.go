@@ -3,11 +3,14 @@ package anthropicapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	llms "github.com/nocturnium/llm-go-sdk"
 )
 
 const (
@@ -281,6 +284,62 @@ data: {"type":"message_stop"}
 	}
 	if !IsEndOfStream(event) {
 		t.Error("expected IsEndOfStream to return true")
+	}
+}
+
+func TestStreamReader_ErrorEvent(t *testing.T) {
+	sseData := `event: message_start
+data: {"type":"message_start","message":{"id":"msg_123","role":"assistant","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+
+`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(sseData))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		BaseURL:         server.URL,
+		APIKey:          "test-key",
+		AllowPrivateIPs: true,
+		AllowHTTP:       true,
+	})
+
+	stream, err := client.CreateMessageStream(context.Background(), &MessagesRequest{
+		Model:     "claude-sonnet-4-20250514",
+		MaxTokens: 1024,
+		Messages:  []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "Hello"}}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateMessageStream: %v", err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	event, err := stream.Read()
+	if err != nil {
+		t.Fatalf("first Read: %v", err)
+	}
+	if event.Type != "message_start" {
+		t.Fatalf("expected message_start, got %s", event.Type)
+	}
+
+	_, err = stream.Read()
+	if err == nil {
+		t.Fatal("expected error event to return error")
+	}
+	if errors.Is(err, io.EOF) {
+		t.Fatalf("expected non-EOF error, got %v", err)
+	}
+	var apiErr *llms.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T: %v", err, err)
+	}
+	if apiErr.Type != "overloaded_error" || apiErr.Message != "Overloaded" {
+		t.Fatalf("unexpected APIError: %#v", apiErr)
 	}
 }
 

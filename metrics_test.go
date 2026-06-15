@@ -260,6 +260,59 @@ func TestMetricsMiddleware_Stream_TimeToFirstToken(t *testing.T) {
 	}
 }
 
+func TestMetricsMiddleware_Stream_AbandonedConsumerDecrementsActiveRequests(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	tracer := tracerProvider.Tracer(InstrumentationName)
+
+	llm := &mockMetricsLLM{
+		provider: ProviderOpenAI,
+		model:    "gpt-4",
+		chunks: []StreamChunk{
+			{Content: "one"},
+			{Content: "two"},
+			{Content: "three"},
+		},
+	}
+
+	middleware, err := NewMetricsMiddleware(llm, WithMetricsTracer(tracer))
+	if err != nil {
+		t.Fatalf("failed to create middleware: %v", err)
+	}
+
+	stream, err := middleware.Stream(context.Background(),
+		[]Message{{Role: RoleUser, Content: "Hi"}},
+		WithStreamBufferSize(1),
+		WithStreamSendTimeout(10*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stream == nil {
+		t.Fatal("expected stream")
+	}
+
+	deadline := time.After(500 * time.Millisecond)
+	for middleware.ActiveRequests() != 0 {
+		select {
+		case <-deadline:
+			t.Fatalf("active requests = %d, want 0", middleware.ActiveRequests())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+	if spans[0].Status().Code != codes.Error {
+		t.Errorf("span status = %v, want Error", spans[0].Status().Code)
+	}
+	if middleware.SuccessRate() != 0 {
+		t.Errorf("success rate = %f, want 0", middleware.SuccessRate())
+	}
+}
+
 func TestMetricsMiddleware_Error(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))

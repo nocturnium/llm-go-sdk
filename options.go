@@ -250,7 +250,9 @@ func WithStreamSendTimeout(d time.Duration) CallOption {
 // WithDisableMessageMerging disables automatic merging of consecutive same-role messages.
 // By default, the SDK merges consecutive user or assistant messages to avoid API validation
 // errors from providers that reject such patterns. Use this option if you need to preserve
-// the exact message structure.
+// the exact message structure. Note that ValidateMessages still applies when merging is
+// disabled: structurally invalid conversations (e.g. one beginning with a tool message) are
+// still rejected; only the consecutive-same-role merging step is skipped.
 func WithDisableMessageMerging() CallOption {
 	return func(o *CallOptions) {
 		o.DisableMessageMerging = true

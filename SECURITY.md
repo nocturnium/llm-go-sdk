@@ -12,10 +12,11 @@ most recent patch release before reporting an issue, as it may already be fixed.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
+| 1.1.x   | :white_check_mark: |
+| 1.0.x   | :x:                |
 | 0.0.x   | :x:                |
 
-The current latest release is `v1.0.8`. We recommend pinning to a released tag
+The current latest release is `v1.1.0`. We recommend pinning to a released tag
 and keeping your dependency current with `go get -u` so you receive fixes
 promptly.
 
@@ -79,7 +80,7 @@ LLM providers using the standard library `net/http`. A few notes on scope:
   (`169.254.169.254`) addresses, requires HTTPS, and re-validates every redirect
   hop. Self-hosted/local endpoints (and the `ollama`, `llamacpp`, and `infinity`
   providers, which default to `http://localhost`) are reached by passing
-  `WithAllowPrivateIPs(true)` — used by default only for those local providers.
+  `WithAllowPrivateIPs()` — used by default only for those local providers.
 - **Provider-side issues are out of scope** here. Vulnerabilities in a third-party
   provider's API or in upstream Go dependencies should be reported to the
   respective maintainers, though we welcome a heads-up so we can update or pin

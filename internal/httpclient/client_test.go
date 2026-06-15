@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -213,6 +214,48 @@ func TestClient_DoJSON_NoBody(t *testing.T) {
 	}
 	if resp["status"] != "ok" {
 		t.Errorf("expected status=ok, got %s", resp["status"])
+	}
+}
+
+func TestClient_DoRawWithHeaders_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Test-Header", "present")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true))
+	body, headers, err := client.DoRawWithHeaders(context.Background(), Request{
+		Method: http.MethodGet,
+		URL:    server.URL,
+	})
+	if err != nil {
+		t.Fatalf("DoRawWithHeaders: %v", err)
+	}
+	if string(body) != `{"ok":true}` {
+		t.Errorf("body = %q, want JSON response", string(body))
+	}
+	if headers.Get("X-Test-Header") != "present" {
+		t.Errorf("X-Test-Header = %q, want present", headers.Get("X-Test-Header"))
+	}
+}
+
+func TestClient_DoRawWithHeaders_ResponseTooLarge(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", strconv.FormatInt(maxResponseSize+1, 10))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true))
+	_, _, err := client.DoRawWithHeaders(context.Background(), Request{
+		Method: http.MethodGet,
+		URL:    server.URL,
+	})
+	if err == nil {
+		t.Fatal("expected over-limit response error")
+	}
+	if !strings.Contains(err.Error(), "response exceeds maximum size") {
+		t.Fatalf("error = %q, want maximum size error", err.Error())
 	}
 }
 

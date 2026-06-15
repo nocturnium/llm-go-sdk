@@ -250,7 +250,7 @@ func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
 	}
 
 	if choice.Message != nil {
-		response.Content = choice.Message.Content()
+		response.Content = choice.Message.RawContent()
 		response.ToolCalls = convertToolCallsToLLMs(choice.Message.ToolCalls)
 
 		// Surface reasoning content if present. Providers use different field names:
@@ -458,6 +458,16 @@ func ProcessStream(
 
 	defer func() { _ = stream.Close() }()
 
+	readDone := make(chan struct{})
+	defer close(readDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = stream.Close()
+		case <-readDone:
+		}
+	}()
+
 	// A malformed/hostile provider response must never crash the host process.
 	// Convert any panic in stream processing into a terminal error chunk.
 	defer func() {
@@ -469,8 +479,7 @@ func ProcessStream(
 	}()
 
 	var accumulatedToolCalls []llms.ToolCall
-	var accumulatedContent string   // Full content for token estimation
-	var accumulatedReasoning string // For reasoning/thinking content
+	var accumulatedContent string // Full content for token estimation
 	var finishReason llms.FinishReason
 	var usage *llms.Usage
 	var bytesRead int64
@@ -483,13 +492,17 @@ func ProcessStream(
 			// The context was canceled or its deadline expired. Deliver a terminal
 			// chunk carrying the context error so a truncated stream is never
 			// mistaken for a successful completion.
-			sender.ForwardTerminalOnEarlyExit(llms.SendContextCanceled)
+			sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
 			return
 		default:
 		}
 
 		chunk, err := stream.Read()
 		if errors.Is(err, io.EOF) {
+			if ctx.Err() != nil {
+				sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
+				return
+			}
 			// Apply token estimation if enabled and usage is missing
 			finalUsage := usage
 			if config != nil && config.EstimateTokens && (usage == nil || usage.TotalTokens == 0) {
@@ -497,18 +510,7 @@ func ProcessStream(
 				finalUsage = &estimated
 			}
 
-			// Build final reasoning if we accumulated any
-			var finalReasoning *llms.ReasoningContent
-			if accumulatedReasoning != "" {
-				finalReasoning = &llms.ReasoningContent{Content: accumulatedReasoning}
-				if finalUsage != nil {
-					finalReasoning.Tokens = finalUsage.ReasoningTokens
-				}
-			}
-
 			sender.SendFinal(llms.StreamChunk{
-				Reasoning:    finalReasoning,
-				Thinking:     finalReasoning,
 				ToolCalls:    accumulatedToolCalls,
 				FinishReason: finishReason,
 				Usage:        finalUsage,
@@ -516,6 +518,10 @@ func ProcessStream(
 			return
 		}
 		if err != nil {
+			if ctx.Err() != nil {
+				sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
+				return
+			}
 			streamErr := &llms.StreamError{
 				Cause:       fmt.Errorf("%s: %w", provider, err),
 				BytesRead:   bytesRead,
@@ -531,7 +537,7 @@ func ProcessStream(
 			choice := chunk.Choices[0]
 
 			if choice.Delta != nil {
-				content := choice.Delta.Content()
+				content := choice.Delta.RawContent()
 				if content != "" {
 					lastContent = content
 					accumulatedContent += content // Accumulate for estimation
@@ -544,7 +550,6 @@ func ProcessStream(
 				// Accumulate reasoning content separately
 				// Handles both "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic/Qwen Thinking)
 				if reasoning := choice.Delta.ReasoningText(); reasoning != "" {
-					accumulatedReasoning += reasoning
 					// Send reasoning in chunks for real-time display
 					rc := &llms.ReasoningContent{Content: reasoning}
 					if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{

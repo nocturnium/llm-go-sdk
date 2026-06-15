@@ -22,10 +22,12 @@ type RateLimiter struct {
 	// Request rate limiting
 	requestLimiter *rate.Limiter
 	requestsPerMin int
+	requestBurst   int
 
 	// Token rate limiting (optional)
 	tokenLimiter  *rate.Limiter
 	tokensPerMin  int
+	tokenBurst    int // Max tokens allowed to burst at once (0 = a full minute's budget)
 	tokenEstimate int // Estimated tokens per request when actual count unknown
 
 	// Behavior
@@ -40,6 +42,7 @@ type RateLimitOption func(*RateLimiter)
 func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 	rl := &RateLimiter{
 		requestsPerMin: 60,               // Default: 60 requests/min
+		requestBurst:   1,                // Default: paced requests, no minute-sized burst
 		tokensPerMin:   0,                // Disabled by default
 		tokenEstimate:  1000,             // Default estimate
 		blocking:       true,             // Wait by default
@@ -52,15 +55,27 @@ func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 
 	// Initialize request limiter
 	requestRate := rate.Limit(float64(rl.requestsPerMin) / 60.0) // Per second
-	rl.requestLimiter = rate.NewLimiter(requestRate, rl.requestsPerMin)
+	rl.requestLimiter = rate.NewLimiter(requestRate, rl.requestBurst)
 
 	// Initialize token limiter if configured
 	if rl.tokensPerMin > 0 {
 		tokenRate := rate.Limit(float64(rl.tokensPerMin) / 60.0)
-		rl.tokenLimiter = rate.NewLimiter(tokenRate, rl.tokensPerMin)
+		rl.tokenLimiter = rate.NewLimiter(tokenRate, rl.tokenBucketBurst())
 	}
 
 	return rl
+}
+
+// tokenBucketBurst returns the configured token burst, defaulting to a full
+// minute's budget (tokensPerMin) when WithTokenBurst was not set. A full-minute
+// default is required because a single request may legitimately consume many
+// tokens; callers who want tighter client-side pacing can lower it via
+// WithTokenBurst.
+func (rl *RateLimiter) tokenBucketBurst() int {
+	if rl.tokenBurst > 0 {
+		return rl.tokenBurst
+	}
+	return rl.tokensPerMin
 }
 
 // WithRequestsPerMinute sets the maximum requests per minute
@@ -72,11 +87,34 @@ func WithRequestsPerMinute(n int) RateLimitOption {
 	}
 }
 
+// WithRequestBurst sets the maximum number of requests allowed to burst at once.
+// The default is 1 so requests are paced instead of allowing an entire minute's
+// quota immediately.
+func WithRequestBurst(n int) RateLimitOption {
+	return func(rl *RateLimiter) {
+		if n > 0 {
+			rl.requestBurst = n
+		}
+	}
+}
+
 // WithTokensPerMinute sets the maximum tokens per minute
 func WithTokensPerMinute(n int) RateLimitOption {
 	return func(rl *RateLimiter) {
 		if n > 0 {
 			rl.tokensPerMin = n
+		}
+	}
+}
+
+// WithTokenBurst sets the maximum number of tokens allowed to burst at once.
+// When unset (0) the limiter allows a full minute's token budget to burst, which
+// preserves support for large single requests; set a smaller value for tighter
+// client-side token pacing.
+func WithTokenBurst(n int) RateLimitOption {
+	return func(rl *RateLimiter) {
+		if n > 0 {
+			rl.tokenBurst = n
 		}
 	}
 }
@@ -201,11 +239,25 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 // This can be called after a request to adjust for the difference between
 // estimated and actual tokens
 func (rl *RateLimiter) RecordTokens(actualTokens int) {
-	// If we underestimated, reserve additional tokens
 	tokenLimiter := rl.tokenLim()
-	if tokenLimiter != nil && actualTokens > rl.tokenEstimate {
+	if tokenLimiter == nil {
+		return
+	}
+
+	switch {
+	case actualTokens > rl.tokenEstimate:
+		// If we underestimated, reserve additional tokens.
 		extra := actualTokens - rl.tokenEstimate
 		tokenLimiter.ReserveN(time.Now(), extra)
+	case actualTokens < rl.tokenEstimate:
+		// If we overestimated, refund unused tokens without exceeding burst.
+		refund := rl.tokenEstimate - actualTokens
+		if remaining := rl.tokenBucketBurst() - int(tokenLimiter.Tokens()); refund > remaining {
+			refund = remaining
+		}
+		if refund > 0 {
+			tokenLimiter.ReserveN(time.Now(), -refund)
+		}
 	}
 }
 
@@ -238,11 +290,11 @@ func (rl *RateLimiter) Reset() {
 
 	// Recreate limiters at full burst
 	requestRate := rate.Limit(float64(rl.requestsPerMin) / 60.0)
-	rl.requestLimiter = rate.NewLimiter(requestRate, rl.requestsPerMin)
+	rl.requestLimiter = rate.NewLimiter(requestRate, rl.requestBurst)
 
 	if rl.tokensPerMin > 0 {
 		tokenRate := rate.Limit(float64(rl.tokensPerMin) / 60.0)
-		rl.tokenLimiter = rate.NewLimiter(tokenRate, rl.tokensPerMin)
+		rl.tokenLimiter = rate.NewLimiter(tokenRate, rl.tokenBucketBurst())
 	}
 }
 

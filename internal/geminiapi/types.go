@@ -10,15 +10,16 @@ import "encoding/json"
 
 // GenerateContentRequest represents a request to the Gemini API
 type GenerateContentRequest struct {
-	Contents         []Content         `json:"contents"`
-	Tools            []Tool            `json:"tools,omitempty"`
-	GenerationConfig *GenerationConfig `json:"generationConfig,omitempty"`
-	SafetySettings   []SafetySetting   `json:"safetySettings,omitempty"`
+	SystemInstruction *Content          `json:"systemInstruction,omitempty"`
+	Contents          []Content         `json:"contents"`
+	Tools             []Tool            `json:"tools,omitempty"`
+	GenerationConfig  *GenerationConfig `json:"generationConfig,omitempty"`
+	SafetySettings    []SafetySetting   `json:"safetySettings,omitempty"`
 }
 
 // Content represents a conversation message
 type Content struct {
-	Role  string `json:"role"`
+	Role  string `json:"role,omitempty"`
 	Parts []Part `json:"parts"`
 }
 

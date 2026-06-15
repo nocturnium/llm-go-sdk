@@ -405,7 +405,7 @@ internally so it is tracked too.
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `Record(provider Provider, model string, usage Usage)` | — | Add one request's usage; cost is computed from the pricing table. |
+| `Record(provider Provider, model string, usage Usage)` | `(cost float64, known bool)` | Add one request's usage; returns the computed cost and `known=false` when no pricing is registered for the provider/model (distinguishes unknown pricing from a real $0 model). |
 | `RecordEmbedding(provider, model, usage EmbeddingUsage)` | — | Convenience for embedding usage. |
 | `Report()` | `[]ModelUsage` | Per-model usage snapshots (copies). |
 | `GetTotalCost()` | `float64` | Sum of estimated cost across models. |
@@ -450,6 +450,11 @@ For a one-off estimate without a tracker, use the package helpers:
 cost := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", resp.Usage)
 fmt.Println(llms.FormatCost(cost)) // e.g. "$0.0123" (4 decimals under 1 cent)
 ```
+
+`EstimateCost` returns `$0` for an unknown model. To tell unknown pricing apart
+from a real zero-cost model, use
+`cost, known := llms.EstimateCostKnown(provider, model, usage)` (or check the
+`bool` from `tracker.Record` / `tracker.GetPricing`).
 
 `llms.FormatCost` renders 4 decimal places for sub-cent values and 2 decimals
 otherwise.

@@ -30,7 +30,11 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 	}
 	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
 	for _, c := range cases {
-		if got := EstimateCost(c.provider, c.model, u); got <= 0 {
+		got, known := EstimateCostKnown(c.provider, c.model, u)
+		if !known {
+			t.Errorf("%s:%s pricing is unknown", c.provider, c.model)
+		}
+		if got <= 0 {
 			t.Errorf("%s:%s estimated at $%v, expected > 0", c.provider, c.model, got)
 		}
 	}
@@ -105,7 +109,10 @@ func TestCostTracker_Record(t *testing.T) {
 		TotalTokens:      1500,
 	}
 
-	tracker.Record(ProviderOpenAI, "gpt-4o", usage)
+	cost, known := tracker.Record(ProviderOpenAI, "gpt-4o", usage)
+	if !known {
+		t.Fatal("expected pricing to be known")
+	}
 
 	result := tracker.GetUsage(ProviderOpenAI, "gpt-4o")
 	if result == nil {
@@ -124,8 +131,31 @@ func TestCostTracker_Record(t *testing.T) {
 
 	// Expected cost: (1000/1M * 2.50) + (500/1M * 10.00) = 0.0025 + 0.005 = 0.0075
 	expectedCost := 0.0075
+	if cost != expectedCost {
+		t.Errorf("recorded cost = %f, want %f", cost, expectedCost)
+	}
 	if result.EstimatedCost != expectedCost {
 		t.Errorf("EstimatedCost = %f, want %f", result.EstimatedCost, expectedCost)
+	}
+}
+
+func TestCostTracker_RecordUnknownPricing(t *testing.T) {
+	tracker := NewCostTracker()
+
+	cost, known := tracker.Record(Provider("unpriced"), "missing-model", Usage{PromptTokens: 1000})
+	if known {
+		t.Fatal("expected pricing to be unknown")
+	}
+	if cost != 0 {
+		t.Errorf("cost = %f, want 0", cost)
+	}
+
+	result := tracker.GetUsage(Provider("unpriced"), "missing-model")
+	if result == nil {
+		t.Fatal("expected usage to be recorded even with unknown pricing")
+	}
+	if result.EstimatedCost != 0 {
+		t.Errorf("EstimatedCost = %f, want 0", result.EstimatedCost)
 	}
 }
 
@@ -545,7 +575,7 @@ func TestEstimateCost(t *testing.T) {
 			provider: ProviderOpenAI,
 			model:    "unknown-model",
 			usage:    Usage{PromptTokens: 1000},
-			expected: 0, // Unknown model returns 0
+			expected: 0,
 		},
 	}
 
@@ -556,6 +586,16 @@ func TestEstimateCost(t *testing.T) {
 				t.Errorf("cost = %f, want %f", cost, tc.expected)
 			}
 		})
+	}
+}
+
+func TestEstimateCost_UnknownPricing(t *testing.T) {
+	cost, known := EstimateCostKnown(Provider("unpriced"), "missing-model", Usage{PromptTokens: 1000})
+	if known {
+		t.Fatal("expected pricing to be unknown")
+	}
+	if cost != 0 {
+		t.Errorf("cost = %f, want 0", cost)
 	}
 }
 

@@ -14,6 +14,8 @@ type ModelCapabilities struct {
 	SupportsVision        bool // Can process images
 	SupportsTools         bool // Supports function/tool calling
 	SupportsStreaming     bool // Supports streaming responses
+	SupportsEmbeddings    bool // Supports text embeddings
+	SupportsBatch         bool // Supports batch processing
 	SupportsJSON          bool // Supports JSON mode output
 	SupportsReasoning     bool // Supports reasoning ("thinking") output
 	SupportsPromptCaching bool // Supports prompt caching
@@ -567,6 +569,8 @@ func (mc ModelCapabilities) ToCapabilities() Capabilities {
 		Streaming:        mc.SupportsStreaming,
 		Tools:            mc.SupportsTools,
 		Vision:           mc.SupportsVision,
+		Embeddings:       mc.SupportsEmbeddings,
+		Batch:            mc.SupportsBatch,
 		JSONMode:         mc.SupportsJSON,
 		Reasoning:        mc.SupportsReasoning,
 		PromptCaching:    mc.SupportsPromptCaching,

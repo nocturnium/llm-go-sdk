@@ -30,6 +30,13 @@ defer server.Close()
 The context governs the subprocess lifetime — pass a long-lived context that
 covers the whole session (cancelling it terminates the server).
 
+By default the subprocess receives only a minimal safe environment (PATH, HOME,
+and common platform keys) — the parent environment is NOT inherited, so provider
+API keys are not leaked to the server. Pass any variables the server needs
+explicitly with `mcp.WithEnv([]string{"GITHUB_TOKEN="+token})` (these are merged
+over the minimal set). Use `mcp.WithWorkDir(dir)` to set the subprocess working
+directory.
+
 ### HTTP (remote servers)
 
 ```go
@@ -81,8 +88,9 @@ fmt.Println(result.Text())
 ## Scope and limitations
 
 - Implements the **tools** subset only (no resources, prompts, or sampling yet).
-- The HTTP transport targets stateless endpoints; session resumption
-  (`Mcp-Session-Id`) is not yet supported.
+- The HTTP transport supports both stateless and stateful servers: it captures
+  the `Mcp-Session-Id` response header from `initialize` and echoes it on
+  subsequent requests automatically.
 
 See [`examples/mcp`](https://github.com/nocturnium/llm-go-sdk/tree/main/examples/mcp)
 for a complete program.

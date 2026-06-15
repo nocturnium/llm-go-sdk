@@ -10,7 +10,7 @@ cost tracking, and tracing all stay the same.
 !!! info "At a glance"
     - **Module:** `github.com/nocturnium/llm-go-sdk`
     - **Import alias:** `llms "github.com/nocturnium/llm-go-sdk"`
-    - **Version:** v1.0.0 · **License:** Apache-2.0 · **Go:** 1.25+
+    - **Version:** v1.1.0 · **License:** Apache-2.0 · **Go:** 1.25+
 
 ---
 

@@ -28,8 +28,7 @@ import (
 )
 
 const (
-	defaultClientName    = "llm-go-sdk"
-	defaultClientVersion = "1.1.0"
+	defaultClientName = "llm-go-sdk"
 )
 
 // Client is a connected MCP client. It is bound to the context passed to its
@@ -71,10 +70,13 @@ func WithClientInfo(name, version string) Option {
 	return func(c *config) { c.clientInfo = Implementation{Name: name, Version: version} }
 }
 
-// WithEnv sets the subprocess environment for a stdio client. A nil env (the
-// default) inherits the current process environment.
+// WithEnv adds or overrides subprocess environment entries for a stdio client.
+// Stdio subprocesses do not inherit the full parent environment by default;
+// they receive only a minimal safe environment plus these entries.
 func WithEnv(env []string) Option {
-	return func(c *config) { c.env = env }
+	return func(c *config) {
+		c.env = env
+	}
 }
 
 // WithWorkDir sets the subprocess working directory for a stdio client.
@@ -123,7 +125,7 @@ func buildConfig(opts []Option) config {
 		cfg.clientInfo.Name = defaultClientName
 	}
 	if cfg.clientInfo.Version == "" {
-		cfg.clientInfo.Version = defaultClientVersion
+		cfg.clientInfo.Version = llms.Version
 	}
 	return cfg
 }
@@ -188,6 +190,9 @@ func (c *Client) initialize(ctx context.Context) error {
 	if err := c.call(ctx, methodInitialize, params, &result); err != nil {
 		return fmt.Errorf("mcp: initialize: %w", err)
 	}
+	if result.ProtocolVersion != protocolVersion {
+		return fmt.Errorf("mcp: initialize: unsupported protocol version %q (supported %q)", result.ProtocolVersion, protocolVersion)
+	}
 	c.serverInfo = result.ServerInfo
 
 	note, err := encodeNotification(methodInitialized, nil)
@@ -215,6 +220,9 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	var all []Tool
 	cursor := ""
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		var res listToolsResult
 		if err := c.call(ctx, methodToolsList, listToolsParams{Cursor: cursor}, &res); err != nil {
 			return nil, fmt.Errorf("mcp: list tools: %w", err)
@@ -232,6 +240,9 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 // result. A result with IsError set is returned without error so callers can
 // inspect the failure content.
 func (c *Client) CallTool(ctx context.Context, name string, arguments json.RawMessage) (*CallToolResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var res CallToolResult
 	if err := c.call(ctx, methodToolsCall, callToolParams{Name: name, Arguments: arguments}, &res); err != nil {
 		return nil, fmt.Errorf("mcp: call tool %q: %w", name, err)

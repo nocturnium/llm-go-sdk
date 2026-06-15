@@ -165,6 +165,104 @@ func TestClient_GenerateContent_ModelOverride(t *testing.T) {
 	}
 }
 
+func TestClient_ModelNameSanitizedInURLPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		call     func(context.Context, *Client) error
+		wantPath string
+	}{
+		{
+			name: "generate content",
+			call: func(ctx context.Context, client *Client) error {
+				_, err := client.GenerateContent(ctx, "../bad/model", &GenerateContentRequest{
+					Contents: []Content{{Role: "user", Parts: []Part{{Text: "test"}}}},
+				})
+				return err
+			},
+			wantPath: "/models/-bad-model:generateContent",
+		},
+		{
+			name: "stream generate content",
+			call: func(ctx context.Context, client *Client) error {
+				stream, err := client.GenerateContentStream(ctx, "../bad/model", &GenerateContentRequest{
+					Contents: []Content{{Role: "user", Parts: []Part{{Text: "test"}}}},
+				})
+				if err != nil {
+					return err
+				}
+				return stream.Close()
+			},
+			wantPath: "/models/-bad-model:streamGenerateContent",
+		},
+		{
+			name: "embed content",
+			call: func(ctx context.Context, client *Client) error {
+				_, err := client.EmbedContent(ctx, "../bad/model", &EmbedContentRequest{
+					Content: EmbeddingContent{Parts: []EmbeddingPart{{Text: "test"}}},
+				})
+				return err
+			},
+			wantPath: "/models/-bad-model:embedContent",
+		},
+		{
+			name: "batch embed contents",
+			call: func(ctx context.Context, client *Client) error {
+				_, err := client.BatchEmbedContents(ctx, "../bad/model", &BatchEmbedContentsRequest{})
+				return err
+			},
+			wantPath: "/models/-bad-model:batchEmbedContents",
+		},
+		{
+			name: "get model",
+			call: func(ctx context.Context, client *Client) error {
+				_, err := client.GetModel(ctx, "models/../bad/model")
+				return err
+			},
+			wantPath: "/models/-bad-model",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.wantPath {
+					t.Errorf("path = %q, want %q", r.URL.Path, tc.wantPath)
+				}
+				if strings.Contains(r.URL.Path, "..") {
+					t.Errorf("path contains traversal segment: %q", r.URL.Path)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				switch tc.name {
+				case "embed content":
+					_ = json.NewEncoder(w).Encode(EmbedContentResponse{Embedding: EmbeddingValues{Values: []float32{1}}})
+				case "batch embed contents":
+					_ = json.NewEncoder(w).Encode(BatchEmbedContentsResponse{Embeddings: []EmbeddingValues{{Values: []float32{1}}}})
+				case "get model":
+					_ = json.NewEncoder(w).Encode(ModelInfo{Name: "models/-bad-model"})
+				default:
+					_ = json.NewEncoder(w).Encode(GenerateContentResponse{
+						Candidates: []Candidate{{Content: &Content{Parts: []Part{{Text: "ok"}}}}},
+					})
+				}
+			}))
+			defer server.Close()
+
+			client := NewClient(ClientConfig{
+				BaseURL:         server.URL,
+				APIKey:          "test-key",
+				Model:           "gemini-pro",
+				AllowPrivateIPs: true,
+				AllowHTTP:       true,
+			})
+
+			if err := tc.call(context.Background(), client); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestClient_GenerateContent_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -53,6 +53,12 @@ func (p Pricing) cost(usage Usage) float64 {
 // charges a distinct cache-read/cache-write rate (e.g. Anthropic read ≈0.1×,
 // write ≈1.25×; OpenAI cached read ≈0.5×); when omitted, cache reads/writes fall
 // back to the prompt rate.
+//
+// Coverage is intentionally partial: models without an entry have no built-in
+// pricing data, so cost lookups report them as unknown (the pricing lookup
+// returns ok=false) rather than guessing a price. Register accurate pricing for
+// such models via the cost tracker's custom-pricing API instead of relying on a
+// silent $0.00.
 var DefaultPricing = map[string]Pricing{
 	// OpenAI (cached input billed at ~0.5×; automatic caching has no write cost).
 	"openai:gpt-4o":                 {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
@@ -164,22 +170,28 @@ func NewCostTracker(customPricing ...map[string]Pricing) *CostTracker {
 // billions of dollars - so this is effectively unreachable in practice.
 const maxSafeTokenCount = 1<<62 - 1
 
-// Record records token usage for a request.
+// Record records token usage for a request and returns the computed cost.
+// The boolean return value is false when no pricing is known for the
+// provider/model, allowing callers to distinguish unknown pricing from a real
+// zero-cost model. Custom pricing can be supplied with NewCostTracker or
+// SetPricing.
 // If token counts approach overflow (extremely unlikely), the record is skipped
 // to prevent data corruption.
 //
 // Lock contention optimization: Cost calculation is performed before acquiring
 // the write lock to minimize lock hold time under high concurrency.
-func (t *CostTracker) Record(provider Provider, model string, usage Usage) {
+func (t *CostTracker) Record(provider Provider, model string, usage Usage) (float64, bool) {
 	key := t.makeKey(provider, model)
 	now := time.Now()
 
 	// Pre-calculate cost OUTSIDE the lock to minimize lock hold time.
 	// Pricing data is read-only after initialization, so this is safe.
 	var cost float64
+	var known bool
 	t.mu.RLock()
 	if pricing, ok := t.pricing[key]; ok {
 		cost = pricing.cost(usage)
+		known = true
 	}
 	t.mu.RUnlock()
 
@@ -203,7 +215,7 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) {
 		// Counters have reached safe maximum - skip this record to prevent overflow.
 		// In production, consider rotating to a new tracking window or alerting.
 		u.LastUsed = now
-		return
+		return cost, known
 	}
 
 	u.PromptTokens += int64(usage.PromptTokens)
@@ -213,6 +225,7 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) {
 	u.Requests++
 	u.LastUsed = now
 	u.EstimatedCost += cost
+	return cost, known
 }
 
 // RecordEmbedding records usage for an embedding request.
@@ -398,14 +411,28 @@ func (m *CostMiddleware) Tracker() *CostTracker {
 // Ensure CostMiddleware implements LLM.
 var _ LLM = (*CostMiddleware)(nil)
 
-// EstimateCost calculates the estimated cost for a given usage.
-func EstimateCost(provider Provider, model string, usage Usage) float64 {
+// EstimateCostKnown calculates the estimated cost for a given usage using
+// default pricing. The boolean return value is false when no pricing is known
+// for the provider/model, which distinguishes unknown pricing from a real
+// zero-cost model. Register custom pricing on a CostTracker when defaults do not
+// include a provider/model.
+func EstimateCostKnown(provider Provider, model string, usage Usage) (float64, bool) {
 	key := fmt.Sprintf("%s:%s", provider, model)
 	pricing, ok := DefaultPricing[key]
 	if !ok {
-		return 0
+		return 0, false
 	}
-	return pricing.cost(usage)
+	return pricing.cost(usage), true
+}
+
+// EstimateCost calculates the estimated cost for a given usage using default
+// pricing. It returns 0 when pricing is unknown for backward compatibility; use
+// EstimateCostKnown when callers must distinguish unknown pricing from a real
+// zero-cost model. Register custom pricing on a CostTracker when defaults do not
+// include a provider/model.
+func EstimateCost(provider Provider, model string, usage Usage) float64 {
+	cost, _ := EstimateCostKnown(provider, model, usage)
+	return cost
 }
 
 // FormatCost formats a cost value as a USD string.

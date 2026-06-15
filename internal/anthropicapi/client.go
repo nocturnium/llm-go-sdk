@@ -154,6 +154,22 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 
 		// Parse based on event type
 		switch eventType {
+		case "error":
+			var raw struct {
+				Type  string `json:"type"`
+				Error struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(sseEvent.Data), &raw); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal error: %w", err)
+			}
+			return nil, &llms.APIError{
+				Type:     raw.Error.Type,
+				Message:  raw.Error.Message,
+				Provider: llms.ProviderAnthropic,
+			}
 		case "message_start":
 			if err := json.Unmarshal([]byte(sseEvent.Data), &event); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal message_start: %w", err)

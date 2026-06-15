@@ -217,6 +217,9 @@ URL is validated, and requests are **rejected** when they target:
   `169.254.169.254`).
 - **Unspecified** addresses (`0.0.0.0`, `::`) and **carrier-grade NAT**
   (`100.64.0.0/10`).
+- **Obfuscated IPv4 literals** — octal, hexadecimal, decimal, and short-dotted
+  spellings of an IP are decoded and checked against the same ranges, so they
+  cannot be used to disguise a private/loopback/link-local target.
 - Internal hostname suffixes: `.local`, `.internal`, `.localdomain`.
 - Non-HTTPS (`http://`) URLs — HTTPS is required.
 
