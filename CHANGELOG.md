@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.2.1] - 2026-06-15
+
+### Fixed
+
+- **Release tooling.** Removed an invalid `GOWORK=off` prefix from the GoReleaser
+  `before` hooks. GoReleaser execs hooks directly (not through a shell), so the
+  prefix was treated as an executable name and aborted artifact generation for the
+  `v1.2.0` tag. The `v1.2.0` source is unaffected and installable via `go get`;
+  this patch only repairs the release pipeline so binaries/SBOMs are published.
+
+## [1.2.0] - 2026-06-15
 
 Post-1.1.0 hardening from a full correctness/security/resilience review. No
 breaking changes to exported APIs; additions are backward-compatible.

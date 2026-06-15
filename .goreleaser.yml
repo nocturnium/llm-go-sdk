@@ -7,8 +7,12 @@ project_name: llms
 
 before:
   hooks:
-    - GOWORK=off go mod tidy
-    - GOWORK=off go mod verify
+    # GoReleaser hooks are exec'd directly (not via a shell), so an inline
+    # `GOWORK=off` prefix is treated as a binary name and fails. The release
+    # runner checks out the repo standalone (no parent go.work), so GOWORK is
+    # already off here; the builds set GOWORK=off via `env:` for safety.
+    - go mod tidy
+    - go mod verify
 
 builds:
   - id: llms-cli
