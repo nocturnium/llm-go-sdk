@@ -31,9 +31,19 @@ import (
 )
 
 func main() {
-	app := &cli.App{
-		Name:  "llms",
-		Usage: "CLI tool for testing LLM providers",
+	app := newApp()
+
+	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func newApp() *cli.App {
+	return &cli.App{
+		Name:    "llms-cli",
+		Version: llms.Version,
+		Usage:   "CLI tool for testing LLM providers",
 		Commands: []*cli.Command{
 			{
 				Name:  "chat",
@@ -163,12 +173,15 @@ func main() {
 				},
 				Action: toolDemoAction,
 			},
+			{
+				Name:  "version",
+				Usage: "Print detailed version information",
+				Action: func(c *cli.Context) error {
+					_, err := fmt.Fprintln(c.App.Writer, llms.VersionInfo())
+					return err
+				},
+			},
 		},
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
 	}
 }
 

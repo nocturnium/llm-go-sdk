@@ -3,7 +3,9 @@ package llms
 import (
 	"context"
 	"errors"
+	"net/url"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -93,9 +95,13 @@ func TestDefaultFallbackSelector(t *testing.T) {
 		{"overloaded_error type", &APIError{Type: "overloaded_error"}, true},
 		{"server_error type", &APIError{Type: "server_error"}, true},
 		{"circuit open", ErrCircuitOpen, true},
+		{"connection refused", syscall.ECONNREFUSED, true},
+		{"url wrapped connection refused", &url.Error{Op: "Post", URL: "http://127.0.0.1", Err: syscall.ECONNREFUSED}, true},
 		{"client error 400", &APIError{StatusCode: 400}, false},
 		{"auth error 401", &APIError{StatusCode: 401}, false},
 		{"not found 404", &APIError{StatusCode: 404}, false},
+		{"context canceled", context.Canceled, false},
+		{"context deadline", context.DeadlineExceeded, false},
 		{"random error", errors.New("random"), false},
 	}
 
@@ -204,6 +210,35 @@ func TestFallbackChain_FallsBack(t *testing.T) {
 	}
 }
 
+func TestFallbackChain_FallsBackOnConnectionRefused(t *testing.T) {
+	client1 := &mockFallbackLLM{
+		provider: ProviderOpenAI,
+		model:    testGPT4,
+		callErr:  &url.Error{Op: "Post", URL: "http://127.0.0.1", Err: syscall.ECONNREFUSED},
+	}
+	client2 := &mockFallbackLLM{
+		provider: ProviderAnthropic,
+		model:    "claude-3",
+		callResp: "from anthropic",
+	}
+
+	chain := NewFallbackChain([]LLM{client1, client2})
+
+	result, err := chain.Call(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "from anthropic" {
+		t.Errorf("result = %s, want 'from anthropic'", result)
+	}
+	if client1.CallCount() != 1 {
+		t.Errorf("client1 call count = %d, want 1", client1.CallCount())
+	}
+	if client2.CallCount() != 1 {
+		t.Errorf("client2 call count = %d, want 1", client2.CallCount())
+	}
+}
+
 func TestFallbackChain_NoFallbackOnNonRetryable(t *testing.T) {
 	client1 := &mockFallbackLLM{
 		callErr: &APIError{StatusCode: 401, Message: "unauthorized"},
@@ -220,6 +255,30 @@ func TestFallbackChain_NoFallbackOnNonRetryable(t *testing.T) {
 	}
 	if client2.CallCount() != 0 {
 		t.Errorf("client2 should not be called, got %d", client2.CallCount())
+	}
+}
+
+func TestFallbackChain_ClientErrorDoesNotMarkUnhealthy(t *testing.T) {
+	client1 := &mockFallbackLLM{
+		callErr: &APIError{StatusCode: 400, Message: "bad request"},
+	}
+	client2 := &mockFallbackLLM{
+		callResp: testSuccess,
+	}
+
+	chain := NewFallbackChain([]LLM{client1, client2},
+		WithFallbackSelector(AlwaysFallbackSelector{}),
+	)
+
+	result, err := chain.Call(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != testSuccess {
+		t.Errorf("result = %s, want success", result)
+	}
+	if !chain.IsClientHealthy(0) {
+		t.Error("400 response should not mark primary unhealthy")
 	}
 }
 
@@ -240,11 +299,45 @@ func TestFallbackChain_AllFail(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when all clients fail")
 	}
+	if !errors.Is(err, ErrAllClientsFailed) {
+		t.Fatalf("err = %v, want ErrAllClientsFailed", err)
+	}
+	if !errors.Is(err, ErrServerError) {
+		t.Fatalf("err = %v, want preserved server error", err)
+	}
 
 	// All clients should have been tried
 	if client1.CallCount() != 1 || client2.CallCount() != 1 || client3.CallCount() != 1 {
 		t.Errorf("all clients should be called once, got %d, %d, %d",
 			client1.CallCount(), client2.CallCount(), client3.CallCount())
+	}
+}
+
+func TestFallbackChain_GenerateContentAllFailReturnsSentinel(t *testing.T) {
+	client1 := &mockFallbackLLM{genErr: &APIError{StatusCode: 503}}
+	client2 := &mockFallbackLLM{genErr: &APIError{StatusCode: 503}}
+	chain := NewFallbackChain([]LLM{client1, client2})
+
+	_, err := chain.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	if !errors.Is(err, ErrAllClientsFailed) {
+		t.Fatalf("err = %v, want ErrAllClientsFailed", err)
+	}
+	if !errors.Is(err, ErrServiceUnavailable) {
+		t.Fatalf("err = %v, want preserved service unavailable error", err)
+	}
+}
+
+func TestFallbackChain_StreamAllFailReturnsSentinel(t *testing.T) {
+	client1 := &mockFallbackLLM{streamErr: &APIError{StatusCode: 503}}
+	client2 := &mockFallbackLLM{streamErr: &APIError{StatusCode: 503}}
+	chain := NewFallbackChain([]LLM{client1, client2})
+
+	_, err := chain.Stream(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	if !errors.Is(err, ErrAllClientsFailed) {
+		t.Fatalf("err = %v, want ErrAllClientsFailed", err)
+	}
+	if !errors.Is(err, ErrServiceUnavailable) {
+		t.Fatalf("err = %v, want preserved service unavailable error", err)
 	}
 }
 

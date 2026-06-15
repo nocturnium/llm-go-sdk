@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -84,5 +85,23 @@ func TestSearchResult_Basic(t *testing.T) {
 	}
 	if result.Date == nil {
 		t.Error("expected date")
+	}
+}
+
+func TestSearchResult_JSONTags(t *testing.T) {
+	result := SearchResult{
+		Title:   "Example Page",
+		URL:     "https://example.com/page",
+		Snippet: "This is an example snippet...",
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := `{"title":"Example Page","url":"https://example.com/page","snippet":"This is an example snippet..."}`
+	if string(data) != want {
+		t.Errorf("json = %s, want %s", data, want)
 	}
 }

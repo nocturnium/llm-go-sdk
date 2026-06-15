@@ -3,14 +3,18 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
+
+const maxStdioLineBytes = 16 * 1024 * 1024
 
 // errTransportClosed is returned when a request is made on a closed transport or
 // the server's stdout closed while a request was in flight.
@@ -36,16 +40,16 @@ type stdioTransport struct {
 
 // newStdioTransport starts the server subprocess and begins reading its output.
 // The provided context governs the subprocess lifetime: canceling it kills the
-// process. A nil env inherits the current environment.
+// process. The subprocess receives only a minimal safe environment by default
+// (PATH, HOME, and common platform process keys when set); env entries add to or
+// override that minimal set.
 func newStdioTransport(ctx context.Context, command string, args, env []string, dir string) (*stdioTransport, error) {
 	// The command is the MCP server the application developer chose to launch (the
 	// whole point of a stdio MCP client), not untrusted input — analogous to a
 	// configured binary path. Launching it from a variable is by design.
 	// #nosec G204 -- caller-specified MCP server command, not untrusted input
 	cmd := exec.CommandContext(ctx, command, args...)
-	if env != nil {
-		cmd.Env = env
-	}
+	cmd.Env = mergeStdioEnv(minimalStdioEnv(), env)
 	cmd.Dir = dir
 	cmd.Stderr = os.Stderr
 
@@ -75,9 +79,7 @@ func (t *stdioTransport) readLoop(stdout io.Reader) {
 	defer close(t.done)
 	br := bufio.NewReader(stdout)
 	for {
-		// ReadBytes accumulates an arbitrarily long line (no fixed-size cap), so
-		// large tool results are not truncated.
-		line, err := br.ReadBytes('\n')
+		line, err := readBoundedLine(br)
 		if len(line) > 0 {
 			t.dispatch(line)
 		}
@@ -88,9 +90,70 @@ func (t *stdioTransport) readLoop(stdout io.Reader) {
 	}
 }
 
+func readBoundedLine(br *bufio.Reader) ([]byte, error) {
+	var line []byte
+	for {
+		fragment, err := br.ReadSlice('\n')
+		if len(line)+len(fragment) > maxStdioLineBytes {
+			return nil, fmt.Errorf("mcp: stdio line exceeds maximum size of %d bytes", maxStdioLineBytes)
+		}
+		line = append(line, fragment...)
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return line, err
+	}
+}
+
+func minimalStdioEnv() []string {
+	keys := []string{"PATH", "HOME", "SystemRoot", "ComSpec", "PATHEXT", "TEMP", "TMP", "USERPROFILE"}
+	env := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
+}
+
+func mergeStdioEnv(base, overrides []string) []string {
+	values := make(map[string]string, len(base)+len(overrides))
+	order := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range append(base, overrides...) {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok || key == "" {
+			continue
+		}
+		if _, found := values[key]; !found {
+			order = append(order, key)
+		}
+		values[key] = entry
+	}
+	env := make([]string, 0, len(order))
+	for _, key := range order {
+		env = append(env, values[key])
+	}
+	return env
+}
+
 func (t *stdioTransport) dispatch(line []byte) {
+	for _, msg := range splitJSONMessages(line) {
+		t.dispatchOne(msg)
+	}
+}
+
+func (t *stdioTransport) dispatchOne(line []byte) {
 	id, ok := messageID(line)
 	if !ok {
+		if isNullIDError(line) {
+			t.mu.Lock()
+			pending := t.pending
+			t.pending = make(map[int64]chan []byte)
+			t.mu.Unlock()
+			for _, ch := range pending {
+				ch <- line
+			}
+		}
 		return // notification or server-initiated request: not handled by this client
 	}
 	t.mu.Lock()
@@ -102,6 +165,14 @@ func (t *stdioTransport) dispatch(line []byte) {
 	if found {
 		ch <- line
 	}
+}
+
+func isNullIDError(line []byte) bool {
+	var resp rpcResponse
+	if err := json.Unmarshal(line, &resp); err != nil {
+		return false
+	}
+	return resp.Error != nil && string(resp.ID) == "null"
 }
 
 // fail marks the transport closed and unblocks every pending request.

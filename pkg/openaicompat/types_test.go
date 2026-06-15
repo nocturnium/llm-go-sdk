@@ -363,6 +363,17 @@ func TestChatMessage_WithToolCallID(t *testing.T) {
 	}
 }
 
+func TestChatMessage_RawContentDoesNotFallBackToReasoning(t *testing.T) {
+	msg := &ChatMessage{ReasoningContent: "SECRET"}
+
+	if got := msg.Content(); got != "SECRET" {
+		t.Errorf("expected legacy Content fallback to reasoning, got %q", got)
+	}
+	if got := msg.RawContent(); got != "" {
+		t.Errorf("expected RawContent to exclude reasoning fallback, got %q", got)
+	}
+}
+
 func TestResponseFormat_JSON(t *testing.T) {
 	rf := ResponseFormat{Type: "json_object"}
 

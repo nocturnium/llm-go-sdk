@@ -274,3 +274,37 @@ func TestSSEReader_LargeDataLine(t *testing.T) {
 		t.Error("large SSE data line was not parsed faithfully")
 	}
 }
+
+func TestSSEReader_LineTooLarge(t *testing.T) {
+	data := "data: " + strings.Repeat("A", maxSSEEventSize+1) + "\n\n"
+	reader := NewSSEReader(newMockReadCloser(data))
+	defer func() { _ = reader.Close() }()
+
+	_, err := reader.Read()
+	if err == nil {
+		t.Fatal("expected oversized SSE line to fail")
+	}
+	if !strings.Contains(err.Error(), "SSE line exceeds maximum size") {
+		t.Fatalf("expected line-size error, got %v", err)
+	}
+}
+
+func TestSSEReader_EventTooLarge(t *testing.T) {
+	var data strings.Builder
+	for data.Len() <= maxSSEEventSize {
+		data.WriteString("data: ")
+		data.WriteString(strings.Repeat("A", 1024))
+		data.WriteString("\n")
+	}
+
+	reader := NewSSEReader(newMockReadCloser(data.String()))
+	defer func() { _ = reader.Close() }()
+
+	_, err := reader.Read()
+	if err == nil {
+		t.Fatal("expected oversized SSE event to fail")
+	}
+	if !strings.Contains(err.Error(), "SSE event exceeds maximum size") {
+		t.Fatalf("expected event-size error, got %v", err)
+	}
+}

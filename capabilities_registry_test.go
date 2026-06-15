@@ -146,12 +146,14 @@ func TestCapabilityRegistry_Concurrent(_ *testing.T) {
 
 func TestModelCapabilities_ToCapabilities(t *testing.T) {
 	mc := ModelCapabilities{
-		MaxContextTokens:  100000,
-		MaxOutputTokens:   8000,
-		SupportsVision:    true,
-		SupportsTools:     true,
-		SupportsStreaming: true,
-		SupportsJSON:      true,
+		MaxContextTokens:   100000,
+		MaxOutputTokens:    8000,
+		SupportsVision:     true,
+		SupportsTools:      true,
+		SupportsStreaming:  true,
+		SupportsEmbeddings: true,
+		SupportsBatch:      true,
+		SupportsJSON:       true,
 	}
 
 	caps := mc.ToCapabilities()
@@ -170,6 +172,12 @@ func TestModelCapabilities_ToCapabilities(t *testing.T) {
 	}
 	if !caps.Streaming {
 		t.Error("expected Streaming=true")
+	}
+	if !caps.Embeddings {
+		t.Error("expected Embeddings=true")
+	}
+	if !caps.Batch {
+		t.Error("expected Batch=true")
 	}
 	if !caps.JSONMode {
 		t.Error("expected JSONMode=true")

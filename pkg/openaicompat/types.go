@@ -250,11 +250,10 @@ type FunctionSelector struct {
 	Name string `json:"name"`
 }
 
-// Content extracts string content from a ChatMessage.
-// Content can be either a string or []ContentPart for vision models.
-// Falls back to reasoning content if Content is empty (Z.AI GLM / Synthetic Thinking models).
-// Returns empty string if no content is available.
-func (m *ChatMessage) Content() string {
+// RawContent extracts string content from a ChatMessage without falling back to
+// reasoning content. Use this for visible response text, especially streaming
+// deltas where reasoning must remain separate from content.
+func (m *ChatMessage) RawContent() string {
 	if m == nil {
 		return ""
 	}
@@ -282,6 +281,16 @@ func (m *ChatMessage) Content() string {
 			}
 		}
 	}
+
+	return result
+}
+
+// Content extracts string content from a ChatMessage.
+// Content can be either a string or []ContentPart for vision models.
+// Falls back to reasoning content if Content is empty (Z.AI GLM / Synthetic Thinking models).
+// Returns empty string if no content is available.
+func (m *ChatMessage) Content() string {
+	result := m.RawContent()
 
 	// Fall back to reasoning content if Content is empty
 	// Handles both "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic/Qwen Thinking)

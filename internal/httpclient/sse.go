@@ -2,11 +2,15 @@ package httpclient
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
 )
+
+const maxSSEEventSize = 4 * 1024 * 1024 // 4MB
 
 // SSEEvent represents a Server-Sent Event
 type SSEEvent struct {
@@ -24,10 +28,10 @@ type SSEEvent struct {
 // call Close() on the reader. This will cause Read() to return with an error.
 // Close() is safe to call multiple times and from any goroutine.
 //
-// Line length: SSEReader uses a bufio.Reader with ReadString('\n') rather than a
-// bufio.Scanner, so individual SSE lines are NOT capped at the scanner's default
+// Line length: SSEReader uses a bounded bufio.Reader loop rather than a
+// bufio.Scanner, so individual SSE lines are not capped at the scanner's default
 // 64KB token limit. Large single `data:` lines (common with base64-encoded
-// images or large JSON payloads) are read in full.
+// images or large JSON payloads) are accepted up to maxSSEEventSize.
 type SSEReader struct {
 	mu     sync.Mutex
 	br     *bufio.Reader
@@ -88,13 +92,19 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 	var event SSEEvent
 	var dataLines []string
 	hasData := false
+	eventSize := 0
 
 	for {
-		line, readErr := r.br.ReadString('\n')
+		line, readErr := r.readLine()
 
-		// ReadString returns any data read before the error (e.g. a final line
+		// readLine returns any data read before the error (e.g. a final line
 		// without a trailing newline at EOF), so process the line first.
 		if line != "" {
+			eventSize += len(line)
+			if eventSize > maxSSEEventSize {
+				return nil, fmt.Errorf("SSE event exceeds maximum size of %d bytes", maxSSEEventSize)
+			}
+
 			// Strip the line terminator (\n and an optional preceding \r) to match
 			// bufio.Scanner's ScanLines semantics.
 			line = strings.TrimSuffix(line, "\n")
@@ -109,6 +119,7 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 				}
 				// Skip blank separators with no buffered data.
 				if readErr == nil {
+					eventSize = 0
 					continue
 				}
 			case strings.HasPrefix(line, ":"):
@@ -133,7 +144,7 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 		}
 
 		if readErr != nil {
-			if readErr == io.EOF {
+			if errors.Is(readErr, io.EOF) {
 				// If we have buffered data at EOF, return it as a final event.
 				if hasData {
 					event.Data = strings.Join(dataLines, "\n")
@@ -143,6 +154,27 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 			}
 			return nil, readErr
 		}
+	}
+}
+
+func (r *SSEReader) readLine() (string, error) {
+	var line []byte
+	for {
+		fragment, err := r.br.ReadSlice('\n')
+		if len(line)+len(fragment) > maxSSEEventSize {
+			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
+		}
+		line = append(line, fragment...)
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if err != nil {
+			if len(line) > 0 {
+				return string(line), err
+			}
+			return "", err
+		}
+		return string(line), nil
 	}
 }
 

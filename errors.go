@@ -6,6 +6,21 @@ import (
 	"time"
 )
 
+const (
+	apiErrorCodeContentFilter          = "content_filter"
+	apiErrorCodeContentPolicyViolation = "content_policy_violation"
+	apiErrorCodeContextLengthExceeded  = "context_length_exceeded"
+	apiErrorCodeInsufficientQuota      = "insufficient_quota"
+	apiErrorCodeModelNotFound          = "model_not_found"
+	apiErrorCodeQuotaExceeded          = "quota_exceeded"
+	apiErrorCodeRateLimitExceeded      = "rate_limit_exceeded"
+	apiErrorTypeAuthentication         = "authentication_error"
+	apiErrorTypeInvalidRequest         = "invalid_request_error"
+	apiErrorTypePermission             = "permission_error"
+	apiErrorTypeRateLimit              = "rate_limit_error"
+	apiErrorTypeServer                 = "server_error"
+)
+
 // Base errors for common failure scenarios.
 var (
 	// Configuration errors.
@@ -53,10 +68,10 @@ type APIError struct {
 	// Message is the human-readable error message
 	Message string
 
-	// Type is the error type from the API (e.g., "invalid_request_error")
+	// Type is the error type from the API (e.g., apiErrorTypeInvalidRequest)
 	Type string
 
-	// Code is the error code from the API (e.g., "context_length_exceeded")
+	// Code is the error code from the API (e.g., apiErrorCodeContextLengthExceeded)
 	Code string
 
 	// Param is the parameter that caused the error (if applicable)
@@ -142,29 +157,29 @@ func (e *APIError) underlyingError() error {
 
 	// Check by error code
 	switch e.Code {
-	case "context_length_exceeded":
+	case apiErrorCodeContextLengthExceeded:
 		return ErrContextLengthExceeded
-	case "model_not_found":
+	case apiErrorCodeModelNotFound:
 		return ErrModelNotFound
-	case "content_filter", "content_policy_violation":
+	case apiErrorCodeContentFilter, apiErrorCodeContentPolicyViolation:
 		return ErrContentFiltered
-	case "rate_limit_exceeded":
+	case apiErrorCodeRateLimitExceeded:
 		return ErrRateLimited
-	case "quota_exceeded", "insufficient_quota":
+	case apiErrorCodeQuotaExceeded, apiErrorCodeInsufficientQuota:
 		return ErrQuotaExceeded
 	}
 
 	// Check by error type
 	switch e.Type {
-	case "authentication_error":
+	case apiErrorTypeAuthentication:
 		return ErrAuthenticationFailed
-	case "permission_error":
+	case apiErrorTypePermission:
 		return ErrPermissionDenied
-	case "rate_limit_error":
+	case apiErrorTypeRateLimit:
 		return ErrRateLimited
-	case "invalid_request_error":
+	case apiErrorTypeInvalidRequest:
 		return ErrInvalidParameters
-	case "server_error":
+	case apiErrorTypeServer:
 		return ErrServerError
 	}
 

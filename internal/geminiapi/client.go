@@ -70,6 +70,7 @@ func (c *Client) GenerateContent(ctx context.Context, model string, req *Generat
 	if model == "" {
 		model = c.model
 	}
+	model = sanitizeModelName(model)
 
 	url := fmt.Sprintf("%s/models/%s:generateContent", c.baseURL, model)
 	headers := c.getHeaders()
@@ -94,6 +95,7 @@ func (c *Client) GenerateContentStream(ctx context.Context, model string, req *G
 	if model == "" {
 		model = c.model
 	}
+	model = sanitizeModelName(model)
 
 	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse", c.baseURL, model)
 	headers := c.getHeaders()
@@ -211,6 +213,7 @@ func (c *Client) EmbedContent(ctx context.Context, model string, req *EmbedConte
 	if model == "" {
 		model = "text-embedding-004"
 	}
+	model = sanitizeModelName(model)
 
 	url := fmt.Sprintf("%s/models/%s:embedContent", c.baseURL, model)
 	headers := c.getHeaders()
@@ -235,6 +238,7 @@ func (c *Client) BatchEmbedContents(ctx context.Context, model string, req *Batc
 	if model == "" {
 		model = "text-embedding-004"
 	}
+	model = sanitizeModelName(model)
 
 	url := fmt.Sprintf("%s/models/%s:batchEmbedContents", c.baseURL, model)
 	headers := c.getHeaders()
@@ -294,7 +298,9 @@ func (c *Client) GetModel(ctx context.Context, modelName string) (*ModelInfo, er
 
 	// Ensure model name has the correct format
 	if !strings.HasPrefix(modelName, "models/") {
-		modelName = "models/" + modelName
+		modelName = "models/" + sanitizeModelName(modelName)
+	} else {
+		modelName = "models/" + sanitizeModelName(strings.TrimPrefix(modelName, "models/"))
 	}
 
 	url := c.baseURL + "/" + modelName
@@ -352,4 +358,8 @@ func WrapError(operation string, err error) error {
 
 	// For other errors, wrap with provider context
 	return llms.WrapProviderError(llms.ProviderGemini, operation, err)
+}
+
+func sanitizeModelName(model string) string {
+	return httpclient.SanitizeModelName(strings.TrimPrefix(model, "models/"))
 }

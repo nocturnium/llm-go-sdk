@@ -105,6 +105,7 @@ func (c *Client) installSSRFDialer() {
 		return
 	}
 	tr, ok := c.httpClient.Transport.(*http.Transport)
+	callerProvidedTransport := ok
 	if !ok {
 		if c.httpClient.Transport != nil {
 			return // custom RoundTripper; cannot inject a dialer
@@ -115,12 +116,24 @@ func (c *Client) installSSRFDialer() {
 		} else {
 			tr = &http.Transport{}
 		}
-		c.httpClient.Transport = tr
 	}
+	tr = tr.Clone()
+	c.httpClient.Transport = tr
+
+	originalDialContext := tr.DialContext
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 		Control:   ssrfDialControl,
+	}
+	if callerProvidedTransport && originalDialContext != nil {
+		tr.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			if err := validateNotPrivateHostFromAddress(address); err != nil {
+				return nil, err
+			}
+			return originalDialContext(ctx, network, address)
+		}
+		return
 	}
 	tr.DialContext = dialer.DialContext
 }
@@ -324,19 +337,27 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 // response body. It uses the same retry, timeout, and error handling path as
 // DoJSON.
 func (c *Client) DoRaw(ctx context.Context, req Request) ([]byte, error) {
+	data, _, err := c.DoRawWithHeaders(ctx, req)
+	return data, err
+}
+
+// DoRawWithHeaders performs an HTTP request with an optional JSON body and
+// returns the raw response body and response headers. It uses the same retry,
+// timeout, error handling, and response-size limit path as DoRaw.
+func (c *Client) DoRawWithHeaders(ctx context.Context, req Request) ([]byte, http.Header, error) {
 	var bodyBytes []byte
 	var err error
 
 	if req.Body != nil {
 		bodyBytes, err = json.Marshal(req.Body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+			return nil, nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	if len(bodyBytes) > 0 {
@@ -352,24 +373,28 @@ func (c *Client) DoRaw(ctx context.Context, req Request) ([]byte, error) {
 
 	resp, err := c.doWithRetry(ctx, httpReq)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return nil, c.handleErrorResponse(resp)
+		return nil, nil, c.handleErrorResponse(resp)
+	}
+
+	if resp.ContentLength > maxResponseSize {
+		return nil, nil, fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
 	}
 
 	// Bound the body so a hostile server can't exhaust memory; reading one byte
 	// past the cap lets us detect and reject an over-limit response explicitly.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if int64(len(data)) > maxResponseSize {
-		return nil, fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
+		return nil, nil, fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
 	}
-	return data, nil
+	return data, resp.Header.Clone(), nil
 }
 
 // DoStream performs an HTTP request and returns the response body for streaming.

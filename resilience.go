@@ -2,6 +2,8 @@ package llms
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -37,7 +39,7 @@ func NewResilientClient(llm LLM, opts ...ResilienceOption) *ResilientClient {
 func WithRetryConfig(cfg *RetryConfig) ResilienceOption {
 	return func(rc *ResilientClient) {
 		if cfg != nil {
-			rc.retry = cfg
+			rc.retry = copyRetryConfig(cfg)
 		}
 	}
 }
@@ -62,6 +64,7 @@ func WithOnRetry(fn func(attempt int, err error, delay time.Duration)) Resilienc
 func WithMaxRetries(n int) ResilienceOption {
 	return func(rc *ResilientClient) {
 		if n >= 0 {
+			rc.retry = copyRetryConfig(rc.retry)
 			rc.retry.MaxAttempts = n + 1 // +1 because MaxAttempts includes first try
 		}
 	}
@@ -70,8 +73,17 @@ func WithMaxRetries(n int) ResilienceOption {
 // WithRetryDelay sets the initial retry delay
 func WithRetryDelay(d time.Duration) ResilienceOption {
 	return func(rc *ResilientClient) {
+		rc.retry = copyRetryConfig(rc.retry)
 		rc.retry.InitialDelay = d
 	}
+}
+
+func copyRetryConfig(cfg *RetryConfig) *RetryConfig {
+	if cfg == nil {
+		return DefaultRetryConfig()
+	}
+	copied := *cfg
+	return &copied
 }
 
 // Call wraps the LLM's Call method with resilience
@@ -139,10 +151,17 @@ func (rc *ResilientClient) Stream(ctx context.Context, messages []Message, optio
 func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 	var lastErr error
 	delay := rc.retry.InitialDelay
+	maxAttempts := rc.retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
 
-	for attempt := 0; attempt < rc.retry.MaxAttempts; attempt++ {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Check circuit breaker
 		if !rc.breaker.Allow() {
+			if lastErr != nil {
+				return fmt.Errorf("%w: %w", ErrCircuitOpen, lastErr)
+			}
 			return ErrCircuitOpen
 		}
 
@@ -155,40 +174,46 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 		lastErr = err
 
-		// Only count failures that indicate the provider itself is unhealthy
-		// (retryable upstream errors: 429/5xx). Client-side and terminal errors —
+		// Only terminal failures that indicate the provider itself is unhealthy
+		// (retryable upstream errors: 429/5xx) count against the breaker.
+		// Client-side and terminal errors —
 		// context cancellation/deadline, 4xx other than 429, and circuit-open —
 		// must NOT trip the breaker, otherwise a burst of bad requests or canceled
 		// calls would needlessly open the circuit on an otherwise healthy provider.
 		// This classification is deliberately independent of rc.retry.ShouldRetry,
 		// which callers may override (e.g. to disable retries) without intending to
 		// change what counts as a provider-health failure.
-		if isProviderUnhealthy(err) {
-			rc.breaker.RecordFailure()
-		}
+		providerUnhealthy := isProviderUnhealthy(err)
 
 		// Check if we should retry
-		if !rc.retry.ShouldRetry(err) {
+		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) {
+			if providerUnhealthy {
+				rc.breaker.RecordFailure()
+			}
 			return err
 		}
 
 		// Don't retry if this was the last attempt
-		if attempt >= rc.retry.MaxAttempts-1 {
+		if attempt >= maxAttempts-1 {
+			if providerUnhealthy {
+				rc.breaker.RecordFailure()
+			}
 			break
 		}
 
 		// Calculate delay with jitter
 		jitteredDelay := calculateDelay(delay, rc.retry.Jitter)
+		retryDelay := retryDelayForError(err, jitteredDelay, rc.retry.MaxDelay)
 
 		// Callback before retry
 		if rc.onRetry != nil {
-			rc.onRetry(attempt+1, err, jitteredDelay)
+			rc.onRetry(attempt+1, err, retryDelay)
 		}
 
 		// Wait before retrying with proper timer cleanup.
 		// Using time.NewTimer instead of time.After to prevent goroutine leaks
 		// when context is canceled during the wait.
-		timer := time.NewTimer(jitteredDelay)
+		timer := time.NewTimer(retryDelay)
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
@@ -206,6 +231,18 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 	}
 
 	return lastErr
+}
+
+func retryDelayForError(err error, jitteredDelay, maxDelay time.Duration) time.Duration {
+	retryDelay := jitteredDelay
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.RetryAfter > retryDelay {
+		retryDelay = apiErr.RetryAfter
+	}
+	if maxDelay > 0 && retryDelay > maxDelay {
+		return maxDelay
+	}
+	return retryDelay
 }
 
 // Provider returns the underlying LLM's provider

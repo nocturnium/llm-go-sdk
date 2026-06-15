@@ -170,14 +170,17 @@ options are covered in their respective guides.)
 
 ```go
 type Response struct {
-    Content       string           // the generated text
-    Thinking      *ThinkingContent // reasoning output; nil if unsupported
-    FinishReason  FinishReason     // why generation stopped
-    Usage         Usage            // token accounting
-    ToolCalls     []ToolCall       // tool calls the model requested
-    SearchResults []SearchResult   // web-search grounding results, if requested
+    Content       string            // the generated text
+    Reasoning     *ReasoningContent // reasoning output; nil if unsupported
+    FinishReason  FinishReason      // why generation stopped
+    Usage         Usage             // token accounting
+    ToolCalls     []ToolCall        // tool calls the model requested
+    SearchResults []SearchResult    // web-search grounding results, if requested
 }
 ```
+
+`Thinking`/`ThinkingContent` is a deprecated alias retained for backward
+compatibility; use `Reasoning`/`ReasoningContent` in new code.
 
 ### Content
 
@@ -217,6 +220,7 @@ type Usage struct {
     TotalTokens         int
     CacheReadTokens     int
     CacheCreationTokens int
+    ReasoningTokens     int
 }
 ```
 
@@ -232,22 +236,24 @@ fmt.Printf("prompt=%d completion=%d total=%d\n",
     Some providers omit token counts. Pass `llms.WithEstimateTokens()` to have
     the SDK estimate them locally when the provider returns zeros.
 
-### Thinking
+### Reasoning
 
 For reasoning-capable models (e.g. Z.AI GLM, OpenAI o-series, DeepSeek),
-`Thinking` carries the chain-of-thought separately from the answer. It is a
+`Reasoning` carries the chain-of-thought separately from the answer. It is a
 **pointer** and is `nil` when the provider does not surface reasoning, so always
 nil-check it:
 
 ```go
-if resp.Thinking != nil {
-    fmt.Println("reasoning:", resp.Thinking.Content)
-    fmt.Println("reasoning tokens:", resp.Thinking.Tokens)
+if resp.Reasoning != nil {
+    fmt.Println("reasoning:", resp.Reasoning.Content)
+    fmt.Println("reasoning tokens:", resp.Reasoning.Tokens)
 }
+fmt.Println(resp.ReasoningText()) // safe empty string when no reasoning is present
 ```
 
-`ThinkingContent` has `Content string`, `Tokens int`, and a
-`Metadata map[string]any` for provider-specific detail.
+`ReasoningContent` has `Content string`, `Tokens int`, `Signature string` (used
+by Anthropic extended thinking), and a `Metadata map[string]any` for
+provider-specific detail. `ThinkingContent` is a deprecated alias.
 
 ---
 

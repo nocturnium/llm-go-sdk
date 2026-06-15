@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -142,6 +143,9 @@ func validateNotPrivateHost(host string) error {
 	if ip := net.ParseIP(host); ip != nil {
 		return validateNotPrivateIP(ip)
 	}
+	if ip := parseIPv4Literal(host); ip != nil {
+		return validateNotPrivateIP(ip)
+	}
 
 	// Check for localhost variations
 	lowerHost := strings.ToLower(host)
@@ -162,6 +166,60 @@ func validateNotPrivateHost(host string) error {
 	// 3. The HTTP client should be configured to not follow redirects to private IPs
 
 	return nil
+}
+
+func validateNotPrivateHostFromAddress(address string) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	return validateNotPrivateHost(host)
+}
+
+func parseIPv4Literal(host string) net.IP {
+	parts := strings.Split(host, ".")
+	if len(parts) == 0 || len(parts) > 4 {
+		return nil
+	}
+	values := make([]uint64, len(parts))
+	for i, part := range parts {
+		if part == "" {
+			return nil
+		}
+		value, err := strconv.ParseUint(part, 0, 32)
+		if err != nil {
+			return nil
+		}
+		values[i] = value
+	}
+
+	var ip uint64
+	switch len(values) {
+	case 1:
+		if values[0] > 0xffffffff {
+			return nil
+		}
+		ip = values[0]
+	case 2:
+		if values[0] > 0xff || values[1] > 0xffffff {
+			return nil
+		}
+		ip = values[0]<<24 | values[1]
+	case 3:
+		if values[0] > 0xff || values[1] > 0xff || values[2] > 0xffff {
+			return nil
+		}
+		ip = values[0]<<24 | values[1]<<16 | values[2]
+	case 4:
+		for _, value := range values {
+			if value > 0xff {
+				return nil
+			}
+		}
+		ip = values[0]<<24 | values[1]<<16 | values[2]<<8 | values[3]
+	}
+
+	return net.IPv4(byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip))
 }
 
 // validateNotPrivateIP checks if an IP is private, loopback, or otherwise internal

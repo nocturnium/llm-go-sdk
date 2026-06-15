@@ -21,6 +21,7 @@ type runToolsConfig struct {
 	maxIterations int
 	concurrency   int
 	onStep        func(iteration int, resp *Response)
+	callOptions   []CallOption
 }
 
 func defaultRunToolsConfig() runToolsConfig {
@@ -69,21 +70,38 @@ func WithToolConcurrency(n int) RunToolsOption {
 	}
 }
 
+// WithCallOptions sets CallOption values to apply to every model turn.
+// RunTools prepends these options before WithTools(registry.Tools()), so caller
+// options can set model, temperature, max tokens, reasoning, response format,
+// and other per-call fields, while the registry tools always take precedence
+// for the tools field.
+func WithCallOptions(options ...CallOption) RunToolsOption {
+	return func(cfg *runToolsConfig) {
+		cfg.callOptions = append([]CallOption(nil), options...)
+	}
+}
+
 // RunTools runs a full tool-calling agent loop using llm and registry.
 //
 // RunTools copies the incoming messages into a fresh transcript, then repeatedly
-// calls GenerateContent with WithTools(registry.Tools()). If the model returns no
-// tool calls, RunTools appends the final assistant message and returns the response
-// and full transcript. If the model returns tool calls, RunTools appends the
-// assistant message carrying those calls, executes the calls concurrently with a
-// bounded per-turn concurrency limit, appends one RoleTool message per call, and
-// calls the model again.
+// calls GenerateContent with any WithCallOptions options followed by
+// WithTools(registry.Tools()). Because WithTools is applied last, registry tools
+// take precedence for the tools field while other forwarded call options such as
+// model, temperature, max tokens, reasoning, and response format are honored. If
+// the model returns no tool calls, RunTools appends the final assistant message
+// and returns the response and full transcript. If the model returns tool calls,
+// RunTools appends the assistant message carrying those calls, executes the calls
+// concurrently with a bounded per-turn concurrency limit, appends one RoleTool
+// message per call, and calls the model again.
 //
 // Tool-result ordering is deterministic: messages are appended in the same order as
 // resp.ToolCalls regardless of completion order. Context cancellation is checked
 // before model calls, while scheduling tool calls, and while waiting for tool
 // results; if ctx is canceled, RunTools returns promptly with ctx.Err(), the last
-// response, and the transcript built so far. ToolRegistry.Handle converts handler
+// response, and the transcript built so far. Note: tool handlers that have already
+// started when cancellation occurs run to completion — ToolHandler receives no
+// context, so handlers that must abort on cancellation should accept a context via
+// closure and check it themselves. ToolRegistry.Handle converts handler
 // errors into tool-result messages so the model can react. If dispatch itself fails
 // such as a missing tool or malformed function call, RunTools uses the same
 // model-reacts policy by appending a tool-result message containing the error text.
@@ -103,7 +121,10 @@ func RunTools(ctx context.Context, llm LLM, messages []Message, registry *ToolRe
 		default:
 		}
 
-		resp, err := llm.GenerateContent(ctx, transcript, WithTools(registry.Tools()))
+		callOptions := make([]CallOption, 0, len(cfg.callOptions)+1)
+		callOptions = append(callOptions, cfg.callOptions...)
+		callOptions = append(callOptions, WithTools(registry.Tools()))
+		resp, err := llm.GenerateContent(ctx, transcript, callOptions...)
 		if err != nil {
 			return nil, transcript, err
 		}
@@ -147,10 +168,17 @@ func runToolCalls(ctx context.Context, registry *ToolRegistry, calls []ToolCall,
 	results := make(chan runToolResult, len(calls))
 
 	for i, tc := range calls {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case sem <- struct{}{}:
+		}
+		if err := ctx.Err(); err != nil {
+			<-sem
+			return nil, err
 		}
 
 		go func(index int, call ToolCall) {
@@ -167,6 +195,9 @@ func runToolCalls(ctx context.Context, registry *ToolRegistry, calls []ToolCall,
 				}
 			}()
 
+			if err := ctx.Err(); err != nil {
+				return
+			}
 			msg, err := registry.Handle(call)
 			if err != nil {
 				msg = ToolResultError(call.ID, toolCallName(call), err)

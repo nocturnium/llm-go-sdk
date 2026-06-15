@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -167,7 +168,7 @@ func TestOTelMiddleware_Call_Error(t *testing.T) {
 	// Check error attributes
 	attrs := span.Attributes()
 	assertAttribute(t, attrs, "llm.error.status_code", int64(429))
-	assertAttribute(t, attrs, "llm.error.type", "rate_limit_error")
+	assertAttribute(t, attrs, "llm.error.type", "rate_limited")
 }
 
 func TestOTelMiddleware_GenerateContent_Success(t *testing.T) {
@@ -292,6 +293,51 @@ func TestOTelMiddleware_Stream_InitError(t *testing.T) {
 
 	if spans[0].Status().Code != codes.Error {
 		t.Error("expected error status on span")
+	}
+}
+
+func TestOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	tracer := tracerProvider.Tracer(InstrumentationName)
+
+	llm := &mockOTelLLM{
+		provider: ProviderOpenAI,
+		model:    "gpt-4",
+		chunks: []StreamChunk{
+			{Content: "one"},
+			{Content: "two"},
+			{Content: "three"},
+		},
+	}
+
+	middleware, _ := NewOTelMiddleware(llm, WithOTelTracer(tracer))
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := middleware.Stream(ctx,
+		[]Message{{Role: RoleUser, Content: "Hi"}},
+		WithStreamBufferSize(1),
+		WithStreamSendTimeout(10*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stream == nil {
+		t.Fatal("expected stream")
+	}
+	cancel()
+
+	deadline := time.After(500 * time.Millisecond)
+	for len(spanRecorder.Ended()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for stream span to end")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	spans := spanRecorder.Ended()
+	if spans[0].Status().Code == codes.Ok {
+		t.Fatalf("span status = Ok, want non-Ok for canceled stream")
 	}
 }
 
@@ -421,6 +467,27 @@ func TestTruncateForSpan(t *testing.T) {
 		if result != tc.expected {
 			t.Errorf("truncateForSpan(%q, %d) = %q, want %q", tc.input, tc.maxLen, result, tc.expected)
 		}
+	}
+}
+
+func TestTruncateForSpan_UTF8Safe(t *testing.T) {
+	result := truncateForSpan("ab😀cd", 4)
+	if !utf8.ValidString(result) {
+		t.Fatalf("truncateForSpan returned invalid UTF-8: %q", result)
+	}
+	if result != "ab..." {
+		t.Errorf("truncateForSpan returned %q, want %q", result, "ab...")
+	}
+}
+
+func TestNormalizeErrorType_BucketsUnknownAPIError(t *testing.T) {
+	err := &APIError{
+		StatusCode: 418,
+		Message:    "provider-specific failure",
+		Code:       "tenant_12345_model_67890",
+	}
+	if got := normalizeErrorType(err); got != "other" {
+		t.Errorf("normalizeErrorType() = %q, want other", got)
 	}
 }
 

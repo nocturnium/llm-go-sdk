@@ -159,8 +159,5 @@ func FormatMessagesCompact(messages []Message) string {
 
 // truncateContent truncates content to maxLen and adds ellipsis if truncated
 func truncateContent(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+	return truncateUTF8(s, maxLen, "...")
 }

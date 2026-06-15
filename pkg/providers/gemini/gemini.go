@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk"
 	"github.com/nocturnium/llm-go-sdk/internal/geminiapi"
@@ -94,6 +95,10 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		return nil, geminiapi.WrapError("generate content", err)
 	}
 
+	if err := validateNonEmptyFinish(resp); err != nil {
+		return nil, err
+	}
+
 	result := convertResponse(resp)
 
 	// apply token estimation if enabled and usage is missing
@@ -162,10 +167,20 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		defer func() { _ = stream.Close() }()
 
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+		readDone := make(chan struct{})
+		defer close(readDone)
+		go func() {
+			select {
+			case <-ctx.Done():
+				_ = stream.Close()
+			case <-readDone:
+			}
+		}()
 
 		var accumulatedToolCalls []llms.ToolCall
 		var accumulatedContent string // Full content for token estimation
 		var accumulatedReasoning string
+		var reasoningDeltaEmitted bool
 		var finishReason llms.FinishReason
 		var usage *llms.Usage
 		var bytesRead int64
@@ -185,6 +200,10 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 			chunk, err := stream.Read()
 			if errors.Is(err, io.EOF) {
+				if ctx.Err() != nil {
+					sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
+					return
+				}
 				// apply token estimation if enabled and usage is missing
 				finalUsage := usage
 				if estimateTokens && (usage == nil || usage.TotalTokens == 0) {
@@ -193,7 +212,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				}
 
 				var finalReasoning *llms.ReasoningContent
-				if accumulatedReasoning != "" {
+				if !reasoningDeltaEmitted && accumulatedReasoning != "" {
 					finalReasoning = &llms.ReasoningContent{Content: accumulatedReasoning}
 					if finalUsage != nil {
 						finalReasoning.Tokens = finalUsage.ReasoningTokens
@@ -215,6 +234,10 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				return
 			}
 			if err != nil {
+				if ctx.Err() != nil {
+					sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
+					return
+				}
 				streamErr := &llms.StreamError{
 					Cause:       geminiapi.WrapError("stream read", err),
 					BytesRead:   bytesRead,
@@ -233,6 +256,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					// Emit reasoning ("thought") content as it streams.
 					if thought := geminiapi.ExtractThoughtContent(candidate.Content.Parts); thought != "" {
 						accumulatedReasoning += thought
+						reasoningDeltaEmitted = true
 						rc := &llms.ReasoningContent{Content: thought}
 						if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
 							return
@@ -283,9 +307,62 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	return chunks, nil
 }
 
+func validateNonEmptyFinish(resp *geminiapi.GenerateContentResponse) error {
+	if resp == nil || len(resp.Candidates) == 0 {
+		return nil
+	}
+	candidate := resp.Candidates[0]
+	reason := strings.ToUpper(candidate.FinishReason)
+	if reason == "" || reason == "STOP" || candidateHasOutput(candidate) {
+		return nil
+	}
+	return fmt.Errorf("gemini: candidate finished with %s and no content", candidate.FinishReason)
+}
+
+func candidateHasOutput(candidate geminiapi.Candidate) bool {
+	if candidate.Content == nil {
+		return false
+	}
+	if geminiapi.ExtractTextContent(candidate.Content.Parts) != "" {
+		return true
+	}
+	if geminiapi.ExtractThoughtContent(candidate.Content.Parts) != "" {
+		return true
+	}
+	return geminiapi.HasFunctionCalls(candidate.Content)
+}
+
+func splitSystemInstruction(messages []llms.Message) (*geminiapi.Content, []llms.Message) {
+	contents := make([]llms.Message, 0, len(messages))
+	var systemParts []string
+	for _, msg := range messages {
+		if msg.Role != llms.RoleSystem {
+			contents = append(contents, msg)
+			continue
+		}
+		if msg.Content != "" {
+			systemParts = append(systemParts, msg.Content)
+			continue
+		}
+		for _, part := range msg.Parts {
+			if part.Type == llms.PartTypeText && part.Text != "" {
+				systemParts = append(systemParts, part.Text)
+			}
+		}
+	}
+	if len(systemParts) == 0 {
+		return nil, contents
+	}
+	return &geminiapi.Content{
+		Parts: []geminiapi.Part{{Text: strings.Join(systemParts, "\n\n")}},
+	}, contents
+}
+
 func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) *geminiapi.GenerateContentRequest {
+	systemInstruction, contents := splitSystemInstruction(messages)
 	req := &geminiapi.GenerateContentRequest{
-		Contents: convertMessages(messages),
+		SystemInstruction: systemInstruction,
+		Contents:          convertMessages(contents),
 	}
 
 	// Add generation config. Temperature/TopP are forwarded as pointers so an

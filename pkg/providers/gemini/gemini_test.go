@@ -179,3 +179,26 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 func TestClientImplementsInterface(_ *testing.T) {
 	var _ llms.LLM = (*Client)(nil)
 }
+
+// TestBuildRequest_SystemInstruction covers #12: a system message is promoted to
+// the Gemini systemInstruction field and excluded from Contents.
+func TestBuildRequest_SystemInstruction(t *testing.T) {
+	client, err := New(WithAPIKey("test-key"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	msgs := []llms.Message{
+		{Role: llms.RoleSystem, Content: "you are helpful"},
+		{Role: llms.RoleUser, Content: "hi"},
+	}
+	req := client.buildRequest(msgs, llms.ApplyOptions())
+	if req.SystemInstruction == nil {
+		t.Fatal("system message was not promoted to SystemInstruction")
+	}
+	if len(req.Contents) != 1 {
+		t.Fatalf("expected system message excluded from Contents (1 user turn), got %d", len(req.Contents))
+	}
+	if req.Contents[0].Role != "user" {
+		t.Errorf("expected remaining content role=user, got %q", req.Contents[0].Role)
+	}
+}

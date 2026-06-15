@@ -250,8 +250,8 @@ func (c *Client) GenerateStream(ctx context.Context, req *GenerateRequest) (*Str
 	}
 
 	return &StreamReader{
-		body:    body,
-		scanner: bufio.NewScanner(body),
+		body:   body,
+		reader: bufio.NewReader(body),
 	}, nil
 }
 
@@ -289,8 +289,8 @@ func (c *Client) ChatStream(ctx context.Context, req *ChatRequest) (*ChatStreamR
 	}
 
 	return &ChatStreamReader{
-		body:    body,
-		scanner: bufio.NewScanner(body),
+		body:   body,
+		reader: bufio.NewReader(body),
 	}, nil
 }
 
@@ -313,27 +313,23 @@ func (c *Client) Embed(ctx context.Context, req *EmbedRequest) (*EmbedResponse, 
 
 // StreamReader reads streaming generate responses.
 type StreamReader struct {
-	body    io.ReadCloser
-	scanner *bufio.Scanner
+	body   io.ReadCloser
+	reader *bufio.Reader
 }
 
 // Read reads the next response from the stream.
 func (r *StreamReader) Read() (*GenerateResponse, error) {
-	if !r.scanner.Scan() {
-		if err := r.scanner.Err(); err != nil {
-			return nil, err
-		}
-		return nil, io.EOF
-	}
-
-	line := r.scanner.Text()
-	if line == "" {
-		return r.Read()
+	line, err := readNDJSONLine(r.reader)
+	if err != nil {
+		return nil, err
 	}
 
 	var resp GenerateResponse
 	if err := json.Unmarshal([]byte(line), &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("ollama stream error: %s", resp.Error)
 	}
 
 	return &resp, nil
@@ -346,27 +342,23 @@ func (r *StreamReader) Close() error {
 
 // ChatStreamReader reads streaming chat responses.
 type ChatStreamReader struct {
-	body    io.ReadCloser
-	scanner *bufio.Scanner
+	body   io.ReadCloser
+	reader *bufio.Reader
 }
 
 // Read reads the next response from the stream.
 func (r *ChatStreamReader) Read() (*ChatResponse, error) {
-	if !r.scanner.Scan() {
-		if err := r.scanner.Err(); err != nil {
-			return nil, err
-		}
-		return nil, io.EOF
-	}
-
-	line := r.scanner.Text()
-	if line == "" {
-		return r.Read()
+	line, err := readNDJSONLine(r.reader)
+	if err != nil {
+		return nil, err
 	}
 
 	var resp ChatResponse
 	if err := json.Unmarshal([]byte(line), &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("ollama stream error: %s", resp.Error)
 	}
 
 	return &resp, nil
@@ -375,6 +367,25 @@ func (r *ChatStreamReader) Read() (*ChatResponse, error) {
 // Close closes the stream.
 func (r *ChatStreamReader) Close() error {
 	return r.body.Close()
+}
+
+func readNDJSONLine(reader *bufio.Reader) (string, error) {
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if strings.TrimSpace(line) == "" {
+					return "", io.EOF
+				}
+				return line, nil
+			}
+			return "", err
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		return line, nil
+	}
 }
 
 // WrapError converts errors to llms.APIError or ProviderError.

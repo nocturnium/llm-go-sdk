@@ -151,7 +151,7 @@ schema); "Native" providers implement a provider-specific wire format.
 | Featherless.ai | `pkg/providers/featherless` | `FEATHERLESS_API_KEY` | OpenAI-compatible | `Qwen/Qwen3-32B` (default); thousands of Hugging Face models, serverless on-demand load; tools, JSON mode |
 | Synthetic.new | `pkg/providers/synthetic` | `SYNTHETIC_API_KEY` | OpenAI-compatible | `hf:Qwen/Qwen3-Coder-480B-A35B-Instruct` (default); Qwen/GLM/Kimi/DeepSeek coding models; tools, JSON mode |
 | Perplexity | `pkg/providers/perplexity` | `PERPLEXITY_API_KEY`, `PPLX_API_KEY` | OpenAI-compatible | `sonar` (default); `sonar-pro`, `sonar-reasoning`; search-augmented generation, citations, domain filtering |
-| Z.AI | `pkg/providers/zai` | `ZAI_API_KEY` | OpenAI-compatible | `glm-4.7` (default), `glm-4.7-flashx`, `glm-4.7-flash`; 200K context / 128K output; tools, vision, JSON mode, native web search, coding endpoint via `WithUseCodingAPI` |
+| Z.AI | `pkg/providers/zai` | `ZAI_API_KEY` | OpenAI-compatible | `glm-4.7` (default), `glm-4.7-FlashX`, `glm-4.7-Flash`; 200K context / 128K output; tools, vision, JSON mode, native web search, coding endpoint via `WithUseCodingAPI` |
 | RunPod | `pkg/providers/runpod` | `RUNPOD_API_KEY` (+ `WithEndpointID`) | OpenAI-compatible (vLLM) | Serverless vLLM endpoints (`https://api.runpod.ai/v2/<id>/openai/v1`); model set by deployment; chat, streaming, tools (model-dependent) |
 | Ollama | `pkg/providers/ollama` | `OLLAMA_HOST` (default `http://localhost:11434`), `OLLAMA_API_KEY` (optional) | OpenAI-compatible + native mgmt API | `llama3.2` (default); local inference; chat, streaming, tools (model-dependent), vision (`llava`), embeddings (`nomic-embed-text`); pull/list/show/delete management |
 | llama.cpp | `pkg/providers/llamacpp` | `LLAMA_CPP_HOST` (default `http://localhost:8080`), `LLAMA_CPP_API_KEY` (optional) | OpenAI-compatible + native server API | Model discovered from `/props`; local inference; chat, streaming, tools (model-dependent), grammar JSON mode, vision (LLaVA), embeddings; `/health`, `/slots`, `/props` |
@@ -201,7 +201,8 @@ The SDK is a single Go module (`github.com/nocturnium/llm-go-sdk`, Go 1.25+) wit
 small, deliberately flat public surface. The **core lives in the root package**
 (`package llms`): the `LLM` interface, all shared types and options, errors,
 streaming, and every middleware. The only other public packages are the provider
-packages under `pkg/providers/*` and the custom-provider base in `pkg/openaicompat`.
+packages under `pkg/providers/*`, the custom-provider base in `pkg/openaicompat`,
+and the MCP client in `pkg/mcp`.
 Everything else lives under `internal/` and is not importable by external code.
 
 | Location | Role |
@@ -676,7 +677,9 @@ var client llms.LLM = base
 
 client = llms.NewRateLimitedClient(client,
     llms.WithRequestsPerMinute(60),
+    llms.WithRequestBurst(5),
     llms.WithTokensPerMinute(100000),
+    llms.WithTokenBurst(20000),
     llms.WithBlocking(true),
     llms.WithWaitTimeout(30*time.Second),
 )
@@ -684,6 +687,10 @@ client = llms.NewRateLimitedClient(client,
 // Or use provider defaults
 client = llms.NewProviderRateLimitedClient(base)
 ```
+
+The request burst defaults to 1, which strictly paces requests instead of
+releasing a full minute's quota immediately. The token burst defaults to a full
+minute's token budget.
 
 ## Fallback Chains
 
@@ -706,7 +713,8 @@ resp, err := chain.GenerateContent(ctx, messages)
 
 A failed client is skipped for `WithRecoveryAfter(d)` (default 30s) before it becomes
 eligible again, so the chain stops hammering a provider that just errored. Selectors:
-`DefaultFallbackSelector` (429/5xx/circuit-open), `AlwaysFallbackSelector`,
+`DefaultFallbackSelector` (429/5xx, transport-level errors such as
+connection-refused/EOF/timeouts, and circuit-open), `AlwaysFallbackSelector`,
 `NeverFallbackSelector`. Weighted variant:
 
 ```go
@@ -904,7 +912,7 @@ client, err := zai.New(
 )
 
 // For coding-specific tasks, use the coding endpoint
-client, err = zai.New(zai.WithAPIKey("..."), zai.WithUseCodingAPI(true))
+client, err = zai.New(zai.WithAPIKey("..."), zai.WithUseCodingAPI())
 ```
 
 ## CLI

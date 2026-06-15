@@ -64,10 +64,10 @@ if !ok {
 check without keeping the typed `Embedder`.
 
 !!! tip "Set the embedding model at construction"
-    Use the provider's `WithEmbeddingModel(...)` option (available on `openai`,
-    `gemini`, `mistral`, `ollama`, `llamacpp`, and `infinity`) so every embed
-    call uses it by default. You can still override per call with
-    `llms.WithEmbedModel(...)`.
+    Use the provider's `WithEmbeddingModel(...)` option (available on all
+    OpenAI-compatible providers, plus `gemini`, `ollama`, `llamacpp`, and
+    `infinity`) so every embed call uses it by default. You can still override
+    per call with `llms.WithEmbedModel(...)`.
 
 ## The package-level helpers
 
@@ -164,9 +164,13 @@ These providers implement `Embedder` and can be used with `llms.AsEmbedder`:
 | infinity | `infinity.New(...)` | `michaelfeil/bge-small-en-v1.5` |
 
 !!! note "Capability, not guarantee"
-    Other chat providers (anthropic, groq, deepseek, perplexity, etc.) do not
-    implement `Embedder`. Always gate on `llms.AsEmbedder` / `SupportsEmbeddings`
-    rather than assuming a provider can embed.
+    OpenAI-compatible providers (groq, deepseek, perplexity, cerebras, etc.)
+    satisfy `Embedder` via BaseProvider even when they have no embedding model,
+    so `llms.AsEmbedder` alone does not prove a provider can embed. The reliable
+    check is configuring an embedding model and handling
+    `llms.ErrEmbeddingModelRequired` from `Embed` / `EmbedQuery` /
+    `EmbedDocuments`. Native providers like anthropic may genuinely not
+    implement `Embedder`.
 
 ## Reranking
 
@@ -349,7 +353,6 @@ func cosineSimilarity(a, b []float32) float64 {
 
 | Sentinel | Meaning |
 | --- | --- |
-| `llms.ErrEmbeddingsNotSupported` | The provider does not implement embeddings. |
 | `llms.ErrEmptyInput` | The input text (or every item in the batch) was empty. |
 | `llms.ErrEmbeddingModelRequired` | No embedding model was set via `WithEmbeddingModel` or `WithEmbedModel`. |
 

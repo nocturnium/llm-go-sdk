@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestSlogLogger_LogRequest(t *testing.T) {
@@ -154,6 +155,27 @@ func TestNopLogger(_ *testing.T) {
 	logger.LogRequest(context.Background(), &LogEntry{})
 	logger.LogResponse(context.Background(), &LogEntry{})
 	logger.LogError(context.Background(), &LogEntry{}, errors.New("test"))
+}
+
+func TestDefaultIDGenerator_UniqueInTightLoop(t *testing.T) {
+	seen := make(map[string]struct{}, 10_000)
+	for i := 0; i < 10_000; i++ {
+		id := defaultIDGenerator()
+		if _, ok := seen[id]; ok {
+			t.Fatalf("duplicate request ID generated: %s", id)
+		}
+		seen[id] = struct{}{}
+	}
+}
+
+func TestTruncateString_UTF8Safe(t *testing.T) {
+	result := truncateString("ab😀cd", 4)
+	if !utf8.ValidString(result) {
+		t.Fatalf("truncateString returned invalid UTF-8: %q", result)
+	}
+	if result != "ab..." {
+		t.Errorf("truncateString returned %q, want %q", result, "ab...")
+	}
 }
 
 func TestJSONLogger(t *testing.T) {
@@ -561,6 +583,28 @@ func TestLogEntry_ToLangfuseGeneration_Minimal(t *testing.T) {
 	}
 	if _, exists := gen["user_id"]; exists {
 		t.Error("user_id should not be present when empty")
+	}
+}
+
+func TestLogEntry_ToLangfuseGeneration_MetadataIncludesCostAndTTFTWithoutOtherMetadata(t *testing.T) {
+	entry := &LogEntry{
+		Operation:        "stream",
+		Model:            "gpt-4",
+		Timestamp:        time.Now(),
+		CostUSD:          0.001,
+		TimeToFirstToken: 25 * time.Millisecond,
+	}
+
+	gen := entry.ToLangfuseGeneration()
+	metadata, ok := gen["metadata"].(map[string]any)
+	if !ok {
+		t.Fatal("metadata is not a map")
+	}
+	if metadata["cost_usd"] != 0.001 {
+		t.Errorf("cost_usd = %v, want 0.001", metadata["cost_usd"])
+	}
+	if metadata["time_to_first_token_ms"] != int64(25) {
+		t.Errorf("time_to_first_token_ms = %v, want 25", metadata["time_to_first_token_ms"])
 	}
 }
 

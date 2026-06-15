@@ -268,7 +268,9 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 		return nil, err
 	}
 
-	wrappedStream := make(chan StreamChunk)
+	opts := ApplyOptions(options...)
+	wrappedStream := make(chan StreamChunk, opts.StreamBufferSize)
+	sender := NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
 	go func() {
 		defer close(wrappedStream)
 		defer span.End()
@@ -287,9 +289,53 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 		// Pre-allocate some capacity to reduce allocations
 		contentBuilder.Grow(1024)
 
+		defer func() {
+			duration := time.Since(start).Seconds()
+			m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+			if chunkCount > 0 {
+				m.streamChunkCount.Add(ctx, chunkCount, metric.WithAttributes(attrs...))
+			}
+
+			if !hadError {
+				if err := ctx.Err(); err != nil {
+					hadError = true
+					m.recordError(ctx, span, err, attrs)
+					m.successRateWindow.Record(false)
+				}
+			}
+
+			if !hadError {
+				m.successRateWindow.Record(true)
+			}
+
+			if usage != nil {
+				m.recordUsage(ctx, span, provider, model, *usage, duration, attrs)
+			}
+
+			span.SetAttributes(
+				attrFinishReason.String(finishReason),
+				attribute.Int64("llm.stream.chunks", chunkCount),
+				attrToolCalls.Int(toolCallCount),
+			)
+
+			if m.recordContent {
+				span.SetAttributes(attribute.String("llm.response", truncateForSpan(contentBuilder.String(), 1000)))
+			}
+
+			if !hadError {
+				span.SetStatus(codes.Ok, "")
+			}
+		}()
+
 		for chunk := range stream {
 			chunkCount++
-			wrappedStream <- chunk
+			sendResult := sender.Send(chunk)
+			if sender.ForwardTerminalOnEarlyExit(sendResult) {
+				hadError = true
+				m.recordError(ctx, span, streamSendResultError(ctx, sendResult), attrs)
+				m.successRateWindow.Record(false)
+				return
+			}
 
 			if !hadFirstToken && chunk.Content != "" {
 				hadFirstToken = true
@@ -300,6 +346,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 			}
 
 			if chunk.Error != nil {
+				hadError = true
 				m.recordError(ctx, span, chunk.Error, attrs)
 				m.successRateWindow.Record(false)
 				return
@@ -311,7 +358,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 				if len(chunk.Content) <= remaining {
 					contentBuilder.WriteString(chunk.Content)
 				} else {
-					contentBuilder.WriteString(chunk.Content[:remaining])
+					contentBuilder.WriteString(truncateUTF8(chunk.Content, remaining, ""))
 					contentTruncated = true
 				}
 			}
@@ -326,30 +373,6 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 				toolCallCount = len(chunk.ToolCalls)
 			}
 		}
-
-		duration := time.Since(start).Seconds()
-		m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
-		m.streamChunkCount.Add(ctx, chunkCount, metric.WithAttributes(attrs...))
-
-		if !hadError {
-			m.successRateWindow.Record(true)
-		}
-
-		if usage != nil {
-			m.recordUsage(ctx, span, provider, model, *usage, duration, attrs)
-		}
-
-		span.SetAttributes(
-			attrFinishReason.String(finishReason),
-			attribute.Int64("llm.stream.chunks", chunkCount),
-			attrToolCalls.Int(toolCallCount),
-		)
-
-		if m.recordContent {
-			span.SetAttributes(attribute.String("llm.response", truncateForSpan(contentBuilder.String(), 1000)))
-		}
-
-		span.SetStatus(codes.Ok, "")
 	}()
 
 	return wrappedStream, nil

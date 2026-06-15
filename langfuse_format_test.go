@@ -3,6 +3,7 @@ package llms
 import (
 	"encoding/json"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestFormatInput_Raw(t *testing.T) {
@@ -191,5 +192,15 @@ func TestFormatMessagesCompact_Empty(t *testing.T) {
 	result := FormatMessagesCompact([]Message{})
 	if result != "[]" {
 		t.Errorf("expected '[]' for empty messages, got '%s'", result)
+	}
+}
+
+func TestTruncateContent_UTF8Safe(t *testing.T) {
+	result := truncateContent("ab😀cd", 4)
+	if !utf8.ValidString(result) {
+		t.Fatalf("truncateContent returned invalid UTF-8: %q", result)
+	}
+	if result != "ab..." {
+		t.Errorf("truncateContent returned %q, want %q", result, "ab...")
 	}
 }

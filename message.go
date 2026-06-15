@@ -41,14 +41,13 @@ const (
 //   - Each message has a role
 //   - Tool messages have a ToolCallID
 //   - System messages appear only at the beginning
-//   - No consecutive messages with the same role (except tool messages)
+//   - The conversation does not start with a tool message
 func ValidateMessages(messages []Message) error {
 	if len(messages) == 0 {
 		return ErrEmptyMessages
 	}
 
 	var errs ValidationErrors
-	var prevRole Role
 	systemMessageSeen := false
 
 	for i, msg := range messages {
@@ -68,6 +67,16 @@ func ValidateMessages(messages []Message) error {
 				Field:   "messages[" + strconv.Itoa(i) + "].role",
 				Value:   msg.Role,
 				Message: "invalid role: must be system, user, assistant, or tool",
+			})
+		}
+
+		// A tool message is a result for a prior assistant tool call, so it
+		// cannot be the first message in a conversation.
+		if i == 0 && msg.Role == RoleTool {
+			errs = append(errs, ValidationError{
+				Field:   "messages[" + strconv.Itoa(i) + "].role",
+				Value:   msg.Role,
+				Message: "tool message cannot start a conversation",
 			})
 		}
 
@@ -97,18 +106,6 @@ func ValidateMessages(messages []Message) error {
 			}
 			systemMessageSeen = true
 		}
-
-		// Check for consecutive messages with the same role (except tool messages)
-		// Many APIs reject consecutive user or assistant messages
-		if i > 0 && msg.Role != RoleTool && msg.Role == prevRole {
-			errs = append(errs, ValidationError{
-				Field:   "messages[" + strconv.Itoa(i) + "].role",
-				Value:   msg.Role,
-				Message: "consecutive " + string(msg.Role) + " messages are not allowed",
-			})
-		}
-
-		prevRole = msg.Role
 	}
 
 	if len(errs) > 0 {

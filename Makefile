@@ -20,41 +20,41 @@ all: check build
 # Build the CLI
 build:
 	@echo "Building llms-cli ($(VERSION))..."
-	go build -v -trimpath -ldflags "$(LDFLAGS)" -o llms-cli ./cmd
+	GOWORK=off go build -v -trimpath -ldflags "$(LDFLAGS)" -o llms-cli ./cmd
 
 # Build for all platforms
 build-all:
 	@echo "Building for all platforms..."
-	GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-amd64 ./cmd
-	GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-arm64 ./cmd
-	GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-darwin-amd64 ./cmd
-	GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-darwin-arm64 ./cmd
-	GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-windows-amd64.exe ./cmd
+	GOOS=linux GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-amd64 ./cmd
+	GOOS=linux GOARCH=arm64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-arm64 ./cmd
+	GOOS=darwin GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-darwin-amd64 ./cmd
+	GOOS=darwin GOARCH=arm64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-darwin-arm64 ./cmd
+	GOOS=windows GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-windows-amd64.exe ./cmd
 
 # Run tests
 test:
 	@echo "Running tests..."
-	go test -race -coverprofile=coverage.out ./...
+	GOWORK=off go test -race -coverprofile=coverage.out ./...
 
 # Run tests with verbose output
 test-verbose:
 	@echo "Running tests (verbose)..."
-	go test -v -race -coverprofile=coverage.out ./...
+	GOWORK=off go test -v -race -coverprofile=coverage.out ./...
 
 # Run short tests only
 test-short:
 	@echo "Running short tests..."
-	go test -short -race ./...
+	GOWORK=off go test -short -race ./...
 
 # Run integration tests
 test-integration:
 	@echo "Running integration tests..."
-	go test -v -tags=integration -race ./...
+	GOWORK=off go test -v -tags=integration -race ./...
 
 # Run benchmarks
 bench:
 	@echo "Running benchmarks..."
-	go test -bench=. -benchmem -run=^$$ ./...
+	GOWORK=off go test -bench=. -benchmem -run=^$$ ./...
 
 # Run linters
 lint:
@@ -69,7 +69,7 @@ lint:
 # Run go vet
 vet:
 	@echo "Running go vet..."
-	go vet ./...
+	GOWORK=off go vet ./...
 
 # Check for vulnerabilities
 vulncheck:
@@ -112,7 +112,7 @@ clean:
 	rm -f llms-cli
 	rm -f coverage.out
 	rm -rf dist/
-	go clean ./...
+	GOWORK=off go clean ./...
 
 # Install git hooks
 setup-hooks:
@@ -129,39 +129,39 @@ setup-hooks:
 # Install development tools
 install-tools:
 	@echo "Installing development tools..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install golang.org/x/tools/cmd/goimports@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install honnef.co/go/tools/cmd/staticcheck@latest
-	go install github.com/goreleaser/goreleaser/v2@latest
-	go install github.com/orhun/git-cliff/git-cliff@latest || echo "git-cliff install failed (optional)"
+	GOWORK=off go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	GOWORK=off go install golang.org/x/tools/cmd/goimports@latest
+	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
+	GOWORK=off go install honnef.co/go/tools/cmd/staticcheck@latest
+	GOWORK=off go install github.com/goreleaser/goreleaser/v2@latest
+	GOWORK=off go install github.com/orhun/git-cliff/git-cliff@latest || echo "git-cliff install failed (optional)"
 	@echo "Tools installed successfully"
 
 # Tidy dependencies
 tidy:
 	@echo "Tidying dependencies..."
-	go mod tidy
+	GOWORK=off go mod tidy
 
 # Verify dependencies
 verify:
 	@echo "Verifying dependencies..."
-	go mod verify
+	GOWORK=off go mod verify
 
 # Download dependencies
 deps:
 	@echo "Downloading dependencies..."
-	go mod download
+	GOWORK=off go mod download
 
 # Generate code
 generate:
 	@echo "Generating code..."
-	go generate ./...
+	GOWORK=off go generate ./...
 
 # Run a quick sanity check
 sanity:
 	@echo "Running sanity check..."
-	go build -v ./...
-	go test -short ./...
+	GOWORK=off go build -v ./...
+	GOWORK=off go test -short ./...
 	@echo "Sanity check passed!"
 
 # Show version info
@@ -203,8 +203,8 @@ release:
 # Show coverage report in browser
 coverage:
 	@echo "Generating coverage report..."
-	go test -race -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out
+	GOWORK=off go test -race -coverprofile=coverage.out ./...
+	GOWORK=off go tool cover -html=coverage.out
 
 # Show help
 help:

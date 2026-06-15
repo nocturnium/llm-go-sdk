@@ -172,11 +172,21 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		defer func() { _ = stream.Close() }()
 
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+		readDone := make(chan struct{})
+		defer close(readDone)
+		go func() {
+			select {
+			case <-ctx.Done():
+				_ = stream.Close()
+			case <-readDone:
+			}
+		}()
 
 		var accumulatedToolCalls []llms.ToolCall
 		var accumulatedContent string // Full content for token estimation
 		var accumulatedReasoning string
 		var reasoningSignature string
+		var reasoningDeltaEmitted bool
 		var currentToolCall *llms.ToolCall
 		var currentToolArgs string
 		var finishReason llms.FinishReason
@@ -198,6 +208,10 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 			event, err := stream.Read()
 			if err != nil {
+				if ctx.Err() != nil {
+					sender.ForwardTerminalOnEarlyExit(llms.SendContextCanceled)
+					return
+				}
 				streamErr := &llms.StreamError{
 					Cause:       anthropicapi.WrapError("stream read", err),
 					BytesRead:   bytesRead,
@@ -255,6 +269,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 						if event.Delta.Thinking != "" {
 							accumulatedReasoning += event.Delta.Thinking
 							rc := &llms.ReasoningContent{Content: event.Delta.Thinking}
+							reasoningDeltaEmitted = true
 							if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
 								return
 							}
@@ -303,7 +318,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				}
 
 				var finalReasoning *llms.ReasoningContent
-				if accumulatedReasoning != "" || reasoningSignature != "" {
+				if !reasoningDeltaEmitted && (accumulatedReasoning != "" || reasoningSignature != "") {
 					finalReasoning = &llms.ReasoningContent{
 						Content:   accumulatedReasoning,
 						Signature: reasoningSignature,

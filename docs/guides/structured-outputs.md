@@ -110,14 +110,24 @@ Reflection rules:
 - Field names come from the `json` tag; fields without a tag use the Go field name.
 - Fields tagged `json:"-"` are skipped.
 - Unexported fields are skipped.
-- A field is marked **required** unless it has `omitempty` *or* is a pointer type
-  — so use `omitempty` or a pointer for optional fields.
+- Every non-skipped field is marked **required**, and every object emits
+  `additionalProperties: false`, so the schema is OpenAI strict-compatible.
+  `omitempty` and pointer fields are NOT treated as optional. If you need
+  optional fields, supply a hand-authored schema via `WithJSONSchema`.
 - Go kinds map to JSON Schema types: integers → `integer`, floats → `number`,
   `bool` → `boolean`, `string` → `string`, slices/arrays → `array`, maps →
   `object` with `additionalProperties`, nested structs → nested `object`.
+- `time.Time` → `string` (format `date-time`); `[]byte` → `string`; types
+  implementing `json.Marshaler`/`encoding.TextMarshaler` → `string`. Types with
+  no closed shape — `json.RawMessage`, `interface{}`, and maps with arbitrary
+  values — map to an unconstrained `{}`, which OpenAI strict validators reject.
+  For structs containing such fields, supply a hand-authored schema via
+  `WithJSONSchema` instead of the auto-strict `GenerateTyped` path.
 
-For `Person` above, `email` is optional (it has `omitempty`) while `name` and
-`age` are required.
+For `Person` above, all three of `name`, `age`, and `email` are marked required
+(`omitempty` no longer makes a field optional), and the object schema gets
+`additionalProperties: false`. To make `email` truly optional, hand-author a
+schema and pass it via `WithJSONSchema`.
 
 !!! note "Schemas are cached"
     `SchemaFrom[T]()` caches the generated schema per type and returns a copy on
@@ -281,8 +291,9 @@ if llms.HasCapability(client, func(c llms.Capabilities) bool { return c.JSONMode
 
 - **Use `WithTemperature(0)`** for extraction and classification tasks — a value
   of `0` is honored by the SDK and yields more deterministic structured output.
-- **Mark optional fields** with `omitempty` or a pointer type so `SchemaFrom`
-  does not list them as required.
+- `SchemaFrom`/`GenerateTyped` emit a strict schema in which every field is
+  required. There is no struct-tag way to mark a field optional; if you need
+  optional fields, author the schema by hand and pass it with `WithJSONSchema`.
 - **Inspect `resp.FinishReason`** (typed `llms.FinishReason`) — a value of
   `llms.FinishReasonLength` means the JSON was likely truncated; raise
   `WithMaxTokens`.

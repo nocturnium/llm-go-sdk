@@ -227,3 +227,34 @@ func responseContent(resp *Response) string {
 	}
 	return resp.Content
 }
+
+// TestRunTools_ForwardsCallOptions covers WithCallOptions (#3): forwarded call
+// options reach each model turn, and registry tools still win the Tools field.
+func TestRunTools_ForwardsCallOptions(t *testing.T) {
+	llm := &scriptedLLM{responses: []*Response{{Content: "done"}}}
+	registry := NewToolRegistry()
+	registry.Register(NewFunctionTool("noop", "noop", nil), func(_ json.RawMessage) (any, error) { return "ok", nil })
+	otherTool := NewFunctionTool("other", "other", nil)
+
+	_, _, err := RunTools(
+		context.Background(), llm,
+		[]Message{{Role: RoleUser, Content: "hi"}},
+		registry,
+		WithCallOptions(WithTemperature(0.5), WithMaxTokens(123), WithTools([]Tool{otherTool})),
+	)
+	if err != nil {
+		t.Fatalf("RunTools() error = %v", err)
+	}
+	if llm.lastOptions == nil {
+		t.Fatal("no call options captured")
+	}
+	if llm.lastOptions.Temperature == nil || *llm.lastOptions.Temperature != 0.5 {
+		t.Errorf("temperature not forwarded: %v", llm.lastOptions.Temperature)
+	}
+	if llm.lastOptions.MaxTokens == nil || *llm.lastOptions.MaxTokens != 123 {
+		t.Errorf("max tokens not forwarded: %v", llm.lastOptions.MaxTokens)
+	}
+	if len(llm.lastOptions.Tools) != 1 || llm.lastOptions.Tools[0].Function == nil || llm.lastOptions.Tools[0].Function.Name != "noop" {
+		t.Errorf("registry tools should win precedence over forwarded WithTools, got %+v", llm.lastOptions.Tools)
+	}
+}

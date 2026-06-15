@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -518,6 +519,55 @@ func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
+func TestLangfuseOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
+
+	mock := &mockLangfuseLLM{
+		provider: ProviderOpenAI,
+		model:    "gpt-4",
+		chunks: []StreamChunk{
+			{Content: "one"},
+			{Content: "two"},
+			{Content: "three"},
+		},
+	}
+
+	middleware, err := NewLangfuseOTelMiddleware(mock, WithLangfuseTracer(tracer))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := middleware.Stream(ctx,
+		[]Message{{Role: RoleUser, Content: "Hello"}},
+		WithStreamBufferSize(1),
+		WithStreamSendTimeout(10*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stream == nil {
+		t.Fatal("expected stream")
+	}
+	cancel()
+
+	deadline := time.After(500 * time.Millisecond)
+	for len(spanRecorder.Ended()) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for stream span to end")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	spans := spanRecorder.Ended()
+	if spans[0].Status().Code == codes.Ok {
+		t.Fatalf("span status = Ok, want non-Ok for canceled stream")
+	}
+}
+
 func TestLangfuseOTelMiddleware_Unwrap(t *testing.T) {
 	mock := &mockLangfuseLLM{
 		provider: ProviderOpenAI,
@@ -577,6 +627,48 @@ func TestLangfuseOTelMiddleware_WithCostTracker(t *testing.T) {
 	if promptTokens != 100 {
 		t.Errorf("expected 100 prompt tokens in tracker, got %d", promptTokens)
 	}
+}
+
+func TestLangfuseOTelMiddleware_CostUsesTrackerPricingWithCacheTokens(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
+
+	usage := Usage{
+		PromptTokens:        1_000_000,
+		CompletionTokens:    1_000_000,
+		CacheReadTokens:     1_000_000,
+		CacheCreationTokens: 1_000_000,
+		TotalTokens:         4_000_000,
+	}
+	mock := &mockLangfuseLLM{
+		provider: ProviderAnthropic,
+		model:    "claude-3-opus-20240229",
+		genResp: &Response{
+			Content: "Response",
+			Usage:   usage,
+		},
+	}
+	costTracker := NewCostTracker()
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracer),
+		WithLangfuseCostTracker(costTracker),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_, err = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "Hello"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	trackerCost := costTracker.GetTotalCost()
+	spans := spanRecorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+	assertMetricsAttribute(t, spans[0].Attributes(), AttrGenAIUsageCost, trackerCost)
 }
 
 func TestLangfuseOTelMiddleware_DisabledCapture(t *testing.T) {

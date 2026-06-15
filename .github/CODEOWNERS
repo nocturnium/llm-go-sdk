@@ -14,7 +14,9 @@ Makefile @jdziat
 /*.go @jdziat
 
 # Provider implementations
-/providers/ @jdziat
+/pkg/providers/ @jdziat
+/pkg/openaicompat/ @jdziat
+/pkg/mcp/ @jdziat
 
 # Internal packages
 /internal/ @jdziat

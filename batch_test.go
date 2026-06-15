@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -331,6 +332,102 @@ func TestConcurrentBatcher_PartialFailure(t *testing.T) {
 	}
 }
 
+func TestConcurrentBatcher_PanicIsolation(t *testing.T) {
+	llm := &mockBatchLLM{
+		callFn: func(messages []Message) (*Response, error) {
+			content := messages[len(messages)-1].Content
+			if content == "panic" {
+				panic("batch panic")
+			}
+			return &Response{
+				Content: content + " response",
+				Usage:   Usage{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3},
+			}, nil
+		},
+	}
+	batcher := NewConcurrentBatcher(llm)
+
+	requests := []BatchRequest{
+		NewBatchRequestFromPrompt("success-1", "ok-1"),
+		NewBatchRequestFromPrompt("panic", "panic"),
+		NewBatchRequestFromPrompt("success-2", "ok-2"),
+	}
+
+	var progressCalls int32
+	resp, err := batcher.ProcessBatch(context.Background(), requests,
+		WithProgressCallback(func(_, _ int) {
+			atomic.AddInt32(&progressCalls, 1)
+		}),
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resp.SuccessCount != 2 {
+		t.Errorf("SuccessCount = %d, want 2", resp.SuccessCount)
+	}
+	if resp.FailureCount != 1 {
+		t.Errorf("FailureCount = %d, want 1", resp.FailureCount)
+	}
+	if len(resp.Results) != 3 {
+		t.Fatalf("Results count = %d, want 3", len(resp.Results))
+	}
+
+	panicResult := resp.Results["panic"]
+	if panicResult == nil {
+		t.Fatal("missing panic result")
+	}
+	if panicResult.Error == nil {
+		t.Fatal("panic result Error is nil")
+	}
+	if !strings.Contains(panicResult.Error.Error(), "panic: batch panic") {
+		t.Errorf("panic error = %q, want panic message", panicResult.Error.Error())
+	}
+	if panicResult.Response != nil {
+		t.Error("panic result Response should be nil")
+	}
+
+	for _, id := range []string{"success-1", "success-2"} {
+		result := resp.Results[id]
+		if result == nil {
+			t.Fatalf("missing result for %s", id)
+		}
+		if result.Error != nil {
+			t.Errorf("%s Error = %v, want nil", id, result.Error)
+		}
+		if result.Response == nil {
+			t.Errorf("%s Response is nil", id)
+		}
+	}
+	if got := atomic.LoadInt32(&progressCalls); got != 3 {
+		t.Errorf("progress calls = %d, want 3", got)
+	}
+}
+
+func TestConcurrentBatcher_DuplicateRequestID(t *testing.T) {
+	llm := &mockBatchLLM{}
+	batcher := NewConcurrentBatcher(llm)
+
+	requests := []BatchRequest{
+		NewBatchRequestFromPrompt("duplicate", "first"),
+		NewBatchRequestFromPrompt("duplicate", "second"),
+	}
+
+	resp, err := batcher.ProcessBatch(context.Background(), requests)
+	if err == nil {
+		t.Fatal("expected duplicate request ID error")
+	}
+	if resp != nil {
+		t.Fatalf("response = %#v, want nil", resp)
+	}
+	if !strings.Contains(err.Error(), "duplicate batch request ID: duplicate") {
+		t.Errorf("error = %q, want duplicate request ID message", err.Error())
+	}
+	if got := atomic.LoadInt32(&llm.callCount); got != 0 {
+		t.Errorf("call count = %d, want 0", got)
+	}
+}
+
 func TestConcurrentBatcher_ContextCancellation(t *testing.T) {
 	llm := &mockBatchLLM{
 		delay: 1 * time.Second, // Long delay
@@ -450,5 +547,25 @@ func TestBatchErrors(t *testing.T) {
 	}
 	if ErrBatchTooLarge == nil {
 		t.Error("ErrBatchTooLarge should not be nil")
+	}
+}
+
+// TestConcurrentBatcher_MaxBatchSize covers WithMaxBatchSize / ErrBatchTooLarge (#31).
+func TestConcurrentBatcher_MaxBatchSize(t *testing.T) {
+	batcher := NewConcurrentBatcher(&mockBatchLLM{})
+	reqs := []BatchRequest{
+		NewBatchRequestFromPrompt("a", "x"),
+		NewBatchRequestFromPrompt("b", "y"),
+		NewBatchRequestFromPrompt("c", "z"),
+	}
+	if _, err := batcher.ProcessBatch(context.Background(), reqs, WithMaxBatchSize(2)); !errors.Is(err, ErrBatchTooLarge) {
+		t.Fatalf("expected ErrBatchTooLarge for 3 > 2, got %v", err)
+	}
+	resp, err := batcher.ProcessBatch(context.Background(), reqs[:2], WithMaxBatchSize(2))
+	if err != nil {
+		t.Fatalf("unexpected error within limit: %v", err)
+	}
+	if resp == nil || len(resp.Results) != 2 {
+		t.Fatalf("expected 2 results within limit, got %#v", resp)
 	}
 }

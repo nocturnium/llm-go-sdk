@@ -20,6 +20,12 @@ func TestNewRateLimiter_Defaults(t *testing.T) {
 	if rl.requestsPerMin != 60 {
 		t.Errorf("requestsPerMin = %d, want 60", rl.requestsPerMin)
 	}
+	if rl.requestBurst != 1 {
+		t.Errorf("requestBurst = %d, want 1", rl.requestBurst)
+	}
+	if rl.requestBurst == rl.requestsPerMin {
+		t.Error("default request burst should not equal requestsPerMin")
+	}
 	if rl.tokensPerMin != 0 {
 		t.Errorf("tokensPerMin = %d, want 0 (disabled)", rl.tokensPerMin)
 	}
@@ -31,6 +37,7 @@ func TestNewRateLimiter_Defaults(t *testing.T) {
 func TestNewRateLimiter_CustomOptions(t *testing.T) {
 	rl := NewRateLimiter(
 		WithRequestsPerMinute(120),
+		WithRequestBurst(3),
 		WithTokensPerMinute(100000),
 		WithTokenEstimate(500),
 		WithBlocking(false),
@@ -39,6 +46,9 @@ func TestNewRateLimiter_CustomOptions(t *testing.T) {
 
 	if rl.requestsPerMin != 120 {
 		t.Errorf("requestsPerMin = %d, want 120", rl.requestsPerMin)
+	}
+	if rl.requestBurst != 3 {
+		t.Errorf("requestBurst = %d, want 3", rl.requestBurst)
 	}
 	if rl.tokensPerMin != 100000 {
 		t.Errorf("tokensPerMin = %d, want 100000", rl.tokensPerMin)
@@ -114,6 +124,7 @@ func TestRateLimiter_NonBlocking(t *testing.T) {
 func TestRateLimiter_TokenLimit(t *testing.T) {
 	rl := NewRateLimiter(
 		WithRequestsPerMinute(100),
+		WithRequestBurst(100),
 		WithTokensPerMinute(1000),
 		WithTokenEstimate(500),
 		WithBlocking(false),
@@ -141,6 +152,7 @@ func TestRateLimiter_TokenLimit(t *testing.T) {
 func TestRateLimiter_RecordTokens(t *testing.T) {
 	rl := NewRateLimiter(
 		WithRequestsPerMinute(100),
+		WithRequestBurst(100),
 		WithTokensPerMinute(1000),
 		WithTokenEstimate(100), // Estimate low
 		WithBlocking(false),
@@ -164,8 +176,33 @@ func TestRateLimiter_RecordTokens(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_RecordTokensRefundsOverEstimate(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(100),
+		WithRequestBurst(100),
+		WithTokensPerMinute(1000),
+		WithTokenEstimate(800),
+		WithBlocking(false),
+	)
+
+	if err := rl.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	beforeRefund := rl.TokensRemaining()
+
+	rl.RecordTokens(300)
+
+	afterRefund := rl.TokensRemaining()
+	if afterRefund <= beforeRefund {
+		t.Fatalf("tokens remaining = %d, want greater than before refund %d", afterRefund, beforeRefund)
+	}
+	if afterRefund < 650 {
+		t.Fatalf("tokens remaining = %d, want refund close to 700", afterRefund)
+	}
+}
+
 func TestRateLimiter_RequestsRemaining(t *testing.T) {
-	rl := NewRateLimiter(WithRequestsPerMinute(10))
+	rl := NewRateLimiter(WithRequestsPerMinute(10), WithRequestBurst(10))
 
 	initial := rl.RequestsRemaining()
 	if initial != 10 {
@@ -192,6 +229,7 @@ func TestRateLimiter_TokensRemaining_Disabled(t *testing.T) {
 func TestRateLimiter_Reset(t *testing.T) {
 	rl := NewRateLimiter(
 		WithRequestsPerMinute(2),
+		WithRequestBurst(2),
 		WithBlocking(false),
 	)
 
@@ -496,7 +534,7 @@ func TestSharedRateLimiter_ResetAll(t *testing.T) {
 }
 
 func TestRateLimiter_ConcurrentAccess(t *testing.T) {
-	rl := NewRateLimiter(WithRequestsPerMinute(1000))
+	rl := NewRateLimiter(WithRequestsPerMinute(1000), WithRequestBurst(1000))
 
 	var wg sync.WaitGroup
 	var successCount int32
@@ -573,4 +611,21 @@ func TestRateLimiter_ResetConcurrentWithReads(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	close(stop)
 	wg.Wait()
+}
+
+// TestRateLimiter_TokenBurst covers WithTokenBurst (#25): the token bucket
+// defaults to a full minute's budget but is configurable for tighter pacing.
+func TestRateLimiter_TokenBurst(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(1000))
+	if got := rl.tokenBucketBurst(); got != 1000 {
+		t.Errorf("default tokenBucketBurst() = %d, want 1000 (full minute)", got)
+	}
+
+	rl2 := NewRateLimiter(WithTokensPerMinute(1000), WithTokenBurst(100))
+	if got := rl2.tokenBucketBurst(); got != 100 {
+		t.Errorf("tokenBucketBurst() = %d, want 100", got)
+	}
+	if rl2.tokenLimiter == nil || rl2.tokenLimiter.Burst() != 100 {
+		t.Errorf("token limiter burst not applied: %#v", rl2.tokenLimiter)
+	}
 }

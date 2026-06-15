@@ -3,7 +3,10 @@ package llms
 import (
 	"context"
 	"errors"
+	"io"
 	"math/rand/v2"
+	"net"
+	"syscall"
 	"time"
 )
 
@@ -63,21 +66,45 @@ func DefaultShouldRetry(err error) bool {
 
 // isProviderUnhealthy reports whether an error indicates the upstream provider
 // is unhealthy, i.e. the kind of transient failure the circuit breaker exists to
-// protect against (rate limiting and 5xx server errors). It deliberately returns
-// false for context cancellation/deadline, 4xx client errors other than 429, and
-// circuit-open errors so those do not trip the breaker.
-//
-// It shares its classification with DefaultShouldRetry so the breaker and the
-// default retry policy agree on what counts as a provider-health failure,
-// regardless of any custom RetryConfig.ShouldRetry a caller installs.
+// protect against. It deliberately returns false for context cancellation,
+// context deadlines, 4xx client errors other than 429, and circuit-open errors.
 func isProviderUnhealthy(err error) bool {
-	return DefaultShouldRetry(err)
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, ErrCircuitOpen) {
+		return false
+	}
+
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case 429, 500, 502, 503, 504:
+			return true
+		}
+	}
+
+	if errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 // calculateDelay calculates the retry delay with jitter
 func calculateDelay(baseDelay time.Duration, jitter float64) time.Duration {
 	if jitter <= 0 {
 		return baseDelay
+	}
+	if jitter > 1 {
+		jitter = 1
 	}
 
 	// Add random jitter: delay * (1 + random(-jitter, +jitter))

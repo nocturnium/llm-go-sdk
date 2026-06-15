@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -61,21 +62,55 @@ func encodeNotification(method string, params any) ([]byte, error) {
 // message has no id (a notification or server-initiated request we do not handle).
 func messageID(raw []byte) (int64, bool) {
 	var probe struct {
-		ID *json.Number `json:"id"`
+		ID json.RawMessage `json:"id"`
 	}
-	if err := json.Unmarshal(raw, &probe); err != nil || probe.ID == nil {
+	if err := json.Unmarshal(raw, &probe); err != nil || len(probe.ID) == 0 || bytes.Equal(probe.ID, []byte("null")) {
 		return 0, false
 	}
-	id, err := strconv.ParseInt(probe.ID.String(), 10, 64)
-	if err != nil {
+
+	var id int64
+	var err error
+	if len(probe.ID) > 0 && probe.ID[0] == '"' {
+		var s string
+		if err := json.Unmarshal(probe.ID, &s); err != nil {
+			return 0, false
+		}
+		id, err = strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return id, true
+	}
+
+	var n json.Number
+	if err := json.Unmarshal(probe.ID, &n); err != nil {
 		return 0, false
 	}
+	id, err = strconv.ParseInt(n.String(), 10, 64)
+	if err == nil {
+		return id, true
+	}
+	f, err := strconv.ParseFloat(n.String(), 64)
+	if err != nil || math.Trunc(f) != f || f < math.MinInt64 || f > math.MaxInt64 {
+		return 0, false
+	}
+	id = int64(f)
 	return id, true
 }
 
 // decodeResult unmarshals a JSON-RPC response's result into out, returning any
 // transport-level RPC error carried by the response.
 func decodeResult(raw []byte, out any) error {
+	if messages := splitJSONMessages(raw); len(messages) > 0 {
+		raw = messages[0]
+		for _, msg := range messages {
+			var resp rpcResponse
+			if err := json.Unmarshal(msg, &resp); err == nil && (len(resp.Result) > 0 || resp.Error != nil) {
+				raw = msg
+				break
+			}
+		}
+	}
 	var resp rpcResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return fmt.Errorf("mcp: decode response: %w", err)
@@ -91,14 +126,14 @@ func decodeResult(raw []byte, out any) error {
 	return nil
 }
 
-// extractJSONMessage returns the JSON-RPC object from a transport response body
-// that may be either a bare JSON object or a Server-Sent Events stream. An SSE
+// extractJSONMessage returns the JSON-RPC object or batch from a transport response body
+// that may be either bare JSON or a Server-Sent Events stream. An SSE
 // response can carry several events (e.g. a notification before the response), so
-// each event's "data:" lines are assembled independently and the last event whose
-// payload is a JSON object — the JSON-RPC response — is returned.
+// each event's "data:" lines are assembled independently and the last event with
+// a JSON-RPC payload is returned.
 func extractJSONMessage(body []byte) []byte {
 	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) > 0 && trimmed[0] == '{' {
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
 		return trimmed
 	}
 	var last []byte
@@ -111,9 +146,30 @@ func extractJSONMessage(body []byte) []byte {
 				data.WriteByte('\n')
 			}
 		}
-		if payload := bytes.TrimSpace(data.Bytes()); len(payload) > 0 && payload[0] == '{' {
+		if payload := bytes.TrimSpace(data.Bytes()); len(payload) > 0 && (payload[0] == '{' || payload[0] == '[') {
 			last = payload
 		}
 	}
 	return last
+}
+
+func splitJSONMessages(raw []byte) [][]byte {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil
+	}
+	if trimmed[0] != '[' {
+		return [][]byte{trimmed}
+	}
+	var batch []json.RawMessage
+	if err := json.Unmarshal(trimmed, &batch); err != nil {
+		return [][]byte{trimmed}
+	}
+	messages := make([][]byte, 0, len(batch))
+	for _, msg := range batch {
+		if trimmedMsg := bytes.TrimSpace(msg); len(trimmedMsg) > 0 {
+			messages = append(messages, trimmedMsg)
+		}
+	}
+	return messages
 }

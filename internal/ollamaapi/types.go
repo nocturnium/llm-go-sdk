@@ -115,6 +115,7 @@ type GenerateResponse struct {
 	Model              string    `json:"model"`
 	CreatedAt          time.Time `json:"created_at"`
 	Response           string    `json:"response"`
+	Error              string    `json:"error,omitempty"`
 	Done               bool      `json:"done"`
 	DoneReason         string    `json:"done_reason,omitempty"`
 	Context            []int     `json:"context,omitempty"`
@@ -174,6 +175,7 @@ type ChatResponse struct {
 	Model              string      `json:"model"`
 	CreatedAt          time.Time   `json:"created_at"`
 	Message            ChatMessage `json:"message"`
+	Error              string      `json:"error,omitempty"`
 	Done               bool        `json:"done"`
 	DoneReason         string      `json:"done_reason,omitempty"`
 	TotalDuration      int64       `json:"total_duration,omitempty"`

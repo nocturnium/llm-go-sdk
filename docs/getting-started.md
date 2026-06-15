@@ -18,7 +18,7 @@ one-liner, and `Stream`.
 Add the SDK to your module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk@v1.0.0
+go get github.com/nocturnium/llm-go-sdk@v1.1.0
 ```
 
 The SDK's root package is named `llms`. Because the import path

@@ -23,47 +23,47 @@ const (
 // external tools (Brave Search, Tavily).
 type WebSearchConfig struct {
 	// Enabled turns web search on/off
-	Enabled bool
+	Enabled bool `json:"enabled"`
 
 	// Provider specifies which search provider to use.
 	// Default (empty) is equivalent to WebSearchAuto.
-	Provider WebSearchProvider
+	Provider WebSearchProvider `json:"provider"`
 
 	// APIKey is the per-call key for external search providers.
 	// Native provider search generally ignores this field.
-	APIKey string
+	APIKey string `json:"api_key"`
 
 	// ResultCount is the number of search results to retrieve (1-50).
 	// Zero uses provider default (typically 10).
-	ResultCount int
+	ResultCount int `json:"result_count"`
 
 	// DomainFilter limits search to specific domains.
 	// Empty means no restriction.
-	DomainFilter []string
+	DomainFilter []string `json:"domain_filter"`
 
 	// DomainExclude excludes specific domains from results.
-	DomainExclude []string
+	DomainExclude []string `json:"domain_exclude"`
 
 	// RecencyFilter limits results by age: "day", "week", "month", "year".
 	// Empty means no time restriction.
-	RecencyFilter string
+	RecencyFilter string `json:"recency_filter"`
 
 	// IncludeResults includes raw search results in response metadata.
 	// Useful for citations and source attribution.
-	IncludeResults bool
+	IncludeResults bool `json:"include_results"`
 }
 
 // SearchResult represents a single web search result.
 type SearchResult struct {
 	// Title is the page title
-	Title string
+	Title string `json:"title"`
 
 	// URL is the page URL
-	URL string
+	URL string `json:"url"`
 
 	// Snippet is a text excerpt from the page
-	Snippet string
+	Snippet string `json:"snippet"`
 
 	// Date is the publication date if available
-	Date *time.Time
+	Date *time.Time `json:"date,omitempty"`
 }

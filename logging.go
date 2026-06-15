@@ -2,8 +2,8 @@ package llms
 
 import (
 	"context"
+	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -169,7 +169,7 @@ func (e *LogEntry) ToLangfuseGeneration() map[string]any {
 	}
 
 	// Metadata
-	if len(e.Metadata) > 0 || len(e.RequestParameters) > 0 {
+	if len(e.Metadata) > 0 || len(e.RequestParameters) > 0 || e.CostUSD > 0 || e.TimeToFirstToken > 0 {
 		metadata := make(map[string]any)
 		for k, v := range e.Metadata {
 			metadata[k] = v
@@ -298,10 +298,7 @@ func (NopLogger) LogError(context.Context, *LogEntry, error) {}
 // truncateString truncates a string to maxLength and appends "..." if truncated.
 // If maxLength is <= 0, the original string is returned unchanged.
 func truncateString(s string, maxLength int) string {
-	if maxLength <= 0 || len(s) <= maxLength {
-		return s
-	}
-	return s[:maxLength] + "..."
+	return truncateUTF8(s, maxLength, "...")
 }
 
 // logValueReplacer neutralizes the carriage-return and line-feed characters that
@@ -464,7 +461,7 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []Message, opti
 				if len(chunk.Content) <= remaining {
 					contentBuilder.WriteString(chunk.Content)
 				} else {
-					contentBuilder.WriteString(chunk.Content[:remaining])
+					contentBuilder.WriteString(truncateUTF8(chunk.Content, remaining, ""))
 					contentBuilder.WriteString("...[truncated]")
 					contentTruncated = true
 				}
@@ -511,45 +508,11 @@ func (m *LoggingMiddleware) Unwrap() LLM {
 	return m.llm
 }
 
-var (
-	requestCounter uint64
-	// IDBufPool reuses byte slices for ID generation to reduce allocations.
-	// Each buffer is sized for: timestamp (14) + "-" (1) + letter (1) = 16 bytes.
-	idBufPool = sync.Pool{
-		New: func() any {
-			buf := make([]byte, 0, 16)
-			return &buf
-		},
-	}
-)
+var requestCounter uint64
 
 func defaultIDGenerator() string {
 	count := atomic.AddUint64(&requestCounter, 1)
-	letter := byte('A' + count%26)
-
-	// Get buffer from pool and reset it
-	bufPtr, ok := idBufPool.Get().(*[]byte)
-	if !ok {
-		// This should never happen if the pool is used correctly,
-		// but fall back to a new buffer if it does
-		newBuf := make([]byte, 0, 32)
-		bufPtr = &newBuf
-	}
-	buf := (*bufPtr)[:0]
-
-	// Use AppendFormat to avoid intermediate string allocation from Format()
-	// Use UTC for consistency in distributed systems
-	buf = time.Now().UTC().AppendFormat(buf, "20060102150405")
-	buf = append(buf, '-', letter)
-
-	// Copy to result string before returning buffer to pool
-	result := string(buf)
-
-	// Return buffer to pool
-	*bufPtr = buf
-	idBufPool.Put(bufPtr)
-
-	return result
+	return time.Now().UTC().Format("20060102150405.000000000") + "-" + strconv.FormatUint(count, 36)
 }
 
 // Ensure LoggingMiddleware implements LLM

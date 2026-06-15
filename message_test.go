@@ -335,11 +335,13 @@ func TestPrepareMessages_DisableMerging(t *testing.T) {
 	}
 
 	opts := &CallOptions{DisableMessageMerging: true}
-	_, err := PrepareMessages(messages, opts)
+	result, err := PrepareMessages(messages, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	// Should fail validation because consecutive user messages
-	if err == nil {
-		t.Error("expected validation error for consecutive user messages")
+	if len(result) != 2 {
+		t.Fatalf("expected 2 unmerged messages, got %d", len(result))
 	}
 }
 
@@ -369,6 +371,34 @@ func TestValidateMessages_ConsecutiveAfterMerging(t *testing.T) {
 
 	if len(result) != 2 {
 		t.Fatalf("expected 2 messages after merging, got %d", len(result))
+	}
+}
+
+func TestValidateMessages_LeadingToolMessage(t *testing.T) {
+	messages := []Message{
+		{Role: RoleTool, Content: "result", ToolCallID: "call-1"},
+	}
+
+	err := ValidateMessages(messages)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
+func TestPrepareMessages_DisableMergingToolSequence(t *testing.T) {
+	messages := []Message{
+		{Role: RoleSystem, Content: "You are helpful"},
+		{Role: RoleUser, Content: "Get weather"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call-1"}}},
+		{Role: RoleTool, Content: "sunny", ToolCallID: "call-1"},
+	}
+
+	result, err := PrepareMessages(messages, &CallOptions{DisableMessageMerging: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != len(messages) {
+		t.Fatalf("expected %d messages, got %d", len(messages), len(result))
 	}
 }
 
