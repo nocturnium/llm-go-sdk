@@ -16,7 +16,7 @@ most recent patch release before reporting an issue, as it may already be fixed.
 | 1.1.x   | :x:                |
 | 0.0.x   | :x:                |
 
-The current latest release is `v1.2.0`. We recommend pinning to a released tag
+The current latest release is `v1.2.1`. We recommend pinning to a released tag
 and keeping your dependency current with `go get -u` so you receive fixes
 promptly.
 
