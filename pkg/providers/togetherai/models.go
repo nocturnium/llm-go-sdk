@@ -117,13 +117,7 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 
 	// Convert pricing if available
 	if m.Pricing != nil {
-		info.Pricing = &llms.ModelPricing{
-			Input:    m.Pricing.Input,
-			Output:   m.Pricing.Output,
-			Hourly:   m.Pricing.Hourly,
-			Finetune: m.Pricing.Finetune,
-			Base:     m.Pricing.Base,
-		}
+		info.Pricing = m.Pricing
 	}
 
 	// Convert created timestamp

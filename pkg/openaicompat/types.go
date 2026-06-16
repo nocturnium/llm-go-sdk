@@ -4,7 +4,11 @@ package openaicompat
 // streaming chunks, embeddings, and model listings). The package-level
 // documentation lives in doc.go.
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	llms "github.com/nocturnium/llm-go-sdk"
+)
 
 const (
 	contentTypeText = "text"
@@ -348,14 +352,8 @@ type ModelResponse struct {
 	Pricing       *ModelPricing `json:"pricing,omitempty"`        // TogetherAI
 }
 
-// ModelPricing contains cost information for a model (TogetherAI specific)
-type ModelPricing struct {
-	Hourly   float64 `json:"hourly,omitempty"`
-	Input    float64 `json:"input,omitempty"`
-	Output   float64 `json:"output,omitempty"`
-	Base     float64 `json:"base,omitempty"`
-	Finetune float64 `json:"finetune,omitempty"`
-}
+// ModelPricing contains cost information for a model (TogetherAI specific).
+type ModelPricing = llms.ModelPricing
 
 // ModelsListResponse represents the response from the models list API
 type ModelsListResponse struct {
