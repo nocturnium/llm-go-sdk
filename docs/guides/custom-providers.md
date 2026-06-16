@@ -248,6 +248,12 @@ chunks, _ := c.Stream(ctx, []llms.Message{
 	{Role: llms.RoleUser, Content: "Stream a haiku."},
 })
 for chunk := range chunks {
+	if chunk.Error != nil {
+		log.Fatal(chunk.Error)
+	}
+	if chunk.Done {
+		break
+	}
 	fmt.Print(chunk.Content)
 }
 

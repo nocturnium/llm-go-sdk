@@ -31,7 +31,25 @@
 // Stream responses in real-time:
 //
 //	chunks, err := client.Stream(ctx, messages)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	text, err := llms.StreamText(chunks)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Print(text)
+//
+// Or consume chunks incrementally:
+//
+//	chunks, err := client.Stream(ctx, messages)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //	for chunk := range chunks {
+//	    if chunk.Error != nil {
+//	        log.Fatal(chunk.Error)
+//	    }
 //	    if chunk.Done {
 //	        break
 //	    }
