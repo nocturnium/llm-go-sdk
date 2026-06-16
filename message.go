@@ -36,11 +36,10 @@ const (
 // ValidateMessages checks if the messages are valid for an LLM call.
 // Returns nil if all messages are valid.
 //
-// Basic validations performed:
+// Provider-neutral validations performed:
 //   - Messages list is not empty
 //   - Each message has a role
-//   - Tool messages have a ToolCallID
-//   - System messages appear only at the beginning
+//   - Each role is known
 //   - The conversation does not start with a tool message
 func ValidateMessages(messages []Message) error {
 	if len(messages) == 0 {
@@ -48,7 +47,6 @@ func ValidateMessages(messages []Message) error {
 	}
 
 	var errs ValidationErrors
-	systemMessageSeen := false
 
 	for i, msg := range messages {
 		// Check role is present
@@ -79,8 +77,21 @@ func ValidateMessages(messages []Message) error {
 				Message: "tool message cannot start a conversation",
 			})
 		}
+	}
 
-		// Tool messages require ToolCallID
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
+
+// ValidateToolCallIDs enforces provider opt-in tool result linkage by requiring
+// every tool message to include a non-empty ToolCallID. This is appropriate for
+// providers such as OpenAI-compatible APIs and Anthropic that match tool results
+// to tool calls by ID.
+func ValidateToolCallIDs(messages []Message) error {
+	var errs ValidationErrors
+	for i, msg := range messages {
 		if msg.Role == RoleTool && msg.ToolCallID == "" {
 			errs = append(errs, ValidationError{
 				Field:   "messages[" + strconv.Itoa(i) + "].tool_call_id",
@@ -88,26 +99,39 @@ func ValidateMessages(messages []Message) error {
 				Message: "tool_call_id is required for tool messages",
 			})
 		}
-
-		// System message must appear at the beginning (index 0)
-		if msg.Role == RoleSystem {
-			if systemMessageSeen {
-				errs = append(errs, ValidationError{
-					Field:   "messages[" + strconv.Itoa(i) + "].role",
-					Value:   msg.Role,
-					Message: "multiple system messages are not allowed",
-				})
-			} else if i > 0 {
-				errs = append(errs, ValidationError{
-					Field:   "messages[" + strconv.Itoa(i) + "].role",
-					Value:   msg.Role,
-					Message: "system message must be first in the conversation",
-				})
-			}
-			systemMessageSeen = true
-		}
 	}
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
 
+// ValidateInlineSystem enforces provider opt-in inline system message rules:
+// at most one system message is allowed, and it must be first if present. This
+// is appropriate for providers that keep system messages inline with the chat
+// history rather than hoisting or concatenating them into a dedicated API field.
+func ValidateInlineSystem(messages []Message) error {
+	var errs ValidationErrors
+	systemMessageSeen := false
+	for i, msg := range messages {
+		if msg.Role != RoleSystem {
+			continue
+		}
+		if systemMessageSeen {
+			errs = append(errs, ValidationError{
+				Field:   "messages[" + strconv.Itoa(i) + "].role",
+				Value:   msg.Role,
+				Message: "multiple system messages are not allowed",
+			})
+		} else if i > 0 {
+			errs = append(errs, ValidationError{
+				Field:   "messages[" + strconv.Itoa(i) + "].role",
+				Value:   msg.Role,
+				Message: "system message must be first in the conversation",
+			})
+		}
+		systemMessageSeen = true
+	}
 	if len(errs) > 0 {
 		return errs
 	}

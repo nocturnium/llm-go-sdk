@@ -86,6 +86,12 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	if err != nil {
 		return nil, err
 	}
+	if err := llms.ValidateInlineSystem(prepared); err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateToolCallIDs(prepared); err != nil {
+		return nil, err
+	}
 
 	model := effectiveModel(p.model, opts.Model)
 	req := BuildChatRequest(model, prepared, opts, false)
@@ -116,6 +122,12 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	// Prepare messages (merge consecutive same-role messages unless disabled, then validate)
 	prepared, err := llms.PrepareMessages(messages, opts)
 	if err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateInlineSystem(prepared); err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateToolCallIDs(prepared); err != nil {
 		return nil, err
 	}
 

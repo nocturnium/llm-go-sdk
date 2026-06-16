@@ -202,3 +202,64 @@ func TestBuildRequest_SystemInstruction(t *testing.T) {
 		t.Errorf("expected remaining content role=user, got %q", req.Contents[0].Role)
 	}
 }
+
+func TestBuildRequest_MultipleAndNonLeadingSystemMessages(t *testing.T) {
+	client, err := New(WithAPIKey("test-key"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "hi"},
+		{Role: llms.RoleSystem, Content: "be concise"},
+		{Role: llms.RoleSystem, Content: "use JSON"},
+	}
+	opts := llms.ApplyOptions(llms.WithDisableMessageMerging())
+
+	prepared, err := llms.PrepareMessages(msgs, opts)
+	if err != nil {
+		t.Fatalf("PrepareMessages: %v", err)
+	}
+	req := client.buildRequest(prepared, opts)
+
+	if req.SystemInstruction == nil {
+		t.Fatal("system messages were not promoted to SystemInstruction")
+	}
+	if got := req.SystemInstruction.Parts[0].Text; got != "be concise\n\nuse JSON" {
+		t.Errorf("expected joined system instruction, got %q", got)
+	}
+	if len(req.Contents) != 1 || req.Contents[0].Role != "user" {
+		t.Fatalf("expected one user content, got %+v", req.Contents)
+	}
+}
+
+func TestBuildRequest_ToolMessageWithoutToolCallID(t *testing.T) {
+	client, err := New(WithAPIKey("test-key"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "Get weather"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{{
+			ID: "get_weather",
+			Function: &llms.FunctionCall{
+				Name:      "get_weather",
+				Arguments: `{"city":"Portland"}`,
+			},
+		}}},
+		{Role: llms.RoleTool, Name: "get_weather", Content: `{"temp":72}`},
+	}
+	opts := llms.ApplyOptions(llms.WithDisableMessageMerging())
+
+	prepared, err := llms.PrepareMessages(msgs, opts)
+	if err != nil {
+		t.Fatalf("PrepareMessages: %v", err)
+	}
+	req := client.buildRequest(prepared, opts)
+
+	if len(req.Contents) != 3 {
+		t.Fatalf("expected 3 contents, got %d", len(req.Contents))
+	}
+	if got := prepared[2].ToolCallID; got != "" {
+		t.Errorf("expected missing ToolCallID to remain unchanged, got %q", got)
+	}
+}

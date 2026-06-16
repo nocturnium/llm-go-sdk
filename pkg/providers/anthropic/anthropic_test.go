@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"context"
 	"errors"
 	"os"
 	"testing"
@@ -140,6 +141,41 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 // TestClientImplementsInterface verifies that Client implements llms.LLM.
 func TestClientImplementsInterface(_ *testing.T) {
 	var _ llms.LLM = (*Client)(nil)
+}
+
+func TestClient_ValidatesToolCallIDs(t *testing.T) {
+	client, err := New(WithAPIKey("test-key"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Get weather"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{{ID: "call-1"}}},
+		{Role: llms.RoleTool, Name: "get_weather", Content: `{"temp":72}`},
+	}
+
+	_, err = client.GenerateContent(context.Background(), messages)
+	assertValidationField(t, err, "messages[2].tool_call_id")
+
+	_, err = client.Stream(context.Background(), messages)
+	assertValidationField(t, err, "messages[2].tool_call_id")
+}
+
+func assertValidationField(t *testing.T, err error, field string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var validationErrs llms.ValidationErrors
+	if !errors.As(err, &validationErrs) {
+		t.Fatalf("expected ValidationErrors, got %T: %v", err, err)
+	}
+	for _, validationErr := range validationErrs {
+		if validationErr.Field == field {
+			return
+		}
+	}
+	t.Fatalf("expected validation field %q in %v", field, validationErrs)
 }
 
 // TestBuildRequest_PartsBasedSystemMessage verifies that a system message built

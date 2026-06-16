@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -382,6 +383,66 @@ func TestValidateMessages_LeadingToolMessage(t *testing.T) {
 	err := ValidateMessages(messages)
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestValidateMessages_AllowsProviderSpecificQuirks(t *testing.T) {
+	messages := []Message{
+		{Role: RoleUser, Content: "Get weather"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call-1"}}},
+		{Role: RoleTool, Name: "get_weather", Content: `{"temp":72}`},
+		{Role: RoleSystem, Content: "Be concise"},
+		{Role: RoleSystem, Content: "Use JSON"},
+	}
+
+	if err := ValidateMessages(messages); err != nil {
+		t.Fatalf("expected provider-neutral validation to pass, got %v", err)
+	}
+}
+
+func TestValidateToolCallIDs(t *testing.T) {
+	messages := []Message{
+		{Role: RoleUser, Content: "Get weather"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call-1"}}},
+		{Role: RoleTool, Name: "get_weather", Content: `{"temp":72}`},
+	}
+
+	err := ValidateToolCallIDs(messages)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var validationErrs ValidationErrors
+	if !errors.As(err, &validationErrs) {
+		t.Fatalf("expected ValidationErrors, got %T", err)
+	}
+	if len(validationErrs) != 1 || validationErrs[0].Field != "messages[2].tool_call_id" {
+		t.Fatalf("unexpected validation errors: %v", validationErrs)
+	}
+}
+
+func TestValidateInlineSystem(t *testing.T) {
+	messages := []Message{
+		{Role: RoleUser, Content: "Hello"},
+		{Role: RoleSystem, Content: "Be concise"},
+		{Role: RoleSystem, Content: "Use JSON"},
+	}
+
+	err := ValidateInlineSystem(messages)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var validationErrs ValidationErrors
+	if !errors.As(err, &validationErrs) {
+		t.Fatalf("expected ValidationErrors, got %T", err)
+	}
+	if len(validationErrs) != 2 {
+		t.Fatalf("expected 2 validation errors, got %d: %v", len(validationErrs), validationErrs)
+	}
+	if validationErrs[0].Message != "system message must be first in the conversation" {
+		t.Errorf("unexpected first validation message: %q", validationErrs[0].Message)
+	}
+	if validationErrs[1].Message != "multiple system messages are not allowed" {
+		t.Errorf("unexpected second validation message: %q", validationErrs[1].Message)
 	}
 }
 
