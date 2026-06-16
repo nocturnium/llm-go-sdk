@@ -272,9 +272,13 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 	wrappedStream := make(chan StreamChunk, opts.StreamBufferSize)
 	sender := NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
 	go func() {
+		// Order matters: the finalize defer (registered last, runs first under
+		// LIFO) populates the span, then span.End() must run before
+		// decrementActive so that an observer waiting on ActiveRequests()==0 is
+		// guaranteed the span has already ended.
 		defer close(wrappedStream)
-		defer span.End()
 		defer m.decrementActive(ctx, attrs)
+		defer span.End()
 
 		var chunkCount int64
 		var contentBuilder strings.Builder
