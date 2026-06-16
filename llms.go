@@ -109,6 +109,8 @@
 //   - Tool support may vary by model within a provider
 //   - Use SupportsEmbeddings() and AsEmbedder() to check embedding capability at runtime
 //   - Use SupportsReranking() and AsReranker() to check reranking capability at runtime
+//   - Use SupportsModelListing() and AsModelLister() to check model listing capability at runtime
+//   - Use AsCapableProvider() for capability introspection through middleware
 package llms
 
 import (
@@ -247,6 +249,14 @@ type CapableProvider interface {
 	Capabilities() Capabilities
 }
 
+// AsCapableProvider attempts to unwrap and cast an LLM to a CapableProvider.
+// Returns the CapableProvider and true if successful, nil and false otherwise.
+func AsCapableProvider(llm LLM) (CapableProvider, bool) {
+	base := UnwrapAll(llm)
+	cp, ok := base.(CapableProvider)
+	return cp, ok
+}
+
 // HasCapability checks if an LLM has a specific capability.
 // Returns false if the LLM doesn't implement CapableProvider.
 //
@@ -297,4 +307,14 @@ func SupportsBatch(llm LLM) bool {
 // SupportsJSONMode checks if the LLM supports structured JSON output.
 func SupportsJSONMode(llm LLM) bool {
 	return HasCapability(llm, func(c Capabilities) bool { return c.JSONMode })
+}
+
+// SupportsReasoning checks if the LLM supports reasoning output.
+func SupportsReasoning(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.Reasoning })
+}
+
+// SupportsPromptCaching checks if the LLM supports prompt caching.
+func SupportsPromptCaching(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.PromptCaching })
 }

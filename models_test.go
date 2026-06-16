@@ -1,9 +1,20 @@
 package llms
 
 import (
+	"context"
 	"testing"
 	"time"
 )
+
+type testModelLister struct{}
+
+func (testModelLister) ListModels(context.Context, ...ListModelsOption) (*ListModelsResult, error) {
+	return &ListModelsResult{}, nil
+}
+
+func (testModelLister) ModelInfo(context.Context, string) (*ModelInfo, error) {
+	return &ModelInfo{}, nil
+}
 
 // Test data
 var testModels = []ModelInfo{
@@ -136,6 +147,35 @@ func TestModelInfo_IsVision(t *testing.T) {
 	}
 	if noVisionModel.IsVision() {
 		t.Error("llama should not be a vision model")
+	}
+}
+
+func TestAsModelLister(t *testing.T) {
+	var lister testModelLister
+
+	got, ok := AsModelLister(lister)
+	if !ok {
+		t.Fatal("expected AsModelLister to return ok=true")
+	}
+	if got == nil {
+		t.Fatal("expected ModelLister implementation")
+	}
+
+	got, ok = AsModelLister(struct{}{})
+	if ok {
+		t.Fatal("expected AsModelLister to return ok=false")
+	}
+	if got != nil {
+		t.Fatal("expected nil ModelLister for non-implementation")
+	}
+}
+
+func TestSupportsModelListing(t *testing.T) {
+	if !SupportsModelListing(testModelLister{}) {
+		t.Fatal("expected SupportsModelListing to return true")
+	}
+	if SupportsModelListing(struct{}{}) {
+		t.Fatal("expected SupportsModelListing to return false")
 	}
 }
 

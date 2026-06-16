@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -11,6 +12,29 @@ const (
 	testStop   = "stop"
 	testSearch = "search"
 )
+
+type testPlainLLM struct{}
+
+func (testPlainLLM) GenerateContent(context.Context, []Message, ...CallOption) (*Response, error) {
+	return &Response{}, nil
+}
+
+func (testPlainLLM) Stream(context.Context, []Message, ...CallOption) (<-chan StreamChunk, error) {
+	ch := make(chan StreamChunk)
+	close(ch)
+	return ch, nil
+}
+
+func (testPlainLLM) Provider() Provider { return ProviderOpenAI }
+func (testPlainLLM) Model() string      { return "test-model" }
+
+type testWrapper struct {
+	LLM
+}
+
+func (w testWrapper) Unwrap() LLM {
+	return w.LLM
+}
 
 func mustMarshalRawMessage(t *testing.T, v any) json.RawMessage {
 	t.Helper()
@@ -224,6 +248,62 @@ func TestResponseStruct(t *testing.T) {
 	}
 	if resp.Usage.TotalTokens != 30 {
 		t.Errorf("expected total tokens 30, got %d", resp.Usage.TotalTokens)
+	}
+}
+
+func TestAsCapableProvider(t *testing.T) {
+	base := NewMockLLM(WithMockCapabilities(Capabilities{Streaming: true}))
+	wrapped := testWrapper{LLM: base}
+
+	cp, ok := AsCapableProvider(wrapped)
+	if !ok {
+		t.Fatal("expected wrapped capable provider to be detected")
+	}
+	if cp == nil {
+		t.Fatal("expected CapableProvider implementation")
+	}
+	if !cp.Capabilities().Streaming {
+		t.Fatal("expected capabilities from unwrapped provider")
+	}
+
+	cp, ok = AsCapableProvider(testPlainLLM{})
+	if ok {
+		t.Fatal("expected non-capable LLM to return ok=false")
+	}
+	if cp != nil {
+		t.Fatal("expected nil CapableProvider for non-capable LLM")
+	}
+}
+
+func TestSupportsReasoning(t *testing.T) {
+	llm := NewMockLLM(WithMockCapabilities(Capabilities{Reasoning: true}))
+	if !SupportsReasoning(llm) {
+		t.Fatal("expected reasoning support")
+	}
+	if !SupportsReasoning(testWrapper{LLM: llm}) {
+		t.Fatal("expected reasoning support through wrapper")
+	}
+	if SupportsReasoning(NewMockLLM()) {
+		t.Fatal("expected default mock to not support reasoning")
+	}
+	if SupportsReasoning(testPlainLLM{}) {
+		t.Fatal("expected non-capable LLM to not support reasoning")
+	}
+}
+
+func TestSupportsPromptCaching(t *testing.T) {
+	llm := NewMockLLM(WithMockCapabilities(Capabilities{PromptCaching: true}))
+	if !SupportsPromptCaching(llm) {
+		t.Fatal("expected prompt caching support")
+	}
+	if !SupportsPromptCaching(testWrapper{LLM: llm}) {
+		t.Fatal("expected prompt caching support through wrapper")
+	}
+	if SupportsPromptCaching(NewMockLLM()) {
+		t.Fatal("expected default mock to not support prompt caching")
+	}
+	if SupportsPromptCaching(testPlainLLM{}) {
+		t.Fatal("expected non-capable LLM to not support prompt caching")
 	}
 }
 

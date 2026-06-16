@@ -220,4 +220,18 @@ type ModelLister interface {
 	ModelInfo(ctx context.Context, modelID string) (*ModelInfo, error)
 }
 
+// AsModelLister attempts to cast a value to a ModelLister.
+// Returns the ModelLister and true if successful, nil and false otherwise.
+func AsModelLister(v any) (ModelLister, bool) {
+	ml, ok := v.(ModelLister)
+	return ml, ok
+}
+
+// SupportsModelListing checks if the given value supports model listing.
+// Returns true if the value implements the ModelLister interface.
+func SupportsModelListing(v any) bool {
+	_, ok := v.(ModelLister)
+	return ok
+}
+
 // Note: ErrModelNotFound is defined in errors.go
