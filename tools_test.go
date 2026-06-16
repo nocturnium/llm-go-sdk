@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -77,34 +78,6 @@ func TestParseToolArguments(t *testing.T) {
 		if !errors.Is(err, ErrInvalidToolResponse) {
 			t.Errorf("expected ErrInvalidToolResponse, got %v", err)
 		}
-	})
-}
-
-func TestMustParseToolArguments(t *testing.T) {
-	t.Run("valid", func(t *testing.T) {
-		tc := ToolCall{
-			Function: &FunctionCall{Name: "test", Arguments: `{"value": 42}`},
-		}
-
-		type Args struct {
-			Value int `json:"value"`
-		}
-
-		args := MustParseToolArguments[Args](tc)
-		if args.Value != 42 {
-			t.Errorf("expected value=42, got %d", args.Value)
-		}
-	})
-
-	t.Run("panics on invalid", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Error("expected panic")
-			}
-		}()
-
-		tc := ToolCall{} // No function
-		MustParseToolArguments[struct{}](tc)
 	})
 }
 
@@ -300,7 +273,7 @@ func TestToolRegistry(t *testing.T) {
 		},
 	})
 
-	registry.Register(weatherTool, func(args json.RawMessage) (any, error) {
+	registry.Register(weatherTool, func(_ context.Context, args json.RawMessage) (any, error) {
 		var parsed struct {
 			Location string `json:"location"`
 		}
@@ -327,7 +300,7 @@ func TestToolRegistry(t *testing.T) {
 			Function: &FunctionCall{Name: testGetWeather, Arguments: `{"location": "Boston"}`},
 		}
 
-		msg, err := registry.Handle(tc)
+		msg, err := registry.Handle(context.Background(), tc)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -349,7 +322,7 @@ func TestToolRegistry(t *testing.T) {
 			Function: &FunctionCall{Name: "unknown_tool", Arguments: "{}"},
 		}
 
-		_, err := registry.Handle(tc)
+		_, err := registry.Handle(context.Background(), tc)
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -364,14 +337,14 @@ func TestToolRegistry_HandleAll(t *testing.T) {
 
 	registry.Register(
 		NewFunctionTool("tool_a", "Tool A", nil),
-		func(_ json.RawMessage) (any, error) {
+		func(_ context.Context, _ json.RawMessage) (any, error) {
 			return "result_a", nil
 		},
 	)
 
 	registry.Register(
 		NewFunctionTool("tool_b", "Tool B", nil),
-		func(_ json.RawMessage) (any, error) {
+		func(_ context.Context, _ json.RawMessage) (any, error) {
 			return "result_b", nil
 		},
 	)
@@ -383,7 +356,7 @@ func TestToolRegistry_HandleAll(t *testing.T) {
 		},
 	}
 
-	messages, err := registry.HandleAll(resp)
+	messages, err := registry.HandleAll(context.Background(), resp)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -400,6 +373,51 @@ func TestToolRegistry_HandleAll(t *testing.T) {
 	}
 }
 
+func TestToolRegistry_ContextPassedToHandlers(t *testing.T) {
+	type contextKey string
+	const key contextKey = "request-id"
+
+	type Args struct {
+		Value int `json:"value"`
+	}
+
+	ctx := context.WithValue(context.Background(), key, "ctx-123")
+	registry := NewToolRegistry()
+	RegisterFunc(registry, NewFunctionTool("typed", "Typed tool", nil), func(ctx context.Context, args Args) (any, error) {
+		if got := ctx.Value(key); got != "ctx-123" {
+			t.Fatalf("context value = %v, want ctx-123", got)
+		}
+		return args.Value * 3, nil
+	})
+	registry.Register(NewFunctionTool("raw", "Raw tool", nil), func(ctx context.Context, _ json.RawMessage) (any, error) {
+		if got := ctx.Value(key); got != "ctx-123" {
+			t.Fatalf("context value = %v, want ctx-123", got)
+		}
+		return "raw-ok", nil
+	})
+
+	msg, err := registry.Handle(ctx, ToolCall{
+		ID:       "call_typed",
+		Function: &FunctionCall{Name: "typed", Arguments: `{"value": 7}`},
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if msg.Content != "21" {
+		t.Fatalf("Handle content = %q, want 21", msg.Content)
+	}
+
+	messages, err := registry.HandleAll(ctx, &Response{ToolCalls: []ToolCall{
+		{ID: "call_raw", Function: &FunctionCall{Name: "raw", Arguments: `{}`}},
+	}})
+	if err != nil {
+		t.Fatalf("HandleAll: %v", err)
+	}
+	if len(messages) != 1 || messages[0].Content != "raw-ok" {
+		t.Fatalf("HandleAll messages = %+v, want raw-ok", messages)
+	}
+}
+
 func TestRegisterFunc(t *testing.T) {
 	type Args struct {
 		Value int `json:"value"`
@@ -408,7 +426,7 @@ func TestRegisterFunc(t *testing.T) {
 	registry := NewToolRegistry()
 	tool := NewFunctionTool("double", "Double a value", nil)
 
-	RegisterFunc(registry, tool, func(args Args) (any, error) {
+	RegisterFunc(registry, tool, func(_ context.Context, args Args) (any, error) {
 		return args.Value * 2, nil
 	})
 
@@ -417,7 +435,7 @@ func TestRegisterFunc(t *testing.T) {
 		Function: &FunctionCall{Name: "double", Arguments: `{"value": 21}`},
 	}
 
-	msg, err := registry.Handle(tc)
+	msg, err := registry.Handle(context.Background(), tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 // ListModels retrieves available models from the TogetherAI API.
@@ -117,13 +117,7 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 
 	// Convert pricing if available
 	if m.Pricing != nil {
-		info.Pricing = &llms.ModelPricing{
-			Input:    m.Pricing.Input,
-			Output:   m.Pricing.Output,
-			Hourly:   m.Pricing.Hourly,
-			Finetune: m.Pricing.Finetune,
-			Base:     m.Pricing.Base,
-		}
+		info.Pricing = m.Pricing
 	}
 
 	// Convert created timestamp

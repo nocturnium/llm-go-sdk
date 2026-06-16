@@ -66,8 +66,8 @@ import (
 	"fmt"
 	"os"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func main() {
@@ -215,24 +215,38 @@ stream, err := client.Stream(ctx, messages,
 
 ## Collecting a full response
 
-There is no `CollectStream` helper in the SDK — accumulate manually as shown in the canonical loop. The common case (build the full text, capture finish reason and usage) is a short helper you can write yourself:
+If you do not need to render chunks incrementally, use `llms.CollectStream` to drain the stream into a single result. It accumulates content and reasoning, captures terminal `FinishReason`, `Usage`, and `ToolCalls`, and returns any terminal error chunk as the function error so it cannot be missed.
 
 ```go
-// collect drains a stream into a single string plus the terminal metadata.
-func collect(stream <-chan llms.StreamChunk) (text string, finish llms.FinishReason, usage *llms.Usage, err error) {
-	var sb strings.Builder
-	for chunk := range stream {
-		if chunk.Error != nil {
-			return sb.String(), finish, usage, chunk.Error
-		}
-		sb.WriteString(chunk.Content)
-		if chunk.Done {
-			finish = chunk.FinishReason
-			usage = chunk.Usage
-		}
-	}
-	return sb.String(), finish, usage, nil
+stream, err := client.Stream(ctx, messages)
+if err != nil {
+	return err
 }
+
+result, err := llms.CollectStream(stream)
+if err != nil {
+	return err // provider error, context cancellation, or llms.ErrStreamTimeout
+}
+
+fmt.Println(result.Content)
+if result.Usage != nil {
+	fmt.Printf("total tokens: %d\n", result.Usage.TotalTokens)
+}
+```
+
+For the most common text-only case, `llms.StreamText` returns the accumulated content plus any terminal error:
+
+```go
+stream, err := client.Stream(ctx, messages)
+if err != nil {
+	return err
+}
+
+text, err := llms.StreamText(stream)
+if err != nil {
+	return err
+}
+fmt.Println(text)
 ```
 
 !!! tip

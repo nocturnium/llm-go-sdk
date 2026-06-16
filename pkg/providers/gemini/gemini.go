@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/geminiapi"
 )
 
 // Client is a Google Gemini LLM client.
@@ -182,6 +182,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		var accumulatedReasoning string
 		var reasoningDeltaEmitted bool
 		var finishReason llms.FinishReason
+		var rawFinishReason string
 		var usage *llms.Usage
 		var bytesRead int64
 		var chunksRead int
@@ -222,6 +223,17 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				// Gemini reports STOP even with function calls; normalize.
 				if len(accumulatedToolCalls) > 0 {
 					finishReason = llms.FinishReasonToolCalls
+				}
+
+				reason := strings.ToUpper(rawFinishReason)
+				hasOutput := accumulatedContent != "" || len(accumulatedToolCalls) > 0 || accumulatedReasoning != ""
+				if !hasOutput && reason != "" && reason != "STOP" {
+					sender.SendFinal(llms.StreamChunk{
+						Error:        fmt.Errorf("gemini: candidate finished with %s and no content", rawFinishReason),
+						FinishReason: finishReason,
+						Usage:        finalUsage,
+					})
+					return
 				}
 
 				sender.SendFinal(llms.StreamChunk{
@@ -293,6 +305,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				}
 
 				if candidate.FinishReason != "" {
+					rawFinishReason = candidate.FinishReason
 					finishReason = llms.FinishReason(geminiapi.GetFinishReason(candidate.FinishReason))
 				}
 			}

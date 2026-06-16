@@ -1,5 +1,9 @@
 # Building a Custom Provider
 
+For the canonical decision tree that distinguishes direct constructors, the
+registry, and the `pkg/openaicompat` provider-author extension point, see
+[Choosing how to construct a client](../getting-started.md#choosing-how-to-construct-a-client).
+
 Most LLM services speak the OpenAI chat-completions wire format. The SDK ships a
 reusable building block, `pkg/openaicompat`, that factors out the request/response
 machinery so a new OpenAI-compatible provider can be implemented in a few dozen
@@ -101,8 +105,8 @@ import (
 	"net/http"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 const (
@@ -248,6 +252,12 @@ chunks, _ := c.Stream(ctx, []llms.Message{
 	{Role: llms.RoleUser, Content: "Stream a haiku."},
 })
 for chunk := range chunks {
+	if chunk.Error != nil {
+		log.Fatal(chunk.Error)
+	}
+	if chunk.Done {
+		break
+	}
 	fmt.Print(chunk.Content)
 }
 

@@ -15,10 +15,10 @@ import (
 	"os"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/gemini"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/gemini"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 // Define the tools/functions the model can call.

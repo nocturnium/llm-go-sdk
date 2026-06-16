@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestChatCompletionRequest_ExtraBody(t *testing.T) {

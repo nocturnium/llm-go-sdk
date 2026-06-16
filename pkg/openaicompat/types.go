@@ -4,7 +4,11 @@ package openaicompat
 // streaming chunks, embeddings, and model listings). The package-level
 // documentation lives in doc.go.
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+)
 
 const (
 	contentTypeText = "text"
@@ -21,8 +25,8 @@ type ChatCompletionRequest struct {
 	// MaxCompletionTokens is the OpenAI reasoning-model replacement for max_tokens.
 	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
 	TopP                *float64        `json:"top_p,omitempty"`
-	FrequencyPenalty    float64         `json:"frequency_penalty,omitempty"`
-	PresencePenalty     float64         `json:"presence_penalty,omitempty"`
+	FrequencyPenalty    *float64        `json:"frequency_penalty,omitempty"`
+	PresencePenalty     *float64        `json:"presence_penalty,omitempty"`
 	Stop                []string        `json:"stop,omitempty"`
 	Stream              bool            `json:"stream,omitempty"`
 	Tools               []Tool          `json:"tools,omitempty"`
@@ -74,11 +78,11 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 	if r.TopP != nil {
 		m["top_p"] = *r.TopP
 	}
-	if r.FrequencyPenalty != 0 {
-		m["frequency_penalty"] = r.FrequencyPenalty
+	if r.FrequencyPenalty != nil {
+		m["frequency_penalty"] = *r.FrequencyPenalty
 	}
-	if r.PresencePenalty != 0 {
-		m["presence_penalty"] = r.PresencePenalty
+	if r.PresencePenalty != nil {
+		m["presence_penalty"] = *r.PresencePenalty
 	}
 	if len(r.Stop) > 0 {
 		m["stop"] = r.Stop
@@ -348,14 +352,8 @@ type ModelResponse struct {
 	Pricing       *ModelPricing `json:"pricing,omitempty"`        // TogetherAI
 }
 
-// ModelPricing contains cost information for a model (TogetherAI specific)
-type ModelPricing struct {
-	Hourly   float64 `json:"hourly,omitempty"`
-	Input    float64 `json:"input,omitempty"`
-	Output   float64 `json:"output,omitempty"`
-	Base     float64 `json:"base,omitempty"`
-	Finetune float64 `json:"finetune,omitempty"`
-}
+// ModelPricing contains cost information for a model (TogetherAI specific).
+type ModelPricing = llms.ModelPricing
 
 // ModelsListResponse represents the response from the models list API
 type ModelsListResponse struct {

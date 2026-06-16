@@ -3,7 +3,7 @@
 
 # Project info
 PROJECT_NAME := llms
-MODULE := github.com/nocturnium/llm-go-sdk
+MODULE := github.com/nocturnium/llm-go-sdk/v2
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "v0.0.0-dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -86,7 +86,7 @@ fmt:
 	@echo "Formatting code..."
 	gofmt -w .
 	@if command -v goimports >/dev/null 2>&1; then \
-		goimports -w -local github.com/nocturnium/llm-go-sdk .; \
+		goimports -w -local github.com/nocturnium/llm-go-sdk/v2 .; \
 	fi
 
 # Check formatting

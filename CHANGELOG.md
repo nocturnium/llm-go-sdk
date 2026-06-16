@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-06-15
+
+v2 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v2`
+(Go semantic import versioning). v1 and v2 are distinct module paths and can coexist,
+so consumers may migrate incrementally. See `docs/migration-guide.md` for the full
+v1 → v2 guide.
+
+### Changed (BREAKING)
+
+- **Module path → `/v2`.** Update imports to `github.com/nocturnium/llm-go-sdk/v2`
+  (the package name stays `llms`): `go get github.com/nocturnium/llm-go-sdk/v2@v2.0.0`.
+- **Tool handlers take a context.** `ToolHandler`, `RegisterFunc`'s typed handler, and
+  `ToolRegistry.Handle`/`HandleAll` now take a leading `context.Context`. `RunTools`
+  cancels in-flight tool handlers when the loop is canceled or a turn errors. Add
+  `ctx context.Context` as the first handler parameter.
+- **Sampling penalties are pointers.** `CallOptions.FrequencyPenalty` and
+  `PresencePenalty` are now `*float64`, so an explicit `0` is distinguishable from
+  unset. `WithFrequencyPenalty`/`WithPresencePenalty` callers are unaffected;
+  struct-literal callers must use a `*float64`.
+- **Removed `MustParseToolArguments`.** It panicked on model-controlled tool-call JSON
+  (a denial-of-service vector). Use the error-returning `ParseToolArguments` /
+  `ParseToolArgumentsMap`.
+- **Registry construction of `runpod`** without an `endpoint_id` now returns an error
+  wrapping `llms.ErrInvalidParameters` (previously `runpod.ErrMissingEndpointID`). The
+  direct `runpod.New` constructor is unchanged.
+
+### Added
+
+- `llms.CollectStream` / `llms.StreamText` (and `StreamResult`) — drain a stream to
+  completion and surface the terminal error explicitly instead of dropping the in-band
+  `StreamChunk.Error`.
+- Capability helpers completing the `As*`/`Supports*` set: `AsModelLister`,
+  `SupportsModelListing`, `AsCapableProvider`, `SupportsReasoning`,
+  `SupportsPromptCaching`, and `ModelCapabilities.ModelTypes()`.
+- `Config.RequireExtra(provider, key)` plus exported `ExtraRunPodEndpointID` /
+  `ExtraZAICoding` constants for explicit, validated provider configuration.
+- Exported message validators `ValidateToolCallIDs` and `ValidateInlineSystem` for
+  provider-author opt-in; core `ValidateMessages` is now provider-neutral.
+- Built-in pricing for groq, fireworks, perplexity (sonar), and Z.AI (glm-4.7,
+  glm-4.7-Flash), each with a sourced, dated comment. Local and BYO/subscription
+  providers, and any model whose public price could not be verified, intentionally
+  return `ok=false` rather than a fabricated $0.
+
+### Fixed
+
+- **Gemini streaming** now surfaces a SAFETY/RECITATION finish that produced no content
+  as a terminal `StreamChunk.Error`, matching the non-streaming path (previously the
+  stream completed cleanly with empty content and no error).
+- **`Response`/`StreamChunk` JSON unmarshal** repopulates the deprecated `Thinking`
+  alias from the canonical `Reasoning` field, which was lost on a JSON round-trip.
+- **Metrics streaming span** is now ended before the active-request counter is
+  decremented, fixing a telemetry-ordering race in which an observer could see
+  `ActiveRequests() == 0` before the span had ended.
+
 ## [1.2.1] - 2026-06-15
 
 ### Fixed

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestClient_GenerateContent_Integration(t *testing.T) {

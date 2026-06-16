@@ -3,7 +3,7 @@ package openaicompat
 import (
 	"context"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // ProviderConfig defines the configuration for an OpenAI-compatible provider.
@@ -50,6 +50,10 @@ type BaseProvider struct {
 }
 
 // NewBaseProvider creates a new base provider with the given configuration.
+// It is a provider-author extension point for implementing a new
+// OpenAI-compatible provider on top of Client, not an end-user client
+// constructor. End users normally construct clients through provider packages
+// such as openai.New or through the llms.New registry path.
 func NewBaseProvider(client *Client, config ProviderConfig) BaseProvider {
 	return BaseProvider{
 		client:         client,
@@ -86,6 +90,12 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	if err != nil {
 		return nil, err
 	}
+	if err := llms.ValidateInlineSystem(prepared); err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateToolCallIDs(prepared); err != nil {
+		return nil, err
+	}
 
 	model := effectiveModel(p.model, opts.Model)
 	req := BuildChatRequest(model, prepared, opts, false)
@@ -116,6 +126,12 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	// Prepare messages (merge consecutive same-role messages unless disabled, then validate)
 	prepared, err := llms.PrepareMessages(messages, opts)
 	if err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateInlineSystem(prepared); err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateToolCallIDs(prepared); err != nil {
 		return nil, err
 	}
 

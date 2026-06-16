@@ -17,7 +17,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/nocturnium/llm-go-sdk
+        - github.com/nocturnium/llm-go-sdk/v2
 
 linters:
   enable:

@@ -562,6 +562,21 @@ func RegisterModelCapabilities(provider Provider, modelID string, caps ModelCapa
 	globalRegistry.Register(provider, modelID, caps)
 }
 
+// ModelTypes derives model type metadata from model capabilities.
+func (mc ModelCapabilities) ModelTypes() []ModelType {
+	var types []ModelType
+	if mc.SupportsStreaming || mc.SupportsTools || mc.SupportsJSON || mc.SupportsReasoning || mc.SupportsPromptCaching {
+		types = append(types, ModelTypeChat)
+	}
+	if mc.SupportsVision {
+		types = append(types, ModelTypeVision)
+	}
+	if mc.SupportsEmbeddings {
+		types = append(types, ModelTypeEmbedding)
+	}
+	return types
+}
+
 // ToCapabilities converts ModelCapabilities to the provider Capabilities struct.
 // This allows easy integration with existing Capabilities() implementations.
 func (mc ModelCapabilities) ToCapabilities() Capabilities {

@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/anthropicapi"
 )
 
 // titleCase capitalizes the first letter of a string.

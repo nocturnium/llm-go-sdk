@@ -2,6 +2,7 @@ package llms
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -236,6 +237,59 @@ func GetSendTimeout(opts *CallOptions) time.Duration {
 // It can modify the chunk, perform side effects (like tracking usage), or both.
 // Return the (possibly modified) chunk to forward it to the consumer.
 type StreamProcessor func(chunk StreamChunk) StreamChunk
+
+// StreamResult is the terminal outcome of a fully drained stream.
+type StreamResult struct {
+	Content      string
+	Reasoning    *ReasoningContent
+	ToolCalls    []ToolCall
+	FinishReason FinishReason
+	Usage        *Usage
+}
+
+// CollectStream drains stream into a StreamResult.
+// It accumulates text content and reasoning content from non-error chunks,
+// captures terminal metadata from the Done chunk, and returns immediately with
+// the partial result when a terminal error chunk is observed.
+func CollectStream(stream <-chan StreamChunk) (StreamResult, error) {
+	var result StreamResult
+	var content strings.Builder
+	var reasoning strings.Builder
+
+	for chunk := range stream {
+		if chunk.Error != nil {
+			result.Content = content.String()
+			if reasoning.Len() > 0 {
+				result.Reasoning = &ReasoningContent{Content: reasoning.String()}
+			}
+			return result, chunk.Error
+		}
+
+		content.WriteString(chunk.Content)
+		if chunk.Reasoning != nil {
+			reasoning.WriteString(chunk.Reasoning.Content)
+		}
+		if chunk.Done {
+			result.FinishReason = chunk.FinishReason
+			result.Usage = chunk.Usage
+			result.ToolCalls = chunk.ToolCalls
+		}
+	}
+
+	result.Content = content.String()
+	if reasoning.Len() > 0 {
+		result.Reasoning = &ReasoningContent{Content: reasoning.String()}
+	}
+	return result, nil
+}
+
+// StreamText drains stream and returns its accumulated text content.
+// If the stream ends with a terminal error chunk, the partial text and that
+// error are returned.
+func StreamText(stream <-chan StreamChunk) (string, error) {
+	result, err := CollectStream(stream)
+	return result.Content, err
+}
 
 // WrapStream wraps a source stream with common middleware setup:
 // - Creates a buffered output channel based on options

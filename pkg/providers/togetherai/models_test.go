@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 // Mock response data matching TogetherAI API format
@@ -291,8 +291,11 @@ func TestConvertModelResponse(t *testing.T) {
 			ContextLength: 131072,
 			License:       "llama3.3",
 			Pricing: &openaicompat.ModelPricing{
-				Input:  0.88,
-				Output: 0.88,
+				Input:    0.88,
+				Output:   0.89,
+				Hourly:   1.23,
+				Finetune: 2.34,
+				Base:     3.45,
 			},
 		}
 
@@ -315,6 +318,25 @@ func TestConvertModelResponse(t *testing.T) {
 		}
 		if info.Pricing == nil {
 			t.Error("expected pricing to be set")
+		} else {
+			if info.Pricing != resp.Pricing {
+				t.Error("expected pricing pointer to pass through")
+			}
+			if info.Pricing.Input != 0.88 {
+				t.Errorf("expected input price 0.88, got %f", info.Pricing.Input)
+			}
+			if info.Pricing.Output != 0.89 {
+				t.Errorf("expected output price 0.89, got %f", info.Pricing.Output)
+			}
+			if info.Pricing.Hourly != 1.23 {
+				t.Errorf("expected hourly price 1.23, got %f", info.Pricing.Hourly)
+			}
+			if info.Pricing.Finetune != 2.34 {
+				t.Errorf("expected finetune price 2.34, got %f", info.Pricing.Finetune)
+			}
+			if info.Pricing.Base != 3.45 {
+				t.Errorf("expected base price 3.45, got %f", info.Pricing.Base)
+			}
 		}
 		if info.FromCache {
 			t.Error("expected FromCache to be false")

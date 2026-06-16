@@ -36,7 +36,9 @@ func WithAPIKey(key string) Option {
 	}
 }
 
-// WithModel sets the model to use.
+// WithModel sets the construction-time default model for this Anthropic client.
+// For a single-call override, pass llms.WithModel to GenerateContent, Stream,
+// or llms.Call instead.
 func WithModel(model string) Option {
 	return func(o *options) {
 		o.Model = model

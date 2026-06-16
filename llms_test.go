@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -11,6 +12,29 @@ const (
 	testStop   = "stop"
 	testSearch = "search"
 )
+
+type testPlainLLM struct{}
+
+func (testPlainLLM) GenerateContent(context.Context, []Message, ...CallOption) (*Response, error) {
+	return &Response{}, nil
+}
+
+func (testPlainLLM) Stream(context.Context, []Message, ...CallOption) (<-chan StreamChunk, error) {
+	ch := make(chan StreamChunk)
+	close(ch)
+	return ch, nil
+}
+
+func (testPlainLLM) Provider() Provider { return ProviderOpenAI }
+func (testPlainLLM) Model() string      { return "test-model" }
+
+type testWrapper struct {
+	LLM
+}
+
+func (w testWrapper) Unwrap() LLM {
+	return w.LLM
+}
 
 func mustMarshalRawMessage(t *testing.T, v any) json.RawMessage {
 	t.Helper()
@@ -73,11 +97,11 @@ func TestDefaultCallOptions(t *testing.T) {
 	if opts.TopP != nil {
 		t.Errorf("expected default top_p to be nil (unset), got %v", *opts.TopP)
 	}
-	if opts.FrequencyPenalty != 0 {
-		t.Errorf("expected default frequency penalty to be 0, got %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty != nil {
+		t.Errorf("expected default frequency penalty to be nil (unset), got %v", *opts.FrequencyPenalty)
 	}
-	if opts.PresencePenalty != 0 {
-		t.Errorf("expected default presence penalty to be 0, got %f", opts.PresencePenalty)
+	if opts.PresencePenalty != nil {
+		t.Errorf("expected default presence penalty to be nil (unset), got %v", *opts.PresencePenalty)
 	}
 	if opts.StopWords != nil {
 		t.Error("expected default stop words to be nil")
@@ -116,15 +140,15 @@ func TestWithTopP(t *testing.T) {
 
 func TestWithFrequencyPenalty(t *testing.T) {
 	opts := ApplyOptions(WithFrequencyPenalty(0.5))
-	if opts.FrequencyPenalty != 0.5 {
-		t.Errorf("expected frequency penalty to be 0.5, got %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty == nil || *opts.FrequencyPenalty != 0.5 {
+		t.Errorf("expected frequency penalty to be 0.5, got %v", opts.FrequencyPenalty)
 	}
 }
 
 func TestWithPresencePenalty(t *testing.T) {
 	opts := ApplyOptions(WithPresencePenalty(0.3))
-	if opts.PresencePenalty != 0.3 {
-		t.Errorf("expected presence penalty to be 0.3, got %f", opts.PresencePenalty)
+	if opts.PresencePenalty == nil || *opts.PresencePenalty != 0.3 {
+		t.Errorf("expected presence penalty to be 0.3, got %v", opts.PresencePenalty)
 	}
 }
 
@@ -158,11 +182,11 @@ func TestApplyMultipleOptions(t *testing.T) {
 	if opts.TopP == nil || *opts.TopP != 0.95 {
 		t.Errorf("expected top_p 0.95, got %v", opts.TopP)
 	}
-	if opts.FrequencyPenalty != 0.2 {
-		t.Errorf("expected frequency penalty 0.2, got %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty == nil || *opts.FrequencyPenalty != 0.2 {
+		t.Errorf("expected frequency penalty 0.2, got %v", opts.FrequencyPenalty)
 	}
-	if opts.PresencePenalty != 0.1 {
-		t.Errorf("expected presence penalty 0.1, got %f", opts.PresencePenalty)
+	if opts.PresencePenalty == nil || *opts.PresencePenalty != 0.1 {
+		t.Errorf("expected presence penalty 0.1, got %v", opts.PresencePenalty)
 	}
 	if len(opts.StopWords) != 1 || opts.StopWords[0] != "done" {
 		t.Errorf("unexpected stop words: %v", opts.StopWords)
@@ -224,6 +248,62 @@ func TestResponseStruct(t *testing.T) {
 	}
 	if resp.Usage.TotalTokens != 30 {
 		t.Errorf("expected total tokens 30, got %d", resp.Usage.TotalTokens)
+	}
+}
+
+func TestAsCapableProvider(t *testing.T) {
+	base := NewMockLLM(WithMockCapabilities(Capabilities{Streaming: true}))
+	wrapped := testWrapper{LLM: base}
+
+	cp, ok := AsCapableProvider(wrapped)
+	if !ok {
+		t.Fatal("expected wrapped capable provider to be detected")
+	}
+	if cp == nil {
+		t.Fatal("expected CapableProvider implementation")
+	}
+	if !cp.Capabilities().Streaming {
+		t.Fatal("expected capabilities from unwrapped provider")
+	}
+
+	cp, ok = AsCapableProvider(testPlainLLM{})
+	if ok {
+		t.Fatal("expected non-capable LLM to return ok=false")
+	}
+	if cp != nil {
+		t.Fatal("expected nil CapableProvider for non-capable LLM")
+	}
+}
+
+func TestSupportsReasoning(t *testing.T) {
+	llm := NewMockLLM(WithMockCapabilities(Capabilities{Reasoning: true}))
+	if !SupportsReasoning(llm) {
+		t.Fatal("expected reasoning support")
+	}
+	if !SupportsReasoning(testWrapper{LLM: llm}) {
+		t.Fatal("expected reasoning support through wrapper")
+	}
+	if SupportsReasoning(NewMockLLM()) {
+		t.Fatal("expected default mock to not support reasoning")
+	}
+	if SupportsReasoning(testPlainLLM{}) {
+		t.Fatal("expected non-capable LLM to not support reasoning")
+	}
+}
+
+func TestSupportsPromptCaching(t *testing.T) {
+	llm := NewMockLLM(WithMockCapabilities(Capabilities{PromptCaching: true}))
+	if !SupportsPromptCaching(llm) {
+		t.Fatal("expected prompt caching support")
+	}
+	if !SupportsPromptCaching(testWrapper{LLM: llm}) {
+		t.Fatal("expected prompt caching support through wrapper")
+	}
+	if SupportsPromptCaching(NewMockLLM()) {
+		t.Fatal("expected default mock to not support prompt caching")
+	}
+	if SupportsPromptCaching(testPlainLLM{}) {
+		t.Fatal("expected non-capable LLM to not support prompt caching")
 	}
 }
 
@@ -717,8 +797,8 @@ func TestCallOptionsStruct(t *testing.T) {
 		Temperature:      &temp,
 		MaxTokens:        intPtr(2048),
 		TopP:             &topP,
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.3,
+		FrequencyPenalty: float64Ptr(0.5),
+		PresencePenalty:  float64Ptr(0.3),
 		StopWords:        []string{testStop},
 		Tools:            tools,
 		ToolChoice:       &ToolChoice{Type: ToolChoiceAuto},
@@ -737,11 +817,11 @@ func TestCallOptionsStruct(t *testing.T) {
 	if opts.TopP == nil || *opts.TopP != 0.95 {
 		t.Errorf("unexpected top p: %v", opts.TopP)
 	}
-	if opts.FrequencyPenalty != 0.5 {
-		t.Errorf("unexpected frequency penalty: %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty == nil || *opts.FrequencyPenalty != 0.5 {
+		t.Errorf("unexpected frequency penalty: %v", opts.FrequencyPenalty)
 	}
-	if opts.PresencePenalty != 0.3 {
-		t.Errorf("unexpected presence penalty: %f", opts.PresencePenalty)
+	if opts.PresencePenalty == nil || *opts.PresencePenalty != 0.3 {
+		t.Errorf("unexpected presence penalty: %v", opts.PresencePenalty)
 	}
 	if len(opts.StopWords) != 1 {
 		t.Errorf("expected 1 stop word, got %d", len(opts.StopWords))

@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/ollamaapi"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/ollamaapi"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 // providerConfig defines Ollama-specific configuration.

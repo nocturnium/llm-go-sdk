@@ -1,6 +1,6 @@
 package runpod
 
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 
 // Common model IDs for RunPod vLLM deployments.
 // Note: These are example models; the actual available models depend on

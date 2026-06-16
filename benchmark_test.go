@@ -147,7 +147,7 @@ func BenchmarkToolRegistry_Handle(b *testing.B) {
 		},
 	})
 
-	registry.Register(weatherTool, func(args json.RawMessage) (any, error) {
+	registry.Register(weatherTool, func(_ context.Context, args json.RawMessage) (any, error) {
 		var parsed struct {
 			Location string `json:"location"`
 		}
@@ -162,7 +162,7 @@ func BenchmarkToolRegistry_Handle(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = registry.Handle(tc)
+		_, _ = registry.Handle(context.Background(), tc)
 	}
 }
 
@@ -171,8 +171,8 @@ func BenchmarkCallOptionsValidate(b *testing.B) {
 		Temperature:      float64Ptr(0.7),
 		MaxTokens:        intPtr(1000),
 		TopP:             float64Ptr(0.9),
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.5,
+		FrequencyPenalty: float64Ptr(0.5),
+		PresencePenalty:  float64Ptr(0.5),
 		Tools: []Tool{
 			NewFunctionTool("test", "Test function", nil),
 		},
@@ -393,7 +393,7 @@ func BenchmarkToolRegistry_HandleParallel(b *testing.B) {
 		},
 	})
 
-	registry.Register(weatherTool, func(_ json.RawMessage) (any, error) {
+	registry.Register(weatherTool, func(_ context.Context, _ json.RawMessage) (any, error) {
 		return map[string]any{"temperature": 72}, nil
 	})
 
@@ -405,7 +405,7 @@ func BenchmarkToolRegistry_HandleParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _ = registry.Handle(tc)
+			_, _ = registry.Handle(context.Background(), tc)
 		}
 	})
 }

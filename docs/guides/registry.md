@@ -1,5 +1,9 @@
 # Provider Registry (Construct by Name)
 
+For the canonical decision tree that distinguishes direct constructors, the
+registry, and the `pkg/openaicompat` provider-author extension point, see
+[Choosing how to construct a client](../getting-started.md#choosing-how-to-construct-a-client).
+
 Most of the SDK constructs a client through a provider package, e.g.
 `openai.New(openai.WithModel("gpt-4o"))`. That is the right approach when the
 provider is known at compile time. When the provider is chosen at **runtime** —
@@ -12,8 +16,8 @@ for config-driven applications that need to switch providers without recompiling
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk"
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/all" // register all chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all" // register all chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o"})
@@ -47,7 +51,7 @@ can construct it. Each provider package does this in its `init()` function, so a
 ### Register everything
 
 ```go
-import _ "github.com/nocturnium/llm-go-sdk/pkg/providers/all"
+import _ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all"
 ```
 
 This registers all **17 chat providers**:
@@ -69,8 +73,8 @@ import only the specific provider packages:
 
 ```go
 import (
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
 )
 ```
 
@@ -268,7 +272,7 @@ functional options. For a provider built on
 ```go
 package myprovider
 
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 
 func init() {
 	llms.RegisterProvider("myprovider", func(cfg llms.Config) (llms.LLM, error) {
@@ -319,8 +323,8 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/all" // register all chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all" // register all chat providers
 )
 
 func main() {

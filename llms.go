@@ -31,7 +31,25 @@
 // Stream responses in real-time:
 //
 //	chunks, err := client.Stream(ctx, messages)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	text, err := llms.StreamText(chunks)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Print(text)
+//
+// Or consume chunks incrementally:
+//
+//	chunks, err := client.Stream(ctx, messages)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //	for chunk := range chunks {
+//	    if chunk.Error != nil {
+//	        log.Fatal(chunk.Error)
+//	    }
 //	    if chunk.Done {
 //	        break
 //	    }
@@ -54,11 +72,11 @@
 //
 // Import the provider you need from its canonical pkg/providers path:
 //
-//	import "github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
-//	import "github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
-//	import "github.com/nocturnium/llm-go-sdk/pkg/providers/gemini"
-//	import "github.com/nocturnium/llm-go-sdk/pkg/providers/togetherai"
-//	import "github.com/nocturnium/llm-go-sdk/pkg/providers/featherless"
+//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
+//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/gemini"
+//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/togetherai"
+//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/featherless"
 //
 // Each provider reads its API key from environment variables by default.
 // See provider documentation for configuration options.
@@ -91,6 +109,8 @@
 //   - Tool support may vary by model within a provider
 //   - Use SupportsEmbeddings() and AsEmbedder() to check embedding capability at runtime
 //   - Use SupportsReranking() and AsReranker() to check reranking capability at runtime
+//   - Use SupportsModelListing() and AsModelLister() to check model listing capability at runtime
+//   - Use AsCapableProvider() for capability introspection through middleware
 package llms
 
 import (
@@ -229,6 +249,14 @@ type CapableProvider interface {
 	Capabilities() Capabilities
 }
 
+// AsCapableProvider attempts to unwrap and cast an LLM to a CapableProvider.
+// Returns the CapableProvider and true if successful, nil and false otherwise.
+func AsCapableProvider(llm LLM) (CapableProvider, bool) {
+	base := UnwrapAll(llm)
+	cp, ok := base.(CapableProvider)
+	return cp, ok
+}
+
 // HasCapability checks if an LLM has a specific capability.
 // Returns false if the LLM doesn't implement CapableProvider.
 //
@@ -279,4 +307,14 @@ func SupportsBatch(llm LLM) bool {
 // SupportsJSONMode checks if the LLM supports structured JSON output.
 func SupportsJSONMode(llm LLM) bool {
 	return HasCapability(llm, func(c Capabilities) bool { return c.JSONMode })
+}
+
+// SupportsReasoning checks if the LLM supports reasoning output.
+func SupportsReasoning(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.Reasoning })
+}
+
+// SupportsPromptCaching checks if the LLM supports prompt caching.
+func SupportsPromptCaching(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.PromptCaching })
 }

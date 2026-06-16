@@ -7,6 +7,101 @@ import (
 	"time"
 )
 
+func TestCollectStream(t *testing.T) {
+	t.Run("clean stream returns content and terminal metadata", func(t *testing.T) {
+		usage := &Usage{PromptTokens: 3, CompletionTokens: 5, TotalTokens: 8}
+		toolCalls := []ToolCall{
+			{
+				ID:   "call_1",
+				Type: ToolTypeFunction,
+				Function: &FunctionCall{
+					Name:      "lookup",
+					Arguments: `{"q":"go"}`,
+				},
+			},
+		}
+		stream := streamFromChunks(
+			StreamChunk{Content: "hello "},
+			StreamChunk{Content: "world", Reasoning: &ReasoningContent{Content: "think "}},
+			StreamChunk{
+				Done:         true,
+				Reasoning:    &ReasoningContent{Content: "more"},
+				FinishReason: FinishReasonToolCalls,
+				Usage:        usage,
+				ToolCalls:    toolCalls,
+			},
+		)
+
+		result, err := CollectStream(stream)
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if result.Content != "hello world" {
+			t.Fatalf("expected full content, got %q", result.Content)
+		}
+		if result.Reasoning == nil || result.Reasoning.Content != "think more" {
+			t.Fatalf("expected accumulated reasoning, got %+v", result.Reasoning)
+		}
+		if result.FinishReason != FinishReasonToolCalls {
+			t.Fatalf("expected finish reason %q, got %q", FinishReasonToolCalls, result.FinishReason)
+		}
+		if result.Usage != usage {
+			t.Fatalf("expected terminal usage pointer, got %+v", result.Usage)
+		}
+		if len(result.ToolCalls) != 1 || result.ToolCalls[0].ID != "call_1" {
+			t.Fatalf("expected terminal tool calls, got %+v", result.ToolCalls)
+		}
+	})
+
+	t.Run("terminal error returns partial content and exact error", func(t *testing.T) {
+		sentinel := context.DeadlineExceeded
+		stream := streamFromChunks(
+			StreamChunk{Content: "partial "},
+			StreamChunk{Content: "text"},
+			StreamChunk{Error: sentinel},
+		)
+
+		result, err := CollectStream(stream)
+		if err == nil {
+			t.Fatal("expected non-nil error from terminal error chunk")
+		}
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("expected error to match sentinel, got %v", err)
+		}
+		if result.Content != "partial text" {
+			t.Fatalf("expected partial content, got %q", result.Content)
+		}
+	})
+}
+
+func TestStreamText_TerminalError(t *testing.T) {
+	sentinel := errors.New("stream failed")
+	stream := streamFromChunks(
+		StreamChunk{Content: "partial"},
+		StreamChunk{Error: sentinel},
+	)
+
+	text, err := StreamText(stream)
+	if err == nil {
+		t.Fatal("expected non-nil error from terminal error chunk")
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("expected error to match sentinel, got %v", err)
+	}
+	if text != "partial" {
+		t.Fatalf("expected partial text, got %q", text)
+	}
+}
+
+func streamFromChunks(chunks ...StreamChunk) <-chan StreamChunk {
+	stream := make(chan StreamChunk, len(chunks))
+	for _, chunk := range chunks {
+		stream <- chunk
+	}
+	close(stream)
+	return stream
+}
+
 // TestWrapStream_ContextCancelEmitsTerminalChunk verifies that when the consumer
 // cancels the context mid-stream, the wrapped stream still delivers exactly one
 // terminal chunk carrying a non-nil Error before the channel closes. A silent

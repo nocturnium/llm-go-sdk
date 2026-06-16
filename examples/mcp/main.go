@@ -18,9 +18,9 @@ import (
 	"os"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/mcp"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/mcp"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
 )
 
 func main() {

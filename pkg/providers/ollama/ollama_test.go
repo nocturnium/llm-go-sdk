@@ -3,7 +3,7 @@ package ollama
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestDefaultOptions(t *testing.T) {

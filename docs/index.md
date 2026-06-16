@@ -8,9 +8,9 @@ server by changing one import and one constructor — streaming, tools, retries,
 cost tracking, and tracing all stay the same.
 
 !!! info "At a glance"
-    - **Module:** `github.com/nocturnium/llm-go-sdk`
-    - **Import alias:** `llms "github.com/nocturnium/llm-go-sdk"`
-    - **Version:** v1.2.1 · **License:** Apache-2.0 · **Go:** 1.25+
+    - **Module:** `github.com/nocturnium/llm-go-sdk/v2`
+    - **Import alias:** `llms "github.com/nocturnium/llm-go-sdk/v2"`
+    - **Version:** v2.0.0 · **License:** Apache-2.0 · **Go:** 1.25+
 
 ---
 
@@ -38,7 +38,7 @@ cost tracking, and tracing all stay the same.
 | anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | infinity |
 
 !!! tip "Construct by name"
-    Blank-import `github.com/nocturnium/llm-go-sdk/pkg/providers/all` to register every chat
+    Blank-import `github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all` to register every chat
     provider, then build one with `llms.New(name, llms.Config{...})`. Call
     `llms.RegisteredProviders()` for the live list.
 
@@ -49,7 +49,7 @@ cost tracking, and tracing all stay the same.
 Install the module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk
+go get github.com/nocturnium/llm-go-sdk/v2
 ```
 
 Make your first call. The package-level helper `llms.Call` sends a single prompt and
@@ -63,8 +63,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func main() {

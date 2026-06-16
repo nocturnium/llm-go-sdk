@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestClient_GenerateContent_NormalToolCallsLeaveContentEmpty(t *testing.T) {

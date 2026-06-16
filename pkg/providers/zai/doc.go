@@ -19,7 +19,7 @@
 //
 // Basic usage with environment variable:
 //
-//	import "github.com/nocturnium/llm-go-sdk/pkg/providers/zai"
+//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/zai"
 //
 //	// Create client (uses ZAI_API_KEY environment variable)
 //	client, err := zai.New()

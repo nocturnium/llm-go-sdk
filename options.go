@@ -63,13 +63,19 @@ type CallOptions struct {
 	// TopP is the nucleus-sampling probability mass. A nil pointer means "not set"
 	// (the provider/model applies its own default); a non-nil pointer sends the
 	// value verbatim, including an explicit 0.0.
-	TopP             *float64
-	FrequencyPenalty float64
-	PresencePenalty  float64
-	StopWords        []string
-	Tools            []Tool
-	ToolChoice       *ToolChoice
-	ResponseFormat   *ResponseFormat
+	TopP *float64
+	// FrequencyPenalty penalizes repeated tokens. A nil pointer means "not set"
+	// (the provider/model applies its own default); a non-nil pointer sends the
+	// value verbatim, including an explicit 0.0.
+	FrequencyPenalty *float64
+	// PresencePenalty penalizes tokens that already appeared. A nil pointer means
+	// "not set" (the provider/model applies its own default); a non-nil pointer
+	// sends the value verbatim, including an explicit 0.0.
+	PresencePenalty *float64
+	StopWords       []string
+	Tools           []Tool
+	ToolChoice      *ToolChoice
+	ResponseFormat  *ResponseFormat
 
 	// Reasoning requests model reasoning ("thinking") for this call. Nil uses the
 	// model's default behavior. See WithReasoning / WithReasoningEffort.
@@ -139,14 +145,14 @@ func WithTopP(topP float64) CallOption {
 // WithFrequencyPenalty sets the frequency penalty
 func WithFrequencyPenalty(penalty float64) CallOption {
 	return func(o *CallOptions) {
-		o.FrequencyPenalty = penalty
+		o.FrequencyPenalty = &penalty
 	}
 }
 
 // WithPresencePenalty sets the presence penalty
 func WithPresencePenalty(penalty float64) CallOption {
 	return func(o *CallOptions) {
-		o.PresencePenalty = penalty
+		o.PresencePenalty = &penalty
 	}
 }
 
@@ -218,7 +224,10 @@ func WithJSONSchema(name string, schema json.RawMessage, strict bool) CallOption
 	}
 }
 
-// WithModel sets the model to use for this call (overrides provider default)
+// WithModel sets the model to use for this call only, overriding the client's
+// construction-time default for this GenerateContent, Stream, or Call
+// invocation. To set a client's default model at construction time, use the
+// provider-specific option such as openai.WithModel or anthropic.WithModel.
 func WithModel(model string) CallOption {
 	return func(o *CallOptions) {
 		o.Model = model
@@ -381,18 +390,18 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.FrequencyPenalty < -2.0 || o.FrequencyPenalty > 2.0 {
+	if o.FrequencyPenalty != nil && (*o.FrequencyPenalty < -2.0 || *o.FrequencyPenalty > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "frequency_penalty",
-			Value:   o.FrequencyPenalty,
+			Value:   *o.FrequencyPenalty,
 			Message: "must be between -2 and 2",
 		})
 	}
 
-	if o.PresencePenalty < -2.0 || o.PresencePenalty > 2.0 {
+	if o.PresencePenalty != nil && (*o.PresencePenalty < -2.0 || *o.PresencePenalty > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "presence_penalty",
-			Value:   o.PresencePenalty,
+			Value:   *o.PresencePenalty,
 			Message: "must be between -2 and 2",
 		})
 	}

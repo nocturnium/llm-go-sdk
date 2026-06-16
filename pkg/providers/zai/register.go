@@ -3,7 +3,7 @@ package zai
 import (
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func init() {
@@ -12,7 +12,7 @@ func init() {
 		if cfg.APIKey != "" {
 			opts = append(opts, WithAPIKey(cfg.APIKey))
 		}
-		if isExtraEnabled(cfg.Extra["coding"]) {
+		if isExtraEnabled(cfg.Extra[llms.ExtraZAICoding]) {
 			opts = append(opts, WithUseCodingAPI())
 		}
 		if cfg.Model != "" {

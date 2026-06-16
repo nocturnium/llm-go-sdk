@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -127,16 +128,6 @@ func ParseToolArguments[T any](tc ToolCall) (T, error) {
 	return result, nil
 }
 
-// MustParseToolArguments is like ParseToolArguments but panics on error.
-// Use only when you're certain the tool call is valid.
-func MustParseToolArguments[T any](tc ToolCall) T {
-	result, err := ParseToolArguments[T](tc)
-	if err != nil {
-		panic(err)
-	}
-	return result
-}
-
 // ParseToolArgumentsMap parses tool call arguments into a map.
 // Useful when the argument structure is not known at compile time.
 func ParseToolArgumentsMap(tc ToolCall) (map[string]any, error) {
@@ -233,7 +224,7 @@ func (r *Response) ToolCallNames() []string {
 
 // ToolHandler is a function that handles a tool call and returns a result.
 // The result will be JSON-encoded if it's not already a string.
-type ToolHandler func(args json.RawMessage) (any, error)
+type ToolHandler func(ctx context.Context, args json.RawMessage) (any, error)
 
 // ToolRegistry manages a collection of tool handlers.
 //
@@ -271,20 +262,20 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 //
 // Example:
 //
-//	registry.RegisterFunc(weatherTool, func(args WeatherArgs) (any, error) {
+//	registry.RegisterFunc(weatherTool, func(ctx context.Context, args WeatherArgs) (any, error) {
 //	    return map[string]any{"temperature": 72}, nil
 //	})
-func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(T) (any, error)) {
+func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Context, T) (any, error)) {
 	if tool.Function == nil {
 		return
 	}
 
-	wrappedHandler := func(args json.RawMessage) (any, error) {
+	wrappedHandler := func(ctx context.Context, args json.RawMessage) (any, error) {
 		var parsed T
 		if err := json.Unmarshal(args, &parsed); err != nil {
 			return nil, fmt.Errorf("failed to parse arguments: %w", err)
 		}
-		return handler(parsed)
+		return handler(ctx, parsed)
 	}
 
 	r.mu.Lock()
@@ -304,7 +295,7 @@ func (r *ToolRegistry) Tools() []Tool {
 }
 
 // Handle executes the appropriate handler for a tool call and returns a tool message.
-func (r *ToolRegistry) Handle(tc ToolCall) (Message, error) {
+func (r *ToolRegistry) Handle(ctx context.Context, tc ToolCall) (Message, error) {
 	if tc.Function == nil {
 		return Message{}, fmt.Errorf("%w: tool call has no function", ErrToolCallFailed)
 	}
@@ -319,7 +310,7 @@ func (r *ToolRegistry) Handle(tc ToolCall) (Message, error) {
 	}
 
 	// Execute handler outside lock to allow concurrent tool execution
-	result, err := handler(json.RawMessage(tc.Function.Arguments))
+	result, err := handler(ctx, json.RawMessage(tc.Function.Arguments))
 	if err != nil {
 		return ToolResultError(tc.ID, tc.Function.Name, err), nil
 	}
@@ -333,11 +324,11 @@ func (r *ToolRegistry) Handle(tc ToolCall) (Message, error) {
 }
 
 // HandleAll executes handlers for all tool calls in a response and returns tool messages.
-func (r *ToolRegistry) HandleAll(resp *Response) ([]Message, error) {
+func (r *ToolRegistry) HandleAll(ctx context.Context, resp *Response) ([]Message, error) {
 	messages := make([]Message, 0, len(resp.ToolCalls))
 
 	for _, tc := range resp.ToolCalls {
-		msg, err := r.Handle(tc)
+		msg, err := r.Handle(ctx, tc)
 		if err != nil {
 			return nil, err
 		}

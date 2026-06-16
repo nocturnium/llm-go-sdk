@@ -1,10 +1,12 @@
 package openaicompat_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 // TestBaseProvider_Capabilities_StaticWinsOverRegistry verifies the capability
@@ -89,4 +91,58 @@ func TestBaseProvider_Capabilities_StaticOnly(t *testing.T) {
 	if caps.MaxContextTokens != 8192 {
 		t.Errorf("MaxContextTokens = %d, want 8192 (static config)", caps.MaxContextTokens)
 	}
+}
+
+func TestBaseProvider_ValidatesToolCallIDs(t *testing.T) {
+	bp := openaicompat.NewBaseProvider(nil, openaicompat.ProviderConfig{
+		Provider:     llms.ProviderOpenAI,
+		ProviderName: "openai",
+		DefaultModel: "gpt-4o",
+	})
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Get weather"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{{ID: "call-1"}}},
+		{Role: llms.RoleTool, Name: "get_weather", Content: `{"temp":72}`},
+	}
+
+	_, err := bp.GenerateContent(context.Background(), messages)
+	assertValidationField(t, err, "messages[2].tool_call_id")
+
+	_, err = bp.Stream(context.Background(), messages)
+	assertValidationField(t, err, "messages[2].tool_call_id")
+}
+
+func TestBaseProvider_ValidatesInlineSystem(t *testing.T) {
+	bp := openaicompat.NewBaseProvider(nil, openaicompat.ProviderConfig{
+		Provider:     llms.ProviderOpenAI,
+		ProviderName: "openai",
+		DefaultModel: "gpt-4o",
+	})
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
+		{Role: llms.RoleSystem, Content: "Be concise"},
+	}
+
+	_, err := bp.GenerateContent(context.Background(), messages, llms.WithDisableMessageMerging())
+	assertValidationField(t, err, "messages[1].role")
+
+	_, err = bp.Stream(context.Background(), messages, llms.WithDisableMessageMerging())
+	assertValidationField(t, err, "messages[1].role")
+}
+
+func assertValidationField(t *testing.T, err error, field string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var validationErrs llms.ValidationErrors
+	if !errors.As(err, &validationErrs) {
+		t.Fatalf("expected ValidationErrors, got %T: %v", err, err)
+	}
+	for _, validationErr := range validationErrs {
+		if validationErr.Field == field {
+			return
+		}
+	}
+	t.Fatalf("expected validation field %q in %v", field, validationErrs)
 }

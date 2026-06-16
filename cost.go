@@ -59,6 +59,15 @@ func (p Pricing) cost(usage Usage) float64 {
 // returns ok=false) rather than guessing a price. Register accurate pricing for
 // such models via the cost tracker's custom-pricing API instead of relying on a
 // silent $0.00.
+//
+// Some providers are deliberately left unpriced so lookups keep returning
+// ok=false: ollama and llamacpp run locally/free and have no per-token list price
+// (N/A); Cerebras no longer lists the default llama3.1-70b model on its public
+// 2026 per-token rate card (custom Dedicated Endpoint pricing only), so it is
+// not publicly verifiable; Mistral defaults are moving "latest" aliases with
+// conflicting public prices for the current version; Azure, RunPod, Infinity,
+// Featherless, and Synthetic are BYO deployment/subscription or volatile model
+// ID surfaces without stable per-token list pricing.
 var DefaultPricing = map[string]Pricing{
 	// OpenAI (cached input billed at ~0.5×; automatic caching has no write cost).
 	"openai:gpt-4o":                 {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
@@ -112,6 +121,13 @@ var DefaultPricing = map[string]Pricing{
 	// DeepSeek (cache hits billed at a steep discount).
 	"deepseek:deepseek-chat":     {PromptPerMillion: 0.27, CompletionPerMillion: 1.10, CacheReadPerMillion: 0.07},
 	"deepseek:deepseek-reasoner": {PromptPerMillion: 0.55, CompletionPerMillion: 2.19, CacheReadPerMillion: 0.14},
+
+	// Cloud provider serverless/list pricing.
+	"groq:llama-3.3-70b-versatile":                                {PromptPerMillion: 0.59, CompletionPerMillion: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
+	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {PromptPerMillion: 0.90, CompletionPerMillion: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
+	"perplexity:sonar":                                            {PromptPerMillion: 1.00, CompletionPerMillion: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar) — excludes per-request search fee; verified 2026-06
+	"zai:glm-4.7":                                                 {PromptPerMillion: 0.40, CompletionPerMillion: 1.75}, // Z.AI GLM-4.7 (openrouter.ai/z-ai/glm-4.7, docs.z.ai), verified 2026-06
+	"zai:glm-4.7-Flash":                                           {PromptPerMillion: 0.06, CompletionPerMillion: 0.40}, // Z.AI GLM-4.7-Flash (pricepertoken.com/z-ai/glm-4.7-flash), verified 2026-06
 
 	// TogetherAI (varies by model, these are examples)
 	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},

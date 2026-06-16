@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/httpclient"
 )
 
 func mustMarshalRawMessage(t *testing.T, v any) json.RawMessage {
@@ -686,7 +686,13 @@ func TestConvertResponse_ReasoningTokens(t *testing.T) {
 }
 
 func TestBuildChatRequest_OpenAIReasoningModel(t *testing.T) {
-	opts := llms.ApplyOptions(llms.WithMaxTokens(1000), llms.WithTemperature(0.7))
+	opts := llms.ApplyOptions(
+		llms.WithMaxTokens(1000),
+		llms.WithTemperature(0.7),
+		llms.WithTopP(0.9),
+		llms.WithFrequencyPenalty(0.5),
+		llms.WithPresencePenalty(0.25),
+	)
 	req := BuildChatRequest("o3-mini", nil, opts, false)
 
 	if req.MaxTokens != nil {
@@ -697,6 +703,15 @@ func TestBuildChatRequest_OpenAIReasoningModel(t *testing.T) {
 	}
 	if req.Temperature != nil {
 		t.Error("o-series: temperature must be dropped")
+	}
+	if req.TopP != nil {
+		t.Error("o-series: top_p must be dropped")
+	}
+	if req.FrequencyPenalty != nil {
+		t.Error("o-series: frequency_penalty must be dropped")
+	}
+	if req.PresencePenalty != nil {
+		t.Error("o-series: presence_penalty must be dropped")
 	}
 
 	data, err := json.Marshal(req)
@@ -715,6 +730,15 @@ func TestBuildChatRequest_OpenAIReasoningModel(t *testing.T) {
 	}
 	if _, ok := m["temperature"]; ok {
 		t.Error("o-series wire: temperature must not appear")
+	}
+	if _, ok := m["top_p"]; ok {
+		t.Error("o-series wire: top_p must not appear")
+	}
+	if _, ok := m["frequency_penalty"]; ok {
+		t.Error("o-series wire: frequency_penalty must not appear")
+	}
+	if _, ok := m["presence_penalty"]; ok {
+		t.Error("o-series wire: presence_penalty must not appear")
 	}
 }
 
@@ -788,6 +812,67 @@ func TestBuildChatRequest_ReasoningDoesNotMutateOptions(t *testing.T) {
 	if _, exists := opts.ExtraBody["thinking"]; exists {
 		t.Error("BuildChatRequest leaked the thinking key into the caller's ExtraBody")
 	}
+}
+
+func TestBuildChatRequest_PenaltyZeroSerialization(t *testing.T) {
+	messages := []llms.Message{{Role: llms.RoleUser, Content: "Hello"}}
+
+	t.Run("explicit zero is sent", func(t *testing.T) {
+		opts := llms.ApplyOptions(
+			llms.WithFrequencyPenalty(0),
+			llms.WithPresencePenalty(0),
+		)
+		req := BuildChatRequest("gpt-4o", messages, opts, false)
+
+		if req.FrequencyPenalty == nil || *req.FrequencyPenalty != 0 {
+			t.Fatalf("expected frequency penalty pointer to explicit 0, got %v", req.FrequencyPenalty)
+		}
+		if req.PresencePenalty == nil || *req.PresencePenalty != 0 {
+			t.Fatalf("expected presence penalty pointer to explicit 0, got %v", req.PresencePenalty)
+		}
+
+		data, err := json.Marshal(req)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got, ok := m["frequency_penalty"]; !ok || got != float64(0) {
+			t.Errorf("expected frequency_penalty=0, got value=%v present=%v json=%s", got, ok, data)
+		}
+		if got, ok := m["presence_penalty"]; !ok || got != float64(0) {
+			t.Errorf("expected presence_penalty=0, got value=%v present=%v json=%s", got, ok, data)
+		}
+	})
+
+	t.Run("unset is omitted", func(t *testing.T) {
+		opts := llms.ApplyOptions()
+		req := BuildChatRequest("gpt-4o", messages, opts, false)
+
+		if req.FrequencyPenalty != nil {
+			t.Fatalf("expected frequency penalty to be nil, got %v", req.FrequencyPenalty)
+		}
+		if req.PresencePenalty != nil {
+			t.Fatalf("expected presence penalty to be nil, got %v", req.PresencePenalty)
+		}
+
+		data, err := json.Marshal(req)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if _, ok := m["frequency_penalty"]; ok {
+			t.Errorf("expected frequency_penalty to be omitted, got %s", data)
+		}
+		if _, ok := m["presence_penalty"]; ok {
+			t.Errorf("expected presence_penalty to be omitted, got %s", data)
+		}
+	})
 }
 
 func TestConvertEmbeddingResponse(t *testing.T) {

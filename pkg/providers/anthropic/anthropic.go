@@ -5,8 +5,8 @@ import (
 	"context"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/anthropicapi"
 )
 
 const structuredOutputToolName = "structured_output"
@@ -94,6 +94,9 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	if err != nil {
 		return nil, err
 	}
+	if err := llms.ValidateToolCallIDs(prepared); err != nil {
+		return nil, err
+	}
 
 	structuredToolName := structuredOutputToolNameFor(opts)
 	req, err := c.buildRequest(prepared, opts, false)
@@ -148,6 +151,9 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	// Prepare messages (merge consecutive same-role messages unless disabled, then validate)
 	prepared, err := llms.PrepareMessages(messages, opts)
 	if err != nil {
+		return nil, err
+	}
+	if err := llms.ValidateToolCallIDs(prepared); err != nil {
 		return nil, err
 	}
 

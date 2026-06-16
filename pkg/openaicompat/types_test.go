@@ -57,16 +57,18 @@ func TestChatCompletionRequest_JSON(t *testing.T) {
 	}
 }
 
-// TestChatCompletionRequest_TemperatureZeroIsSerialized proves that an explicit
-// temperature/top_p of 0.0 is serialized to the wire, while an unset (nil)
-// value is omitted so the provider applies its own default.
-func TestChatCompletionRequest_TemperatureZeroIsSerialized(t *testing.T) {
+// TestChatCompletionRequest_ExplicitZeroIsSerialized proves that an explicit
+// 0.0 sampling value is serialized to the wire, while an unset (nil) value is
+// omitted so the provider applies its own default.
+func TestChatCompletionRequest_ExplicitZeroIsSerialized(t *testing.T) {
 	t.Run("explicit zero is sent", func(t *testing.T) {
 		req := ChatCompletionRequest{
-			Model:       testGPT4,
-			Messages:    []ChatMessage{{Role: "user", ContentValue: testHello}},
-			Temperature: float64Ptr(0),
-			TopP:        float64Ptr(0),
+			Model:            testGPT4,
+			Messages:         []ChatMessage{{Role: "user", ContentValue: testHello}},
+			Temperature:      float64Ptr(0),
+			TopP:             float64Ptr(0),
+			FrequencyPenalty: float64Ptr(0),
+			PresencePenalty:  float64Ptr(0),
 		}
 
 		data, err := json.Marshal(req)
@@ -94,13 +96,29 @@ func TestChatCompletionRequest_TemperatureZeroIsSerialized(t *testing.T) {
 		if topP != float64(0) {
 			t.Errorf("expected top_p=0, got %v", topP)
 		}
+
+		frequencyPenalty, ok := m["frequency_penalty"]
+		if !ok {
+			t.Fatalf("expected frequency_penalty key to be present, got %s", data)
+		}
+		if frequencyPenalty != float64(0) {
+			t.Errorf("expected frequency_penalty=0, got %v", frequencyPenalty)
+		}
+
+		presencePenalty, ok := m["presence_penalty"]
+		if !ok {
+			t.Fatalf("expected presence_penalty key to be present, got %s", data)
+		}
+		if presencePenalty != float64(0) {
+			t.Errorf("expected presence_penalty=0, got %v", presencePenalty)
+		}
 	})
 
 	t.Run("unset is omitted", func(t *testing.T) {
 		req := ChatCompletionRequest{
 			Model:    testGPT4,
 			Messages: []ChatMessage{{Role: "user", ContentValue: testHello}},
-			// Temperature and TopP left nil (unset).
+			// Temperature, TopP, and penalties left nil (unset).
 		}
 
 		data, err := json.Marshal(req)
@@ -118,6 +136,12 @@ func TestChatCompletionRequest_TemperatureZeroIsSerialized(t *testing.T) {
 		}
 		if _, ok := m["top_p"]; ok {
 			t.Errorf("expected top_p to be omitted, got %s", data)
+		}
+		if _, ok := m["frequency_penalty"]; ok {
+			t.Errorf("expected frequency_penalty to be omitted, got %s", data)
+		}
+		if _, ok := m["presence_penalty"]; ok {
+			t.Errorf("expected presence_penalty to be omitted, got %s", data)
 		}
 	})
 }

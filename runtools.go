@@ -98,13 +98,13 @@ func WithCallOptions(options ...CallOption) RunToolsOption {
 // resp.ToolCalls regardless of completion order. Context cancellation is checked
 // before model calls, while scheduling tool calls, and while waiting for tool
 // results; if ctx is canceled, RunTools returns promptly with ctx.Err(), the last
-// response, and the transcript built so far. Note: tool handlers that have already
-// started when cancellation occurs run to completion — ToolHandler receives no
-// context, so handlers that must abort on cancellation should accept a context via
-// closure and check it themselves. ToolRegistry.Handle converts handler
-// errors into tool-result messages so the model can react. If dispatch itself fails
-// such as a missing tool or malformed function call, RunTools uses the same
-// model-reacts policy by appending a tool-result message containing the error text.
+// response, and the transcript built so far. Tool handlers receive a context that
+// is canceled when RunTools returns early due to an error or context cancellation,
+// and handlers should honor that context to abort in-flight work. ToolRegistry.Handle
+// converts handler errors into tool-result messages so the model can react. If
+// dispatch itself fails such as a missing tool or malformed function call, RunTools
+// uses the same model-reacts policy by appending a tool-result message containing
+// the error text.
 //
 // If the loop reaches the configured iteration guard before the model stops asking
 // for tools, RunTools returns the last response, the transcript, and an error that
@@ -161,6 +161,9 @@ type runToolResult struct {
 }
 
 func runToolCalls(ctx context.Context, registry *ToolRegistry, calls []ToolCall, concurrency int) ([]Message, error) {
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if concurrency > len(calls) {
 		concurrency = len(calls)
 	}
@@ -195,10 +198,10 @@ func runToolCalls(ctx context.Context, registry *ToolRegistry, calls []ToolCall,
 				}
 			}()
 
-			if err := ctx.Err(); err != nil {
+			if err := callCtx.Err(); err != nil {
 				return
 			}
-			msg, err := registry.Handle(call)
+			msg, err := registry.Handle(callCtx, call)
 			if err != nil {
 				msg = ToolResultError(call.ID, toolCallName(call), err)
 			}
@@ -216,6 +219,9 @@ func runToolCalls(ctx context.Context, registry *ToolRegistry, calls []ToolCall,
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case result := <-results:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			messages[result.index] = result.message
 		}
 	}

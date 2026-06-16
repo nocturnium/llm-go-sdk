@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/httpclient"
 )
 
 // isOpenAIReasoningModel reports whether model is an OpenAI reasoning model that
@@ -332,8 +332,8 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 		req.MaxTokens = nil
 		req.Temperature = nil
 		req.TopP = nil
-		req.FrequencyPenalty = 0
-		req.PresencePenalty = 0
+		req.FrequencyPenalty = nil
+		req.PresencePenalty = nil
 	}
 
 	if len(opts.Tools) > 0 {

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/all"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all"
 )
 
 func TestAllRegistersChatProviders(t *testing.T) {
@@ -61,7 +61,7 @@ func TestAllConstructsRunPodWithEndpointIDExtra(t *testing.T) {
 	t.Setenv("RUNPOD_API_KEY", "test-key")
 
 	llm, err := llms.New("runpod", llms.Config{
-		Extra: map[string]string{"endpoint_id": "ep-123"},
+		Extra: map[string]string{llms.ExtraRunPodEndpointID: "ep-123"},
 	})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)

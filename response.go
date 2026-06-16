@@ -1,5 +1,7 @@
 package llms
 
+import "encoding/json"
+
 // FinishReason describes why a model stopped generating output.
 type FinishReason string
 
@@ -24,14 +26,27 @@ type Response struct {
 	// Thinking is the former name of Reasoning, populated to the same value.
 	//
 	// Deprecated: use Reasoning. Retained for backward compatibility; it is not
-	// serialized (Reasoning is the canonical JSON field) and is NOT restored when a
-	// Response is unmarshaled from JSON (read Reasoning instead). Removed in a
-	// future major version.
+	// serialized (Reasoning is the canonical JSON field) and is repopulated from
+	// Reasoning when a Response is unmarshaled from JSON. Removed in a future major
+	// version.
 	Thinking      *ReasoningContent `json:"-"`
 	FinishReason  FinishReason      `json:"finish_reason,omitempty"`
 	Usage         Usage             `json:"usage"`
 	ToolCalls     []ToolCall        `json:"tool_calls,omitempty"`     // Tool calls requested by the model
 	SearchResults []SearchResult    `json:"search_results,omitempty"` // Web search results when WebSearch.IncludeResults is true
+}
+
+// UnmarshalJSON restores the deprecated Thinking alias from the canonical
+// Reasoning JSON field.
+func (r *Response) UnmarshalJSON(data []byte) error {
+	type responseAlias Response
+	var alias responseAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*r = Response(alias)
+	r.Thinking = r.Reasoning
+	return nil
 }
 
 // SetReasoning sets the canonical Reasoning field and the deprecated Thinking
@@ -81,8 +96,10 @@ type StreamChunk struct {
 
 	// Thinking is the former name of Reasoning, populated to the same value.
 	//
-	// Deprecated: use Reasoning. Retained for backward compatibility; not
-	// serialized and will be removed in a future major version.
+	// Deprecated: use Reasoning. Retained for backward compatibility; it is not
+	// serialized (Reasoning is the canonical JSON field) and is repopulated from
+	// Reasoning when a StreamChunk is unmarshaled from JSON. Removed in a future
+	// major version.
 	Thinking *ReasoningContent `json:"-"`
 
 	// ToolCalls contains any tool calls in this chunk (may be partial)
@@ -99,4 +116,17 @@ type StreamChunk struct {
 
 	// Done indicates this is the final chunk
 	Done bool `json:"done,omitempty"`
+}
+
+// UnmarshalJSON restores the deprecated Thinking alias from the canonical
+// Reasoning JSON field.
+func (c *StreamChunk) UnmarshalJSON(data []byte) error {
+	type streamChunkAlias StreamChunk
+	var alias streamChunkAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*c = StreamChunk(alias)
+	c.Thinking = c.Reasoning
+	return nil
 }

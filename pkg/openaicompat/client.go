@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/httpclient"
 )
 
 // Client is an OpenAI-compatible API client

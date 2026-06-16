@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/anthropicapi"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/anthropicapi"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 func TestConvertResponse_CacheUsage(t *testing.T) {

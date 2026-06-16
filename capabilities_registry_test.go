@@ -146,14 +146,16 @@ func TestCapabilityRegistry_Concurrent(_ *testing.T) {
 
 func TestModelCapabilities_ToCapabilities(t *testing.T) {
 	mc := ModelCapabilities{
-		MaxContextTokens:   100000,
-		MaxOutputTokens:    8000,
-		SupportsVision:     true,
-		SupportsTools:      true,
-		SupportsStreaming:  true,
-		SupportsEmbeddings: true,
-		SupportsBatch:      true,
-		SupportsJSON:       true,
+		MaxContextTokens:      100000,
+		MaxOutputTokens:       8000,
+		SupportsVision:        true,
+		SupportsTools:         true,
+		SupportsStreaming:     true,
+		SupportsEmbeddings:    true,
+		SupportsBatch:         true,
+		SupportsJSON:          true,
+		SupportsReasoning:     true,
+		SupportsPromptCaching: true,
 	}
 
 	caps := mc.ToCapabilities()
@@ -181,6 +183,64 @@ func TestModelCapabilities_ToCapabilities(t *testing.T) {
 	}
 	if !caps.JSONMode {
 		t.Error("expected JSONMode=true")
+	}
+	if !caps.Reasoning {
+		t.Error("expected Reasoning=true")
+	}
+	if !caps.PromptCaching {
+		t.Error("expected PromptCaching=true")
+	}
+}
+
+func TestModelCapabilities_ModelTypes(t *testing.T) {
+	tests := []struct {
+		name string
+		caps ModelCapabilities
+		want []ModelType
+	}{
+		{
+			name: "chat",
+			caps: ModelCapabilities{SupportsStreaming: true},
+			want: []ModelType{ModelTypeChat},
+		},
+		{
+			name: "vision",
+			caps: ModelCapabilities{SupportsVision: true},
+			want: []ModelType{ModelTypeVision},
+		},
+		{
+			name: "embedding",
+			caps: ModelCapabilities{SupportsEmbeddings: true},
+			want: []ModelType{ModelTypeEmbedding},
+		},
+		{
+			name: "combined",
+			caps: ModelCapabilities{
+				SupportsTools:      true,
+				SupportsVision:     true,
+				SupportsEmbeddings: true,
+			},
+			want: []ModelType{ModelTypeChat, ModelTypeVision, ModelTypeEmbedding},
+		},
+		{
+			name: "none",
+			caps: ModelCapabilities{},
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.caps.ModelTypes()
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
+			}
+		})
 	}
 }
 

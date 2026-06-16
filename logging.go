@@ -260,8 +260,8 @@ func (e *LogEntry) PopulateFromCallOptions(opts *CallOptions) {
 		}
 	}
 
-	// Capture request parameters. Temperature/TopP are only recorded when the
-	// caller explicitly set them (non-nil pointer); 0 is a valid set value.
+	// Capture request parameters. Pointer-backed values are only recorded when
+	// the caller explicitly set them (non-nil pointer); 0 is a valid set value.
 	e.RequestParameters = map[string]any{}
 	if opts.MaxTokens != nil {
 		e.RequestParameters["max_tokens"] = *opts.MaxTokens
@@ -272,11 +272,11 @@ func (e *LogEntry) PopulateFromCallOptions(opts *CallOptions) {
 	if opts.TopP != nil {
 		e.RequestParameters["top_p"] = *opts.TopP
 	}
-	if opts.FrequencyPenalty != 0 {
-		e.RequestParameters["frequency_penalty"] = opts.FrequencyPenalty
+	if opts.FrequencyPenalty != nil {
+		e.RequestParameters["frequency_penalty"] = *opts.FrequencyPenalty
 	}
-	if opts.PresencePenalty != 0 {
-		e.RequestParameters["presence_penalty"] = opts.PresencePenalty
+	if opts.PresencePenalty != nil {
+		e.RequestParameters["presence_penalty"] = *opts.PresencePenalty
 	}
 	if opts.ResponseFormat != nil && opts.ResponseFormat.Type == ResponseFormatJSONObject {
 		e.RequestParameters["json_mode"] = true

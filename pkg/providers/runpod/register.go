@@ -1,6 +1,6 @@
 package runpod
 
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 
 func init() {
 	llms.RegisterProvider("runpod", func(cfg llms.Config) (llms.LLM, error) {
@@ -8,9 +8,11 @@ func init() {
 		if cfg.APIKey != "" {
 			opts = append(opts, WithAPIKey(cfg.APIKey))
 		}
-		if cfg.Extra != nil && cfg.Extra["endpoint_id"] != "" {
-			opts = append(opts, WithEndpointID(cfg.Extra["endpoint_id"]))
+		id, err := cfg.RequireExtra("runpod", llms.ExtraRunPodEndpointID)
+		if err != nil {
+			return nil, err
 		}
+		opts = append(opts, WithEndpointID(id))
 		if cfg.Model != "" {
 			opts = append(opts, WithModel(cfg.Model))
 		}
