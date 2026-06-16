@@ -215,7 +215,7 @@ func TestClient_Register(t *testing.T) {
 
 	// The registered handler must round-trip through CallTool, and the remote tool
 	// name (without the prefix) must be sent on the wire.
-	msg, err := reg.Handle(llms.ToolCall{
+	msg, err := reg.Handle(context.Background(), llms.ToolCall{
 		ID:       "1",
 		Type:     llms.ToolTypeFunction,
 		Function: &llms.FunctionCall{Name: "web_search", Arguments: `{"q":"go"}`},
@@ -235,6 +235,36 @@ func TestClient_Register(t *testing.T) {
 	}
 }
 
+func TestClient_RegisterHandlerUsesRuntimeContext(t *testing.T) {
+	m := newMockTransport()
+	m.queue(methodToolsList, listToolsResult{Tools: []Tool{{Name: "search"}}})
+	m.queue(methodToolsCall, CallToolResult{Content: []ContentBlock{{Type: "text", Text: "results"}}})
+
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	c, err := newClient(baseCtx, m, buildConfig(nil))
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
+	reg := llms.NewToolRegistry()
+	if err := c.Register(reg); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	cancelBase()
+
+	msg, err := reg.Handle(context.Background(), llms.ToolCall{
+		ID:       "1",
+		Type:     llms.ToolTypeFunction,
+		Function: &llms.FunctionCall{Name: "search", Arguments: `{}`},
+	})
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if msg.Content != "results" {
+		t.Fatalf("message content = %q, want results", msg.Content)
+	}
+}
+
 func TestClient_RegisterToolError(t *testing.T) {
 	m := newMockTransport()
 	m.queue(methodToolsList, listToolsResult{Tools: []Tool{{Name: "boom"}}})
@@ -247,7 +277,7 @@ func TestClient_RegisterToolError(t *testing.T) {
 	}
 	// A result flagged IsError surfaces as a tool-error message so RunTools lets the
 	// model react rather than aborting the loop.
-	msg, err := reg.Handle(llms.ToolCall{ID: "1", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "boom", Arguments: "{}"}})
+	msg, err := reg.Handle(context.Background(), llms.ToolCall{ID: "1", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "boom", Arguments: "{}"}})
 	if err != nil {
 		t.Fatalf("Handle returned a hard error: %v", err)
 	}

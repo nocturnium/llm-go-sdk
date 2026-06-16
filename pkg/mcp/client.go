@@ -252,9 +252,9 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments json.RawMe
 
 // Register discovers the server's tools and registers each into reg as an
 // llms.Tool whose handler invokes the tool over MCP. Tool names are prefixed with
-// the client's NamePrefix. The registered handlers use the client's connection
-// context, so they remain callable for the client's lifetime (e.g. across an
-// llms.RunTools agent loop).
+// the client's NamePrefix. Tool discovery uses the client's connection context;
+// registered handlers use the context passed by llms.ToolRegistry.Handle so
+// in-flight MCP calls can be canceled by callers such as llms.RunTools.
 func (c *Client) Register(reg *llms.ToolRegistry) error {
 	tools, err := c.ListTools(c.baseCtx)
 	if err != nil {
@@ -268,8 +268,8 @@ func (c *Client) Register(reg *llms.ToolRegistry) error {
 }
 
 func (c *Client) toolHandler(remoteName string) llms.ToolHandler {
-	return func(args json.RawMessage) (any, error) {
-		res, err := c.CallTool(c.baseCtx, remoteName, args)
+	return func(ctx context.Context, args json.RawMessage) (any, error) {
+		res, err := c.CallTool(ctx, remoteName, args)
 		if err != nil {
 			return nil, err
 		}

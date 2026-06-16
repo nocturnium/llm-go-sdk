@@ -94,12 +94,12 @@ func TestRunToolsExecutesToolsAndReturnsFinalTranscript(t *testing.T) {
 
 	var executed int32
 	registry := NewToolRegistry()
-	registry.Register(NewFunctionTool("slow_tool", "Slow tool", nil), func(_ json.RawMessage) (any, error) {
+	registry.Register(NewFunctionTool("slow_tool", "Slow tool", nil), func(_ context.Context, _ json.RawMessage) (any, error) {
 		atomic.AddInt32(&executed, 1)
 		time.Sleep(10 * time.Millisecond)
 		return "slow-result", nil
 	})
-	registry.Register(NewFunctionTool("fast_tool", "Fast tool", nil), func(_ json.RawMessage) (any, error) {
+	registry.Register(NewFunctionTool("fast_tool", "Fast tool", nil), func(_ context.Context, _ json.RawMessage) (any, error) {
 		atomic.AddInt32(&executed, 1)
 		return "fast-result", nil
 	})
@@ -178,7 +178,7 @@ func TestRunToolsMaxIterations(t *testing.T) {
 		},
 	}
 	registry := NewToolRegistry()
-	registry.Register(NewFunctionTool("repeat_tool", "Repeat tool", nil), func(_ json.RawMessage) (any, error) {
+	registry.Register(NewFunctionTool("repeat_tool", "Repeat tool", nil), func(_ context.Context, _ json.RawMessage) (any, error) {
 		return "repeat-result", nil
 	})
 
@@ -221,6 +221,79 @@ func TestRunToolsContextCancellation(t *testing.T) {
 	}
 }
 
+func TestRunToolsCancelsInFlightToolHandler(t *testing.T) {
+	toolCall := ToolCall{
+		ID:   "call-block",
+		Type: ToolTypeFunction,
+		Function: &FunctionCall{
+			Name:      "blocking_tool",
+			Arguments: `{}`,
+		},
+	}
+	llm := &scriptedLLM{
+		responses: []*Response{{
+			Content:   "calling blocking tool",
+			ToolCalls: []ToolCall{toolCall},
+		}},
+	}
+
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	registry := NewToolRegistry()
+	registry.Register(NewFunctionTool("blocking_tool", "Blocks until canceled", nil), func(ctx context.Context, _ json.RawMessage) (any, error) {
+		close(started)
+		<-ctx.Done()
+		done <- ctx.Err()
+		return nil, ctx.Err()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type runResult struct {
+		resp       *Response
+		transcript []Message
+		err        error
+	}
+	resultCh := make(chan runResult, 1)
+	go func() {
+		resp, transcript, err := RunTools(ctx, llm, []Message{{Role: RoleUser, Content: "cancel in flight"}}, registry)
+		resultCh <- runResult{resp: resp, transcript: transcript, err: err}
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("tool handler did not start")
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("handler error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("tool handler did not observe cancellation")
+	}
+
+	select {
+	case result := <-resultCh:
+		if !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("RunTools() error = %v, want context.Canceled", result.err)
+		}
+		if result.resp == nil || len(result.resp.ToolCalls) != 1 {
+			t.Fatalf("RunTools() response = %+v, want response with tool call", result.resp)
+		}
+		if len(result.transcript) != 2 {
+			t.Fatalf("transcript length = %d, want original plus assistant only", len(result.transcript))
+		}
+	case <-time.After(time.Second):
+		t.Fatal("RunTools did not return after context cancellation")
+	}
+}
+
 func responseContent(resp *Response) string {
 	if resp == nil {
 		return ""
@@ -233,7 +306,7 @@ func responseContent(resp *Response) string {
 func TestRunTools_ForwardsCallOptions(t *testing.T) {
 	llm := &scriptedLLM{responses: []*Response{{Content: "done"}}}
 	registry := NewToolRegistry()
-	registry.Register(NewFunctionTool("noop", "noop", nil), func(_ json.RawMessage) (any, error) { return "ok", nil })
+	registry.Register(NewFunctionTool("noop", "noop", nil), func(_ context.Context, _ json.RawMessage) (any, error) { return "ok", nil })
 	otherTool := NewFunctionTool("other", "other", nil)
 
 	_, _, err := RunTools(
