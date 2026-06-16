@@ -1,6 +1,6 @@
 package llamacpp
 
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 
 func init() {
 	llms.RegisterProvider("llamacpp", func(cfg llms.Config) (llms.LLM, error) {

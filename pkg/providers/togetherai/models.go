@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
 )
 
 // ListModels retrieves available models from the TogetherAI API.

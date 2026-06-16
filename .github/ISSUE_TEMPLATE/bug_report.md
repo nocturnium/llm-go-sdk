@@ -35,7 +35,7 @@ Steps to reproduce the behavior:
 package main
 
 import (
-    "github.com/nocturnium/llm-go-sdk"
+    "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func main() {

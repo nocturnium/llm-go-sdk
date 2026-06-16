@@ -18,7 +18,7 @@ one-liner, and `Stream`.
 Add the SDK to your module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk@v1.2.1
+go get github.com/nocturnium/llm-go-sdk/v2@v1.2.1
 ```
 
 The SDK's root package is named `llms`. Because the import path
@@ -26,13 +26,13 @@ The SDK's root package is named `llms`. Because the import path
 your code reads clearly:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 ```
 
 Each provider lives under `pkg/providers/<name>`. For OpenAI:
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 ```
 
 ## Choosing how to construct a client
@@ -84,8 +84,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func main() {
@@ -166,8 +166,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func main() {
@@ -201,7 +201,7 @@ of your code is identical. Each provider reads its own environment variable
 (here, `ANTHROPIC_API_KEY`).
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
 
 // Was:
 client, err := openai.New(openai.WithModel("gpt-4o"))

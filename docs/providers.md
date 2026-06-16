@@ -7,8 +7,8 @@ example:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 client, err := openai.New(
@@ -89,8 +89,8 @@ package to register all 17 chat providers, then call `llms.New`:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk"
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/all"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all"
 )
 
 llm, err := llms.New("openai", llms.Config{
@@ -144,7 +144,7 @@ a model id. The API key is read from `AZURE_OPENAI_API_KEY` or
 default API version is `2024-02-15-preview`.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/azure"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/azure"
 
 client, err := azure.New(
 	azure.WithEndpoint("https://my-resource.openai.azure.com"),
@@ -171,7 +171,7 @@ relaxed automatically (no need for `WithAllowPrivateIPs`/`WithAllowHTTP`).
   Optional `LLAMA_CPP_API_KEY` is supported.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/ollama"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/ollama"
 
 client, err := ollama.New(
 	ollama.WithModel("llama3.2"),
@@ -190,8 +190,8 @@ infinity is an embeddings/reranking server, not a chat provider. It implements
 ```go
 import (
 	"context"
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/infinity"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/infinity"
 )
 
 client, err := infinity.New(
@@ -218,7 +218,7 @@ construction returns `runpod.ErrMissingEndpointID` without it. The client builds
 the URL as `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1`.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/runpod"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/runpod"
 
 client, err := runpod.New(
 	runpod.WithEndpointID("ep-123"),
@@ -243,7 +243,7 @@ flagship `glm-4.7` model. Opt into the coding-specific endpoint
 exposes native web search.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/zai"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/zai"
 
 client, err := zai.New(
 	zai.WithModel("glm-4.7"),
@@ -268,7 +268,7 @@ default model is `sonar`. The key is read from `PERPLEXITY_API_KEY` or
 `Response.SearchResults`.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/pkg/providers/perplexity"
+import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/perplexity"
 
 client, err := perplexity.New(
 	perplexity.WithModel("sonar"),

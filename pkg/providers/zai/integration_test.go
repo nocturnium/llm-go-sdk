@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // setupMockServer creates a test server and returns a client configured to use it.

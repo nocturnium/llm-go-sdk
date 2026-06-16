@@ -17,7 +17,7 @@ import (
 
 const (
 	// InstrumentationName is the name used for OTel instrumentation
-	InstrumentationName = "github.com/nocturnium/llm-go-sdk"
+	InstrumentationName = "github.com/nocturnium/llm-go-sdk/v2"
 
 	// Metric names.
 	metricRequests         = "llm.requests"

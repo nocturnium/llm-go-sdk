@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	_ "github.com/nocturnium/llm-go-sdk/pkg/providers/all"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all"
 )
 
 func TestAllRegistersChatProviders(t *testing.T) {

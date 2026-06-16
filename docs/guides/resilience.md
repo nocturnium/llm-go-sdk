@@ -21,7 +21,7 @@ these failures:
 All of these helpers live in the root `llms` package:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 ```
 
 ---
@@ -38,8 +38,8 @@ import (
 	"fmt"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func main() {
@@ -283,9 +283,9 @@ overloaded, or down.
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 primary, _ := openai.New(openai.WithModel("gpt-4o"))
@@ -386,9 +386,9 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func buildClient() (llms.LLM, error) {

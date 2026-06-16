@@ -1,6 +1,6 @@
 package azure
 
-import llms "github.com/nocturnium/llm-go-sdk"
+import llms "github.com/nocturnium/llm-go-sdk/v2"
 
 func init() {
 	llms.RegisterProvider("azure", func(cfg llms.Config) (llms.LLM, error) {

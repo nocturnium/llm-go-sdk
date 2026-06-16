@@ -57,7 +57,7 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/nocturnium/llm-go-sdk
     - icon: fontawesome/brands/golang
-      link: https://pkg.go.dev/github.com/nocturnium/llm-go-sdk
+      link: https://pkg.go.dev/github.com/nocturnium/llm-go-sdk/v2
 
 nav:
   - Home: index.md
@@ -80,4 +80,4 @@ nav:
       - Custom Providers: guides/custom-providers.md
   - Architecture: ARCHITECTURE.md
   - Package Layout: migration-guide.md
-  - API Reference (pkg.go.dev): https://pkg.go.dev/github.com/nocturnium/llm-go-sdk
+  - API Reference (pkg.go.dev): https://pkg.go.dev/github.com/nocturnium/llm-go-sdk/v2

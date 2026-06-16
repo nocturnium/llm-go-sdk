@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/httpclient"
 )
 
 const defaultBaseURL = "http://localhost:11434"

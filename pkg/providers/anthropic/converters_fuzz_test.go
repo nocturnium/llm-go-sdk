@@ -3,8 +3,8 @@ package anthropic
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/anthropicapi"
 )
 
 // FuzzConvertMessages tests that convertMessages handles arbitrary string content

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // cachedModels contains metadata for popular models available on Featherless.

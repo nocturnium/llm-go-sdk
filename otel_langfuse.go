@@ -14,7 +14,7 @@ import (
 
 const (
 	// LangfuseInstrumentationName is the instrumentation scope name for Langfuse-compatible spans
-	LangfuseInstrumentationName = "github.com/nocturnium/llm-go-sdk/langfuse"
+	LangfuseInstrumentationName = "github.com/nocturnium/llm-go-sdk/v2/langfuse"
 
 	// Default content capture limits
 	defaultMaxInputCapture  = 100_000

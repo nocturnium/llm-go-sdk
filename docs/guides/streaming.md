@@ -66,8 +66,8 @@ import (
 	"fmt"
 	"os"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
 )
 
 func main() {

@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk"
-	"github.com/nocturnium/llm-go-sdk/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/internal/httpclient"
 )
 
 // isOpenAIReasoningModel reports whether model is an OpenAI reasoning model that

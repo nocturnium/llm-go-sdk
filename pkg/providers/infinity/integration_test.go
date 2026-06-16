@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // TestEmbed tests embedding generation.

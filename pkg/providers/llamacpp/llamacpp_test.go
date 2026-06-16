@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk"
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestNew(t *testing.T) {
