@@ -27,6 +27,11 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 		{ProviderGemini, "gemini-2.5-pro"},
 		{ProviderGemini, "gemini-2.5-flash"},
 		{ProviderDeepSeek, "deepseek-chat"},
+		{ProviderGroq, "llama-3.3-70b-versatile"},
+		{ProviderFireworks, "accounts/fireworks/models/llama-v3p1-70b-instruct"},
+		{ProviderPerplexity, "sonar"},
+		{ProviderZAI, "glm-4.7"},
+		{ProviderZAI, "glm-4.7-Flash"},
 	}
 	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
 	for _, c := range cases {
@@ -50,6 +55,11 @@ func TestPricing_DefaultPricing(t *testing.T) {
 		"gemini:gemini-1.5-pro",
 		"gemini:gemini-1.5-flash",
 		"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo",
+		"groq:llama-3.3-70b-versatile",
+		"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct",
+		"perplexity:sonar",
+		"zai:glm-4.7",
+		"zai:glm-4.7-Flash",
 	}
 
 	for _, model := range expectedModels {
@@ -596,6 +606,28 @@ func TestEstimateCost_UnknownPricing(t *testing.T) {
 	}
 	if cost != 0 {
 		t.Errorf("cost = %f, want 0", cost)
+	}
+}
+
+func TestEstimateCostKnown_LocalProvidersIntentionallyUnpriced(t *testing.T) {
+	tests := []struct {
+		provider Provider
+		model    string
+	}{
+		{ProviderOllama, "llama3.1"},
+		{ProviderLlamaCpp, "llama3.1"},
+	}
+
+	for _, tc := range tests {
+		t.Run(string(tc.provider), func(t *testing.T) {
+			cost, known := EstimateCostKnown(tc.provider, tc.model, Usage{PromptTokens: 1000})
+			if known {
+				t.Fatal("expected pricing to be unknown")
+			}
+			if cost != 0 {
+				t.Errorf("cost = %f, want 0", cost)
+			}
+		})
 	}
 }
 
