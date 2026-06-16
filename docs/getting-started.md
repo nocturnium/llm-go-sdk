@@ -35,6 +35,22 @@ Each provider lives under `pkg/providers/<name>`. For OpenAI:
 import "github.com/nocturnium/llm-go-sdk/pkg/providers/openai"
 ```
 
+## Choosing how to construct a client
+
+There are three coherent construction mechanisms. Pick one based on who decides
+the provider and whether you are authoring a provider or consuming one.
+
+| Mechanism | Use when |
+| --- | --- |
+| Direct provider constructor: `<pkg>.New(...WithModel...)`, for example `openai.New(openai.WithModel("gpt-4o"))` | The provider is known at compile time and you want strongly typed, provider-specific options. |
+| Name-based registry: `llms.New(name, llms.Config{...})` / `llms.NewFromEnv()` with a blank import of `pkg/providers/all` | The provider is chosen at runtime from configuration, environment, user input, or a CLI flag. |
+| OpenAI-compatible base provider: `openaicompat.NewClient(...)` + `openaicompat.NewBaseProvider(...)` | You are authoring a new OpenAI-compatible provider; this is not the normal end-user client constructor. |
+
+Two APIs also share the name `WithModel` at different layers:
+`openai.WithModel`, `anthropic.WithModel`, and other provider-specific options
+set a construction-time default on the client; `llms.WithModel` is a per-call
+override passed to `GenerateContent`, `Stream`, or `llms.Call`.
+
 ## Configure an API key
 
 Every provider reads its key from an environment variable by default, so you

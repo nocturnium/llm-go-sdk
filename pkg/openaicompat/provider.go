@@ -50,6 +50,10 @@ type BaseProvider struct {
 }
 
 // NewBaseProvider creates a new base provider with the given configuration.
+// It is a provider-author extension point for implementing a new
+// OpenAI-compatible provider on top of Client, not an end-user client
+// constructor. End users normally construct clients through provider packages
+// such as openai.New or through the llms.New registry path.
 func NewBaseProvider(client *Client, config ProviderConfig) BaseProvider {
 	return BaseProvider{
 		client:         client,

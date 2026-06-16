@@ -1,5 +1,9 @@
 # Building a Custom Provider
 
+For the canonical decision tree that distinguishes direct constructors, the
+registry, and the `pkg/openaicompat` provider-author extension point, see
+[Choosing how to construct a client](../getting-started.md#choosing-how-to-construct-a-client).
+
 Most LLM services speak the OpenAI chat-completions wire format. The SDK ships a
 reusable building block, `pkg/openaicompat`, that factors out the request/response
 machinery so a new OpenAI-compatible provider can be implemented in a few dozen

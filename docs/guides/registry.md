@@ -1,5 +1,9 @@
 # Provider Registry (Construct by Name)
 
+For the canonical decision tree that distinguishes direct constructors, the
+registry, and the `pkg/openaicompat` provider-author extension point, see
+[Choosing how to construct a client](../getting-started.md#choosing-how-to-construct-a-client).
+
 Most of the SDK constructs a client through a provider package, e.g.
 `openai.New(openai.WithModel("gpt-4o"))`. That is the right approach when the
 provider is known at compile time. When the provider is chosen at **runtime** —

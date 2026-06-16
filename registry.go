@@ -76,6 +76,10 @@ func RegisterProvider(name string, factory ProviderFactory) {
 //
 // The name lookup is case-insensitive. It returns an error when the provider
 // has not been registered, including the current registered provider list.
+// Prefer direct provider constructors such as openai.New or anthropic.New when
+// the provider is known at compile time. Use pkg/openaicompat.NewClient plus
+// pkg/openaicompat.NewBaseProvider when authoring a new OpenAI-compatible
+// provider, then register it here if callers should construct it by name.
 func New(name string, cfg Config) (LLM, error) {
 	key := normalizeProviderName(name)
 

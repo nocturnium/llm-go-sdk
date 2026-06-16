@@ -224,7 +224,10 @@ func WithJSONSchema(name string, schema json.RawMessage, strict bool) CallOption
 	}
 }
 
-// WithModel sets the model to use for this call (overrides provider default)
+// WithModel sets the model to use for this call only, overriding the client's
+// construction-time default for this GenerateContent, Stream, or Call
+// invocation. To set a client's default model at construction time, use the
+// provider-specific option such as openai.WithModel or anthropic.WithModel.
 func WithModel(model string) CallOption {
 	return func(o *CallOptions) {
 		o.Model = model
