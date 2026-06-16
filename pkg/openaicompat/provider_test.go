@@ -1,6 +1,7 @@
 package openaicompat_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -104,10 +105,10 @@ func TestBaseProvider_ValidatesToolCallIDs(t *testing.T) {
 		{Role: llms.RoleTool, Name: "get_weather", Content: `{"temp":72}`},
 	}
 
-	_, err := bp.GenerateContent(nil, messages)
+	_, err := bp.GenerateContent(context.Background(), messages)
 	assertValidationField(t, err, "messages[2].tool_call_id")
 
-	_, err = bp.Stream(nil, messages)
+	_, err = bp.Stream(context.Background(), messages)
 	assertValidationField(t, err, "messages[2].tool_call_id")
 }
 
@@ -122,10 +123,10 @@ func TestBaseProvider_ValidatesInlineSystem(t *testing.T) {
 		{Role: llms.RoleSystem, Content: "Be concise"},
 	}
 
-	_, err := bp.GenerateContent(nil, messages, llms.WithDisableMessageMerging())
+	_, err := bp.GenerateContent(context.Background(), messages, llms.WithDisableMessageMerging())
 	assertValidationField(t, err, "messages[1].role")
 
-	_, err = bp.Stream(nil, messages, llms.WithDisableMessageMerging())
+	_, err = bp.Stream(context.Background(), messages, llms.WithDisableMessageMerging())
 	assertValidationField(t, err, "messages[1].role")
 }
 
