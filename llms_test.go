@@ -73,11 +73,11 @@ func TestDefaultCallOptions(t *testing.T) {
 	if opts.TopP != nil {
 		t.Errorf("expected default top_p to be nil (unset), got %v", *opts.TopP)
 	}
-	if opts.FrequencyPenalty != 0 {
-		t.Errorf("expected default frequency penalty to be 0, got %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty != nil {
+		t.Errorf("expected default frequency penalty to be nil (unset), got %v", *opts.FrequencyPenalty)
 	}
-	if opts.PresencePenalty != 0 {
-		t.Errorf("expected default presence penalty to be 0, got %f", opts.PresencePenalty)
+	if opts.PresencePenalty != nil {
+		t.Errorf("expected default presence penalty to be nil (unset), got %v", *opts.PresencePenalty)
 	}
 	if opts.StopWords != nil {
 		t.Error("expected default stop words to be nil")
@@ -116,15 +116,15 @@ func TestWithTopP(t *testing.T) {
 
 func TestWithFrequencyPenalty(t *testing.T) {
 	opts := ApplyOptions(WithFrequencyPenalty(0.5))
-	if opts.FrequencyPenalty != 0.5 {
-		t.Errorf("expected frequency penalty to be 0.5, got %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty == nil || *opts.FrequencyPenalty != 0.5 {
+		t.Errorf("expected frequency penalty to be 0.5, got %v", opts.FrequencyPenalty)
 	}
 }
 
 func TestWithPresencePenalty(t *testing.T) {
 	opts := ApplyOptions(WithPresencePenalty(0.3))
-	if opts.PresencePenalty != 0.3 {
-		t.Errorf("expected presence penalty to be 0.3, got %f", opts.PresencePenalty)
+	if opts.PresencePenalty == nil || *opts.PresencePenalty != 0.3 {
+		t.Errorf("expected presence penalty to be 0.3, got %v", opts.PresencePenalty)
 	}
 }
 
@@ -158,11 +158,11 @@ func TestApplyMultipleOptions(t *testing.T) {
 	if opts.TopP == nil || *opts.TopP != 0.95 {
 		t.Errorf("expected top_p 0.95, got %v", opts.TopP)
 	}
-	if opts.FrequencyPenalty != 0.2 {
-		t.Errorf("expected frequency penalty 0.2, got %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty == nil || *opts.FrequencyPenalty != 0.2 {
+		t.Errorf("expected frequency penalty 0.2, got %v", opts.FrequencyPenalty)
 	}
-	if opts.PresencePenalty != 0.1 {
-		t.Errorf("expected presence penalty 0.1, got %f", opts.PresencePenalty)
+	if opts.PresencePenalty == nil || *opts.PresencePenalty != 0.1 {
+		t.Errorf("expected presence penalty 0.1, got %v", opts.PresencePenalty)
 	}
 	if len(opts.StopWords) != 1 || opts.StopWords[0] != "done" {
 		t.Errorf("unexpected stop words: %v", opts.StopWords)
@@ -717,8 +717,8 @@ func TestCallOptionsStruct(t *testing.T) {
 		Temperature:      &temp,
 		MaxTokens:        intPtr(2048),
 		TopP:             &topP,
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.3,
+		FrequencyPenalty: float64Ptr(0.5),
+		PresencePenalty:  float64Ptr(0.3),
 		StopWords:        []string{testStop},
 		Tools:            tools,
 		ToolChoice:       &ToolChoice{Type: ToolChoiceAuto},
@@ -737,11 +737,11 @@ func TestCallOptionsStruct(t *testing.T) {
 	if opts.TopP == nil || *opts.TopP != 0.95 {
 		t.Errorf("unexpected top p: %v", opts.TopP)
 	}
-	if opts.FrequencyPenalty != 0.5 {
-		t.Errorf("unexpected frequency penalty: %f", opts.FrequencyPenalty)
+	if opts.FrequencyPenalty == nil || *opts.FrequencyPenalty != 0.5 {
+		t.Errorf("unexpected frequency penalty: %v", opts.FrequencyPenalty)
 	}
-	if opts.PresencePenalty != 0.3 {
-		t.Errorf("unexpected presence penalty: %f", opts.PresencePenalty)
+	if opts.PresencePenalty == nil || *opts.PresencePenalty != 0.3 {
+		t.Errorf("unexpected presence penalty: %v", opts.PresencePenalty)
 	}
 	if len(opts.StopWords) != 1 {
 		t.Errorf("expected 1 stop word, got %d", len(opts.StopWords))

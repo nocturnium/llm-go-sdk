@@ -20,6 +20,12 @@ func TestCallOptions_Defaults(t *testing.T) {
 	if opts.TopP != nil {
 		t.Errorf("expected TopP to be nil (unset), got %v", *opts.TopP)
 	}
+	if opts.FrequencyPenalty != nil {
+		t.Errorf("expected FrequencyPenalty to be nil (unset), got %v", *opts.FrequencyPenalty)
+	}
+	if opts.PresencePenalty != nil {
+		t.Errorf("expected PresencePenalty to be nil (unset), got %v", *opts.PresencePenalty)
+	}
 	if opts.StreamBufferSize != 100 {
 		t.Errorf("expected StreamBufferSize 100, got %d", opts.StreamBufferSize)
 	}
@@ -136,6 +142,26 @@ func TestApplyOptions_MultipleTraceOptions(t *testing.T) {
 	}
 }
 
+func TestApplyOptions_PenaltyZeroIsExplicit(t *testing.T) {
+	opts := ApplyOptions(
+		WithFrequencyPenalty(0),
+		WithPresencePenalty(0),
+	)
+
+	if opts.FrequencyPenalty == nil {
+		t.Fatal("expected FrequencyPenalty to be set")
+	}
+	if *opts.FrequencyPenalty != 0 {
+		t.Errorf("expected FrequencyPenalty 0, got %v", *opts.FrequencyPenalty)
+	}
+	if opts.PresencePenalty == nil {
+		t.Fatal("expected PresencePenalty to be set")
+	}
+	if *opts.PresencePenalty != 0 {
+		t.Errorf("expected PresencePenalty 0, got %v", *opts.PresencePenalty)
+	}
+}
+
 func TestCallOptions_Validate_Valid(t *testing.T) {
 	opts := DefaultCallOptions()
 	err := opts.Validate()
@@ -213,7 +239,7 @@ func TestCallOptions_Validate_InvalidFrequencyPenalty(t *testing.T) {
 			opts := &CallOptions{
 				Temperature:      float64Ptr(0.7),
 				TopP:             float64Ptr(1.0),
-				FrequencyPenalty: tt.penalty,
+				FrequencyPenalty: float64Ptr(tt.penalty),
 			}
 			if err := opts.Validate(); err == nil {
 				t.Error("expected validation error")
@@ -226,7 +252,7 @@ func TestCallOptions_Validate_InvalidPresencePenalty(t *testing.T) {
 	opts := &CallOptions{
 		Temperature:     float64Ptr(0.7),
 		TopP:            float64Ptr(1.0),
-		PresencePenalty: 2.5,
+		PresencePenalty: float64Ptr(2.5),
 	}
 	if err := opts.Validate(); err == nil {
 		t.Error("expected validation error")

@@ -671,8 +671,8 @@ func TestLogEntry_PopulateFromCallOptions(t *testing.T) {
 		Temperature:      float64Ptr(0.7),
 		MaxTokens:        intPtr(1000),
 		TopP:             float64Ptr(0.9),
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.3,
+		FrequencyPenalty: float64Ptr(0.5),
+		PresencePenalty:  float64Ptr(0.3),
 		ResponseFormat:   &ResponseFormat{Type: ResponseFormatJSONObject},
 		Trace: &TraceOptions{
 			TraceID:   "opt-trace",

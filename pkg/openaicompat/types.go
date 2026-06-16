@@ -21,8 +21,8 @@ type ChatCompletionRequest struct {
 	// MaxCompletionTokens is the OpenAI reasoning-model replacement for max_tokens.
 	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
 	TopP                *float64        `json:"top_p,omitempty"`
-	FrequencyPenalty    float64         `json:"frequency_penalty,omitempty"`
-	PresencePenalty     float64         `json:"presence_penalty,omitempty"`
+	FrequencyPenalty    *float64        `json:"frequency_penalty,omitempty"`
+	PresencePenalty     *float64        `json:"presence_penalty,omitempty"`
 	Stop                []string        `json:"stop,omitempty"`
 	Stream              bool            `json:"stream,omitempty"`
 	Tools               []Tool          `json:"tools,omitempty"`
@@ -74,11 +74,11 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 	if r.TopP != nil {
 		m["top_p"] = *r.TopP
 	}
-	if r.FrequencyPenalty != 0 {
-		m["frequency_penalty"] = r.FrequencyPenalty
+	if r.FrequencyPenalty != nil {
+		m["frequency_penalty"] = *r.FrequencyPenalty
 	}
-	if r.PresencePenalty != 0 {
-		m["presence_penalty"] = r.PresencePenalty
+	if r.PresencePenalty != nil {
+		m["presence_penalty"] = *r.PresencePenalty
 	}
 	if len(r.Stop) > 0 {
 		m["stop"] = r.Stop

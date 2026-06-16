@@ -608,11 +608,11 @@ func (m *LangfuseOTelMiddleware) setGenAIRequestAttributes(span trace.Span, opts
 	if opts.TopP != nil {
 		span.SetAttributes(keyGenAIRequestTopP.Float64(*opts.TopP))
 	}
-	if opts.FrequencyPenalty != 0 {
-		span.SetAttributes(keyGenAIRequestFrequencyPenalty.Float64(opts.FrequencyPenalty))
+	if opts.FrequencyPenalty != nil {
+		span.SetAttributes(keyGenAIRequestFrequencyPenalty.Float64(*opts.FrequencyPenalty))
 	}
-	if opts.PresencePenalty != 0 {
-		span.SetAttributes(keyGenAIRequestPresencePenalty.Float64(opts.PresencePenalty))
+	if opts.PresencePenalty != nil {
+		span.SetAttributes(keyGenAIRequestPresencePenalty.Float64(*opts.PresencePenalty))
 	}
 }
 

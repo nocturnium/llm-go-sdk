@@ -332,8 +332,8 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 		req.MaxTokens = nil
 		req.Temperature = nil
 		req.TopP = nil
-		req.FrequencyPenalty = 0
-		req.PresencePenalty = 0
+		req.FrequencyPenalty = nil
+		req.PresencePenalty = nil
 	}
 
 	if len(opts.Tools) > 0 {

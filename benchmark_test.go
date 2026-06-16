@@ -171,8 +171,8 @@ func BenchmarkCallOptionsValidate(b *testing.B) {
 		Temperature:      float64Ptr(0.7),
 		MaxTokens:        intPtr(1000),
 		TopP:             float64Ptr(0.9),
-		FrequencyPenalty: 0.5,
-		PresencePenalty:  0.5,
+		FrequencyPenalty: float64Ptr(0.5),
+		PresencePenalty:  float64Ptr(0.5),
 		Tools: []Tool{
 			NewFunctionTool("test", "Test function", nil),
 		},
