@@ -382,6 +382,86 @@ func TestClient_Stream_Integration(t *testing.T) {
 	}
 }
 
+func TestClient_Stream_EmptySafetyFinishErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		finishReason string
+	}{
+		{name: "safety", finishReason: "SAFETY"},
+		{name: "recitation", finishReason: "RECITATION"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.Contains(r.URL.Path, ":streamGenerateContent") {
+					t.Errorf("expected :streamGenerateContent in path, got %s", r.URL.Path)
+				}
+				if r.URL.Query().Get("alt") != "sse" {
+					t.Error("expected alt=sse query parameter")
+				}
+
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("Connection", "keep-alive")
+
+				flusher, ok := w.(http.Flusher)
+				if !ok {
+					t.Error("expected ResponseWriter to support Flusher")
+					return
+				}
+
+				chunk := `{"candidates":[{"finishReason":"` + tc.finishReason + `"}]}`
+				_, _ = w.Write([]byte("data: " + chunk + "\n\n"))
+				flusher.Flush()
+			}))
+			defer server.Close()
+
+			client, err := New(
+				WithAPIKey("test-api-key"),
+				WithBaseURL(server.URL),
+				WithAllowPrivateIPs(), WithAllowHTTP(),
+			)
+			if err != nil {
+				t.Fatalf("failed to create client: %v", err)
+			}
+
+			chunks, err := client.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hi"}})
+			if err != nil {
+				t.Fatalf("Stream failed: %v", err)
+			}
+
+			var content strings.Builder
+			var errChunks int
+			var totalChunks int
+			var streamErr error
+
+			for chunk := range chunks {
+				totalChunks++
+				content.WriteString(chunk.Content)
+				if chunk.Error != nil {
+					errChunks++
+					streamErr = chunk.Error
+				}
+			}
+
+			if content.String() != "" {
+				t.Fatalf("expected no accumulated content, got %q", content.String())
+			}
+			if totalChunks != 1 {
+				t.Fatalf("expected exactly one terminal chunk, got %d", totalChunks)
+			}
+			if errChunks != 1 {
+				t.Fatalf("expected exactly one error chunk, got %d", errChunks)
+			}
+			msg := streamErr.Error()
+			if !strings.Contains(msg, tc.finishReason) || !strings.Contains(msg, "no content") {
+				t.Fatalf("expected error to mention %q and no content, got %q", tc.finishReason, msg)
+			}
+		})
+	}
+}
+
 func TestClient_Stream_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
