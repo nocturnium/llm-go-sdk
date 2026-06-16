@@ -2,6 +2,7 @@ package llms
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -78,6 +79,42 @@ func TestRegistry_UnknownProvider(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "registryknown") {
 		t.Fatalf("error %q does not include registered provider list", err.Error())
+	}
+}
+
+func TestConfigRequireExtra(t *testing.T) {
+	cfg := Config{Extra: map[string]string{"present": " value "}}
+
+	value, err := cfg.RequireExtra("test-provider", "present")
+	if err != nil {
+		t.Fatalf("RequireExtra returned error: %v", err)
+	}
+	if value != " value " {
+		t.Fatalf("RequireExtra value = %q, want original value", value)
+	}
+
+	for _, tc := range []struct {
+		name string
+		cfg  Config
+	}{
+		{name: "missing", cfg: Config{}},
+		{name: "blank", cfg: Config{Extra: map[string]string{"required": " \t\n"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.cfg.RequireExtra("test-provider", "required")
+			if err == nil {
+				t.Fatal("RequireExtra returned nil error")
+			}
+			if !errors.Is(err, ErrInvalidParameters) {
+				t.Fatalf("RequireExtra error = %v, want ErrInvalidParameters", err)
+			}
+			if !strings.Contains(err.Error(), "test-provider") {
+				t.Fatalf("error %q does not include provider name", err.Error())
+			}
+			if !strings.Contains(err.Error(), "required") {
+				t.Fatalf("error %q does not include required key", err.Error())
+			}
+		})
 	}
 }
 

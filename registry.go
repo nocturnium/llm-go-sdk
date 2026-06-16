@@ -14,8 +14,8 @@ import (
 //
 // Extra carries provider-specific construction parameters that do not have a
 // common SDK field. Recognized keys:
-//   - runpod: "endpoint_id" sets the required serverless endpoint ID.
-//   - zai: "coding" set to "true", "1", or "yes" enables the Coding API.
+//   - runpod: ExtraRunPodEndpointID sets the required serverless endpoint ID.
+//   - zai: ExtraZAICoding set to "true", "1", or "yes" enables the Coding API.
 type Config struct {
 	APIKey          string
 	Model           string
@@ -24,6 +24,27 @@ type Config struct {
 	AllowPrivateIPs bool
 	HTTPClient      *http.Client
 	Extra           map[string]string
+}
+
+// Recognized Config.Extra keys for provider-specific construction settings.
+const (
+	// ExtraRunPodEndpointID is the Config.Extra key for the required RunPod serverless endpoint ID.
+	ExtraRunPodEndpointID = "endpoint_id"
+
+	// ExtraZAICoding is the Config.Extra key for enabling the optional Z.AI Coding API endpoint.
+	ExtraZAICoding = "coding"
+)
+
+// RequireExtra returns the non-blank Config.Extra value for key.
+//
+// If the key is absent or blank, RequireExtra returns an error that names both
+// the provider and key and wraps ErrInvalidParameters.
+func (c Config) RequireExtra(provider, key string) (string, error) {
+	value := c.Extra[key]
+	if strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("llms: provider %q: missing required config key %q: %w", provider, key, ErrInvalidParameters)
+	}
+	return value, nil
 }
 
 // ProviderFactory constructs an LLM provider from common configuration.

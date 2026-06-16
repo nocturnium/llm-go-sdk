@@ -61,7 +61,7 @@ func TestAllConstructsRunPodWithEndpointIDExtra(t *testing.T) {
 	t.Setenv("RUNPOD_API_KEY", "test-key")
 
 	llm, err := llms.New("runpod", llms.Config{
-		Extra: map[string]string{"endpoint_id": "ep-123"},
+		Extra: map[string]string{llms.ExtraRunPodEndpointID: "ep-123"},
 	})
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)

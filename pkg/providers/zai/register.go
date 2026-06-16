@@ -12,7 +12,7 @@ func init() {
 		if cfg.APIKey != "" {
 			opts = append(opts, WithAPIKey(cfg.APIKey))
 		}
-		if isExtraEnabled(cfg.Extra["coding"]) {
+		if isExtraEnabled(cfg.Extra[llms.ExtraZAICoding]) {
 			opts = append(opts, WithUseCodingAPI())
 		}
 		if cfg.Model != "" {
