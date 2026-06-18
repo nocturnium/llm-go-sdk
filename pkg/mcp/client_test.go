@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os/exec"
 	"strconv"
@@ -19,7 +20,7 @@ import (
 type mockTransport struct {
 	mu            sync.Mutex
 	results       map[string][][]byte // queued result payloads per method (last is reused)
-	errs          map[string]*rpcError
+	errs          map[string]*RPCError
 	calls         []recordedCall
 	notifications []string
 	closed        bool
@@ -31,7 +32,7 @@ type recordedCall struct {
 }
 
 func newMockTransport() *mockTransport {
-	m := &mockTransport{results: map[string][][]byte{}, errs: map[string]*rpcError{}}
+	m := &mockTransport{results: map[string][][]byte{}, errs: map[string]*RPCError{}}
 	m.queue(methodInitialize, InitializeResult{
 		ProtocolVersion: protocolVersion,
 		ServerInfo:      Implementation{Name: "test-server", Version: "1.0"},
@@ -75,7 +76,7 @@ func (m *mockTransport) request(_ context.Context, id int64, payload []byte) ([]
 	case result != nil:
 		resp.Result = result
 	default:
-		resp.Error = &rpcError{Code: -32601, Message: "method not found: " + probe.Method}
+		resp.Error = &RPCError{Code: -32601, Message: "method not found: " + probe.Method}
 	}
 	return json.Marshal(resp)
 }
@@ -131,7 +132,7 @@ func TestClient_InitializeHandshake(t *testing.T) {
 
 func TestClient_InitializeError(t *testing.T) {
 	m := newMockTransport()
-	m.errs[methodInitialize] = &rpcError{Code: -32000, Message: "boom"}
+	m.errs[methodInitialize] = &RPCError{Code: -32000, Message: "boom"}
 
 	if _, err := newClient(context.Background(), m, buildConfig(nil)); err == nil {
 		t.Fatal("expected initialize error")
@@ -283,6 +284,33 @@ func TestClient_RegisterToolError(t *testing.T) {
 	}
 	if msg.Content == "" {
 		t.Error("expected an error tool-result message")
+	}
+
+	// The underlying handler error must be a *ToolError carrying the tool name and
+	// content, so callers can distinguish a tool-level failure from a protocol error.
+	_, herr := c.toolHandler("boom")(context.Background(), json.RawMessage(`{}`))
+	var toolErr *ToolError
+	if !errors.As(herr, &toolErr) {
+		t.Fatalf("error = %v, want *ToolError", herr)
+	}
+	if toolErr.Tool != "boom" || toolErr.Content != "kaboom" {
+		t.Errorf("ToolError = %+v, want {boom kaboom}", toolErr)
+	}
+}
+
+// A protocol-level failure on tools/call must surface as an inspectable *RPCError.
+func TestClient_CallToolRPCError(t *testing.T) {
+	m := newMockTransport()
+	m.errs[methodToolsCall] = &RPCError{Code: CodeMethodNotFound, Message: "no such tool"}
+	c := mustClient(t, m)
+
+	_, err := c.CallTool(context.Background(), "missing", json.RawMessage(`{}`))
+	var rpcErr *RPCError
+	if !errors.As(err, &rpcErr) {
+		t.Fatalf("error = %v, want *RPCError", err)
+	}
+	if rpcErr.Code != CodeMethodNotFound {
+		t.Errorf("code = %d, want %d", rpcErr.Code, CodeMethodNotFound)
 	}
 }
 

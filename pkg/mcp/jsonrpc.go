@@ -26,22 +26,46 @@ type rpcNotification struct {
 	Params  any    `json:"params,omitempty"`
 }
 
+// Standard JSON-RPC 2.0 error codes (see the JSON-RPC and MCP specs). Servers may
+// also return implementation-defined codes; inspect RPCError.Code directly for those.
+const (
+	// CodeParseError indicates invalid JSON was received by the server.
+	CodeParseError = -32700
+	// CodeInvalidRequest indicates the payload was not a valid Request object.
+	CodeInvalidRequest = -32600
+	// CodeMethodNotFound indicates the requested method does not exist.
+	CodeMethodNotFound = -32601
+	// CodeInvalidParams indicates invalid method parameters.
+	CodeInvalidParams = -32602
+	// CodeInternalError indicates an internal JSON-RPC error.
+	CodeInternalError = -32603
+)
+
 // rpcResponse is a JSON-RPC 2.0 response.
 type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
-	Error   *rpcError       `json:"error,omitempty"`
+	Error   *RPCError       `json:"error,omitempty"`
 }
 
-// rpcError is a JSON-RPC 2.0 error object.
-type rpcError struct {
+// RPCError is a JSON-RPC 2.0 error object returned by an MCP server. Calls such as
+// [Client.CallTool] and [Client.ListTools] wrap it, so callers can inspect the
+// protocol-level code with errors.As:
+//
+//	var rpcErr *mcp.RPCError
+//	if errors.As(err, &rpcErr) && rpcErr.Code == mcp.CodeMethodNotFound {
+//	    // the server does not implement the method
+//	}
+//
+// A server-side tool that runs but reports failure is NOT an RPCError; see [ToolError].
+type RPCError struct {
 	Code    int             `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
-func (e *rpcError) Error() string {
+func (e *RPCError) Error() string {
 	if len(e.Data) > 0 {
 		return fmt.Sprintf("mcp: rpc error %d: %s (%s)", e.Code, e.Message, string(e.Data))
 	}
