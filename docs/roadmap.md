@@ -33,9 +33,9 @@ tools, and first-class reasoning items.
    `pkg/openaicompat`; `ProviderConfig.UseResponsesAPI` routes non-streaming `GenerateContent`
    through `/responses`; `openai.WithResponsesAPI()` opt-in. Basic `store`/`previous_response_id`
    pass-through via `CallOptions.ExtraBody`. Unit + round-trip + end-to-end tests.
-2. **Statefulness ergonomics.** Surface the response `id` on `llms.Response` (or a typed wrapper)
-   and add first-class options for `store` + `previous_response_id` so callers can chain
-   server-side conversation state without reaching into `ExtraBody`.
+2. ✅ **Statefulness ergonomics.** *(Shipped.)* `llms.Response.ID` is surfaced from both the
+   chat-completions and Responses converters; `openai.WithPreviousResponseID(id)` and
+   `openai.WithStore(bool)` chain server-side conversation state without touching `ExtraBody`.
 3. **Streaming.** Parse the Responses SSE event types (`response.output_text.delta`,
    `response.reasoning.*`, `response.completed`, …) into the existing `StreamChunk` channel
    (currently `Stream` stays on chat completions).
