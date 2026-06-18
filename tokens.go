@@ -4,6 +4,21 @@ import (
 	"unicode"
 )
 
+// Tokenizer counts tokens for a model's exact encoding.
+//
+// The core package ships only the chars-per-token heuristic (see TokenEstimator);
+// an accurate BPE implementation lives in the opt-in subpackage pkg/tokenizer so
+// the core stays free of tokenizer dependencies. Plug one in via
+// TokenEstimator.Tokenizer:
+//
+//	est := llms.DefaultTokenEstimator()
+//	est.Tokenizer, _ = tokenizer.ForModel("gpt-4o")
+//	n := est.EstimateTokens("hello world") // exact, not heuristic
+type Tokenizer interface {
+	// CountTokens returns the number of tokens text encodes to.
+	CountTokens(text string) int
+}
+
 // TokenEstimator provides token count estimation for text.
 // This is useful as a fallback when providers don't return token counts.
 //
@@ -13,9 +28,15 @@ import (
 //   - Whitespace handling matches typical BPE tokenizers
 //
 // Note: These are estimates. Actual token counts vary by model and tokenizer.
+// Set Tokenizer for exact counts (see pkg/tokenizer).
 type TokenEstimator struct {
 	// CharsPerToken is the average characters per token (default: 4.0)
 	CharsPerToken float64
+
+	// Tokenizer, when non-nil, produces exact token counts for text content and
+	// overrides the CharsPerToken heuristic. Message-structure overhead is still
+	// added on top (see EstimateMessages).
+	Tokenizer Tokenizer
 }
 
 // DefaultTokenEstimator returns a token estimator with default settings.
@@ -30,6 +51,11 @@ func DefaultTokenEstimator() *TokenEstimator {
 func (e *TokenEstimator) EstimateTokens(text string) int {
 	if text == "" {
 		return 0
+	}
+
+	// Exact path: use the configured tokenizer when present.
+	if e.Tokenizer != nil {
+		return e.Tokenizer.CountTokens(text)
 	}
 
 	charsPerToken := e.CharsPerToken

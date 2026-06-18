@@ -39,9 +39,22 @@ func SchemaFrom[T any]() (json.RawMessage, error) {
 	return cloneRawMessage(stored), nil
 }
 
+// RepairOptions configures the self-repair loop of GenerateTypedWithRepair.
+type RepairOptions struct {
+	// MaxRepairAttempts is the number of additional model calls to make after the
+	// first response fails to parse into T. 0 means no model-driven repair (local
+	// JSON extraction is still attempted). Each repair turn feeds the model its
+	// previous output and the parse error and asks for corrected JSON.
+	MaxRepairAttempts int
+}
+
 // GenerateTyped generates content with a JSON Schema response format and unmarshals
 // the response content into T. If opts already include a json_schema response
 // format, that schema is used; otherwise SchemaFrom[T] is applied automatically.
+//
+// If the model wraps its JSON in markdown fences or surrounding prose, GenerateTyped
+// transparently extracts the embedded JSON before unmarshaling. For model-driven
+// retries on persistent failures, use GenerateTypedWithRepair.
 //
 // The auto-generated schema is emitted in OpenAI strict mode. Fields whose Go type
 // has no closed JSON Schema shape — json.RawMessage, interface{}, and maps with
@@ -49,6 +62,21 @@ func SchemaFrom[T any]() (json.RawMessage, error) {
 // validators reject. For structs containing such fields, supply a hand-authored
 // schema via WithJSONSchema instead of relying on the auto-strict path.
 func GenerateTyped[T any](ctx context.Context, llm LLM, messages []Message, opts ...CallOption) (T, *Response, error) {
+	return generateTyped[T](ctx, llm, messages, RepairOptions{}, opts...)
+}
+
+// GenerateTypedWithRepair behaves like GenerateTyped but, when the response fails
+// to parse into T, sends the model its invalid output plus the parse error and asks
+// it to return corrected JSON, up to repair.MaxRepairAttempts times. Local JSON
+// extraction (stripping code fences/prose) is attempted on every response before a
+// repair turn is spent, so malformed-wrapper cases cost no extra model calls.
+//
+// Transport errors are returned immediately and never trigger a repair turn.
+func GenerateTypedWithRepair[T any](ctx context.Context, llm LLM, messages []Message, repair RepairOptions, opts ...CallOption) (T, *Response, error) {
+	return generateTyped[T](ctx, llm, messages, repair, opts...)
+}
+
+func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repair RepairOptions, opts ...CallOption) (T, *Response, error) {
 	var zero T
 
 	applied := ApplyOptions(opts...)
@@ -61,19 +89,103 @@ func GenerateTyped[T any](ctx context.Context, llm LLM, messages []Message, opts
 		callOpts = append(append([]CallOption(nil), opts...), WithJSONSchema(schemaNameForType(reflect.TypeOf((*T)(nil)).Elem()), schema, true))
 	}
 
-	resp, err := llm.GenerateContent(ctx, messages, callOpts...)
-	if err != nil {
-		return zero, resp, err
-	}
-	if resp == nil {
-		return zero, nil, fmt.Errorf("llms: structured output response is nil")
+	attempts := max(repair.MaxRepairAttempts+1, 1)
+
+	convo := append([]Message(nil), messages...)
+	var lastResp *Response
+	var lastErr error
+
+	for attempt := 0; attempt < attempts; attempt++ {
+		resp, err := llm.GenerateContent(ctx, convo, callOpts...)
+		if err != nil {
+			return zero, resp, err
+		}
+		if resp == nil {
+			return zero, nil, fmt.Errorf("llms: structured output response is nil")
+		}
+		lastResp = resp
+
+		value, perr := parseTyped[T](resp.Content)
+		if perr == nil {
+			return value, resp, nil
+		}
+		lastErr = perr
+
+		// Queue a repair turn unless this was the final attempt.
+		if attempt < attempts-1 {
+			convo = append(convo,
+				Message{Role: RoleAssistant, Content: resp.Content},
+				Message{Role: RoleUser, Content: repairPrompt(perr)},
+			)
+		}
 	}
 
+	return zero, lastResp, fmt.Errorf("llms: structured output invalid after %d attempt(s): %w", attempts, lastErr)
+}
+
+// parseTyped unmarshals content into T, first directly and then, if that fails,
+// from JSON embedded in markdown fences or surrounding prose.
+func parseTyped[T any](content string) (T, error) {
 	var value T
-	if err := json.Unmarshal([]byte(resp.Content), &value); err != nil {
-		return zero, resp, fmt.Errorf("llms: structured output is not valid JSON: %w", err)
+	if err := json.Unmarshal([]byte(content), &value); err == nil {
+		return value, nil
 	}
-	return value, resp, nil
+	if extracted, ok := extractJSON(content); ok {
+		var v T
+		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
+			return v, nil
+		}
+	}
+	var zero T
+	return zero, fmt.Errorf("llms: structured output is not valid JSON")
+}
+
+// repairPrompt is the correction instruction sent to the model on a repair turn.
+func repairPrompt(parseErr error) string {
+	return "Your previous reply could not be parsed as JSON matching the required schema (" +
+		parseErr.Error() + "). Reply again with ONLY the corrected JSON object — no prose, " +
+		"no markdown code fences, no explanation."
+}
+
+// extractJSON finds the first balanced JSON object or array embedded in s,
+// ignoring braces inside strings. It handles markdown code fences and prose
+// around the JSON. The boolean is false when no balanced JSON value is found.
+func extractJSON(s string) (string, bool) {
+	start := strings.IndexAny(s, "{[")
+	if start < 0 {
+		return "", false
+	}
+
+	open := s[start]
+	closeCh := byte('}')
+	if open == '[' {
+		closeCh = ']'
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case escaped:
+			escaped = false
+		case c == '\\' && inString:
+			escaped = true
+		case c == '"':
+			inString = !inString
+		case inString:
+			// skip structural characters inside strings
+		case c == open:
+			depth++
+		case c == closeCh:
+			depth--
+			if depth == 0 {
+				return s[start : i+1], true
+			}
+		}
+	}
+	return "", false
 }
 
 func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any, error) {
