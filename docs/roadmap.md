@@ -28,19 +28,18 @@ Scoped here so they can be picked up as focused PRs.
 tools, and first-class reasoning items.
 
 **Scope (sequence as separate PRs):**
-1. **Types + non-streaming client.** Add Responses request/response types to `pkg/openaicompat`
-   and a `Responses(ctx, ...)` client method hitting `/responses`. Map `[]llms.Message` →
-   the `input` item array; parse `output` items (`message`/`output_text`, `function_call`,
-   `reasoning`) back into `*llms.Response` (content + `ToolCalls` + reasoning). Unit-test with a
-   mock transport, mirroring `engine_test.go`.
-2. **Provider opt-in.** A client option on `pkg/providers/openai` (e.g. `WithResponsesAPI()`)
-   that routes `GenerateContent` through `/responses`; default stays chat-completions for
-   compatibility.
-3. **Statefulness.** Support `store` + `previous_response_id` (surface via `CallOptions`
-   extras or a dedicated option) so callers can chain server-side conversation state.
-4. **Streaming.** Parse the Responses SSE event types (`response.output_text.delta`,
-   `response.reasoning.*`, `response.completed`, …) into the existing `StreamChunk` channel.
-5. **Reasoning-item round-trip.** For o-series models, pass prior `reasoning` items back on
+1. ✅ **Types + non-streaming client + provider opt-in.** *(Shipped.)* Responses wire types,
+   `Client.CreateResponse`, and `BuildResponsesRequest`/`ConvertResponsesResponse` in
+   `pkg/openaicompat`; `ProviderConfig.UseResponsesAPI` routes non-streaming `GenerateContent`
+   through `/responses`; `openai.WithResponsesAPI()` opt-in. Basic `store`/`previous_response_id`
+   pass-through via `CallOptions.ExtraBody`. Unit + round-trip + end-to-end tests.
+2. **Statefulness ergonomics.** Surface the response `id` on `llms.Response` (or a typed wrapper)
+   and add first-class options for `store` + `previous_response_id` so callers can chain
+   server-side conversation state without reaching into `ExtraBody`.
+3. **Streaming.** Parse the Responses SSE event types (`response.output_text.delta`,
+   `response.reasoning.*`, `response.completed`, …) into the existing `StreamChunk` channel
+   (currently `Stream` stays on chat completions).
+4. **Reasoning-item round-trip.** For o-series models, pass prior `reasoning` items back on
    the next turn. Needs live verification.
 
 **Risks:** distinct request/response shape and a new SSE event grammar; correctness needs
