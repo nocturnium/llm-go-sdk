@@ -25,6 +25,8 @@ type options struct {
 	// AllowHTTP allows plain-HTTP (non-HTTPS) requests.
 	AllowHTTP      bool
 	ProviderConfig *openaicompat.ProviderConfig
+	// responsesAPI routes non-streaming GenerateContent through the Responses API.
+	responsesAPI bool
 }
 
 // defaultOptions returns the default options for OpenAI.
@@ -38,6 +40,17 @@ func defaultOptions() *options {
 func WithProviderConfig(config *openaicompat.ProviderConfig) Option {
 	return func(o *options) {
 		o.ProviderConfig = config
+	}
+}
+
+// WithResponsesAPI routes non-streaming GenerateContent (and Call) through the
+// OpenAI Responses API (POST /responses) instead of /chat/completions. Streaming
+// continues to use the chat-completions endpoint. Pass server-side conversation
+// state via call options: llms.WithExtraBodyParam("previous_response_id", id) and
+// ("store", true).
+func WithResponsesAPI() Option {
+	return func(o *options) {
+		o.responsesAPI = true
 	}
 }
 

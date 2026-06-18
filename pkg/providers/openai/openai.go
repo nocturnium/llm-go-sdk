@@ -78,6 +78,9 @@ func New(opts ...Option) (*Client, error) {
 	if options.EmbeddingModel != "" {
 		providerConfig.DefaultEmbeddingModel = options.EmbeddingModel
 	}
+	if options.responsesAPI {
+		providerConfig.UseResponsesAPI = true
+	}
 
 	return &Client{
 		BaseProvider: openaicompat.NewBaseProvider(client, providerConfig),

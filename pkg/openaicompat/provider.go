@@ -23,6 +23,12 @@ type ProviderConfig struct {
 
 	// Capabilities defines what features this provider supports
 	Capabilities llms.Capabilities
+
+	// UseResponsesAPI routes non-streaming GenerateContent through the OpenAI
+	// Responses API (POST /responses) instead of /chat/completions. Streaming
+	// still uses the chat-completions path. Only meaningful for providers whose
+	// endpoint implements the Responses API (OpenAI).
+	UseResponsesAPI bool
 }
 
 // BaseProvider provides common functionality for OpenAI-compatible providers.
@@ -98,14 +104,23 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	}
 
 	model := effectiveModel(p.model, opts.Model)
-	req := BuildChatRequest(model, prepared, opts, false)
 
-	resp, err := p.client.CreateChatCompletion(ctx, req)
-	if err != nil {
-		return nil, WrapError(p.config.Provider, "generate content", err)
+	var result *llms.Response
+	if p.config.UseResponsesAPI {
+		req := BuildResponsesRequest(model, prepared, opts, false)
+		resp, err := p.client.CreateResponse(ctx, req)
+		if err != nil {
+			return nil, WrapError(p.config.Provider, "generate content", err)
+		}
+		result = ConvertResponsesResponse(resp)
+	} else {
+		req := BuildChatRequest(model, prepared, opts, false)
+		resp, err := p.client.CreateChatCompletion(ctx, req)
+		if err != nil {
+			return nil, WrapError(p.config.Provider, "generate content", err)
+		}
+		result = ConvertResponse(resp)
 	}
-
-	result := ConvertResponse(resp)
 
 	// Apply token estimation if enabled and usage is missing
 	if opts.EstimateTokens && result.Usage.TotalTokens == 0 {
