@@ -78,8 +78,6 @@ func TestEstimatorIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var _ llms.Tokenizer = tk // compile-time interface check
-
 	est := llms.DefaultTokenEstimator()
 	est.Tokenizer = tk
 	if got := est.EstimateTokens("Hello, world!"); got != 4 {
