@@ -43,11 +43,9 @@ func WithProviderConfig(config *openaicompat.ProviderConfig) Option {
 	}
 }
 
-// WithResponsesAPI routes non-streaming GenerateContent (and Call) through the
-// OpenAI Responses API (POST /responses) instead of /chat/completions. Streaming
-// continues to use the chat-completions endpoint. Pass server-side conversation
-// state via call options: llms.WithExtraBodyParam("previous_response_id", id) and
-// ("store", true).
+// WithResponsesAPI routes GenerateContent, Call, and Stream through the OpenAI
+// Responses API (POST /responses) instead of /chat/completions. Chain server-side
+// conversation state with WithPreviousResponseID / WithStore.
 func WithResponsesAPI() Option {
 	return func(o *options) {
 		o.responsesAPI = true

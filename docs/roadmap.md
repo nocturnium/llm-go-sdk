@@ -36,11 +36,16 @@ tools, and first-class reasoning items.
 2. ✅ **Statefulness ergonomics.** *(Shipped.)* `llms.Response.ID` is surfaced from both the
    chat-completions and Responses converters; `openai.WithPreviousResponseID(id)` and
    `openai.WithStore(bool)` chain server-side conversation state without touching `ExtraBody`.
-3. **Streaming.** Parse the Responses SSE event types (`response.output_text.delta`,
-   `response.reasoning.*`, `response.completed`, …) into the existing `StreamChunk` channel
-   (currently `Stream` stays on chat completions).
+3. ✅ **Streaming.** *(Shipped — mock-tested; wants a live smoke test.)* `Stream` routes through
+   `/responses` when `WithResponsesAPI()` is set. The typed SSE events
+   (`response.output_text.delta`, `response.reasoning_summary_text.delta`, `response.completed`,
+   `error`, …) are parsed into the existing `StreamChunk` channel; tool calls, usage, and finish
+   reason come from the authoritative `response.completed` payload.
 4. **Reasoning-item round-trip.** For o-series models, pass prior `reasoning` items back on
    the next turn. Needs live verification.
+
+> Note: streaming was validated against mock SSE fixtures; the live OpenAI event grammar should
+> be smoke-tested before relying on it in production.
 
 **Risks:** distinct request/response shape and a new SSE event grammar; correctness needs
 live-API testing, hence the staged PRs rather than an inline build.
