@@ -56,8 +56,12 @@ live-API testing, hence the staged PRs rather than an inline build.
 wedge, since few Go LLM SDKs have first-class MCP. Worth investing to make it best-in-class.
 
 **Scope (sequence as separate PRs):**
-1. **Audit + harden the existing client** — transport lifecycle/cancellation, error mapping,
-   timeouts, reconnect; raise test coverage on the current surface before adding features.
+1. ✅ **Audit + error mapping.** *(Shipped.)* Audit found the transport layer already well-hardened
+   (bounded reads, env isolation, concurrent id-correlated dispatch, context cancellation,
+   kill-on-timeout close, SSRF defaults, session-id capture, pagination). Gap was error
+   inspectability: exported `RPCError` (+ standard JSON-RPC code constants) so protocol errors are
+   `errors.As`-able, and added `ToolError` so a tool that ran-but-failed is distinguishable from a
+   protocol failure.
 2. **Capabilities coverage** — tools, resources, prompts, and sampling per the MCP spec; map
    MCP tools onto `llms.Tool`/`ToolRegistry` so they drop into the `RunTools` agent loop.
 3. **Streaming/notifications** — handle server-initiated notifications and progress.
