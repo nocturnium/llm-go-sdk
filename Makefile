@@ -1,5 +1,5 @@
 .PHONY: all build test lint clean setup-hooks install-tools check fmt vet
-.PHONY: release release-dry-run changelog version vulncheck ci
+.PHONY: release release-dry-run changelog version vulncheck ci apidiff apidiff-baseline
 
 # Project info
 PROJECT_NAME := llms
@@ -103,7 +103,7 @@ check: fmt-check vet lint test
 	@echo "All checks passed!"
 
 # Run CI checks (comprehensive)
-ci: fmt-check vet lint vulncheck test
+ci: fmt-check vet lint vulncheck apidiff test
 	@echo "All CI checks passed!"
 
 # Clean build artifacts
@@ -133,11 +133,45 @@ install-tools:
 	GOWORK=off go install golang.org/x/tools/cmd/goimports@latest
 	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
 	GOWORK=off go install honnef.co/go/tools/cmd/staticcheck@latest
+	GOWORK=off go install golang.org/x/exp/cmd/apidiff@latest
 	GOWORK=off go install github.com/goreleaser/goreleaser/v2@latest
 	GOWORK=off go install github.com/orhun/git-cliff/git-cliff@latest || echo "git-cliff install failed (optional)"
 	@echo "Tools installed successfully"
 
 # Tidy dependencies
+# Path to the committed public-API baseline (apidiff export data).
+API_BASELINE := api/v2.txt
+
+# apidiff: fail if the exported API surface has changed since the committed
+# baseline. Guards the single-version v2 contract — every exported change must
+# be deliberate and re-baselined via `make apidiff-baseline`.
+apidiff:
+	@echo "Checking public API against $(API_BASELINE)..."
+	@if ! command -v apidiff >/dev/null 2>&1; then \
+		echo "apidiff not installed. Run 'make install-tools' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(API_BASELINE)" ]; then \
+		echo "Baseline $(API_BASELINE) missing. Run 'make apidiff-baseline'."; \
+		exit 1; \
+	fi
+	@out="$$(GOWORK=off apidiff -m $(API_BASELINE) $(MODULE) 2>&1 | grep -v '^Ignoring internal package' || true)"; \
+	if [ -n "$$out" ]; then \
+		echo "Public API changed since baseline:"; \
+		echo "$$out"; \
+		echo "If intentional, re-baseline with 'make apidiff-baseline' and review the diff."; \
+		exit 1; \
+	fi
+	@echo "Public API matches baseline."
+
+# Regenerate the committed API baseline. Run this (and review) whenever an
+# exported-surface change is intentional.
+apidiff-baseline:
+	@echo "Writing API baseline to $(API_BASELINE)..."
+	@mkdir -p $(dir $(API_BASELINE))
+	GOWORK=off apidiff -m -w $(API_BASELINE) $(MODULE)
+	@echo "Baseline written. Review and commit $(API_BASELINE)."
+
 tidy:
 	@echo "Tidying dependencies..."
 	GOWORK=off go mod tidy
@@ -227,6 +261,8 @@ help:
 	@echo "  lint            - Run golangci-lint"
 	@echo "  vet             - Run go vet"
 	@echo "  vulncheck       - Run vulnerability check"
+	@echo "  apidiff         - Check public API against committed baseline"
+	@echo "  apidiff-baseline - Regenerate the public API baseline"
 	@echo "  fmt             - Format code"
 	@echo "  fmt-check       - Check code formatting"
 	@echo "  check           - Run all checks"
