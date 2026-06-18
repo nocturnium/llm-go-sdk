@@ -24,10 +24,9 @@ type ProviderConfig struct {
 	// Capabilities defines what features this provider supports
 	Capabilities llms.Capabilities
 
-	// UseResponsesAPI routes non-streaming GenerateContent through the OpenAI
-	// Responses API (POST /responses) instead of /chat/completions. Streaming
-	// still uses the chat-completions path. Only meaningful for providers whose
-	// endpoint implements the Responses API (OpenAI).
+	// UseResponsesAPI routes GenerateContent and Stream through the OpenAI
+	// Responses API (POST /responses) instead of /chat/completions. Only
+	// meaningful for providers whose endpoint implements the Responses API (OpenAI).
 	UseResponsesAPI bool
 }
 
@@ -151,12 +150,6 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	}
 
 	model := effectiveModel(p.model, opts.Model)
-	req := BuildChatRequest(model, prepared, opts, true)
-
-	stream, err := p.client.CreateChatCompletionStream(ctx, req)
-	if err != nil {
-		return nil, WrapError(p.config.Provider, "stream", err)
-	}
 
 	bufferSize := llms.GetBufferSize(opts)
 	chunks := make(chan llms.StreamChunk, bufferSize)
@@ -169,6 +162,22 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 			Messages:       prepared,
 			EstimateTokens: true,
 		}
+	}
+
+	if p.config.UseResponsesAPI {
+		req := BuildResponsesRequest(model, prepared, opts, true)
+		stream, err := p.client.CreateResponseStream(ctx, req)
+		if err != nil {
+			return nil, WrapError(p.config.Provider, "stream", err)
+		}
+		go ProcessResponsesStream(ctx, stream, chunks, sender, p.config.ProviderName, config)
+		return chunks, nil
+	}
+
+	req := BuildChatRequest(model, prepared, opts, true)
+	stream, err := p.client.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		return nil, WrapError(p.config.Provider, "stream", err)
 	}
 
 	go ProcessStream(ctx, stream, chunks, sender, p.config.ProviderName, config)
