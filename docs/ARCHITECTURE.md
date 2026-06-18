@@ -198,6 +198,22 @@ Everything else lives under `internal/` and is not importable by external code.
 > imported only from `pkg/providers/<name>`. See
 > [`migration-guide.md`](./migration-guide.md) for the layout reference.
 
+> **Decision — why not a "facade at root"?** A recurring suggestion is to shrink
+> the root by moving its code into sub-packages and re-exporting from a thin root
+> facade. This does not work in Go here, and we have deliberately rejected it:
+> the root package is the dependency **leaf** — every provider imports it for both
+> *types* (`llms.Message`) and *functions* (`llms.ApplyOptions`, `llms.PrepareMessages`,
+> `llms.WrapProviderError`). A root that re-exported from sub-packages would need to
+> import them, creating `root → subpkg → root` **import cycles** that do not compile.
+> Type aliases (`type X = sub.X`) can forward types but cannot forward functions
+> (the bulk of the surface), so a facade also means hundreds of hand-maintained
+> wrappers that fracture godoc. The correct dependency direction is *inward to the
+> core*: features depend on the core, never the reverse. If the root must shed a
+> heavy dependency (e.g. OpenTelemetry), the answer is to move that **middleware
+> out** to a leaf sub-package that imports the core — a breaking change reserved for
+> a deliberate major version, documented in
+> [`v3-package-taxonomy.md`](./v3-package-taxonomy.md).
+
 ### `pkg/openaicompat`
 
 The OpenAI-compatible base lives in `pkg/openaicompat`; it is public precisely so
