@@ -166,6 +166,27 @@ func TestConvertResponsesResponse_ToolCallsAndLength(t *testing.T) {
 	}
 }
 
+// Both the chat-completions and Responses converters must surface the provider
+// response id on llms.Response so callers can chain turns.
+func TestConverters_SurfaceResponseID(t *testing.T) {
+	chat := ConvertResponse(&ChatCompletionResponse{
+		ID:      "chatcmpl-1",
+		Choices: []Choice{{Message: &ChatMessage{Role: "assistant", ContentValue: "hi"}}},
+	})
+	if chat.ID != "chatcmpl-1" {
+		t.Errorf("chat path ID = %q, want chatcmpl-1", chat.ID)
+	}
+
+	responses := ConvertResponsesResponse(&ResponsesResponse{
+		ID:     "resp-1",
+		Status: "completed",
+		Output: []ResponsesOutputItem{{Type: "message", Content: []ResponsesOutputContent{{Type: "output_text", Text: "hi"}}}},
+	})
+	if responses.ID != "resp-1" {
+		t.Errorf("responses path ID = %q, want resp-1", responses.ID)
+	}
+}
+
 func TestClient_CreateResponse_RoundTrip(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/responses" {

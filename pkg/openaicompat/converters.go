@@ -241,11 +241,12 @@ func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCal
 // ConvertResponse converts an OpenAI-compatible response to llms.Response.
 func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
 	if len(resp.Choices) == 0 {
-		return &llms.Response{}
+		return &llms.Response{ID: resp.ID}
 	}
 
 	choice := resp.Choices[0]
 	response := &llms.Response{
+		ID:           resp.ID,
 		FinishReason: llms.FinishReason(choice.FinishReason),
 	}
 

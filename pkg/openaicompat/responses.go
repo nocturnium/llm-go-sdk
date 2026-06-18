@@ -344,7 +344,7 @@ func convertResponsesFormat(format *llms.ResponseFormat) *ResponsesFormat {
 
 // ConvertResponsesResponse maps a Responses API response to the neutral llms.Response.
 func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
-	result := &llms.Response{}
+	result := &llms.Response{ID: resp.ID}
 
 	var content, reasoning string
 	for _, item := range resp.Output {

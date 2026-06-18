@@ -18,6 +18,13 @@ const (
 
 // Response represents the response from an LLM
 type Response struct {
+	// ID is the provider's identifier for this response, when one is returned
+	// (e.g. the OpenAI chat completion id, or the Responses API response id). It
+	// is the handle used to chain server-side conversation state — pass it as the
+	// previous response on the next turn (see the openai provider's Responses-API
+	// options). Empty when the provider does not return an id.
+	ID string `json:"id,omitempty"`
+
 	Content string `json:"content,omitempty"`
 	// Reasoning is the model's reasoning/chain-of-thought output, when the
 	// provider/model supports it (OpenAI o-series, Anthropic extended thinking,
