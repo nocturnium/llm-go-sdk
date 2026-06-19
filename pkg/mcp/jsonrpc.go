@@ -179,6 +179,64 @@ func extractJSONMessage(body []byte) []byte {
 	return last
 }
 
+// extractFrames returns every JSON-RPC frame found in a transport response body
+// (bare JSON, a JSON batch, or an SSE stream), separating the response frame
+// (carrying a result or error) from server-initiated notification frames (no id).
+// The HTTP transport uses it to surface progress/log notifications that arrive
+// interleaved on a POST response's SSE stream while still resolving the request.
+func extractFrames(body []byte) (response []byte, notifications [][]byte) {
+	for _, event := range collectJSONPayloads(body) {
+		for _, msg := range splitJSONMessages(event) {
+			if isNotificationFrame(msg) {
+				notifications = append(notifications, msg)
+				continue
+			}
+			// The last non-notification frame is treated as the response, matching
+			// extractJSONMessage's "last JSON-RPC payload wins" behavior.
+			response = msg
+		}
+	}
+	return response, notifications
+}
+
+// collectJSONPayloads returns the JSON payloads carried by a transport body that
+// may be bare JSON or an SSE stream (one payload per SSE event).
+func collectJSONPayloads(body []byte) [][]byte {
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+		return [][]byte{trimmed}
+	}
+	var payloads [][]byte
+	for _, event := range bytes.Split(body, []byte("\n\n")) {
+		var data bytes.Buffer
+		for _, line := range bytes.Split(event, []byte("\n")) {
+			line = bytes.TrimRight(line, "\r")
+			if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
+				data.Write(bytes.TrimSpace(rest))
+				data.WriteByte('\n')
+			}
+		}
+		if payload := bytes.TrimSpace(data.Bytes()); len(payload) > 0 && (payload[0] == '{' || payload[0] == '[') {
+			payloads = append(payloads, payload)
+		}
+	}
+	return payloads
+}
+
+// isNotificationFrame reports whether a single JSON-RPC object is a notification
+// (a method call with no id), as opposed to a response (result or error).
+func isNotificationFrame(msg []byte) bool {
+	var probe struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+	}
+	if err := json.Unmarshal(msg, &probe); err != nil {
+		return false
+	}
+	hasID := len(probe.ID) != 0 && !bytes.Equal(probe.ID, []byte("null"))
+	return probe.Method != "" && !hasID
+}
+
 func splitJSONMessages(raw []byte) [][]byte {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 {

@@ -1,9 +1,21 @@
-// Package mcp is a minimal Model Context Protocol (MCP) client for the tools
-// subset of the protocol: initialize, tools/list, and tools/call. It connects to
-// an MCP server over stdio (a subprocess) or Streamable HTTP and can register the
-// server's tools into an *llms.ToolRegistry so they drive llms.RunTools.
+// Package mcp is a Model Context Protocol (MCP) client (protocol revision
+// 2025-06-18). It connects to an MCP server over stdio (a subprocess) or
+// Streamable HTTP and covers tools (tools/list, tools/call — registerable into an
+// *llms.ToolRegistry so they drive llms.RunTools), resources (resources/list,
+// resources/read), prompts (prompts/list, prompts/get — bridgeable into
+// []llms.Message), the server's advertised capabilities, and server-initiated
+// progress and log notifications.
 //
-// Example (stdio):
+// One-call mount (the common case — connect and register tools):
+//
+//	reg := llms.NewToolRegistry()
+//	closer, err := mcp.MountStdio(ctx, reg, "npx",
+//	    []string{"-y", "@modelcontextprotocol/server-filesystem", "/data"})
+//	if err != nil { return err }
+//	defer closer.Close()
+//	resp, msgs, err := llms.RunTools(ctx, llm, messages, reg)
+//
+// Explicit client (when you also need resources, prompts, or notifications):
 //
 //	mc, err := mcp.NewStdioClient(ctx, "npx",
 //	    []string{"-y", "@modelcontextprotocol/server-filesystem", "/data"})
@@ -20,6 +32,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -42,6 +56,19 @@ type Client struct {
 	namePrefix string
 	clientInfo Implementation
 	serverInfo Implementation
+	serverCaps ServerCapabilities
+	// notifier holds the server-notification handler state behind a pointer so the
+	// Client struct itself stays comparable (a mutex by value would not be).
+	notifier *notifier
+}
+
+// notifier carries the registered handlers for server-initiated notifications.
+// It is pointer-held by Client and guards its fields with its own mutex.
+type notifier struct {
+	mu           sync.RWMutex
+	progressFn   func(ProgressNotification)
+	logFn        func(LogMessage)
+	callProgress map[string]func(ProgressNotification) // keyed by progress token
 }
 
 type config struct {
@@ -172,7 +199,9 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 		baseCtx:    ctx,
 		namePrefix: cfg.namePrefix,
 		clientInfo: cfg.clientInfo,
+		notifier:   &notifier{},
 	}
+	t.onNotification(c.dispatchNotification)
 	if err := c.initialize(ctx); err != nil {
 		_ = t.close()
 		return nil, err
@@ -194,6 +223,11 @@ func (c *Client) initialize(ctx context.Context) error {
 		return fmt.Errorf("mcp: initialize: unsupported protocol version %q (supported %q)", result.ProtocolVersion, protocolVersion)
 	}
 	c.serverInfo = result.ServerInfo
+	if len(result.Capabilities) > 0 {
+		// Capabilities are advisory; a malformed map should not fail the handshake,
+		// so an unmarshal error simply leaves the typed view zero-valued.
+		_ = json.Unmarshal(result.Capabilities, &c.serverCaps)
+	}
 
 	note, err := encodeNotification(methodInitialized, nil)
 	if err != nil {
@@ -245,6 +279,49 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments json.RawMe
 	}
 	var res CallToolResult
 	if err := c.call(ctx, methodToolsCall, callToolParams{Name: name, Arguments: arguments}, &res); err != nil {
+		return nil, fmt.Errorf("mcp: call tool %q: %w", name, err)
+	}
+	return &res, nil
+}
+
+// CallOption configures a single CallToolWithProgress invocation.
+type CallOption func(*callConfig)
+
+type callConfig struct {
+	progress func(ProgressNotification)
+}
+
+// WithProgress asks the server to report incremental progress for this tool call
+// and routes each notifications/progress message it sends to fn. The client
+// generates a unique progress token, sends it in the request's _meta, and
+// delivers only the progress notifications carrying that token to fn (other
+// progress notifications still reach any client-level OnProgress handler). The
+// handler may be invoked concurrently from the transport read path and must not
+// block; it stops receiving notifications once the call returns. See
+// [Client.OnProgress] for the transport delivery boundary.
+func WithProgress(fn func(ProgressNotification)) CallOption {
+	return func(c *callConfig) { c.progress = fn }
+}
+
+// CallToolWithProgress is [Client.CallTool] with per-call options such as
+// [WithProgress]. With no options it behaves exactly like CallTool.
+func (c *Client) CallToolWithProgress(ctx context.Context, name string, arguments json.RawMessage, opts ...CallOption) (*CallToolResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var cc callConfig
+	for _, o := range opts {
+		o(&cc)
+	}
+	params := callToolParams{Name: name, Arguments: arguments}
+	if cc.progress != nil {
+		token := "progress-" + strconv.FormatInt(c.nextID.Add(1), 10)
+		params.Meta = &requestMeta{ProgressToken: token}
+		cleanup := c.registerCallProgress(token, cc.progress)
+		defer cleanup()
+	}
+	var res CallToolResult
+	if err := c.call(ctx, methodToolsCall, params, &res); err != nil {
 		return nil, fmt.Errorf("mcp: call tool %q: %w", name, err)
 	}
 	return &res, nil
@@ -303,6 +380,13 @@ func (e *ToolError) Error() string {
 // ServerInfo returns the server's reported name and version (available after a
 // successful connection).
 func (c *Client) ServerInfo() Implementation { return c.serverInfo }
+
+// ServerCapabilities returns the typed capabilities the server advertised during
+// initialize. A nil sub-capability means the feature was not advertised; gate
+// calls on it, e.g.:
+//
+//	if c.ServerCapabilities().Resources != nil { /* safe to ListResources */ }
+func (c *Client) ServerCapabilities() ServerCapabilities { return c.serverCaps }
 
 // Close releases the client's transport resources (terminating the subprocess
 // for stdio clients).

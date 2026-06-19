@@ -23,10 +23,39 @@ type httpTransport struct {
 	headers   map[string]string
 	sessionMu sync.RWMutex
 	sessionID string
+	notifyMu  sync.RWMutex
+	notifyFn  func(raw []byte)
 }
 
 func newHTTPTransport(url string, client *httpclient.Client, headers map[string]string) *httpTransport {
 	return &httpTransport{client: client, url: url, headers: headers}
+}
+
+// onNotification registers a sink for server-initiated frames. The Streamable
+// HTTP transport has no standalone GET SSE listener, so it can only surface
+// notifications that arrive interleaved on a POST response's SSE stream (e.g.
+// progress/log notifications emitted by the server while a tools/call is in
+// flight). Notifications a server would push out-of-band over a separate GET SSE
+// channel are not delivered by this client. See deliverNotifications.
+func (t *httpTransport) onNotification(fn func(raw []byte)) {
+	t.notifyMu.Lock()
+	t.notifyFn = fn
+	t.notifyMu.Unlock()
+}
+
+func (t *httpTransport) deliverNotifications(frames [][]byte) {
+	if len(frames) == 0 {
+		return
+	}
+	t.notifyMu.RLock()
+	fn := t.notifyFn
+	t.notifyMu.RUnlock()
+	if fn == nil {
+		return
+	}
+	for _, frame := range frames {
+		fn(frame)
+	}
 }
 
 func (t *httpTransport) requestHeaders() map[string]string {
@@ -53,7 +82,9 @@ func (t *httpTransport) request(ctx context.Context, _ int64, payload []byte) ([
 		return nil, err
 	}
 	t.captureSessionID(headers)
-	return extractJSONMessage(body), nil
+	response, notifications := extractFrames(body)
+	t.deliverNotifications(notifications)
+	return response, nil
 }
 
 func (t *httpTransport) notify(ctx context.Context, payload []byte) error {

@@ -34,8 +34,26 @@ type stdioTransport struct {
 	closed   bool
 	closeErr error
 
+	notifyMu sync.RWMutex
+	notifyFn func(raw []byte)
+
 	done      chan struct{}
 	closeOnce sync.Once
+}
+
+func (t *stdioTransport) onNotification(fn func(raw []byte)) {
+	t.notifyMu.Lock()
+	t.notifyFn = fn
+	t.notifyMu.Unlock()
+}
+
+func (t *stdioTransport) deliverNotification(raw []byte) {
+	t.notifyMu.RLock()
+	fn := t.notifyFn
+	t.notifyMu.RUnlock()
+	if fn != nil {
+		fn(raw)
+	}
 }
 
 // newStdioTransport starts the server subprocess and begins reading its output.
@@ -153,8 +171,11 @@ func (t *stdioTransport) dispatchOne(line []byte) {
 			for _, ch := range pending {
 				ch <- line
 			}
+			return
 		}
-		return // notification or server-initiated request: not handled by this client
+		// A server-initiated notification (no id, no error): surface it to the sink.
+		t.deliverNotification(line)
+		return
 	}
 	t.mu.Lock()
 	ch, found := t.pending[id]
