@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+Additive, non-breaking changes on top of v3.0.0. The module path is unchanged and
+every change is API-compatible (the `apidiff` baseline grows, with no removals).
+
+### Added
+
+- **Middleware composition — `llms.Chain`.** `Chain(base, ...Middleware)` (where
+  `Middleware = func(LLM) LLM`) composes middleware around a base client: the first
+  listed sits innermost (resilience/fallback), the last outermost (observability/
+  logging). A flat alternative to manual nesting now that the middleware live in
+  `pkg/middleware/resilience` and `pkg/observability`.
+- **OpenAI Responses API — stateless reasoning round-trip.**
+  `openai.WithReasoningRoundTrip()` requests encrypted reasoning items
+  (`include: ["reasoning.encrypted_content"]`) so a reasoning model's thinking can be
+  replayed across turns without server-side state. The new `Message.Reasoning` field
+  carries it (also usable for Anthropic extended-thinking signatures); `pkg/openaicompat`
+  gains `ResponsesReasoningItem` and `MetadataKeyResponsesReasoning`.
+- **MCP client — resources, prompts, capabilities, mounting, and notifications**
+  (`pkg/mcp`, extending the tools-only client):
+  - Resources: `Client.ListResources` (cursor-paginated) and `Client.ReadResource`
+    (`Resource`, `ResourceContents`, `ReadResourceResult`).
+  - Prompts: `Client.ListPrompts` and `Client.GetPrompt` (`Prompt`, `PromptArgument`,
+    `PromptMessage`, `GetPromptResult`), with `GetPromptResult.LLMMessages()` bridging a
+    server prompt into `[]llms.Message` for `RunTools`.
+  - Capabilities: typed `ServerCapabilities` parsed from the initialize handshake,
+    exposed via `Client.ServerCapabilities()`.
+  - One-call mounting: `MountStdio` / `MountHTTP` connect a server and register its tools.
+  - Notifications: `Client.OnProgress` / `Client.OnLog`, plus per-call `WithProgress` and
+    `Client.CallToolWithProgress` (`ProgressNotification`, `LogMessage`). stdio surfaces all
+    server notification frames; the Streamable HTTP transport surfaces those that arrive
+    interleaved on a POST response stream.
+
+### Changed
+
+- **Model metadata refreshed (data only).** Re-verified the OpenAI / Anthropic / Gemini
+  pricing-and-context overlays against current published pricing (correcting stale cost
+  estimates), and refreshed the Featherless and RunPod curated model lists. Z.AI and
+  Synthetic were already current and are unchanged.
+
 ## [3.0.0] - 2026-06-19
 
 v3 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v3`
