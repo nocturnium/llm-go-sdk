@@ -274,10 +274,28 @@ func (c *Client) toolHandler(remoteName string) llms.ToolHandler {
 			return nil, err
 		}
 		if res.IsError {
-			return nil, fmt.Errorf("mcp tool %q reported an error: %s", remoteName, res.Text())
+			return nil, &ToolError{Tool: remoteName, Content: res.Text()}
 		}
 		return res.Text(), nil
 	}
+}
+
+// ToolError reports that an MCP tool ran but returned an error result (the
+// tools/call response had isError set). It is distinct from an [RPCError], which
+// signals a protocol-level failure. Callers (and llms.RunTools handlers) can
+// detect it with errors.As:
+//
+//	var toolErr *mcp.ToolError
+//	if errors.As(err, &toolErr) { /* the tool itself failed: toolErr.Content */ }
+type ToolError struct {
+	// Tool is the server-side tool name (without the client's NamePrefix).
+	Tool string
+	// Content is the concatenated text content of the error result.
+	Content string
+}
+
+func (e *ToolError) Error() string {
+	return fmt.Sprintf("mcp tool %q reported an error: %s", e.Tool, e.Content)
 }
 
 // ServerInfo returns the server's reported name and version (available after a
