@@ -1,4 +1,4 @@
-package llms
+package resilience
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 const (
@@ -17,17 +19,17 @@ const (
 
 // mockFallbackLLM is a mock LLM for testing fallback chain
 type mockFallbackLLM struct {
-	provider  Provider
+	provider  llms.Provider
 	model     string
 	callResp  string
 	callErr   error
-	genResp   *Response
+	genResp   *llms.Response
 	genErr    error
 	streamErr error
 	callCount int32
 }
 
-func (m *mockFallbackLLM) Call(_ context.Context, _ string, _ ...CallOption) (string, error) {
+func (m *mockFallbackLLM) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	if m.callErr != nil {
 		return "", m.callErr
@@ -35,7 +37,7 @@ func (m *mockFallbackLLM) Call(_ context.Context, _ string, _ ...CallOption) (st
 	return m.callResp, nil
 }
 
-func (m *mockFallbackLLM) GenerateContent(_ context.Context, _ []Message, _ ...CallOption) (*Response, error) {
+func (m *mockFallbackLLM) GenerateContent(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (*llms.Response, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	if m.genErr != nil {
 		return nil, m.genErr
@@ -46,23 +48,23 @@ func (m *mockFallbackLLM) GenerateContent(_ context.Context, _ []Message, _ ...C
 	if m.genResp != nil {
 		return m.genResp, nil
 	}
-	return &Response{Content: m.callResp}, nil
+	return &llms.Response{Content: m.callResp}, nil
 }
 
-func (m *mockFallbackLLM) Stream(_ context.Context, _ []Message, _ ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockFallbackLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	if m.streamErr != nil {
 		return nil, m.streamErr
 	}
-	ch := make(chan StreamChunk, 1)
-	ch <- StreamChunk{Content: m.callResp}
+	ch := make(chan llms.StreamChunk, 1)
+	ch <- llms.StreamChunk{Content: m.callResp}
 	close(ch)
 	return ch, nil
 }
 
-func (m *mockFallbackLLM) Provider() Provider { return m.provider }
-func (m *mockFallbackLLM) Model() string      { return m.model }
-func (m *mockFallbackLLM) CallCount() int     { return int(atomic.LoadInt32(&m.callCount)) }
+func (m *mockFallbackLLM) Provider() llms.Provider { return m.provider }
+func (m *mockFallbackLLM) Model() string           { return m.model }
+func (m *mockFallbackLLM) CallCount() int          { return int(atomic.LoadInt32(&m.callCount)) }
 
 type fallbackTestClock struct {
 	now time.Time
@@ -85,21 +87,21 @@ func TestDefaultFallbackSelector(t *testing.T) {
 		expected bool
 	}{
 		{"nil error", nil, false},
-		{"rate limited", &APIError{StatusCode: 429}, true},
-		{"server error 500", &APIError{StatusCode: 500}, true},
-		{"server error 502", &APIError{StatusCode: 502}, true},
-		{"server error 503", &APIError{StatusCode: 503}, true},
-		{"server error 504", &APIError{StatusCode: 504}, true},
-		{"overloaded 529", &APIError{StatusCode: 529}, true},
-		{"rate_limit_error type", &APIError{Type: "rate_limit_error"}, true},
-		{"overloaded_error type", &APIError{Type: "overloaded_error"}, true},
-		{"server_error type", &APIError{Type: "server_error"}, true},
+		{"rate limited", &llms.APIError{StatusCode: 429}, true},
+		{"server error 500", &llms.APIError{StatusCode: 500}, true},
+		{"server error 502", &llms.APIError{StatusCode: 502}, true},
+		{"server error 503", &llms.APIError{StatusCode: 503}, true},
+		{"server error 504", &llms.APIError{StatusCode: 504}, true},
+		{"overloaded 529", &llms.APIError{StatusCode: 529}, true},
+		{"rate_limit_error type", &llms.APIError{Type: "rate_limit_error"}, true},
+		{"overloaded_error type", &llms.APIError{Type: "overloaded_error"}, true},
+		{"server_error type", &llms.APIError{Type: "server_error"}, true},
 		{"circuit open", ErrCircuitOpen, true},
 		{"connection refused", syscall.ECONNREFUSED, true},
 		{"url wrapped connection refused", &url.Error{Op: "Post", URL: "http://127.0.0.1", Err: syscall.ECONNREFUSED}, true},
-		{"client error 400", &APIError{StatusCode: 400}, false},
-		{"auth error 401", &APIError{StatusCode: 401}, false},
-		{"not found 404", &APIError{StatusCode: 404}, false},
+		{"client error 400", &llms.APIError{StatusCode: 400}, false},
+		{"auth error 401", &llms.APIError{StatusCode: 401}, false},
+		{"not found 404", &llms.APIError{StatusCode: 404}, false},
 		{"context canceled", context.Canceled, false},
 		{"context deadline", context.DeadlineExceeded, false},
 		{"random error", errors.New("random"), false},
@@ -148,12 +150,12 @@ func TestFallbackChain_EmptyChain(t *testing.T) {
 
 func TestFallbackChain_SingleClient_Success(t *testing.T) {
 	client := &mockFallbackLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    testGPT4,
 		callResp: testSuccess,
 	}
 
-	chain := NewFallbackChain([]LLM{client})
+	chain := NewFallbackChain([]llms.LLM{client})
 
 	result, err := chain.Call(context.Background(), "test")
 	if err != nil {
@@ -173,7 +175,7 @@ func TestFallbackChain_SingleClient_Error(t *testing.T) {
 		callErr: expectedErr,
 	}
 
-	chain := NewFallbackChain([]LLM{client})
+	chain := NewFallbackChain([]llms.LLM{client})
 
 	_, err := chain.Call(context.Background(), "test")
 	if !errors.Is(err, expectedErr) {
@@ -183,17 +185,17 @@ func TestFallbackChain_SingleClient_Error(t *testing.T) {
 
 func TestFallbackChain_FallsBack(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    testGPT4,
-		callErr:  &APIError{StatusCode: 429, Message: "rate limited"},
+		callErr:  &llms.APIError{StatusCode: 429, Message: "rate limited"},
 	}
 	client2 := &mockFallbackLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3",
 		callResp: "from anthropic",
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	result, err := chain.Call(context.Background(), "test")
 	if err != nil {
@@ -212,17 +214,17 @@ func TestFallbackChain_FallsBack(t *testing.T) {
 
 func TestFallbackChain_FallsBackOnConnectionRefused(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    testGPT4,
 		callErr:  &url.Error{Op: "Post", URL: "http://127.0.0.1", Err: syscall.ECONNREFUSED},
 	}
 	client2 := &mockFallbackLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3",
 		callResp: "from anthropic",
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	result, err := chain.Call(context.Background(), "test")
 	if err != nil {
@@ -241,13 +243,13 @@ func TestFallbackChain_FallsBackOnConnectionRefused(t *testing.T) {
 
 func TestFallbackChain_NoFallbackOnNonRetryable(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 401, Message: "unauthorized"},
+		callErr: &llms.APIError{StatusCode: 401, Message: "unauthorized"},
 	}
 	client2 := &mockFallbackLLM{
 		callResp: "should not reach",
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	_, err := chain.Call(context.Background(), "test")
 	if err == nil {
@@ -260,13 +262,13 @@ func TestFallbackChain_NoFallbackOnNonRetryable(t *testing.T) {
 
 func TestFallbackChain_ClientErrorDoesNotMarkUnhealthy(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 400, Message: "bad request"},
+		callErr: &llms.APIError{StatusCode: 400, Message: "bad request"},
 	}
 	client2 := &mockFallbackLLM{
 		callResp: testSuccess,
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2},
+	chain := NewFallbackChain([]llms.LLM{client1, client2},
 		WithFallbackSelector(AlwaysFallbackSelector{}),
 	)
 
@@ -284,16 +286,16 @@ func TestFallbackChain_ClientErrorDoesNotMarkUnhealthy(t *testing.T) {
 
 func TestFallbackChain_AllFail(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 500},
+		callErr: &llms.APIError{StatusCode: 500},
 	}
 	client2 := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 500},
+		callErr: &llms.APIError{StatusCode: 500},
 	}
 	client3 := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 500},
+		callErr: &llms.APIError{StatusCode: 500},
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2, client3})
+	chain := NewFallbackChain([]llms.LLM{client1, client2, client3})
 
 	_, err := chain.Call(context.Background(), "test")
 	if err == nil {
@@ -302,7 +304,7 @@ func TestFallbackChain_AllFail(t *testing.T) {
 	if !errors.Is(err, ErrAllClientsFailed) {
 		t.Fatalf("err = %v, want ErrAllClientsFailed", err)
 	}
-	if !errors.Is(err, ErrServerError) {
+	if !errors.Is(err, llms.ErrServerError) {
 		t.Fatalf("err = %v, want preserved server error", err)
 	}
 
@@ -314,47 +316,47 @@ func TestFallbackChain_AllFail(t *testing.T) {
 }
 
 func TestFallbackChain_GenerateContentAllFailReturnsSentinel(t *testing.T) {
-	client1 := &mockFallbackLLM{genErr: &APIError{StatusCode: 503}}
-	client2 := &mockFallbackLLM{genErr: &APIError{StatusCode: 503}}
-	chain := NewFallbackChain([]LLM{client1, client2})
+	client1 := &mockFallbackLLM{genErr: &llms.APIError{StatusCode: 503}}
+	client2 := &mockFallbackLLM{genErr: &llms.APIError{StatusCode: 503}}
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
-	_, err := chain.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, err := chain.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 	if !errors.Is(err, ErrAllClientsFailed) {
 		t.Fatalf("err = %v, want ErrAllClientsFailed", err)
 	}
-	if !errors.Is(err, ErrServiceUnavailable) {
+	if !errors.Is(err, llms.ErrServiceUnavailable) {
 		t.Fatalf("err = %v, want preserved service unavailable error", err)
 	}
 }
 
 func TestFallbackChain_StreamAllFailReturnsSentinel(t *testing.T) {
-	client1 := &mockFallbackLLM{streamErr: &APIError{StatusCode: 503}}
-	client2 := &mockFallbackLLM{streamErr: &APIError{StatusCode: 503}}
-	chain := NewFallbackChain([]LLM{client1, client2})
+	client1 := &mockFallbackLLM{streamErr: &llms.APIError{StatusCode: 503}}
+	client2 := &mockFallbackLLM{streamErr: &llms.APIError{StatusCode: 503}}
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
-	_, err := chain.Stream(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, err := chain.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 	if !errors.Is(err, ErrAllClientsFailed) {
 		t.Fatalf("err = %v, want ErrAllClientsFailed", err)
 	}
-	if !errors.Is(err, ErrServiceUnavailable) {
+	if !errors.Is(err, llms.ErrServiceUnavailable) {
 		t.Fatalf("err = %v, want preserved service unavailable error", err)
 	}
 }
 
 func TestFallbackChain_OnFallbackCallback(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		provider: ProviderOpenAI,
-		callErr:  &APIError{StatusCode: 429},
+		provider: llms.ProviderOpenAI,
+		callErr:  &llms.APIError{StatusCode: 429},
 	}
 	client2 := &mockFallbackLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		callResp: testSuccess,
 	}
 
 	var fallbackCalled bool
 	var fromIdx, toIdx int
-	chain := NewFallbackChain([]LLM{client1, client2},
-		WithOnFallback(func(fi, ti int, _, _ LLM, _ error) {
+	chain := NewFallbackChain([]llms.LLM{client1, client2},
+		WithOnFallback(func(fi, ti int, _, _ llms.LLM, _ error) {
 			fallbackCalled = true
 			fromIdx = fi
 			toIdx = ti
@@ -381,8 +383,8 @@ func TestFallbackChain_OnSuccessCallback(t *testing.T) {
 
 	var successCalled bool
 	var successIdx int
-	chain := NewFallbackChain([]LLM{client},
-		WithOnSuccess(func(idx int, _ LLM) {
+	chain := NewFallbackChain([]llms.LLM{client},
+		WithOnSuccess(func(idx int, _ llms.LLM) {
 			successCalled = true
 			successIdx = idx
 		}),
@@ -403,13 +405,13 @@ func TestFallbackChain_OnSuccessCallback(t *testing.T) {
 
 func TestFallbackChain_GenerateContent(t *testing.T) {
 	client := &mockFallbackLLM{
-		genResp: &Response{Content: testGenerated},
+		genResp: &llms.Response{Content: testGenerated},
 	}
 
-	chain := NewFallbackChain([]LLM{client})
+	chain := NewFallbackChain([]llms.LLM{client})
 
-	resp, err := chain.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "test"},
+	resp, err := chain.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "test"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -424,10 +426,10 @@ func TestFallbackChain_Stream(t *testing.T) {
 		callResp: testStreamed,
 	}
 
-	chain := NewFallbackChain([]LLM{client})
+	chain := NewFallbackChain([]llms.LLM{client})
 
-	stream, err := chain.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "test"},
+	stream, err := chain.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "test"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -443,17 +445,17 @@ func TestFallbackChain_Stream(t *testing.T) {
 }
 
 func TestFallbackChain_GetProvider(t *testing.T) {
-	client := &mockFallbackLLM{provider: ProviderOpenAI}
-	chain := NewFallbackChain([]LLM{client})
+	client := &mockFallbackLLM{provider: llms.ProviderOpenAI}
+	chain := NewFallbackChain([]llms.LLM{client})
 
-	if chain.Provider() != ProviderOpenAI {
+	if chain.Provider() != llms.ProviderOpenAI {
 		t.Errorf("provider = %v, want OpenAI", chain.Provider())
 	}
 }
 
 func TestFallbackChain_GetModel(t *testing.T) {
 	client := &mockFallbackLLM{model: testGPT4}
-	chain := NewFallbackChain([]LLM{client})
+	chain := NewFallbackChain([]llms.LLM{client})
 
 	if chain.Model() != testGPT4 {
 		t.Errorf("model = %s, want 'gpt-4'", chain.Model())
@@ -463,7 +465,7 @@ func TestFallbackChain_GetModel(t *testing.T) {
 func TestFallbackChain_Clients(t *testing.T) {
 	client1 := &mockFallbackLLM{}
 	client2 := &mockFallbackLLM{}
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	clients := chain.Clients()
 	if len(clients) != 2 {
@@ -473,7 +475,7 @@ func TestFallbackChain_Clients(t *testing.T) {
 
 func TestFallbackChain_AddClient(t *testing.T) {
 	client1 := &mockFallbackLLM{}
-	chain := NewFallbackChain([]LLM{client1})
+	chain := NewFallbackChain([]llms.LLM{client1})
 
 	client2 := &mockFallbackLLM{}
 	chain.AddClient(client2)
@@ -486,7 +488,7 @@ func TestFallbackChain_AddClient(t *testing.T) {
 func TestFallbackChain_RemoveClient(t *testing.T) {
 	client1 := &mockFallbackLLM{}
 	client2 := &mockFallbackLLM{}
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	if !chain.RemoveClient(0) {
 		t.Error("remove should return true")
@@ -503,13 +505,13 @@ func TestFallbackChain_RemoveClient(t *testing.T) {
 
 func TestFallbackChain_HealthTracking(t *testing.T) {
 	client1 := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 500},
+		callErr: &llms.APIError{StatusCode: 500},
 	}
 	client2 := &mockFallbackLLM{
 		callResp: testSuccess,
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	// First call - client1 fails, client2 succeeds
 	_, err := chain.Call(context.Background(), "test")
@@ -543,16 +545,16 @@ func TestFallbackChain_HealthTracking(t *testing.T) {
 func TestFallbackChain_RecoveryAfterRestoresPrimary(t *testing.T) {
 	clock := &fallbackTestClock{now: time.Unix(100, 0)}
 	client1 := &mockFallbackLLM{
-		provider: ProviderOpenAI,
-		callErr:  &APIError{StatusCode: 503},
+		provider: llms.ProviderOpenAI,
+		callErr:  &llms.APIError{StatusCode: 503},
 		callResp: "from primary",
 	}
 	client2 := &mockFallbackLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		callResp: "from fallback",
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2},
+	chain := NewFallbackChain([]llms.LLM{client1, client2},
 		WithRecoveryAfter(10*time.Millisecond),
 		withFallbackClock(clock.Now),
 	)
@@ -611,9 +613,9 @@ func TestFallbackChain_RecoveryAfterRestoresPrimary(t *testing.T) {
 func TestFallbackChain_WithRecoveryAfterHonored(t *testing.T) {
 	clock := &fallbackTestClock{now: time.Unix(200, 0)}
 	client := &mockFallbackLLM{
-		callErr: &APIError{StatusCode: 503},
+		callErr: &llms.APIError{StatusCode: 503},
 	}
-	chain := NewFallbackChain([]LLM{client},
+	chain := NewFallbackChain([]llms.LLM{client},
 		WithRecoveryAfter(25*time.Millisecond),
 		withFallbackClock(clock.Now),
 	)
@@ -641,7 +643,7 @@ func TestFallbackChain_AllClientsInCooldownStillAttempts(t *testing.T) {
 	clock := &fallbackTestClock{now: time.Unix(300, 0)}
 	client1 := &mockFallbackLLM{callResp: "from primary"}
 	client2 := &mockFallbackLLM{callResp: "from fallback"}
-	chain := NewFallbackChain([]LLM{client1, client2},
+	chain := NewFallbackChain([]llms.LLM{client1, client2},
 		WithRecoveryAfter(time.Minute),
 		withFallbackClock(clock.Now),
 	)
@@ -666,7 +668,7 @@ func TestFallbackChain_AllClientsInCooldownStillAttempts(t *testing.T) {
 
 func TestFallbackChain_SetClientHealthy(t *testing.T) {
 	client := &mockFallbackLLM{}
-	chain := NewFallbackChain([]LLM{client})
+	chain := NewFallbackChain([]llms.LLM{client})
 
 	chain.SetClientHealthy(0, false)
 	if chain.IsClientHealthy(0) {
@@ -682,7 +684,7 @@ func TestFallbackChain_SetClientHealthy(t *testing.T) {
 func TestFallbackChain_ResetHealth(t *testing.T) {
 	client1 := &mockFallbackLLM{}
 	client2 := &mockFallbackLLM{}
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	chain.SetClientHealthy(0, false)
 	chain.SetClientHealthy(1, false)
@@ -703,7 +705,7 @@ func TestFallbackChain_CustomSelector(t *testing.T) {
 	}
 
 	// Custom selector that falls back on any error
-	chain := NewFallbackChain([]LLM{client1, client2},
+	chain := NewFallbackChain([]llms.LLM{client1, client2},
 		WithFallbackSelector(AlwaysFallbackSelector{}),
 	)
 
@@ -724,7 +726,7 @@ func TestFallbackChain_CircuitOpenTriggersFallback(t *testing.T) {
 		callResp: testSuccess,
 	}
 
-	chain := NewFallbackChain([]LLM{client1, client2})
+	chain := NewFallbackChain([]llms.LLM{client1, client2})
 
 	result, err := chain.Call(context.Background(), "test")
 	if err != nil {
@@ -736,13 +738,13 @@ func TestFallbackChain_CircuitOpenTriggersFallback(t *testing.T) {
 }
 
 func TestWeightedFallbackChain(t *testing.T) {
-	client1 := &mockFallbackLLM{provider: ProviderOpenAI, model: "low-priority"}
-	client2 := &mockFallbackLLM{provider: ProviderAnthropic, model: "high-priority", callResp: testSuccess}
-	client3 := &mockFallbackLLM{provider: ProviderGemini, model: "medium-priority"}
+	client1 := &mockFallbackLLM{provider: llms.ProviderOpenAI, model: "low-priority"}
+	client2 := &mockFallbackLLM{provider: llms.ProviderAnthropic, model: "high-priority", callResp: testSuccess}
+	client3 := &mockFallbackLLM{provider: llms.ProviderGemini, model: "medium-priority"}
 
 	// client2 has highest weight, should be tried first
 	chain, err := NewWeightedFallbackChain(
-		[]LLM{client1, client2, client3},
+		[]llms.LLM{client1, client2, client3},
 		[]int{1, 10, 5},
 	)
 	if err != nil {

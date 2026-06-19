@@ -1,4 +1,4 @@
-package llms
+package resilience
 
 import (
 	"errors"

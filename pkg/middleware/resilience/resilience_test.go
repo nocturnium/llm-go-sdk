@@ -1,4 +1,4 @@
-package llms
+package resilience
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestCircuitBreaker_InitialState(t *testing.T) {
@@ -267,13 +269,13 @@ func TestDefaultShouldRetry(t *testing.T) {
 		expected bool
 	}{
 		{"nil error", nil, false},
-		{"rate limited", &APIError{StatusCode: 429}, true},
-		{"server error 500", &APIError{StatusCode: 500}, true},
-		{"server error 502", &APIError{StatusCode: 502}, true},
-		{"server error 503", &APIError{StatusCode: 503}, true},
-		{"server error 504", &APIError{StatusCode: 504}, true},
-		{"client error 400", &APIError{StatusCode: 400}, false},
-		{"auth error 401", &APIError{StatusCode: 401}, false},
+		{"rate limited", &llms.APIError{StatusCode: 429}, true},
+		{"server error 500", &llms.APIError{StatusCode: 500}, true},
+		{"server error 502", &llms.APIError{StatusCode: 502}, true},
+		{"server error 503", &llms.APIError{StatusCode: 503}, true},
+		{"server error 504", &llms.APIError{StatusCode: 504}, true},
+		{"client error 400", &llms.APIError{StatusCode: 400}, false},
+		{"auth error 401", &llms.APIError{StatusCode: 401}, false},
 		{"context canceled", context.Canceled, false},
 		{"context deadline", context.DeadlineExceeded, false},
 		{"circuit open", ErrCircuitOpen, false},
@@ -297,9 +299,9 @@ func TestIsProviderUnhealthy(t *testing.T) {
 		expected bool
 	}{
 		{"nil error", nil, false},
-		{"rate limited", &APIError{StatusCode: 429}, true},
-		{"server error", &APIError{StatusCode: 503}, true},
-		{"client error", &APIError{StatusCode: 400}, false},
+		{"rate limited", &llms.APIError{StatusCode: 429}, true},
+		{"server error", &llms.APIError{StatusCode: 503}, true},
+		{"client error", &llms.APIError{StatusCode: 400}, false},
 		{"context canceled", context.Canceled, false},
 		{"context deadline", context.DeadlineExceeded, false},
 		{"circuit open", ErrCircuitOpen, false},
@@ -322,7 +324,7 @@ func TestIsProviderUnhealthy(t *testing.T) {
 
 // mockResilientLLM is a mock LLM for testing resilient client
 type mockResilientLLM struct {
-	provider    Provider
+	provider    llms.Provider
 	model       string
 	callCount   int32
 	responses   []mockResponse
@@ -335,25 +337,25 @@ type mockResponse struct {
 	err     error
 }
 
-func (m *mockResilientLLM) Call(_ context.Context, _ string, _ ...CallOption) (string, error) {
+func (m *mockResilientLLM) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	return m.getResponse()
 }
 
-func (m *mockResilientLLM) GenerateContent(_ context.Context, _ []Message, _ ...CallOption) (*Response, error) {
+func (m *mockResilientLLM) GenerateContent(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (*llms.Response, error) {
 	content, err := m.getResponse()
 	if err != nil {
 		return nil, err
 	}
-	return &Response{Content: content}, nil
+	return &llms.Response{Content: content}, nil
 }
 
-func (m *mockResilientLLM) Stream(_ context.Context, _ []Message, _ ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockResilientLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	content, err := m.getResponse()
 	if err != nil {
 		return nil, err
 	}
-	ch := make(chan StreamChunk, 1)
-	ch <- StreamChunk{Content: content}
+	ch := make(chan llms.StreamChunk, 1)
+	ch <- llms.StreamChunk{Content: content}
 	close(ch)
 	return ch, nil
 }
@@ -383,9 +385,9 @@ func (m *mockResilientLLM) getResponse() (string, error) {
 	return resp.content, resp.err
 }
 
-func (m *mockResilientLLM) Provider() Provider { return m.provider }
-func (m *mockResilientLLM) Model() string      { return m.model }
-func (m *mockResilientLLM) CallCount() int     { return int(atomic.LoadInt32(&m.callCount)) }
+func (m *mockResilientLLM) Provider() llms.Provider { return m.provider }
+func (m *mockResilientLLM) Model() string           { return m.model }
+func (m *mockResilientLLM) CallCount() int          { return int(atomic.LoadInt32(&m.callCount)) }
 
 func TestResilientClient_SuccessNoRetry(t *testing.T) {
 	llm := &mockResilientLLM{
@@ -409,8 +411,8 @@ func TestResilientClient_SuccessNoRetry(t *testing.T) {
 func TestResilientClient_RetriesOnRetryableError(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 429, Message: "rate limited"}},
-			{err: &APIError{StatusCode: 503, Message: "service unavailable"}},
+			{err: &llms.APIError{StatusCode: 429, Message: "rate limited"}},
+			{err: &llms.APIError{StatusCode: 503, Message: "service unavailable"}},
 			{content: "success"},
 		},
 	}
@@ -439,7 +441,7 @@ func TestResilientClient_RetriesOnRetryableError(t *testing.T) {
 func TestResilientClient_NoRetryOnNonRetryableError(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 401, Message: "unauthorized"}},
+			{err: &llms.APIError{StatusCode: 401, Message: "unauthorized"}},
 		},
 	}
 
@@ -457,9 +459,9 @@ func TestResilientClient_NoRetryOnNonRetryableError(t *testing.T) {
 func TestResilientClient_MaxAttemptsExhausted(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 429}},
-			{err: &APIError{StatusCode: 429}},
-			{err: &APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
 		},
 	}
 
@@ -484,9 +486,9 @@ func TestResilientClient_MaxAttemptsExhausted(t *testing.T) {
 func TestResilientClient_CircuitBreakerOpens(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 500}},
-			{err: &APIError{StatusCode: 500}},
-			{err: &APIError{StatusCode: 500}},
+			{err: &llms.APIError{StatusCode: 500}},
+			{err: &llms.APIError{StatusCode: 500}},
+			{err: &llms.APIError{StatusCode: 500}},
 		},
 	}
 
@@ -549,7 +551,7 @@ func TestResilientClient_CircuitBreakerOpensOnConnectionRefused(t *testing.T) {
 
 func TestResilientClient_PreservesLastErrorWhenRetriesExhausted(t *testing.T) {
 	llm := &mockResilientLLM{
-		responses: []mockResponse{{err: &APIError{StatusCode: 500}}},
+		responses: []mockResponse{{err: &llms.APIError{StatusCode: 500}}},
 	}
 	breaker := NewCircuitBreaker(WithMaxFailures(1))
 	client := NewResilientClient(llm,
@@ -563,7 +565,7 @@ func TestResilientClient_PreservesLastErrorWhenRetriesExhausted(t *testing.T) {
 	)
 
 	_, err := client.Call(context.Background(), "test")
-	if !errors.Is(err, ErrServerError) {
+	if !errors.Is(err, llms.ErrServerError) {
 		t.Fatalf("err = %v, want preserved server error", err)
 	}
 	if breaker.State() != CircuitOpen {
@@ -573,7 +575,7 @@ func TestResilientClient_PreservesLastErrorWhenRetriesExhausted(t *testing.T) {
 
 func TestResilientClient_CircuitBreakerCountsFailingCallsNotAttempts(t *testing.T) {
 	llm := &mockResilientLLM{
-		responses: []mockResponse{{err: &APIError{StatusCode: 500}}},
+		responses: []mockResponse{{err: &llms.APIError{StatusCode: 500}}},
 	}
 	breaker := NewCircuitBreaker(WithMaxFailures(2))
 	client := NewResilientClient(llm,
@@ -672,7 +674,7 @@ func TestResilientClient_BreakerIgnoresContextCanceled(t *testing.T) {
 
 	t.Run("retryable 503 opens breaker", func(t *testing.T) {
 		llm := &mockResilientLLM{
-			responses: []mockResponse{{err: &APIError{StatusCode: 503, Message: "service unavailable"}}},
+			responses: []mockResponse{{err: &llms.APIError{StatusCode: 503, Message: "service unavailable"}}},
 		}
 		breaker := NewCircuitBreaker(WithMaxFailures(5))
 		client := NewResilientClient(llm,
@@ -693,7 +695,7 @@ func TestResilientClient_BreakerIgnoresContextCanceled(t *testing.T) {
 func TestResilientClient_OnRetryCallback(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
 			{content: "success"},
 		},
 	}
@@ -725,7 +727,7 @@ func TestResilientClient_HonorsRetryAfter(t *testing.T) {
 	retryAfter := 30 * time.Millisecond
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 429, RetryAfter: retryAfter}},
+			{err: &llms.APIError{StatusCode: 429, RetryAfter: retryAfter}},
 			{content: "success"},
 		},
 	}
@@ -764,7 +766,7 @@ func TestResilientClient_HonorsRetryAfter(t *testing.T) {
 
 func TestResilientClient_MaxAttemptsZeroAttemptsOnce(t *testing.T) {
 	llm := &mockResilientLLM{
-		responses: []mockResponse{{err: &APIError{StatusCode: 429}}},
+		responses: []mockResponse{{err: &llms.APIError{StatusCode: 429}}},
 	}
 	client := NewResilientClient(llm,
 		WithRetryConfig(&RetryConfig{
@@ -786,8 +788,8 @@ func TestResilientClient_MaxAttemptsZeroAttemptsOnce(t *testing.T) {
 func TestResilientClient_ContextCancellation(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 429}},
-			{err: &APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
 		},
 	}
 
@@ -816,8 +818,8 @@ func TestResilientClient_GenerateContent(t *testing.T) {
 
 	client := NewResilientClient(llm)
 
-	resp, err := client.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "test"},
+	resp, err := client.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "test"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -834,8 +836,8 @@ func TestResilientClient_Stream(t *testing.T) {
 
 	client := NewResilientClient(llm)
 
-	stream, err := client.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "test"},
+	stream, err := client.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "test"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -851,10 +853,10 @@ func TestResilientClient_Stream(t *testing.T) {
 }
 
 func TestResilientClient_GetProvider(t *testing.T) {
-	llm := &mockResilientLLM{provider: ProviderOpenAI}
+	llm := &mockResilientLLM{provider: llms.ProviderOpenAI}
 	client := NewResilientClient(llm)
 
-	if client.Provider() != ProviderOpenAI {
+	if client.Provider() != llms.ProviderOpenAI {
 		t.Errorf("provider = %v, want OpenAI", client.Provider())
 	}
 }
@@ -889,8 +891,8 @@ func TestResilientClient_CircuitBreakerAccessor(t *testing.T) {
 func TestResilientClient_WithMaxRetries(t *testing.T) {
 	llm := &mockResilientLLM{
 		responses: []mockResponse{
-			{err: &APIError{StatusCode: 429}},
-			{err: &APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
+			{err: &llms.APIError{StatusCode: 429}},
 			{content: "success"},
 		},
 	}

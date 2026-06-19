@@ -1,35 +1,37 @@
-package llms
+package resilience
 
 import (
 	"context"
 	"sync/atomic"
 	"testing"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // streamMock is an LLM whose Stream emits a fixed set of chunks (used to simulate
 // streams that fail via a terminal error chunk rather than a synchronous error).
 type streamMock struct {
-	provider     Provider
+	provider     llms.Provider
 	model        string
-	streamChunks []StreamChunk
+	streamChunks []llms.StreamChunk
 	streamErr    error
 	calls        int32
 }
 
-func (m *streamMock) Call(context.Context, string, ...CallOption) (string, error) {
+func (m *streamMock) Call(context.Context, string, ...llms.CallOption) (string, error) {
 	return "", nil
 }
 
-func (m *streamMock) GenerateContent(context.Context, []Message, ...CallOption) (*Response, error) {
-	return &Response{}, nil
+func (m *streamMock) GenerateContent(context.Context, []llms.Message, ...llms.CallOption) (*llms.Response, error) {
+	return &llms.Response{}, nil
 }
 
-func (m *streamMock) Stream(context.Context, []Message, ...CallOption) (<-chan StreamChunk, error) {
+func (m *streamMock) Stream(context.Context, []llms.Message, ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	atomic.AddInt32(&m.calls, 1)
 	if m.streamErr != nil {
 		return nil, m.streamErr
 	}
-	ch := make(chan StreamChunk, len(m.streamChunks))
+	ch := make(chan llms.StreamChunk, len(m.streamChunks))
 	for _, c := range m.streamChunks {
 		ch <- c
 	}
@@ -37,18 +39,18 @@ func (m *streamMock) Stream(context.Context, []Message, ...CallOption) (<-chan S
 	return ch, nil
 }
 
-func (m *streamMock) Provider() Provider { return m.provider }
-func (m *streamMock) Model() string      { return m.model }
+func (m *streamMock) Provider() llms.Provider { return m.provider }
+func (m *streamMock) Model() string           { return m.model }
 
 // TestResilientClient_StreamRecordsFailure verifies a stream that fails via a
 // terminal error chunk trips the circuit breaker (previously it was recorded as a
 // false success).
 func TestResilientClient_StreamRecordsFailure(t *testing.T) {
 	cb := NewCircuitBreaker(WithMaxFailures(1))
-	mock := &streamMock{streamChunks: []StreamChunk{{Error: &APIError{StatusCode: 503}}}}
+	mock := &streamMock{streamChunks: []llms.StreamChunk{{Error: &llms.APIError{StatusCode: 503}}}}
 	rc := NewResilientClient(mock, WithCircuitBreaker(cb), WithMaxRetries(0))
 
-	ch, err := rc.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}})
+	ch, err := rc.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -64,10 +66,10 @@ func TestResilientClient_StreamRecordsFailure(t *testing.T) {
 // the breaker.
 func TestResilientClient_StreamRecordsSuccess(t *testing.T) {
 	cb := NewCircuitBreaker(WithMaxFailures(1))
-	mock := &streamMock{streamChunks: []StreamChunk{{Content: "ok"}, {Done: true}}}
+	mock := &streamMock{streamChunks: []llms.StreamChunk{{Content: "ok"}, {Done: true}}}
 	rc := NewResilientClient(mock, WithCircuitBreaker(cb), WithMaxRetries(0))
 
-	ch, err := rc.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}})
+	ch, err := rc.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -83,11 +85,11 @@ func TestResilientClient_StreamRecordsSuccess(t *testing.T) {
 // client when a stream errors before emitting any content (previously the failing
 // client was marked healthy and no failover occurred).
 func TestFallbackChain_StreamFailsOverOnError(t *testing.T) {
-	bad := &streamMock{provider: "p0", streamChunks: []StreamChunk{{Error: &APIError{StatusCode: 503}}}}
-	good := &streamMock{provider: "p1", streamChunks: []StreamChunk{{Content: "hello"}, {Done: true}}}
-	fc := NewFallbackChain([]LLM{bad, good})
+	bad := &streamMock{provider: "p0", streamChunks: []llms.StreamChunk{{Error: &llms.APIError{StatusCode: 503}}}}
+	good := &streamMock{provider: "p1", streamChunks: []llms.StreamChunk{{Content: "hello"}, {Done: true}}}
+	fc := NewFallbackChain([]llms.LLM{bad, good})
 
-	ch, err := fc.Stream(context.Background(), []Message{{Role: RoleUser, Content: "hi"}})
+	ch, err := fc.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}

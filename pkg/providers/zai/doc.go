@@ -92,7 +92,7 @@
 // For advanced configuration, supply a standard library *http.Client (for
 // timeouts, proxies, or a custom transport) and use a convenience option for
 // the timeout. For retries and circuit breaking, wrap the client with
-// llms.NewResilientClient.
+// resilience.NewResilientClient.
 //
 //	client, err := zai.New(
 //	    zai.WithAPIKey("your-api-key"),

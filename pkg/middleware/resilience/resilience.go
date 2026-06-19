@@ -1,15 +1,17 @@
-package llms
+package resilience
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // ResilientClient wraps an LLM with retry logic and circuit breaker
 type ResilientClient struct {
-	llm     LLM
+	llm     llms.LLM
 	retry   *RetryConfig
 	breaker *CircuitBreaker
 
@@ -21,7 +23,7 @@ type ResilientClient struct {
 type ResilienceOption func(*ResilientClient)
 
 // NewResilientClient creates a new resilient LLM client
-func NewResilientClient(llm LLM, opts ...ResilienceOption) *ResilientClient {
+func NewResilientClient(llm llms.LLM, opts ...ResilienceOption) *ResilientClient {
 	rc := &ResilientClient{
 		llm:     llm,
 		retry:   DefaultRetryConfig(),
@@ -87,19 +89,19 @@ func copyRetryConfig(cfg *RetryConfig) *RetryConfig {
 }
 
 // Call wraps the LLM's Call method with resilience
-func (rc *ResilientClient) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (rc *ResilientClient) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	var result string
 	err := rc.execute(ctx, func() error {
 		var callErr error
-		result, callErr = Call(ctx, rc.llm, prompt, options...)
+		result, callErr = llms.Call(ctx, rc.llm, prompt, options...)
 		return callErr
 	})
 	return result, err
 }
 
 // GenerateContent wraps the LLM's GenerateContent method with resilience
-func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
-	var result *Response
+func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
+	var result *llms.Response
 	err := rc.execute(ctx, func() error {
 		var genErr error
 		result, genErr = rc.llm.GenerateContent(ctx, messages, options...)
@@ -115,7 +117,7 @@ func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []Messa
 // from the stream's actual outcome (success/failure) once it completes. Mid-stream
 // retry is not possible once chunks have been emitted; only the initial connect
 // error is handled synchronously.
-func (rc *ResilientClient) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	if !rc.breaker.Allow() {
 		return nil, ErrCircuitOpen
 	}
@@ -127,10 +129,10 @@ func (rc *ResilientClient) Stream(ctx context.Context, messages []Message, optio
 		return nil, err
 	}
 
-	opts := ApplyOptions(options...)
+	opts := llms.ApplyOptions(options...)
 	var termErr error
-	return WrapStreamWithFinalizer(ctx, src, opts,
-		func(chunk StreamChunk) StreamChunk {
+	return llms.WrapStreamWithFinalizer(ctx, src, opts,
+		func(chunk llms.StreamChunk) llms.StreamChunk {
 			if chunk.Error != nil {
 				termErr = chunk.Error
 			}
@@ -235,7 +237,7 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 func retryDelayForError(err error, jitteredDelay, maxDelay time.Duration) time.Duration {
 	retryDelay := jitteredDelay
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) && apiErr.RetryAfter > retryDelay {
 		retryDelay = apiErr.RetryAfter
 	}
@@ -246,7 +248,7 @@ func retryDelayForError(err error, jitteredDelay, maxDelay time.Duration) time.D
 }
 
 // Provider returns the underlying LLM's provider
-func (rc *ResilientClient) Provider() Provider {
+func (rc *ResilientClient) Provider() llms.Provider {
 	return rc.llm.Provider()
 }
 
@@ -261,9 +263,9 @@ func (rc *ResilientClient) CircuitBreaker() *CircuitBreaker {
 }
 
 // Unwrap returns the underlying LLM
-func (rc *ResilientClient) Unwrap() LLM {
+func (rc *ResilientClient) Unwrap() llms.LLM {
 	return rc.llm
 }
 
 // Ensure ResilientClient implements LLM
-var _ LLM = (*ResilientClient)(nil)
+var _ llms.LLM = (*ResilientClient)(nil)

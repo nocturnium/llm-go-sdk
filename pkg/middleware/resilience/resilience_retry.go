@@ -1,4 +1,4 @@
-package llms
+package resilience
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"net"
 	"syscall"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // RetryConfig configures retry behavior
@@ -41,7 +43,7 @@ func DefaultShouldRetry(err error) bool {
 	}
 
 	// Check for specific error types
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case 429: // Rate limited
@@ -79,7 +81,7 @@ func isProviderUnhealthy(err error) bool {
 		return false
 	}
 
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case 429, 500, 502, 503, 504:

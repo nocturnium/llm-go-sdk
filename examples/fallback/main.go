@@ -14,6 +14,7 @@ import (
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v2/pkg/middleware/resilience"
 	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
 	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/gemini"
 	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
@@ -60,7 +61,7 @@ func main() {
 
 	// Example 1: Basic fallback chain
 	fmt.Println("=== Basic Fallback Chain ===")
-	chain := llms.NewFallbackChain(clients)
+	chain := resilience.NewFallbackChain(clients)
 
 	resp, err := chain.Call(ctx, "What is 2+2? Reply with just the number.")
 	if err != nil {
@@ -72,12 +73,12 @@ func main() {
 
 	// Example 2: Fallback with callbacks
 	fmt.Println("=== Fallback with Monitoring ===")
-	monitoredChain := llms.NewFallbackChain(clients,
-		llms.WithOnFallback(func(_, _ int, from, to llms.LLM, err error) {
+	monitoredChain := resilience.NewFallbackChain(clients,
+		resilience.WithOnFallback(func(_, _ int, from, to llms.LLM, err error) {
 			fmt.Printf("  Falling back: %s -> %s (error: %v)\n",
 				from.Provider(), to.Provider(), err)
 		}),
-		llms.WithOnSuccess(func(idx int, client llms.LLM) {
+		resilience.WithOnSuccess(func(idx int, client llms.LLM) {
 			fmt.Printf("  Success with provider #%d: %s\n", idx, client.Provider())
 		}),
 	)
@@ -93,20 +94,20 @@ func main() {
 	fmt.Println("=== Fallback Selectors ===")
 
 	// Default: Falls back on rate limits, server errors, circuit open
-	defaultChain := llms.NewFallbackChain(clients,
-		llms.WithFallbackSelector(llms.DefaultFallbackSelector{}),
+	defaultChain := resilience.NewFallbackChain(clients,
+		resilience.WithFallbackSelector(resilience.DefaultFallbackSelector{}),
 	)
 	fmt.Println("DefaultFallbackSelector: Falls back on 429, 5xx, circuit open")
 
 	// Always: Falls back on any error
-	alwaysChain := llms.NewFallbackChain(clients,
-		llms.WithFallbackSelector(llms.AlwaysFallbackSelector{}),
+	alwaysChain := resilience.NewFallbackChain(clients,
+		resilience.WithFallbackSelector(resilience.AlwaysFallbackSelector{}),
 	)
 	fmt.Println("AlwaysFallbackSelector: Falls back on any error")
 
 	// Never: No fallback, fail fast
-	neverChain := llms.NewFallbackChain(clients,
-		llms.WithFallbackSelector(llms.NeverFallbackSelector{}),
+	neverChain := resilience.NewFallbackChain(clients,
+		resilience.WithFallbackSelector(resilience.NeverFallbackSelector{}),
 	)
 	fmt.Println("NeverFallbackSelector: No fallback, fail immediately")
 
@@ -128,7 +129,7 @@ func main() {
 			weights[i] = 10 - i*3 // Higher priority for earlier providers
 		}
 
-		weightedChain, err := llms.NewWeightedFallbackChain(clients, weights)
+		weightedChain, err := resilience.NewWeightedFallbackChain(clients, weights)
 		if err != nil {
 			log.Printf("Failed to create weighted chain: %v", err)
 		} else {
@@ -151,7 +152,7 @@ func main() {
 
 	// Example 5: Health management
 	fmt.Println("=== Health Management ===")
-	healthChain := llms.NewFallbackChain(clients)
+	healthChain := resilience.NewFallbackChain(clients)
 
 	// Check health status
 	for i := range clients {
@@ -176,7 +177,7 @@ func main() {
 
 	// Example 6: Dynamic client management
 	fmt.Println("\n=== Dynamic Client Management ===")
-	dynamicChain := llms.NewFallbackChain(clients[:1]) // Start with one client
+	dynamicChain := resilience.NewFallbackChain(clients[:1]) // Start with one client
 
 	fmt.Printf("Initial clients: %d\n", len(dynamicChain.Clients()))
 

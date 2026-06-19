@@ -1,4 +1,4 @@
-package llms
+package resilience
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // Fallback-related errors
@@ -36,7 +38,7 @@ func (s DefaultFallbackSelector) ShouldFallback(err error) bool {
 		return true
 	}
 
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
 		case 529: // Overloaded (Anthropic)
@@ -77,12 +79,12 @@ func (s NeverFallbackSelector) ShouldFallback(_ error) bool {
 // FallbackChain tries multiple LLM clients in order until one succeeds
 type FallbackChain struct {
 	mu       sync.RWMutex
-	clients  []LLM
+	clients  []llms.LLM
 	selector FallbackSelector
 
 	// Callbacks
-	onFallback func(fromIdx int, toIdx int, from, to LLM, err error)
-	onSuccess  func(idx int, client LLM)
+	onFallback func(fromIdx int, toIdx int, from, to llms.LLM, err error)
+	onSuccess  func(idx int, client llms.LLM)
 
 	// Health tracking - using a slice for simpler index management.
 	// Each index corresponds directly to the client at the same index.
@@ -97,7 +99,7 @@ type FallbackChain struct {
 type FallbackOption func(*FallbackChain)
 
 // NewFallbackChain creates a new fallback chain with the given clients
-func NewFallbackChain(clients []LLM, opts ...FallbackOption) *FallbackChain {
+func NewFallbackChain(clients []llms.LLM, opts ...FallbackOption) *FallbackChain {
 	fc := &FallbackChain{
 		clients:        clients,
 		selector:       DefaultFallbackSelector{},
@@ -123,14 +125,14 @@ func WithFallbackSelector(selector FallbackSelector) FallbackOption {
 }
 
 // WithOnFallback sets a callback that's called when falling back to the next client
-func WithOnFallback(fn func(fromIdx int, toIdx int, from, to LLM, err error)) FallbackOption {
+func WithOnFallback(fn func(fromIdx int, toIdx int, from, to llms.LLM, err error)) FallbackOption {
 	return func(fc *FallbackChain) {
 		fc.onFallback = fn
 	}
 }
 
 // WithOnSuccess sets a callback that's called when a client succeeds
-func WithOnSuccess(fn func(idx int, client LLM)) FallbackOption {
+func WithOnSuccess(fn func(idx int, client llms.LLM)) FallbackOption {
 	return func(fc *FallbackChain) {
 		fc.onSuccess = fn
 	}
@@ -155,7 +157,7 @@ func withFallbackClock(now func() time.Time) FallbackOption {
 }
 
 // Call tries each client in order until one succeeds
-func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	fc.mu.RLock()
 	clients := fc.clients
 	fc.mu.RUnlock()
@@ -169,7 +171,7 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...Cal
 	var lastErr error
 	for pos, i := range candidateIndexes {
 		client := clients[i]
-		result, err := Call(ctx, client, prompt, options...)
+		result, err := llms.Call(ctx, client, prompt, options...)
 		if err == nil {
 			fc.markHealthy(i)
 			if fc.onSuccess != nil {
@@ -201,7 +203,7 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...Cal
 // executeWithFallback executes an operation across clients with fallback logic.
 // The operation function receives a client and returns a result and error.
 // This helper centralizes the retry/fallback logic used by GenerateContent and Stream.
-func executeWithFallback[T any](fc *FallbackChain, operation func(client LLM) (T, error)) (T, error) {
+func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LLM) (T, error)) (T, error) {
 	fc.mu.RLock()
 	clients := fc.clients
 	fc.mu.RUnlock()
@@ -246,8 +248,8 @@ func executeWithFallback[T any](fc *FallbackChain, operation func(client LLM) (T
 }
 
 // GenerateContent tries each client in order until one succeeds
-func (fc *FallbackChain) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
-	return executeWithFallback(fc, func(client LLM) (*Response, error) {
+func (fc *FallbackChain) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
+	return executeWithFallback(fc, func(client llms.LLM) (*llms.Response, error) {
 		return client.GenerateContent(ctx, messages, options...)
 	})
 }
@@ -258,7 +260,7 @@ func (fc *FallbackChain) GenerateContent(ctx context.Context, messages []Message
 // first chunk: if a client errors before emitting any content, it fails over to
 // the next client; once content flows, that client is committed and streamed
 // through (a later mid-stream error marks it unhealthy but cannot fail over).
-func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	fc.mu.RLock()
 	clients := fc.clients
 	fc.mu.RUnlock()
@@ -266,7 +268,7 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options
 		return nil, ErrNoClientsAvailable
 	}
 
-	opts := ApplyOptions(options...)
+	opts := llms.ApplyOptions(options...)
 	candidates := fc.candidateIndexes(len(clients))
 	var lastErr error
 
@@ -290,7 +292,7 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []Message, options
 		case !ok:
 			// Stream closed without any chunk; treat as an (empty) success.
 			fc.markHealthy(i)
-			return forwardStream(ctx, opts, StreamChunk{Done: true}, src, nil), nil
+			return forwardStream(ctx, opts, llms.StreamChunk{Done: true}, src, nil), nil
 		case first.Error != nil:
 			lastErr = first.Error
 			if isProviderUnhealthy(first.Error) {
@@ -329,7 +331,7 @@ func allClientsFailedError(err error) error {
 
 // fireFallback invokes the onFallback callback (if set) for a transition from the
 // candidate at position pos to the next candidate.
-func (fc *FallbackChain) fireFallback(pos int, candidates []int, clients []LLM, err error) {
+func (fc *FallbackChain) fireFallback(pos int, candidates []int, clients []llms.LLM, err error) {
 	if fc.onFallback == nil || pos >= len(candidates)-1 {
 		return
 	}
@@ -340,7 +342,7 @@ func (fc *FallbackChain) fireFallback(pos int, candidates []int, clients []LLM, 
 
 // drainStream consumes a stream to completion so its producer goroutine is not
 // left blocked when the chain abandons it to fail over.
-func drainStream(src <-chan StreamChunk) {
+func drainStream(src <-chan llms.StreamChunk) {
 	for range src { //nolint:revive // intentionally draining to unblock the producer
 	}
 }
@@ -348,9 +350,9 @@ func drainStream(src <-chan StreamChunk) {
 // forwardStream emits first, then forwards src to a new channel with StreamSender
 // timeout protection and the terminal-chunk guarantee. onDone (if set) is invoked
 // once with the terminal stream error, if one was observed.
-func forwardStream(ctx context.Context, opts *CallOptions, first StreamChunk, src <-chan StreamChunk, onDone func(error)) <-chan StreamChunk {
-	out := make(chan StreamChunk, GetBufferSize(opts))
-	sender := NewStreamSender(ctx, out, opts.StreamSendTimeout)
+func forwardStream(ctx context.Context, opts *llms.CallOptions, first llms.StreamChunk, src <-chan llms.StreamChunk, onDone func(error)) <-chan llms.StreamChunk {
+	out := make(chan llms.StreamChunk, llms.GetBufferSize(opts))
+	sender := llms.NewStreamSender(ctx, out, opts.StreamSendTimeout)
 
 	go func() {
 		defer close(out)
@@ -377,7 +379,7 @@ func forwardStream(ctx context.Context, opts *CallOptions, first StreamChunk, sr
 }
 
 // Provider returns the first client's provider
-func (fc *FallbackChain) Provider() Provider {
+func (fc *FallbackChain) Provider() llms.Provider {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
@@ -399,17 +401,17 @@ func (fc *FallbackChain) Model() string {
 }
 
 // Clients returns all clients in the chain
-func (fc *FallbackChain) Clients() []LLM {
+func (fc *FallbackChain) Clients() []llms.LLM {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
-	result := make([]LLM, len(fc.clients))
+	result := make([]llms.LLM, len(fc.clients))
 	copy(result, fc.clients)
 	return result
 }
 
 // AddClient adds a client to the end of the chain
-func (fc *FallbackChain) AddClient(client LLM) {
+func (fc *FallbackChain) AddClient(client llms.LLM) {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
@@ -516,7 +518,7 @@ func isHealthyAt(unhealthyUntil time.Time, now time.Time) bool {
 }
 
 // Ensure FallbackChain implements LLM
-var _ LLM = (*FallbackChain)(nil)
+var _ llms.LLM = (*FallbackChain)(nil)
 
 // WeightedFallbackChain extends FallbackChain with weighted selection
 type WeightedFallbackChain struct {
@@ -534,7 +536,7 @@ type WeightedFallbackChain struct {
 //   - opts: Optional fallback configuration options
 //
 // Returns error if validation fails. Use MustNewWeightedFallbackChain for panic on error.
-func NewWeightedFallbackChain(clients []LLM, weights []int, opts ...FallbackOption) (*WeightedFallbackChain, error) {
+func NewWeightedFallbackChain(clients []llms.LLM, weights []int, opts ...FallbackOption) (*WeightedFallbackChain, error) {
 	if len(clients) == 0 {
 		return nil, ErrNoClientsAvailable
 	}
@@ -546,7 +548,7 @@ func NewWeightedFallbackChain(clients []LLM, weights []int, opts ...FallbackOpti
 
 	// Sort clients by weight (descending)
 	type clientWeight struct {
-		client LLM
+		client llms.LLM
 		weight int
 	}
 
@@ -567,7 +569,7 @@ func NewWeightedFallbackChain(clients []LLM, weights []int, opts ...FallbackOpti
 		return cw[i].weight > cw[j].weight
 	})
 
-	sortedClients := make([]LLM, len(cw))
+	sortedClients := make([]llms.LLM, len(cw))
 	sortedWeights := make([]int, len(cw))
 	for i, c := range cw {
 		sortedClients[i] = c.client
@@ -582,7 +584,7 @@ func NewWeightedFallbackChain(clients []LLM, weights []int, opts ...FallbackOpti
 
 // MustNewWeightedFallbackChain is like NewWeightedFallbackChain but panics on error.
 // Use this when you're certain the inputs are valid.
-func MustNewWeightedFallbackChain(clients []LLM, weights []int, opts ...FallbackOption) *WeightedFallbackChain {
+func MustNewWeightedFallbackChain(clients []llms.LLM, weights []int, opts ...FallbackOption) *WeightedFallbackChain {
 	wfc, err := NewWeightedFallbackChain(clients, weights, opts...)
 	if err != nil {
 		panic(fmt.Sprintf("MustNewWeightedFallbackChain: %v", err))

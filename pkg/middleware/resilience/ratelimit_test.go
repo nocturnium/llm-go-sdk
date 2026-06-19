@@ -1,4 +1,4 @@
-package llms
+package resilience
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 const (
@@ -277,38 +279,38 @@ func TestRateLimiter_ContextCancellation(t *testing.T) {
 
 // mockRateLimitLLM is a mock LLM for testing rate limited client
 type mockRateLimitLLM struct {
-	provider  Provider
+	provider  llms.Provider
 	model     string
 	callResp  string
-	genResp   *Response
+	genResp   *llms.Response
 	callCount int32
 }
 
-func (m *mockRateLimitLLM) Call(_ context.Context, _ string, _ ...CallOption) (string, error) {
+func (m *mockRateLimitLLM) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	return m.callResp, nil
 }
 
-func (m *mockRateLimitLLM) GenerateContent(_ context.Context, _ []Message, _ ...CallOption) (*Response, error) {
+func (m *mockRateLimitLLM) GenerateContent(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (*llms.Response, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	if m.genResp != nil {
 		return m.genResp, nil
 	}
-	return &Response{Content: m.callResp, Usage: Usage{TotalTokens: 100}}, nil
+	return &llms.Response{Content: m.callResp, Usage: llms.Usage{TotalTokens: 100}}, nil
 }
 
-func (m *mockRateLimitLLM) Stream(_ context.Context, _ []Message, _ ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockRateLimitLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	atomic.AddInt32(&m.callCount, 1)
-	ch := make(chan StreamChunk, 2)
-	ch <- StreamChunk{Content: m.callResp}
-	ch <- StreamChunk{Usage: &Usage{TotalTokens: 50}}
+	ch := make(chan llms.StreamChunk, 2)
+	ch <- llms.StreamChunk{Content: m.callResp}
+	ch <- llms.StreamChunk{Usage: &llms.Usage{TotalTokens: 50}}
 	close(ch)
 	return ch, nil
 }
 
-func (m *mockRateLimitLLM) Provider() Provider { return m.provider }
-func (m *mockRateLimitLLM) Model() string      { return m.model }
-func (m *mockRateLimitLLM) CallCount() int     { return int(atomic.LoadInt32(&m.callCount)) }
+func (m *mockRateLimitLLM) Provider() llms.Provider { return m.provider }
+func (m *mockRateLimitLLM) Model() string           { return m.model }
+func (m *mockRateLimitLLM) CallCount() int          { return int(atomic.LoadInt32(&m.callCount)) }
 
 func TestRateLimitedClient_Call(t *testing.T) {
 	llm := &mockRateLimitLLM{callResp: testSuccess}
@@ -325,12 +327,12 @@ func TestRateLimitedClient_Call(t *testing.T) {
 
 func TestRateLimitedClient_GenerateContent(t *testing.T) {
 	llm := &mockRateLimitLLM{
-		genResp: &Response{Content: "generated", Usage: Usage{TotalTokens: 150}},
+		genResp: &llms.Response{Content: "generated", Usage: llms.Usage{TotalTokens: 150}},
 	}
 	client := NewRateLimitedClient(llm, WithRequestsPerMinute(60))
 
-	resp, err := client.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "test"},
+	resp, err := client.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "test"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -344,8 +346,8 @@ func TestRateLimitedClient_Stream(t *testing.T) {
 	llm := &mockRateLimitLLM{callResp: "streamed"}
 	client := NewRateLimitedClient(llm, WithRequestsPerMinute(60))
 
-	stream, err := client.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "test"},
+	stream, err := client.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "test"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -386,10 +388,10 @@ func TestRateLimitedClient_RateLimited(t *testing.T) {
 }
 
 func TestRateLimitedClient_GetProvider(t *testing.T) {
-	llm := &mockRateLimitLLM{provider: ProviderOpenAI}
+	llm := &mockRateLimitLLM{provider: llms.ProviderOpenAI}
 	client := NewRateLimitedClient(llm)
 
-	if client.Provider() != ProviderOpenAI {
+	if client.Provider() != llms.ProviderOpenAI {
 		t.Errorf("provider = %v, want OpenAI", client.Provider())
 	}
 }
@@ -433,7 +435,7 @@ func TestRateLimitedClientWithLimiter(t *testing.T) {
 
 func TestProviderRateLimits(t *testing.T) {
 	// Check that known providers have limits defined
-	providers := []Provider{ProviderOpenAI, ProviderAnthropic, ProviderGemini, ProviderTogetherAI}
+	providers := []llms.Provider{llms.ProviderOpenAI, llms.ProviderAnthropic, llms.ProviderGemini, llms.ProviderTogetherAI}
 
 	for _, p := range providers {
 		limits, ok := ProviderRateLimits[p]
@@ -448,18 +450,18 @@ func TestProviderRateLimits(t *testing.T) {
 }
 
 func TestNewProviderRateLimitedClient(t *testing.T) {
-	llm := &mockRateLimitLLM{provider: ProviderOpenAI}
+	llm := &mockRateLimitLLM{provider: llms.ProviderOpenAI}
 	client := NewProviderRateLimitedClient(llm)
 
 	limiter := client.Limiter()
-	if limiter.requestsPerMin != ProviderRateLimits[ProviderOpenAI].RequestsPerMinute {
+	if limiter.requestsPerMin != ProviderRateLimits[llms.ProviderOpenAI].RequestsPerMinute {
 		t.Errorf("requests/min = %d, want %d",
-			limiter.requestsPerMin, ProviderRateLimits[ProviderOpenAI].RequestsPerMinute)
+			limiter.requestsPerMin, ProviderRateLimits[llms.ProviderOpenAI].RequestsPerMinute)
 	}
 }
 
 func TestNewProviderRateLimitedClient_Override(t *testing.T) {
-	llm := &mockRateLimitLLM{provider: ProviderOpenAI}
+	llm := &mockRateLimitLLM{provider: llms.ProviderOpenAI}
 	client := NewProviderRateLimitedClient(llm, WithRequestsPerMinute(999))
 
 	limiter := client.Limiter()
@@ -488,13 +490,13 @@ func TestSharedRateLimiter(t *testing.T) {
 func TestSharedRateLimiter_GetProviderLimiter(t *testing.T) {
 	shared := NewSharedRateLimiter()
 
-	limiter := shared.GetProviderLimiter(ProviderOpenAI)
-	if limiter.requestsPerMin != ProviderRateLimits[ProviderOpenAI].RequestsPerMinute {
+	limiter := shared.GetProviderLimiter(llms.ProviderOpenAI)
+	if limiter.requestsPerMin != ProviderRateLimits[llms.ProviderOpenAI].RequestsPerMinute {
 		t.Error("should use provider default limits")
 	}
 
 	// Should return same limiter
-	limiter2 := shared.GetProviderLimiter(ProviderOpenAI)
+	limiter2 := shared.GetProviderLimiter(llms.ProviderOpenAI)
 	if limiter != limiter2 {
 		t.Error("should return same limiter for same provider")
 	}

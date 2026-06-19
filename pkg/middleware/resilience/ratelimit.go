@@ -1,10 +1,12 @@
-package llms
+package resilience
 
 import (
 	"context"
 	"errors"
 	"sync"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"golang.org/x/time/rate"
 )
@@ -300,12 +302,12 @@ func (rl *RateLimiter) Reset() {
 
 // RateLimitedClient wraps an LLM with client-side rate limiting
 type RateLimitedClient struct {
-	llm     LLM
+	llm     llms.LLM
 	limiter *RateLimiter
 }
 
 // NewRateLimitedClient creates a new rate-limited LLM client
-func NewRateLimitedClient(llm LLM, opts ...RateLimitOption) *RateLimitedClient {
+func NewRateLimitedClient(llm llms.LLM, opts ...RateLimitOption) *RateLimitedClient {
 	return &RateLimitedClient{
 		llm:     llm,
 		limiter: NewRateLimiter(opts...),
@@ -313,7 +315,7 @@ func NewRateLimitedClient(llm LLM, opts ...RateLimitOption) *RateLimitedClient {
 }
 
 // NewRateLimitedClientWithLimiter creates a rate-limited client with a shared limiter
-func NewRateLimitedClientWithLimiter(llm LLM, limiter *RateLimiter) *RateLimitedClient {
+func NewRateLimitedClientWithLimiter(llm llms.LLM, limiter *RateLimiter) *RateLimitedClient {
 	return &RateLimitedClient{
 		llm:     llm,
 		limiter: limiter,
@@ -321,15 +323,15 @@ func NewRateLimitedClientWithLimiter(llm LLM, limiter *RateLimiter) *RateLimited
 }
 
 // Call wraps the LLM's Call method with rate limiting
-func (rlc *RateLimitedClient) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (rlc *RateLimitedClient) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	if err := rlc.limiter.Wait(ctx); err != nil {
 		return "", err
 	}
-	return Call(ctx, rlc.llm, prompt, options...)
+	return llms.Call(ctx, rlc.llm, prompt, options...)
 }
 
 // GenerateContent wraps the LLM's GenerateContent method with rate limiting
-func (rlc *RateLimitedClient) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
+func (rlc *RateLimitedClient) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	if err := rlc.limiter.Wait(ctx); err != nil {
 		return nil, err
 	}
@@ -346,7 +348,7 @@ func (rlc *RateLimitedClient) GenerateContent(ctx context.Context, messages []Me
 }
 
 // Stream wraps the LLM's Stream method with rate limiting
-func (rlc *RateLimitedClient) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (rlc *RateLimitedClient) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	if err := rlc.limiter.Wait(ctx); err != nil {
 		return nil, err
 	}
@@ -356,8 +358,8 @@ func (rlc *RateLimitedClient) Stream(ctx context.Context, messages []Message, op
 		return nil, err
 	}
 
-	opts := ApplyOptions(options...)
-	return WrapStream(ctx, stream, opts, func(chunk StreamChunk) StreamChunk {
+	opts := llms.ApplyOptions(options...)
+	return llms.WrapStream(ctx, stream, opts, func(chunk llms.StreamChunk) llms.StreamChunk {
 		if chunk.Usage != nil {
 			rlc.limiter.RecordTokens(chunk.Usage.TotalTokens)
 		}
@@ -366,7 +368,7 @@ func (rlc *RateLimitedClient) Stream(ctx context.Context, messages []Message, op
 }
 
 // Provider returns the underlying LLM's provider
-func (rlc *RateLimitedClient) Provider() Provider {
+func (rlc *RateLimitedClient) Provider() llms.Provider {
 	return rlc.llm.Provider()
 }
 
@@ -381,47 +383,47 @@ func (rlc *RateLimitedClient) Limiter() *RateLimiter {
 }
 
 // Unwrap returns the underlying LLM
-func (rlc *RateLimitedClient) Unwrap() LLM {
+func (rlc *RateLimitedClient) Unwrap() llms.LLM {
 	return rlc.llm
 }
 
 // Ensure RateLimitedClient implements LLM
-var _ LLM = (*RateLimitedClient)(nil)
+var _ llms.LLM = (*RateLimitedClient)(nil)
 
 // ProviderRateLimits contains default rate limits for known providers
 // These are conservative defaults - actual limits may be higher based on tier
-var ProviderRateLimits = map[Provider]struct {
+var ProviderRateLimits = map[llms.Provider]struct {
 	RequestsPerMinute int
 	TokensPerMinute   int
 }{
-	ProviderOpenAI: {
+	llms.ProviderOpenAI: {
 		RequestsPerMinute: 60,    // Tier 1 default
 		TokensPerMinute:   60000, // Tier 1 default
 	},
-	ProviderAnthropic: {
+	llms.ProviderAnthropic: {
 		RequestsPerMinute: 60,    // Default
 		TokensPerMinute:   80000, // Default
 	},
-	ProviderGemini: {
+	llms.ProviderGemini: {
 		RequestsPerMinute: 60,      // Free tier
 		TokensPerMinute:   1000000, // Very generous
 	},
-	ProviderTogetherAI: {
+	llms.ProviderTogetherAI: {
 		RequestsPerMinute: 60,
 		TokensPerMinute:   100000,
 	},
-	ProviderFeatherless: {
+	llms.ProviderFeatherless: {
 		RequestsPerMinute: 60,     // Conservative default
 		TokensPerMinute:   100000, // Conservative default
 	},
-	ProviderSynthetic: {
+	llms.ProviderSynthetic: {
 		RequestsPerMinute: 25,    // 125 requests per 5 hours = 25/hour = ~0.4/min, use burst
 		TokensPerMinute:   50000, // Conservative default (no per-token pricing)
 	},
 }
 
 // NewProviderRateLimitedClient creates a rate-limited client with provider defaults
-func NewProviderRateLimitedClient(llm LLM, opts ...RateLimitOption) *RateLimitedClient {
+func NewProviderRateLimitedClient(llm llms.LLM, opts ...RateLimitOption) *RateLimitedClient {
 	provider := llm.Provider()
 
 	// Start with provider defaults if available
@@ -467,7 +469,7 @@ func (srl *SharedRateLimiter) GetLimiter(key string, opts ...RateLimitOption) *R
 }
 
 // GetProviderLimiter returns a rate limiter for a provider with default limits
-func (srl *SharedRateLimiter) GetProviderLimiter(provider Provider) *RateLimiter {
+func (srl *SharedRateLimiter) GetProviderLimiter(provider llms.Provider) *RateLimiter {
 	key := string(provider)
 
 	srl.mu.Lock()
