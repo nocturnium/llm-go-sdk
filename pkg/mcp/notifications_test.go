@@ -104,9 +104,12 @@ func TestClient_CallToolWithProgress(t *testing.T) {
 func TestClient_PerCallProgressRouting(t *testing.T) {
 	m := newMockTransport()
 	c := mustClient(t, m)
+	defer func() { _ = c.Close() }()
 
-	var clientLevel int
-	c.OnProgress(func(ProgressNotification) { clientLevel++ })
+	// Handlers run on the notifier pump (off the read path), so synchronize on
+	// channels rather than reading shared counters directly.
+	clientLevelCh := make(chan ProgressNotification, 4)
+	c.OnProgress(func(pn ProgressNotification) { clientLevelCh <- pn })
 
 	perCallCh := make(chan ProgressNotification, 1)
 	cleanup := c.registerCallProgress("tok-1", func(pn ProgressNotification) { perCallCh <- pn })
@@ -122,14 +125,25 @@ func TestClient_PerCallProgressRouting(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("per-call handler did not receive the matching notification")
 	}
-	if clientLevel != 0 {
-		t.Errorf("client-level handler fired %d times for a per-call token, want 0", clientLevel)
-	}
 
 	// A token with no per-call handler falls through to the client-level handler.
 	m.emit([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"other","progress":2}}`))
-	if clientLevel != 1 {
-		t.Errorf("client-level handler fired %d times, want 1", clientLevel)
+	select {
+	case pn := <-clientLevelCh:
+		if pn.Progress != 2 {
+			t.Errorf("client-level progress = %v, want 2", pn.Progress)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("client-level handler did not receive the fall-through notification")
+	}
+
+	// The per-call token must NOT have reached the client-level handler. The pump is
+	// serial, so by the time the fall-through notification has been delivered above,
+	// any client-level delivery for "tok-1" would already be queued ahead of it.
+	select {
+	case pn := <-clientLevelCh:
+		t.Errorf("client-level handler unexpectedly fired again: %+v", pn)
+	default:
 	}
 }
 

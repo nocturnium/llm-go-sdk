@@ -164,13 +164,7 @@ func (t *stdioTransport) dispatchOne(line []byte) {
 	id, ok := messageID(line)
 	if !ok {
 		if isNullIDError(line) {
-			t.mu.Lock()
-			pending := t.pending
-			t.pending = make(map[int64]chan []byte)
-			t.mu.Unlock()
-			for _, ch := range pending {
-				ch <- line
-			}
+			t.dispatchNullIDError(line)
 			return
 		}
 		// A server-initiated notification (no id, no error): surface it to the sink.
@@ -186,6 +180,34 @@ func (t *stdioTransport) dispatchOne(line []byte) {
 	if found {
 		ch <- line
 	}
+}
+
+// dispatchNullIDError handles a JSON-RPC error response carrying a null/absent id.
+// Per JSON-RPC such a frame is a parse/invalid-request error that cannot be
+// correlated to any specific in-flight request, so it must not be broadcast to
+// every pending channel (that would prematurely fail unrelated concurrent
+// requests and then drop their real id-correlated responses).
+//
+//   - Exactly one request pending: the error is unambiguously the answer to it,
+//     so deliver it there.
+//   - Zero or more than one request pending: there is no safe correlation, so
+//     treat it as a transport-level protocol failure (fail/teardown) — the
+//     transport closes cleanly and every caller observes one consistent error
+//     rather than a poisoned result.
+func (t *stdioTransport) dispatchNullIDError(line []byte) {
+	t.mu.Lock()
+	if len(t.pending) == 1 {
+		var ch chan []byte
+		for id, c := range t.pending {
+			ch = c
+			delete(t.pending, id)
+		}
+		t.mu.Unlock()
+		ch <- line
+		return
+	}
+	t.mu.Unlock()
+	t.fail(&RPCError{Code: CodeInvalidRequest, Message: "mcp: server returned an error with a null id; cannot correlate to a request"})
 }
 
 func isNullIDError(line []byte) bool {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestClient_ListResourcesPagination(t *testing.T) {
@@ -32,6 +33,33 @@ func TestClient_ListResourcesPagination(t *testing.T) {
 		if p.Cursor != "page2" {
 			t.Errorf("expected cursor=page2 on second call, got %q", p.Cursor)
 		}
+	}
+}
+
+// A server that returns the same non-empty nextCursor forever must terminate
+// quickly via the cursor-cycle guard rather than looping until ctx cancellation.
+func TestClient_ListResourcesCursorCycleGuard(t *testing.T) {
+	m := newMockTransport()
+	m.queue(methodResourcesList, listResourcesResult{
+		Resources:  []Resource{{URI: "file:///a", Name: "a"}},
+		NextCursor: "loop",
+	})
+	c := mustClient(t, m)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := c.ListResources(ctx)
+	if err != nil {
+		t.Fatalf("ListResources: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("ListResources looped until context timeout instead of breaking on a repeated cursor")
+	}
+	if len(res) == 0 {
+		t.Fatalf("expected at least one resource, got %+v", res)
+	}
+	if calls := m.callCount(methodResourcesList); calls != 2 {
+		t.Errorf("expected exactly 2 list calls before the guard trips, got %d", calls)
 	}
 }
 

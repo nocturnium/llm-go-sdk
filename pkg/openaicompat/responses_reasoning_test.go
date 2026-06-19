@@ -105,6 +105,121 @@ func TestResponsesReasoningRoundTrip(t *testing.T) {
 	}
 }
 
+// TestResponsesReasoning_SurvivesJSONRoundTrip guards FIX #1: the stored reasoning
+// items must replay even after the conversation history has been JSON-serialized and
+// restored. After a round trip the metadata value is []any/map[string]any rather than
+// the original []ResponsesReasoningItem, so a plain type assertion fails silently; the
+// tolerant decoder must still recover the encrypted item.
+func TestResponsesReasoning_SurvivesJSONRoundTrip(t *testing.T) {
+	resp := &ResponsesResponse{
+		ID:     "resp_rt",
+		Status: "completed",
+		Output: []ResponsesOutputItem{
+			{
+				Type:             "reasoning",
+				ID:               "rs_rt",
+				EncryptedContent: "ENC_RT",
+				Summary:          []ResponsesSummaryPart{{Type: "summary_text", Text: "thought"}},
+			},
+			{Type: "message", Role: "assistant", Content: []ResponsesOutputContent{{Type: "output_text", Text: "Answer"}}},
+		},
+	}
+	converted := ConvertResponsesResponse(resp)
+
+	history := []llms.Message{
+		{Role: llms.RoleUser, Content: "first"},
+		{Role: llms.RoleAssistant, Content: "Answer", Reasoning: converted.Reasoning},
+		{Role: llms.RoleUser, Content: "second"},
+	}
+
+	// Serialize then restore the history, as a stateless client persisting a transcript
+	// would. This turns the metadata slice into []any of map[string]any.
+	raw, err := json.Marshal(history)
+	if err != nil {
+		t.Fatalf("marshal history: %v", err)
+	}
+	var restored []llms.Message
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatalf("unmarshal history: %v", err)
+	}
+	// Sanity-check that the round trip actually changed the concrete type, so the test
+	// would fail without the tolerant decoder.
+	if _, ok := restored[1].Reasoning.Metadata[MetadataKeyResponsesReasoning].([]ResponsesReasoningItem); ok {
+		t.Fatal("expected metadata type to degrade after JSON round trip; test is not exercising the decoder")
+	}
+
+	req := BuildResponsesRequest("o4-mini", restored, &llms.CallOptions{}, false)
+
+	found := false
+	for _, it := range req.Input {
+		if it.Type == "reasoning" && it.EncryptedContent == "ENC_RT" && it.ID == "rs_rt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("encrypted reasoning item must replay after a JSON round trip, got input %+v", req.Input)
+	}
+}
+
+// TestBuildResponsesRequest_NilOpts guards FIX #3: BuildResponsesRequest must not
+// panic when opts is nil; it defaults to ApplyOptions().
+func TestBuildResponsesRequest_NilOpts(t *testing.T) {
+	req := BuildResponsesRequest("m", []llms.Message{{Role: llms.RoleUser, Content: "hi"}}, nil, false)
+	if req == nil {
+		t.Fatal("expected a non-nil request")
+	}
+	if req.Model != "m" {
+		t.Errorf("model = %q, want m", req.Model)
+	}
+}
+
+// TestReasoningInputItems_OrphanSuppressed guards FIX #8: an assistant message that
+// carries reasoning but has no content and no tool calls must NOT emit an orphaned
+// "reasoning" input item (the API rejects one with no following item).
+func TestReasoningInputItems_OrphanSuppressed(t *testing.T) {
+	reasoning := &llms.ReasoningContent{
+		Metadata: map[string]any{
+			MetadataKeyResponsesReasoning: []ResponsesReasoningItem{
+				{ID: "rs_orphan", EncryptedContent: "ENC"},
+			},
+		},
+	}
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "hi"},
+		{Role: llms.RoleAssistant, Reasoning: reasoning}, // no content, no tool calls
+	}
+	req := BuildResponsesRequest("o4-mini", msgs, &llms.CallOptions{}, false)
+	for _, it := range req.Input {
+		if it.Type == "reasoning" {
+			t.Errorf("did not expect an orphaned reasoning item, got input %+v", req.Input)
+		}
+	}
+
+	// But the same reasoning DOES replay when the turn also carries a tool call.
+	msgsWithCall := []llms.Message{
+		{Role: llms.RoleUser, Content: "hi"},
+		{Role: llms.RoleAssistant, Reasoning: reasoning, ToolCalls: []llms.ToolCall{
+			{ID: "call_1", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "f", Arguments: "{}"}},
+		}},
+	}
+	req2 := BuildResponsesRequest("o4-mini", msgsWithCall, &llms.CallOptions{}, false)
+	reasoningIdx, callIdx := -1, -1
+	for i, it := range req2.Input {
+		switch it.Type {
+		case "reasoning":
+			reasoningIdx = i
+		case "function_call":
+			callIdx = i
+		}
+	}
+	if reasoningIdx == -1 {
+		t.Fatal("expected reasoning item to replay alongside a tool call")
+	}
+	if callIdx == -1 || reasoningIdx > callIdx {
+		t.Errorf("reasoning item (idx %d) must precede the function_call (idx %d)", reasoningIdx, callIdx)
+	}
+}
+
 // TestResponsesReasoning_NoEncryptedContent verifies the default path is unchanged
 // when no encrypted content is present: summary text still surfaces, but nothing is
 // stashed for round-tripping and no reasoning input items are emitted.

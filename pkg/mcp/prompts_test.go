@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
@@ -36,6 +37,33 @@ func TestClient_ListPromptsPagination(t *testing.T) {
 		if p.Cursor != "page2" {
 			t.Errorf("expected cursor=page2 on second call, got %q", p.Cursor)
 		}
+	}
+}
+
+// A server that returns the same non-empty nextCursor forever must terminate
+// quickly via the cursor-cycle guard rather than looping until ctx cancellation.
+func TestClient_ListPromptsCursorCycleGuard(t *testing.T) {
+	m := newMockTransport()
+	m.queue(methodPromptsList, listPromptsResult{
+		Prompts:    []Prompt{{Name: "greet"}},
+		NextCursor: "loop",
+	})
+	c := mustClient(t, m)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	prompts, err := c.ListPrompts(ctx)
+	if err != nil {
+		t.Fatalf("ListPrompts: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("ListPrompts looped until context timeout instead of breaking on a repeated cursor")
+	}
+	if len(prompts) == 0 {
+		t.Fatalf("expected at least one prompt, got %+v", prompts)
+	}
+	if calls := m.callCount(methodPromptsList); calls != 2 {
+		t.Errorf("expected exactly 2 list calls before the guard trips, got %d", calls)
 	}
 }
 

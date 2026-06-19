@@ -26,7 +26,9 @@ func (c *Client) ListPrompts(ctx context.Context) ([]Prompt, error) {
 			return nil, fmt.Errorf("mcp: list prompts: %w", err)
 		}
 		all = append(all, res.Prompts...)
-		if res.NextCursor == "" {
+		if res.NextCursor == "" || res.NextCursor == cursor {
+			// A server that returns the same non-empty cursor forever would loop
+			// until ctx cancellation; stop when the cursor fails to advance.
 			break
 		}
 		cursor = res.NextCursor

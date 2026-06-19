@@ -64,11 +64,21 @@ type Client struct {
 
 // notifier carries the registered handlers for server-initiated notifications.
 // It is pointer-held by Client and guards its fields with its own mutex.
+//
+// Handler invocation runs OFF the transport read path: dispatchNotification only
+// parses the frame and hands the typed work to a single serial pump goroutine via
+// queue. A slow or re-entrant handler (one that calls back into the Client) can
+// therefore never stall response delivery or wedge in-flight RPCs on the read
+// goroutine (stdio readLoop / the HTTP request goroutine).
 type notifier struct {
 	mu           sync.RWMutex
 	progressFn   func(ProgressNotification)
 	logFn        func(LogMessage)
 	callProgress map[string]func(ProgressNotification) // keyed by progress token
+
+	queue     chan func() // buffered hand-off of handler invocations to the pump
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type config struct {
@@ -199,7 +209,7 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 		baseCtx:    ctx,
 		namePrefix: cfg.namePrefix,
 		clientInfo: cfg.clientInfo,
-		notifier:   &notifier{},
+		notifier:   newNotifier(),
 	}
 	t.onNotification(c.dispatchNotification)
 	if err := c.initialize(ctx); err != nil {
@@ -262,7 +272,9 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 			return nil, fmt.Errorf("mcp: list tools: %w", err)
 		}
 		all = append(all, res.Tools...)
-		if res.NextCursor == "" {
+		if res.NextCursor == "" || res.NextCursor == cursor {
+			// A server that returns the same non-empty cursor forever would loop
+			// until ctx cancellation; stop when the cursor fails to advance.
 			break
 		}
 		cursor = res.NextCursor
@@ -296,9 +308,9 @@ type callConfig struct {
 // generates a unique progress token, sends it in the request's _meta, and
 // delivers only the progress notifications carrying that token to fn (other
 // progress notifications still reach any client-level OnProgress handler). The
-// handler may be invoked concurrently from the transport read path and must not
-// block; it stops receiving notifications once the call returns. See
-// [Client.OnProgress] for the transport delivery boundary.
+// handler runs on the client's serial notification pump off the transport read
+// path (see [Client.OnProgress]); it stops receiving notifications once the call
+// returns.
 func WithProgress(fn func(ProgressNotification)) CallOption {
 	return func(c *callConfig) { c.progress = fn }
 }
@@ -389,5 +401,9 @@ func (c *Client) ServerInfo() Implementation { return c.serverInfo }
 func (c *Client) ServerCapabilities() ServerCapabilities { return c.serverCaps }
 
 // Close releases the client's transport resources (terminating the subprocess
-// for stdio clients).
-func (c *Client) Close() error { return c.transport.close() }
+// for stdio clients) and stops the notification pump.
+func (c *Client) Close() error {
+	err := c.transport.close()
+	c.notifier.stop()
+	return err
+}
