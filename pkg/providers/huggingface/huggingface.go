@@ -1,20 +1,19 @@
-// Package huggingface provides an embeddings client for HuggingFace Inference
-// Endpoints. It targets the OpenAI-compatible embeddings route (POST
-// /v1/embeddings) exposed by Text Embeddings Inference (TEI) — the container HF
-// runs for embedding/feature-extraction models — so it reuses the SDK's
-// OpenAI-compatible client.
+// Package huggingface provides a client for HuggingFace Inference Endpoints. A
+// single per-deployment endpoint serves one model, which HuggingFace exposes
+// behind an OpenAI-compatible route depending on the container:
 //
-// HuggingFace Inference Endpoints are per-deployment URLs, so an endpoint is
-// required; the token is the Bearer credential (HF_TOKEN).
+//   - Text Generation Inference (TGI) — chat/text-generation at
+//     POST <endpoint>/v1/chat/completions. The client implements llms.LLM
+//     (GenerateContent / Stream).
+//   - Text Embeddings Inference (TEI) — embeddings at POST <endpoint>/v1/embeddings.
+//     The client implements llms.Embedder.
 //
-// Example:
-//
-//	emb, err := huggingface.New(
-//	    huggingface.WithEndpoint("https://xxxx.endpoints.huggingface.cloud"),
-//	    huggingface.WithAPIKey(os.Getenv("HF_TOKEN")),
-//	)
-//	if err != nil { return err }
-//	vecs, err := emb.EmbedDocuments(ctx, []string{"hello", "world"})
+// Both reuse the SDK's OpenAI-compatible HTTP client (SSRF protection, retries,
+// error mapping). Because Inference Endpoints are per-deployment URLs, an endpoint
+// is required (WithEndpoint); the token is the Bearer credential, taken from
+// WithAPIKey or the HF_TOKEN / HUGGINGFACE_API_KEY environment variables. The
+// provider is not in the by-name registry (it needs an endpoint) — construct it
+// directly with New.
 package huggingface
 
 import (
@@ -26,16 +25,37 @@ import (
 	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
 )
 
-// Client is a HuggingFace Inference Endpoints embeddings client.
+// providerConfig is the HuggingFace Inference Endpoints provider configuration.
+// Capabilities advertise the OpenAI-compatible chat surface a TGI endpoint exposes
+// plus embeddings; whether a given endpoint answers chat or embeddings depends on
+// the model it has deployed.
+var providerConfig = openaicompat.ProviderConfig{
+	Provider:     llms.ProviderHuggingFace,
+	ProviderName: "huggingface",
+	Capabilities: llms.Capabilities{
+		Streaming:  true,
+		Tools:      true,
+		JSONMode:   true,
+		Embeddings: true,
+		Batch:      true,
+	},
+}
+
+// Client is a HuggingFace Inference Endpoints client. It speaks both the
+// chat/completions (TGI) and embeddings (TEI) OpenAI-compatible routes; use the
+// one your deployed endpoint serves.
 //
 // Thread-safety: all methods are safe for concurrent use.
 type Client struct {
-	client         *openaicompat.Client
+	openaicompat.BaseProvider
+	options        *options
 	embeddingModel string
 }
 
-// New creates a HuggingFace embeddings client. WithEndpoint is required; the token
-// is taken from WithAPIKey or, failing that, HF_TOKEN / HUGGINGFACE_API_KEY.
+// New creates a HuggingFace Inference Endpoints client. WithEndpoint is required;
+// the token is taken from WithAPIKey or, failing that, HF_TOKEN /
+// HUGGINGFACE_API_KEY. Use WithModel for a chat (TGI) endpoint and
+// WithEmbeddingModel for an embeddings (TEI) endpoint.
 func New(opts ...Option) (*Client, error) {
 	o := apply(opts...)
 
@@ -57,26 +77,28 @@ func New(opts ...Option) (*Client, error) {
 		AllowHTTP:       o.AllowHTTP,
 	})
 
-	return &Client{client: client, embeddingModel: o.EmbeddingModel}, nil
+	// The embedding model defaults to the chat model when unset, so a single
+	// WithModel still labels embedding requests as it did before chat support.
+	embeddingModel := o.EmbeddingModel
+	if embeddingModel == "" {
+		embeddingModel = o.Model
+	}
+
+	cfg := providerConfig
+	cfg.DefaultModel = o.Model
+	cfg.DefaultEmbeddingModel = embeddingModel
+
+	return &Client{
+		BaseProvider:   openaicompat.NewBaseProvider(client, cfg),
+		options:        o,
+		embeddingModel: embeddingModel,
+	}, nil
 }
 
-// normalizeEndpoint returns the OpenAI-compatible base URL ("<endpoint>/v1"),
-// tolerating a trailing slash or an endpoint that already includes "/v1".
-func normalizeEndpoint(endpoint string) string {
-	base := strings.TrimRight(strings.TrimSpace(endpoint), "/")
-	base = strings.TrimSuffix(base, "/v1")
-	return base + "/v1"
-}
-
-// Provider returns the provider type.
-func (c *Client) Provider() llms.Provider { return llms.ProviderHuggingFace }
-
-// Capabilities reports that this client supports embeddings only.
-func (c *Client) Capabilities() llms.Capabilities {
-	return llms.Capabilities{Embeddings: true, Batch: true}
-}
-
-// Embed generates embeddings for one or more texts.
+// Embed generates embeddings for one or more texts via the endpoint's TEI route.
+// It overrides the embedded BaseProvider's Embed to tolerate an unset model — TEI
+// endpoints serve a fixed model and ignore the field — and to wrap errors with the
+// huggingface provider.
 func (c *Client) Embed(ctx context.Context, texts []string, options ...llms.EmbedOption) (*llms.EmbeddingResponse, error) {
 	if err := llms.ValidateEmbedInput(texts); err != nil {
 		return nil, err
@@ -96,7 +118,7 @@ func (c *Client) Embed(ctx context.Context, texts []string, options ...llms.Embe
 		User:           opts.User,
 	}
 
-	resp, err := c.client.CreateEmbedding(ctx, req)
+	resp, err := c.Client().CreateEmbedding(ctx, req)
 	if err != nil {
 		return nil, llms.WrapProviderError(llms.ProviderHuggingFace, "embed", err)
 	}
@@ -113,5 +135,17 @@ func (c *Client) EmbedDocuments(ctx context.Context, texts []string, options ...
 	return llms.EmbedDocuments(ctx, c, texts, options...)
 }
 
-// Ensure Client implements the embeddings interfaces.
-var _ llms.Embedder = (*Client)(nil)
+// normalizeEndpoint returns the OpenAI-compatible base URL ("<endpoint>/v1"),
+// tolerating a trailing slash or an endpoint that already includes "/v1".
+func normalizeEndpoint(endpoint string) string {
+	base := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	base = strings.TrimSuffix(base, "/v1")
+	return base + "/v1"
+}
+
+// Ensure Client implements the chat and embeddings interfaces.
+var (
+	_ llms.LLM             = (*Client)(nil)
+	_ llms.CapableProvider = (*Client)(nil)
+	_ llms.Embedder        = (*Client)(nil)
+)

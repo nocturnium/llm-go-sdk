@@ -11,6 +11,7 @@ type Option func(*options)
 type options struct {
 	APIKey         string
 	Endpoint       string
+	Model          string
 	EmbeddingModel string
 	HTTPClient     *http.Client
 	Timeout        time.Duration
@@ -50,9 +51,14 @@ func WithEmbeddingModel(model string) Option {
 	return func(o *options) { o.EmbeddingModel = model }
 }
 
-// WithModel is an alias for WithEmbeddingModel.
+// WithModel sets the chat/text-generation model sent to a TGI-backed Inference
+// Endpoint (the OpenAI-compatible /v1/chat/completions route). HF Inference
+// Endpoints serve a single deployed model, so this is usually the deployed model
+// id and may be left unset. When no embedding model is set, this value is also
+// used for embedding requests. For an embeddings (TEI) endpoint, prefer
+// WithEmbeddingModel.
 func WithModel(model string) Option {
-	return func(o *options) { o.EmbeddingModel = model }
+	return func(o *options) { o.Model = model }
 }
 
 // WithHTTPClient sets a custom HTTP client.
