@@ -417,8 +417,10 @@ func TestEmbedQuery(t *testing.T) {
 	}
 }
 
-// TestListModels tests model listing via OpenAI-compatible endpoint.
-func TestListModels(t *testing.T) {
+// TestListModelsIntegration tests model listing via the OpenAI-compatible endpoint
+// under the integration build tag (distinct from the unit TestListModels in
+// coverage_test.go, which compiles without the tag).
+func TestListModelsIntegration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/models" {
 			resp := map[string]any{
@@ -646,8 +648,10 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-// TestPullModel tests model pulling with progress.
-func TestPullModel(t *testing.T) {
+// TestPullModelIntegration tests model pulling with progress under the integration
+// build tag (distinct from the unit TestPullModel in coverage_test.go, which
+// compiles without the tag).
+func TestPullModelIntegration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/pull" {
 			var req ollamaapi.PullRequest
