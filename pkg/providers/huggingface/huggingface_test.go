@@ -103,16 +103,54 @@ func TestNew_ResolvesTokenFromEnv(t *testing.T) {
 }
 
 func TestCapabilities(t *testing.T) {
+	// Neither WithModel nor WithEmbeddingModel set: the deployment mode is
+	// ambiguous, so the provider advertises the full superset.
 	c, _ := New(WithEndpoint("https://x"), WithAPIKey("k"))
 	caps := c.Capabilities()
-	// A HuggingFace Inference Endpoint serves either chat (TGI) or embeddings (TEI),
-	// so the provider advertises both surfaces.
 	if !caps.Embeddings || !caps.Streaming || !caps.Tools {
 		t.Errorf("capabilities = %+v, want chat + embeddings", caps)
 	}
 	if c.Provider() != llms.ProviderHuggingFace {
 		t.Errorf("provider = %q", c.Provider())
 	}
+}
+
+// TestCapabilities_ModeAware verifies that Capabilities() narrows the superset to
+// the endpoint's deployment mode: an HF Inference Endpoint serves a single
+// deployment, so a chat (TGI) endpoint must not advertise embeddings and an
+// embeddings (TEI) endpoint must not advertise chat.
+func TestCapabilities_ModeAware(t *testing.T) {
+	t.Run("chat only (WithModel)", func(t *testing.T) {
+		c, _ := New(WithEndpoint("https://x"), WithAPIKey("k"), WithModel("meta-llama/Llama-3.1-8B-Instruct"))
+		caps := c.Capabilities()
+		if !caps.Streaming || !caps.Tools || !caps.JSONMode {
+			t.Errorf("chat caps = %+v, want Streaming/Tools/JSONMode", caps)
+		}
+		if caps.Embeddings || caps.Batch {
+			t.Errorf("chat endpoint advertised embeddings: Embeddings=%v Batch=%v", caps.Embeddings, caps.Batch)
+		}
+	})
+
+	t.Run("embeddings only (WithEmbeddingModel)", func(t *testing.T) {
+		c, _ := New(WithEndpoint("https://x"), WithAPIKey("k"), WithEmbeddingModel("BAAI/bge-small-en"))
+		caps := c.Capabilities()
+		if !caps.Embeddings || !caps.Batch {
+			t.Errorf("embeddings caps = %+v, want Embeddings/Batch", caps)
+		}
+		if caps.Streaming || caps.Tools || caps.JSONMode {
+			t.Errorf("embeddings endpoint advertised chat: Streaming=%v Tools=%v JSONMode=%v", caps.Streaming, caps.Tools, caps.JSONMode)
+		}
+	})
+
+	t.Run("both set: superset", func(t *testing.T) {
+		c, _ := New(WithEndpoint("https://x"), WithAPIKey("k"),
+			WithModel("meta-llama/Llama-3.1-8B-Instruct"),
+			WithEmbeddingModel("BAAI/bge-small-en"))
+		caps := c.Capabilities()
+		if !caps.Streaming || !caps.Tools || !caps.JSONMode || !caps.Embeddings || !caps.Batch {
+			t.Errorf("both set: caps = %+v, want full superset", caps)
+		}
+	})
 }
 
 func TestNormalizeEndpoint(t *testing.T) {

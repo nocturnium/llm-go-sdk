@@ -85,6 +85,64 @@ func TestMergeConsecutiveMessages_MergeAssistantMessages(t *testing.T) {
 	}
 }
 
+// TestMergeConsecutiveMessages_PreservesReasoning guards FIX #2: a reasoning-bearing
+// turn is a merge boundary, so two consecutive same-role messages are not merged when
+// the second carries Reasoning, and that Reasoning survives intact (it must not be
+// dropped, as the pre-fix merge did).
+func TestMergeConsecutiveMessages_PreservesReasoning(t *testing.T) {
+	reasoning := &ReasoningContent{
+		Content:  "thinking",
+		Metadata: map[string]any{"openai_responses_reasoning_items": "x"},
+	}
+	messages := []Message{
+		{Role: RoleUser, Content: "Hello"},
+		{Role: RoleAssistant, Content: "first"},
+		{Role: RoleAssistant, Content: "second", Reasoning: reasoning},
+	}
+
+	result := MergeConsecutiveMessages(messages)
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3 messages (reasoning turn is a boundary), got %d: %+v", len(result), result)
+	}
+	last := result[len(result)-1]
+	if last.Content != "second" {
+		t.Errorf("expected the reasoning-bearing message to stay intact, got content %q", last.Content)
+	}
+	if last.Reasoning == nil {
+		t.Fatal("expected the merged output to preserve the second message's Reasoning, got nil")
+	}
+	if last.Reasoning.Content != "thinking" {
+		t.Errorf("reasoning content = %q, want thinking", last.Reasoning.Content)
+	}
+}
+
+// TestMergeConsecutiveMessages_ReasoningTurnNotAbsorbed guards FIX #2 from the other
+// side: a following same-role message must not be merged into a reasoning-bearing
+// accumulator, so the reasoning turn keeps its own content and Reasoning.
+func TestMergeConsecutiveMessages_ReasoningTurnNotAbsorbed(t *testing.T) {
+	reasoning := &ReasoningContent{Content: "thinking"}
+	messages := []Message{
+		{Role: RoleAssistant, Content: "first", Reasoning: reasoning},
+		{Role: RoleAssistant, Content: "second"},
+	}
+
+	result := MergeConsecutiveMessages(messages)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d: %+v", len(result), result)
+	}
+	if result[0].Reasoning == nil || result[0].Reasoning.Content != "thinking" {
+		t.Errorf("first turn must keep its Reasoning, got %+v", result[0].Reasoning)
+	}
+	if result[0].Content != "first" {
+		t.Errorf("first turn content = %q, want first (no absorption)", result[0].Content)
+	}
+	if result[1].Content != "second" {
+		t.Errorf("second turn content = %q, want second", result[1].Content)
+	}
+}
+
 func TestMergeConsecutiveMessages_ToolMessagesNotMerged(t *testing.T) {
 	messages := []Message{
 		{Role: RoleAssistant, Content: "", ToolCalls: []ToolCall{{ID: "1"}}},

@@ -26,9 +26,10 @@ import (
 )
 
 // providerConfig is the HuggingFace Inference Endpoints provider configuration.
-// Capabilities advertise the OpenAI-compatible chat surface a TGI endpoint exposes
-// plus embeddings; whether a given endpoint answers chat or embeddings depends on
-// the model it has deployed.
+// Capabilities here is the full superset (the OpenAI-compatible chat surface a TGI
+// endpoint exposes plus embeddings); whether a given endpoint actually answers
+// chat or embeddings depends on the model it has deployed, so (*Client).Capabilities
+// narrows this superset to the endpoint's deployment mode at runtime.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:     llms.ProviderHuggingFace,
 	ProviderName: "huggingface",
@@ -93,6 +94,46 @@ func New(opts ...Option) (*Client, error) {
 		options:        o,
 		embeddingModel: embeddingModel,
 	}, nil
+}
+
+// Capabilities reports the feature surface for THIS endpoint's deployment mode.
+//
+// An HF Inference Endpoint serves a single deployment: a TGI chat endpoint will
+// not answer embeddings and a TEI embeddings endpoint will not answer chat, so a
+// flat superset would route capability-gated callers to unsupported routes. The
+// mode is derived from the construction options:
+//
+//   - only WithModel (chat endpoint): chat caps (Streaming/Tools/JSONMode),
+//     Embeddings/Batch off.
+//   - only WithEmbeddingModel (embeddings endpoint): Embeddings/Batch, chat caps
+//     off.
+//   - both or neither set (mode ambiguous): the full superset, matching the
+//     embedded BaseProvider.
+//
+// It shadows the embedded BaseProvider.Capabilities, masking the booleans for the
+// resolved mode while preserving the merged registry/static integer fields (e.g.
+// MaxContextTokens).
+func (c *Client) Capabilities() llms.Capabilities {
+	caps := c.BaseProvider.Capabilities()
+
+	hasChat := c.options.Model != ""
+	hasEmbeddings := c.options.EmbeddingModel != ""
+
+	switch {
+	case hasChat && !hasEmbeddings:
+		// Chat-only (TGI): keep chat caps, drop embeddings.
+		caps.Embeddings = false
+		caps.Batch = false
+	case hasEmbeddings && !hasChat:
+		// Embeddings-only (TEI): keep embeddings/batch, drop chat caps.
+		caps.Streaming = false
+		caps.Tools = false
+		caps.JSONMode = false
+	default:
+		// Both or neither set: mode is ambiguous, advertise the superset as-is.
+	}
+
+	return caps
 }
 
 // Embed generates embeddings for one or more texts via the endpoint's TEI route.

@@ -241,6 +241,9 @@ func (c *Client) CreateResponse(ctx context.Context, req *ResponsesRequest) (*Re
 // BuildResponsesRequest builds a ResponsesRequest from llms types. System messages
 // become the top-level `instructions`; remaining messages become `input` items.
 func BuildResponsesRequest(model string, messages []llms.Message, opts *llms.CallOptions, stream bool) *ResponsesRequest {
+	if opts == nil {
+		opts = llms.ApplyOptions()
+	}
 	input, instructions := convertMessagesToResponsesInput(messages)
 
 	req := &ResponsesRequest{
@@ -316,9 +319,14 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 			})
 
 		case llms.RoleAssistant:
-			// Encrypted reasoning items must precede the message they belong to.
-			items = append(items, reasoningInputItems(msg)...)
-			if parts := responsesMessageContent(msg, "output_text"); len(parts) > 0 {
+			// Reasoning items must precede the item they belong to, and the API
+			// rejects an orphaned one. Only replay them when this turn also emits a
+			// following item (non-empty message content or at least one tool call).
+			parts := responsesMessageContent(msg, "output_text")
+			if len(parts) > 0 || len(msg.ToolCalls) > 0 {
+				items = append(items, reasoningInputItems(msg)...)
+			}
+			if len(parts) > 0 {
 				items = append(items, ResponsesInputItem{
 					Type:    itemTypeMessage,
 					Role:    string(msg.Role),
@@ -353,8 +361,8 @@ func reasoningInputItems(msg llms.Message) []ResponsesInputItem {
 	if msg.Reasoning == nil || msg.Reasoning.Metadata == nil {
 		return nil
 	}
-	stored, ok := msg.Reasoning.Metadata[MetadataKeyResponsesReasoning].([]ResponsesReasoningItem)
-	if !ok {
+	stored := decodeReasoningItems(msg.Reasoning.Metadata[MetadataKeyResponsesReasoning])
+	if len(stored) == 0 {
 		return nil
 	}
 	items := make([]ResponsesInputItem, 0, len(stored))
@@ -368,6 +376,30 @@ func reasoningInputItems(msg llms.Message) []ResponsesInputItem {
 			EncryptedContent: it.EncryptedContent,
 			Summary:          it.Summary,
 		})
+	}
+	return items
+}
+
+// decodeReasoningItems tolerantly recovers the stored reasoning items from a
+// metadata value. The in-memory value is the original []ResponsesReasoningItem,
+// but once the conversation is JSON-serialized and restored it comes back as
+// []any of map[string]any, where a direct type assertion would fail and silently
+// drop the items. In that case we re-marshal and decode through the matching json
+// tags (id/encrypted_content/summary), returning nil if the shape doesn't fit.
+func decodeReasoningItems(v any) []ResponsesReasoningItem {
+	if v == nil {
+		return nil
+	}
+	if items, ok := v.([]ResponsesReasoningItem); ok {
+		return items
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var items []ResponsesReasoningItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil
 	}
 	return items
 }

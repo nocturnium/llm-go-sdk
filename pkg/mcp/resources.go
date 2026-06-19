@@ -25,7 +25,9 @@ func (c *Client) ListResources(ctx context.Context) ([]Resource, error) {
 			return nil, fmt.Errorf("mcp: list resources: %w", err)
 		}
 		all = append(all, res.Resources...)
-		if res.NextCursor == "" {
+		if res.NextCursor == "" || res.NextCursor == cursor {
+			// A server that returns the same non-empty cursor forever would loop
+			// until ctx cancellation; stop when the cursor fails to advance.
 			break
 		}
 		cursor = res.NextCursor

@@ -4,10 +4,69 @@ import (
 	"encoding/json"
 )
 
+// notifyQueueSize bounds the notification pump's hand-off buffer. When the buffer
+// fills (a persistently slow handler), further notifications are run in their own
+// goroutine instead of blocking the transport read path — delivery is preserved
+// and the read goroutine is never stalled.
+const notifyQueueSize = 64
+
+// newNotifier constructs a notifier with its serial pump goroutine running. The
+// pump invokes handlers off the transport read path so a slow or re-entrant
+// handler cannot stall response delivery.
+func newNotifier() *notifier {
+	n := &notifier{
+		queue: make(chan func(), notifyQueueSize),
+		done:  make(chan struct{}),
+	}
+	go n.run()
+	return n
+}
+
+// run drains queued handler invocations serially, preserving notification order
+// in the common case. It exits when stop closes done.
+func (n *notifier) run() {
+	for {
+		select {
+		case fn := <-n.queue:
+			fn()
+		case <-n.done:
+			return
+		}
+	}
+}
+
+// enqueue hands a handler invocation to the pump without ever blocking the
+// caller (the transport read goroutine). If the pump's buffer is momentarily
+// full, the work runs in its own goroutine so a wedged handler cannot apply
+// backpressure to response delivery; if the notifier is stopped, the work is
+// dropped.
+func (n *notifier) enqueue(fn func()) {
+	select {
+	case <-n.done:
+		return
+	default:
+	}
+	select {
+	case n.queue <- fn:
+	case <-n.done:
+	default:
+		go fn()
+	}
+}
+
+// stop shuts down the pump goroutine. It is idempotent and safe to call from
+// Client.Close.
+func (n *notifier) stop() {
+	n.closeOnce.Do(func() { close(n.done) })
+}
+
 // OnProgress registers a handler for server-initiated progress notifications
 // (notifications/progress). It returns the client for chaining. Pass nil to clear
-// the handler. The handler may be invoked concurrently from the transport's read
-// path; it must not block.
+// the handler. Handlers run on a single serial pump goroutine off the transport
+// read path, so a slow handler does not stall in-flight RPCs and a handler may
+// safely call back into the Client; handlers are not invoked concurrently with
+// one another, and a handler that blocks forever will stall delivery of later
+// notifications (but not RPC responses).
 //
 // Transport boundary: stdio surfaces every progress notification the server
 // sends. The Streamable HTTP transport only surfaces notifications that arrive
@@ -50,16 +109,18 @@ func (c *Client) dispatchNotification(raw []byte) {
 		}
 		// A progress notification carrying a token registered by a CallTool option
 		// is routed to that call's handler; otherwise it falls through to the
-		// client-level handler.
+		// client-level handler. The handler is captured under the lock here (on the
+		// read path) but invoked off it by the pump, so a blocking handler — or one
+		// that calls back into the Client — cannot stall response delivery.
 		c.notifier.mu.RLock()
 		perCall := c.notifier.callProgress[progressTokenKey(pn.ProgressToken)]
 		clientFn := c.notifier.progressFn
 		c.notifier.mu.RUnlock()
 		switch {
 		case perCall != nil:
-			perCall(pn)
+			c.notifier.enqueue(func() { perCall(pn) })
 		case clientFn != nil:
-			clientFn(pn)
+			c.notifier.enqueue(func() { clientFn(pn) })
 		}
 	case methodNotificationsMessage:
 		c.notifier.mu.RLock()
@@ -72,7 +133,7 @@ func (c *Client) dispatchNotification(raw []byte) {
 		if err := json.Unmarshal(probe.Params, &lm); err != nil {
 			return
 		}
-		fn(lm)
+		c.notifier.enqueue(func() { fn(lm) })
 	default:
 		// list_changed / resource updated notifications are recognized by name but
 		// not yet surfaced through a typed handler; ignore them.

@@ -167,6 +167,9 @@ func isValidRole(role Role) bool {
 //   - Parts are combined into a single slice
 //   - ToolCalls from all merged messages are combined
 //   - The first message's other fields (ToolCallID, Name) are preserved
+//
+// A message carrying Reasoning is treated as a merge boundary so its per-turn
+// reasoning round-trip data (encrypted/signed thinking) is never dropped.
 func MergeConsecutiveMessages(messages []Message) []Message {
 	if len(messages) <= 1 {
 		return messages
@@ -187,6 +190,20 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 				current = nil
 			}
 			result = append(result, msg)
+			continue
+		}
+
+		// A reasoning-bearing turn is a merge boundary: its Reasoning (the
+		// encrypted/signed thinking that round-trips across turns) is per-turn
+		// data that merging cannot combine, so don't fold such a message into a
+		// prior accumulator, and don't fold a following message into one. This
+		// keeps each reasoning-bearing turn — and its Reasoning — intact.
+		if msg.Reasoning != nil || (current != nil && current.Reasoning != nil) {
+			if current != nil {
+				result = append(result, *current)
+			}
+			msgCopy := msg
+			current = &msgCopy
 			continue
 		}
 

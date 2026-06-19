@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
@@ -126,6 +127,18 @@ func (m *mockTransport) lastCall(method string) (recordedCall, bool) {
 	return recordedCall{}, false
 }
 
+func (m *mockTransport) callCount(method string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, call := range m.calls {
+		if call.method == method {
+			n++
+		}
+	}
+	return n
+}
+
 func mustClient(t *testing.T, m *mockTransport, opts ...Option) *Client {
 	t.Helper()
 	c, err := newClient(context.Background(), m, buildConfig(opts))
@@ -180,6 +193,34 @@ func TestClient_ListToolsPagination(t *testing.T) {
 		if p.Cursor != "page2" {
 			t.Errorf("expected cursor=page2 on second call, got %q", p.Cursor)
 		}
+	}
+}
+
+// A server that returns the same non-empty nextCursor forever must not loop until
+// ctx cancellation: the cursor-cycle guard breaks once the cursor stops advancing.
+func TestClient_ListToolsCursorCycleGuard(t *testing.T) {
+	m := newMockTransport()
+	// The mock reuses the final queued result for every call, so a single page with a
+	// constant non-empty NextCursor models a server that never advances the cursor.
+	m.queue(methodToolsList, listToolsResult{Tools: []Tool{{Name: "a"}}, NextCursor: "loop"})
+	c := mustClient(t, m)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	tools, err := c.ListTools(ctx)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("ListTools looped until context timeout instead of breaking on a repeated cursor")
+	}
+	// Two requests are made (page, then the repeated cursor that trips the guard), so
+	// the single page's tools appear twice before termination.
+	if len(tools) == 0 {
+		t.Fatalf("expected at least one tool, got %+v", tools)
+	}
+	if calls := m.callCount(methodToolsList); calls != 2 {
+		t.Errorf("expected exactly 2 list calls before the guard trips, got %d", calls)
 	}
 }
 
