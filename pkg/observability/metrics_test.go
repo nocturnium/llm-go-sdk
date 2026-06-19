@@ -1,10 +1,12 @@
-package llms
+package observability
 
 import (
 	"context"
 	"errors"
 	"testing"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -16,18 +18,18 @@ import (
 
 // mockMetricsLLM is a mock LLM for testing metrics middleware
 type mockMetricsLLM struct {
-	provider  Provider
+	provider  llms.Provider
 	model     string
 	callResp  string
 	callErr   error
-	genResp   *Response
+	genResp   *llms.Response
 	genErr    error
-	chunks    []StreamChunk
+	chunks    []llms.StreamChunk
 	streamErr error
 	delay     time.Duration
 }
 
-func (m *mockMetricsLLM) Call(ctx context.Context, _ string, _ ...CallOption) (string, error) {
+func (m *mockMetricsLLM) Call(ctx context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	if m.delay > 0 {
 		select {
 		case <-ctx.Done():
@@ -41,7 +43,7 @@ func (m *mockMetricsLLM) Call(ctx context.Context, _ string, _ ...CallOption) (s
 	return m.callResp, nil
 }
 
-func (m *mockMetricsLLM) GenerateContent(ctx context.Context, _ []Message, _ ...CallOption) (*Response, error) {
+func (m *mockMetricsLLM) GenerateContent(ctx context.Context, _ []llms.Message, _ ...llms.CallOption) (*llms.Response, error) {
 	if m.delay > 0 {
 		select {
 		case <-ctx.Done():
@@ -55,11 +57,11 @@ func (m *mockMetricsLLM) GenerateContent(ctx context.Context, _ []Message, _ ...
 	return m.genResp, nil
 }
 
-func (m *mockMetricsLLM) Stream(ctx context.Context, _ []Message, _ ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockMetricsLLM) Stream(ctx context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	if m.streamErr != nil {
 		return nil, m.streamErr
 	}
-	ch := make(chan StreamChunk)
+	ch := make(chan llms.StreamChunk)
 	go func() {
 		defer close(ch)
 		for _, chunk := range m.chunks {
@@ -76,11 +78,11 @@ func (m *mockMetricsLLM) Stream(ctx context.Context, _ []Message, _ ...CallOptio
 	return ch, nil
 }
 
-func (m *mockMetricsLLM) Provider() Provider { return m.provider }
-func (m *mockMetricsLLM) Model() string      { return m.model }
+func (m *mockMetricsLLM) Provider() llms.Provider { return m.provider }
+func (m *mockMetricsLLM) Model() string           { return m.model }
 
 func TestNewMetricsMiddleware(t *testing.T) {
-	llm := &mockMetricsLLM{provider: ProviderOpenAI, model: "gpt-4"}
+	llm := &mockMetricsLLM{provider: llms.ProviderOpenAI, model: "gpt-4"}
 
 	middleware, err := NewMetricsMiddleware(llm)
 	if err != nil {
@@ -107,11 +109,11 @@ func TestMetricsMiddleware_Call_Success(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4o",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "Hello!",
-			Usage:   Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage:   llms.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		},
 	}
 
@@ -143,7 +145,7 @@ func TestMetricsMiddleware_Call_Success(t *testing.T) {
 	}
 
 	// Check cost tracking
-	usage := middleware.CostTracker().GetUsage(ProviderOpenAI, "gpt-4o")
+	usage := middleware.CostTracker().GetUsage(llms.ProviderOpenAI, "gpt-4o")
 	if usage == nil {
 		t.Fatal("expected usage to be tracked")
 	}
@@ -158,12 +160,12 @@ func TestMetricsMiddleware_GenerateContent_Success(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content:      "Generated response",
 			FinishReason: "stop",
-			Usage: Usage{
+			Usage: llms.Usage{
 				PromptTokens:     100,
 				CompletionTokens: 50,
 				TotalTokens:      150,
@@ -176,8 +178,8 @@ func TestMetricsMiddleware_GenerateContent_Success(t *testing.T) {
 		t.Fatalf("failed to create middleware: %v", err)
 	}
 
-	resp, err := middleware.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "Hello"},
+	resp, err := middleware.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	})
 
 	if err != nil {
@@ -203,13 +205,13 @@ func TestMetricsMiddleware_Stream_TimeToFirstToken(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderGemini,
+		provider: llms.ProviderGemini,
 		model:    "gemini-pro",
 		delay:    10 * time.Millisecond,
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "Hello"},
 			{Content: " World"},
-			{FinishReason: "stop", Usage: &Usage{PromptTokens: 10, CompletionTokens: 5}},
+			{FinishReason: "stop", Usage: &llms.Usage{PromptTokens: 10, CompletionTokens: 5}},
 		},
 	}
 
@@ -218,8 +220,8 @@ func TestMetricsMiddleware_Stream_TimeToFirstToken(t *testing.T) {
 		t.Fatalf("failed to create middleware: %v", err)
 	}
 
-	stream, err := middleware.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "Hi"},
+	stream, err := middleware.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Hi"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -266,9 +268,9 @@ func TestMetricsMiddleware_Stream_AbandonedConsumerDecrementsActiveRequests(t *t
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "one"},
 			{Content: "two"},
 			{Content: "three"},
@@ -281,9 +283,9 @@ func TestMetricsMiddleware_Stream_AbandonedConsumerDecrementsActiveRequests(t *t
 	}
 
 	stream, err := middleware.Stream(context.Background(),
-		[]Message{{Role: RoleUser, Content: "Hi"}},
-		WithStreamBufferSize(1),
-		WithStreamSendTimeout(10*time.Millisecond),
+		[]llms.Message{{Role: llms.RoleUser, Content: "Hi"}},
+		llms.WithStreamBufferSize(1),
+		llms.WithStreamSendTimeout(10*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -318,21 +320,21 @@ func TestMetricsMiddleware_Error(t *testing.T) {
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
-	expectedErr := &APIError{
+	expectedErr := &llms.APIError{
 		StatusCode: 429,
 		Message:    "rate limited",
 		Type:       "rate_limit_error",
 	}
 
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		genErr:   expectedErr,
 	}
 
 	middleware, _ := NewMetricsMiddleware(llm, WithMetricsTracer(tracer))
-	_, err := middleware.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "Hi"},
+	_, err := middleware.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Hi"},
 	})
 
 	if !errors.Is(err, expectedErr) {
@@ -352,7 +354,7 @@ func TestMetricsMiddleware_Error(t *testing.T) {
 
 func TestMetricsMiddleware_SuccessRate(t *testing.T) {
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 	}
 
@@ -365,8 +367,8 @@ func TestMetricsMiddleware_SuccessRate(t *testing.T) {
 
 	// Make some successful requests
 	for i := 0; i < 3; i++ {
-		llm.genResp = &Response{Content: "ok"}
-		_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+		llm.genResp = &llms.Response{Content: "ok"}
+		_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 	}
 
 	if middleware.SuccessRate() != 1.0 {
@@ -375,7 +377,7 @@ func TestMetricsMiddleware_SuccessRate(t *testing.T) {
 
 	// Make a failed request
 	llm.genErr = errors.New("error")
-	_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 
 	// 3 successes, 1 failure = 0.75
 	rate := middleware.SuccessRate()
@@ -386,10 +388,10 @@ func TestMetricsMiddleware_SuccessRate(t *testing.T) {
 
 func TestMetricsMiddleware_ActiveRequests(t *testing.T) {
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		delay:    50 * time.Millisecond,
-		genResp:  &Response{Content: "ok"},
+		genResp:  &llms.Response{Content: "ok"},
 	}
 
 	middleware, _ := NewMetricsMiddleware(llm)
@@ -398,7 +400,7 @@ func TestMetricsMiddleware_ActiveRequests(t *testing.T) {
 	done := make(chan struct{})
 	for i := 0; i < 3; i++ {
 		go func() {
-			_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+			_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 			done <- struct{}{}
 		}()
 	}
@@ -428,17 +430,17 @@ func TestMetricsMiddleware_CostRecording(t *testing.T) {
 	meter := meterProvider.Meter(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4o",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "test",
-			Usage:   Usage{PromptTokens: 1000000, CompletionTokens: 500000}, // 1M prompt, 0.5M completion
+			Usage:   llms.Usage{PromptTokens: 1000000, CompletionTokens: 500000}, // 1M prompt, 0.5M completion
 		},
 	}
 
 	middleware, _ := NewMetricsMiddleware(llm, WithMetricsMeter(meter), WithMetricsCostRecording(true))
 
-	_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 
 	// Collect metrics
 	var data metricdata.ResourceMetrics
@@ -477,18 +479,18 @@ func TestMetricsMiddleware_TokensPerSecond(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		delay:    50 * time.Millisecond, // Adds some latency
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "test",
-			Usage:   Usage{PromptTokens: 10, CompletionTokens: 100},
+			Usage:   llms.Usage{PromptTokens: 10, CompletionTokens: 100},
 		},
 	}
 
 	middleware, _ := NewMetricsMiddleware(llm, WithMetricsTracer(tracer))
 
-	_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 
 	spans := spanRecorder.Ended()
 	attrs := spans[0].Attributes()
@@ -516,9 +518,9 @@ func TestMetricsMiddleware_ContentRecording(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp:  &Response{Content: "response content"},
+		genResp:  &llms.Response{Content: "response content"},
 	}
 
 	middleware, _ := NewMetricsMiddleware(llm,
@@ -536,10 +538,10 @@ func TestMetricsMiddleware_ContentRecording(t *testing.T) {
 }
 
 func TestMetricsMiddleware_GetProvider(t *testing.T) {
-	llm := &mockMetricsLLM{provider: ProviderGemini}
+	llm := &mockMetricsLLM{provider: llms.ProviderGemini}
 	middleware, _ := NewMetricsMiddleware(llm)
 
-	if middleware.Provider() != ProviderGemini {
+	if middleware.Provider() != llms.ProviderGemini {
 		t.Errorf("provider = %s, want gemini", middleware.Provider())
 	}
 }
@@ -597,16 +599,16 @@ func TestSlidingWindow(t *testing.T) {
 }
 
 func TestMetricsMiddleware_WithCustomCostTracker(t *testing.T) {
-	tracker := NewCostTracker()
+	tracker := llms.NewCostTracker()
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp:  &Response{Content: "ok", Usage: Usage{PromptTokens: 100}},
+		genResp:  &llms.Response{Content: "ok", Usage: llms.Usage{PromptTokens: 100}},
 	}
 
 	middleware, _ := NewMetricsMiddleware(llm, WithMetricsCostTracker(tracker))
 
-	_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 
 	// Verify the custom tracker was used
 	if middleware.CostTracker() != tracker {

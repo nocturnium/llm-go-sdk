@@ -1,4 +1,4 @@
-package llms
+package observability
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestSlogLogger_LogRequest(t *testing.T) {
@@ -19,10 +21,10 @@ func TestSlogLogger_LogRequest(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID: "test-123",
-		Provider:  ProviderOpenAI,
+		Provider:  llms.ProviderOpenAI,
 		Model:     "gpt-4",
 		Operation: "call",
-		Messages:  []Message{{Role: RoleUser, Content: "Hello"}},
+		Messages:  []llms.Message{{Role: llms.RoleUser, Content: "Hello"}},
 		Timestamp: time.Now(),
 		Streaming: false,
 	}
@@ -48,13 +50,13 @@ func TestSlogLogger_LogResponse(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID:    "test-456",
-		Provider:     ProviderAnthropic,
+		Provider:     llms.ProviderAnthropic,
 		Model:        "claude-3",
 		Operation:    "generate_content",
 		Content:      "Hello, world!",
 		Duration:     100 * time.Millisecond,
 		FinishReason: "stop",
-		Usage: &Usage{
+		Usage: &llms.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -79,13 +81,13 @@ func TestSlogLogger_LogError(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID: "test-error",
-		Provider:  ProviderGemini,
+		Provider:  llms.ProviderGemini,
 		Model:     "gemini-pro",
 		Operation: "call",
 		Duration:  50 * time.Millisecond,
 	}
 
-	err := &APIError{
+	err := &llms.APIError{
 		StatusCode: 429,
 		Message:    "rate limited",
 		Type:       "rate_limit_error",
@@ -109,10 +111,10 @@ func TestSlogLogger_WithRedaction(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID: "test-redact",
-		Provider:  ProviderOpenAI,
+		Provider:  llms.ProviderOpenAI,
 		Model:     "gpt-4",
 		Operation: "call",
-		Messages:  []Message{{Role: RoleUser, Content: "secret password: 12345"}},
+		Messages:  []llms.Message{{Role: llms.RoleUser, Content: "secret password: 12345"}},
 		Timestamp: time.Now(),
 	}
 
@@ -133,7 +135,7 @@ func TestSlogLogger_WithMaxLength(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID: "test-truncate",
-		Provider:  ProviderOpenAI,
+		Provider:  llms.ProviderOpenAI,
 		Model:     "gpt-4",
 		Operation: "generate_content",
 		Content:   "This is a very long response that should be truncated",
@@ -187,7 +189,7 @@ func TestJSONLogger(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID: "json-test",
-		Provider:  ProviderOpenAI,
+		Provider:  llms.ProviderOpenAI,
 		Model:     "gpt-4",
 		Operation: "call",
 		Timestamp: time.Now(),
@@ -214,7 +216,7 @@ func TestJSONLogger_LogError(t *testing.T) {
 
 	entry := &LogEntry{
 		RequestID: "json-error",
-		Provider:  ProviderOpenAI,
+		Provider:  llms.ProviderOpenAI,
 		Operation: "call",
 	}
 
@@ -240,21 +242,21 @@ func TestJSONLogger_LogError(t *testing.T) {
 
 // mockLLM is a mock LLM for testing
 type mockLLM struct {
-	callFn   func(ctx context.Context, prompt string, options ...CallOption) (string, error)
-	genFn    func(ctx context.Context, messages []Message, options ...CallOption) (*Response, error)
-	streamFn func(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error)
-	provider Provider
+	callFn   func(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)
+	genFn    func(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error)
+	streamFn func(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error)
+	provider llms.Provider
 	model    string
 }
 
-func (m *mockLLM) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (m *mockLLM) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	if m.callFn != nil {
 		return m.callFn(ctx, prompt, options...)
 	}
 	return "response", nil
 }
 
-func (m *mockLLM) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
+func (m *mockLLM) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	if m.genFn != nil {
 		return m.genFn(ctx, messages, options...)
 	}
@@ -267,22 +269,22 @@ func (m *mockLLM) GenerateContent(ctx context.Context, messages []Message, optio
 		if err != nil {
 			return nil, err
 		}
-		return &Response{Content: content}, nil
+		return &llms.Response{Content: content}, nil
 	}
-	return &Response{Content: "response"}, nil
+	return &llms.Response{Content: "response"}, nil
 }
 
-func (m *mockLLM) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockLLM) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	if m.streamFn != nil {
 		return m.streamFn(ctx, messages, options...)
 	}
-	ch := make(chan StreamChunk, 1)
-	ch <- StreamChunk{Content: "stream response"}
+	ch := make(chan llms.StreamChunk, 1)
+	ch <- llms.StreamChunk{Content: "stream response"}
 	close(ch)
 	return ch, nil
 }
 
-func (m *mockLLM) Provider() Provider {
+func (m *mockLLM) Provider() llms.Provider {
 	return m.provider
 }
 
@@ -299,10 +301,10 @@ func TestLoggingMiddleware_Call(t *testing.T) {
 	}
 
 	llm := &mockLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		callFn: func(_ context.Context, _ string, _ ...CallOption) (string, error) {
-			return testCostHelloResponse, nil
+		callFn: func(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
+			return "Hello!", nil
 		},
 	}
 
@@ -312,8 +314,8 @@ func TestLoggingMiddleware_Call(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != testCostHelloResponse {
-		t.Errorf("result = %s, want %s", result, testCostHelloResponse)
+	if result != "Hello!" {
+		t.Errorf("result = %s, want %s", result, "Hello!")
 	}
 	if !requestLogged {
 		t.Error("request was not logged")
@@ -332,9 +334,9 @@ func TestLoggingMiddleware_Call_Error(t *testing.T) {
 	}
 
 	llm := &mockLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		callFn: func(_ context.Context, _ string, _ ...CallOption) (string, error) {
+		callFn: func(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 			return "", expectedErr
 		},
 	}
@@ -360,13 +362,13 @@ func TestLoggingMiddleware_GenerateContent(t *testing.T) {
 	}
 
 	llm := &mockLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3",
-		genFn: func(_ context.Context, _ []Message, _ ...CallOption) (*Response, error) {
-			return &Response{
+		genFn: func(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (*llms.Response, error) {
+			return &llms.Response{
 				Content:      "Generated content",
 				FinishReason: "stop",
-				Usage: Usage{
+				Usage: llms.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 20,
 					TotalTokens:      30,
@@ -376,8 +378,8 @@ func TestLoggingMiddleware_GenerateContent(t *testing.T) {
 	}
 
 	middleware := NewLoggingMiddleware(llm, mockLogger)
-	resp, err := middleware.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "Test"},
+	resp, err := middleware.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Test"},
 	})
 
 	if err != nil {
@@ -404,21 +406,21 @@ func TestLoggingMiddleware_Stream(t *testing.T) {
 	}
 
 	llm := &mockLLM{
-		provider: ProviderGemini,
+		provider: llms.ProviderGemini,
 		model:    "gemini-pro",
-		streamFn: func(_ context.Context, _ []Message, _ ...CallOption) (<-chan StreamChunk, error) {
-			ch := make(chan StreamChunk, 3)
-			ch <- StreamChunk{Content: "Hello"}
-			ch <- StreamChunk{Content: " World"}
-			ch <- StreamChunk{FinishReason: "stop"}
+		streamFn: func(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+			ch := make(chan llms.StreamChunk, 3)
+			ch <- llms.StreamChunk{Content: "Hello"}
+			ch <- llms.StreamChunk{Content: " World"}
+			ch <- llms.StreamChunk{FinishReason: "stop"}
 			close(ch)
 			return ch, nil
 		},
 	}
 
 	middleware := NewLoggingMiddleware(llm, mockLogger)
-	stream, err := middleware.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "Test"},
+	stream, err := middleware.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Test"},
 	})
 
 	if err != nil {
@@ -430,8 +432,8 @@ func TestLoggingMiddleware_Stream(t *testing.T) {
 		fullContent += chunk.Content
 	}
 
-	if fullContent != testCostHelloWorld {
-		t.Errorf("content = %s, want %q", fullContent, testCostHelloWorld)
+	if fullContent != "Hello World" {
+		t.Errorf("content = %s, want %q", fullContent, "Hello World")
 	}
 
 	// Wait a bit for the logging goroutine
@@ -440,16 +442,16 @@ func TestLoggingMiddleware_Stream(t *testing.T) {
 	if responseEntry == nil {
 		t.Fatal("response was not logged")
 	}
-	if responseEntry.Content != testCostHelloWorld {
-		t.Errorf("logged content = %s, want %q", responseEntry.Content, testCostHelloWorld)
+	if responseEntry.Content != "Hello World" {
+		t.Errorf("logged content = %s, want %q", responseEntry.Content, "Hello World")
 	}
 }
 
 func TestLoggingMiddleware_GetProvider(t *testing.T) {
-	llm := &mockLLM{provider: ProviderOpenAI}
+	llm := &mockLLM{provider: llms.ProviderOpenAI}
 	middleware := NewLoggingMiddleware(llm, NopLogger{})
 
-	if middleware.Provider() != ProviderOpenAI {
+	if middleware.Provider() != llms.ProviderOpenAI {
 		t.Errorf("provider = %s, want openai", middleware.Provider())
 	}
 }
@@ -503,14 +505,14 @@ func TestLogEntry_ToLangfuseGeneration(t *testing.T) {
 	now := time.Now()
 	entry := &LogEntry{
 		RequestID:    "req-123",
-		Provider:     ProviderOpenAI,
+		Provider:     llms.ProviderOpenAI,
 		Model:        "gpt-4",
 		Operation:    "generate_content",
 		Content:      "Hello, world!",
 		Timestamp:    now,
 		Duration:     100 * time.Millisecond,
 		FinishReason: "stop",
-		Usage: &Usage{
+		Usage: &llms.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -667,14 +669,14 @@ func TestLogEntry_PopulateFromTraceContext_Nil(t *testing.T) {
 }
 
 func TestLogEntry_PopulateFromCallOptions(t *testing.T) {
-	opts := &CallOptions{
+	opts := &llms.CallOptions{
 		Temperature:      float64Ptr(0.7),
 		MaxTokens:        intPtr(1000),
 		TopP:             float64Ptr(0.9),
 		FrequencyPenalty: float64Ptr(0.5),
 		PresencePenalty:  float64Ptr(0.3),
-		ResponseFormat:   &ResponseFormat{Type: ResponseFormatJSONObject},
-		Trace: &TraceOptions{
+		ResponseFormat:   &llms.ResponseFormat{Type: llms.ResponseFormatJSONObject},
+		Trace: &llms.TraceOptions{
 			TraceID:   "opt-trace",
 			SpanID:    "opt-span",
 			ParentID:  "opt-parent",

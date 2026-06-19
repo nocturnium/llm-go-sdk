@@ -1,9 +1,11 @@
-package llms
+package observability
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // SlogLogger is a Logger implementation using log/slog
@@ -149,7 +151,7 @@ func (l *SlogLogger) buildErrorAttrs(entry *LogEntry, err error) []slog.Attr {
 	}
 
 	// Add structured error information
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
 		attrs = append(attrs,
 			slog.Int("status_code", apiErr.StatusCode),

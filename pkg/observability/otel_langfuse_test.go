@@ -1,10 +1,12 @@
-package llms
+package observability
 
 import (
 	"context"
 	"errors"
 	"testing"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -15,21 +17,21 @@ import (
 
 // mockLangfuseLLM is a mock LLM for testing Langfuse middleware
 type mockLangfuseLLM struct {
-	provider  Provider
+	provider  llms.Provider
 	model     string
 	callResp  string
 	callErr   error
-	genResp   *Response
+	genResp   *llms.Response
 	genErr    error
-	chunks    []StreamChunk
+	chunks    []llms.StreamChunk
 	streamErr error
 }
 
-func (m *mockLangfuseLLM) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (m *mockLangfuseLLM) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	return m.callResp, m.callErr
 }
 
-func (m *mockLangfuseLLM) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
+func (m *mockLangfuseLLM) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	if m.genErr != nil {
 		return nil, m.genErr
 	}
@@ -39,14 +41,14 @@ func (m *mockLangfuseLLM) GenerateContent(ctx context.Context, messages []Messag
 	if m.genResp != nil {
 		return m.genResp, nil
 	}
-	return &Response{Content: m.callResp}, nil
+	return &llms.Response{Content: m.callResp}, nil
 }
 
-func (m *mockLangfuseLLM) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockLangfuseLLM) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	if m.streamErr != nil {
 		return nil, m.streamErr
 	}
-	ch := make(chan StreamChunk, len(m.chunks))
+	ch := make(chan llms.StreamChunk, len(m.chunks))
 	go func() {
 		defer close(ch)
 		for _, chunk := range m.chunks {
@@ -56,7 +58,7 @@ func (m *mockLangfuseLLM) Stream(ctx context.Context, messages []Message, option
 	return ch, nil
 }
 
-func (m *mockLangfuseLLM) Provider() Provider {
+func (m *mockLangfuseLLM) Provider() llms.Provider {
 	return m.provider
 }
 
@@ -66,7 +68,7 @@ func (m *mockLangfuseLLM) Model() string {
 
 func TestNewLangfuseOTelMiddleware(t *testing.T) {
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 	}
 
@@ -75,7 +77,7 @@ func TestNewLangfuseOTelMiddleware(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if middleware.Provider() != ProviderOpenAI {
+	if middleware.Provider() != llms.ProviderOpenAI {
 		t.Errorf("expected provider OpenAI, got %s", middleware.Provider())
 	}
 
@@ -86,7 +88,7 @@ func TestNewLangfuseOTelMiddleware(t *testing.T) {
 
 func TestNewLangfuseOTelMiddleware_WithOptions(t *testing.T) {
 	mock := &mockLangfuseLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3",
 	}
 
@@ -98,7 +100,7 @@ func TestNewLangfuseOTelMiddleware_WithOptions(t *testing.T) {
 	meterProvider := metric.NewMeterProvider(metric.WithReader(reader))
 	otel.SetMeterProvider(meterProvider)
 
-	costTracker := NewCostTracker()
+	costTracker := llms.NewCostTracker()
 
 	middleware, err := NewLangfuseOTelMiddleware(mock,
 		WithLangfuseInputCapture(true, 50000),
@@ -137,7 +139,7 @@ func TestLangfuseOTelMiddleware_Call(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		callResp: "Hello response",
 	}
@@ -172,7 +174,7 @@ func TestLangfuseOTelMiddleware_Call_Error(t *testing.T) {
 
 	expectedErr := errors.New("call failed")
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		callErr:  expectedErr,
 	}
@@ -196,12 +198,12 @@ func TestLangfuseOTelMiddleware_GenerateContent(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content:      "Generated content",
 			FinishReason: "stop",
-			Usage: Usage{
+			Usage: llms.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 20,
 				TotalTokens:      30,
@@ -215,8 +217,8 @@ func TestLangfuseOTelMiddleware_GenerateContent(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	resp, err := middleware.GenerateContent(ctx, messages)
@@ -239,9 +241,9 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithTraceContext(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "Response with context",
 		},
 	}
@@ -260,8 +262,8 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithTraceContext(t *testing.T) {
 	}
 
 	ctx := WithTraceContext(context.Background(), tc)
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	resp, err := middleware.GenerateContent(ctx, messages)
@@ -280,9 +282,9 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "Response with options",
 		},
 	}
@@ -293,12 +295,12 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	resp, err := middleware.GenerateContent(ctx, messages,
-		WithTrace(TraceOptions{
+		llms.WithTrace(llms.TraceOptions{
 			TraceID:   "trace-override",
 			UserID:    "user-override",
 			SessionID: "session-override",
@@ -306,11 +308,11 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 			Metadata:  map[string]any{"meta": "data"},
 			Version:   "v1.0",
 		}),
-		WithTemperature(0.8),
-		WithMaxTokens(100),
-		WithTopP(0.9),
-		WithFrequencyPenalty(0.5),
-		WithPresencePenalty(0.5),
+		llms.WithTemperature(0.8),
+		llms.WithMaxTokens(100),
+		llms.WithTopP(0.9),
+		llms.WithFrequencyPenalty(0.5),
+		llms.WithPresencePenalty(0.5),
 	)
 
 	if err != nil {
@@ -329,7 +331,7 @@ func TestLangfuseOTelMiddleware_GenerateContent_Error(t *testing.T) {
 
 	expectedErr := errors.New("generation failed")
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		genErr:   expectedErr,
 	}
@@ -340,8 +342,8 @@ func TestLangfuseOTelMiddleware_GenerateContent_Error(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	_, err = middleware.GenerateContent(ctx, messages)
@@ -356,14 +358,14 @@ func TestLangfuseOTelMiddleware_Stream(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "Hello "},
 			{Content: "World"},
 			{
 				FinishReason: "stop",
-				Usage: &Usage{
+				Usage: &llms.Usage{
 					PromptTokens:     10,
 					CompletionTokens: 5,
 					TotalTokens:      15,
@@ -378,8 +380,8 @@ func TestLangfuseOTelMiddleware_Stream(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	stream, err := middleware.Stream(ctx, messages)
@@ -407,7 +409,7 @@ func TestLangfuseOTelMiddleware_Stream_Error(t *testing.T) {
 
 	expectedErr := errors.New("stream failed")
 	mock := &mockLangfuseLLM{
-		provider:  ProviderOpenAI,
+		provider:  llms.ProviderOpenAI,
 		model:     "gpt-4",
 		streamErr: expectedErr,
 	}
@@ -418,8 +420,8 @@ func TestLangfuseOTelMiddleware_Stream_Error(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	_, err = middleware.Stream(ctx, messages)
@@ -434,13 +436,13 @@ func TestLangfuseOTelMiddleware_Stream_WithToolCalls(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "Let me help you"},
 			{
-				ToolCalls: []ToolCall{
-					{ID: "call_1", Type: "function", Function: &FunctionCall{Name: "get_weather"}},
+				ToolCalls: []llms.ToolCall{
+					{ID: "call_1", Type: "function", Function: &llms.FunctionCall{Name: "get_weather"}},
 				},
 			},
 			{FinishReason: "tool_calls"},
@@ -453,8 +455,8 @@ func TestLangfuseOTelMiddleware_Stream_WithToolCalls(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "What's the weather?"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "What's the weather?"},
 	}
 
 	stream, err := middleware.Stream(ctx, messages)
@@ -482,9 +484,9 @@ func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "Hello"},
 			{Error: errors.New("chunk error")},
 		},
@@ -496,8 +498,8 @@ func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	stream, err := middleware.Stream(ctx, messages)
@@ -525,9 +527,9 @@ func TestLangfuseOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
 	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "one"},
 			{Content: "two"},
 			{Content: "three"},
@@ -541,9 +543,9 @@ func TestLangfuseOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := middleware.Stream(ctx,
-		[]Message{{Role: RoleUser, Content: "Hello"}},
-		WithStreamBufferSize(1),
-		WithStreamSendTimeout(10*time.Millisecond),
+		[]llms.Message{{Role: llms.RoleUser, Content: "Hello"}},
+		llms.WithStreamBufferSize(1),
+		llms.WithStreamSendTimeout(10*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -570,7 +572,7 @@ func TestLangfuseOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
 
 func TestLangfuseOTelMiddleware_Unwrap(t *testing.T) {
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 	}
 
@@ -591,11 +593,11 @@ func TestLangfuseOTelMiddleware_WithCostTracker(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "Response",
-			Usage: Usage{
+			Usage: llms.Usage{
 				PromptTokens:     100,
 				CompletionTokens: 50,
 				TotalTokens:      150,
@@ -603,7 +605,7 @@ func TestLangfuseOTelMiddleware_WithCostTracker(t *testing.T) {
 		},
 	}
 
-	costTracker := NewCostTracker()
+	costTracker := llms.NewCostTracker()
 
 	middleware, err := NewLangfuseOTelMiddleware(mock,
 		WithLangfuseCostTracker(costTracker),
@@ -613,8 +615,8 @@ func TestLangfuseOTelMiddleware_WithCostTracker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	}
 
 	_, err = middleware.GenerateContent(ctx, messages)
@@ -634,7 +636,7 @@ func TestLangfuseOTelMiddleware_CostUsesTrackerPricingWithCacheTokens(t *testing
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
 	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
-	usage := Usage{
+	usage := llms.Usage{
 		PromptTokens:        1_000_000,
 		CompletionTokens:    1_000_000,
 		CacheReadTokens:     1_000_000,
@@ -642,14 +644,14 @@ func TestLangfuseOTelMiddleware_CostUsesTrackerPricingWithCacheTokens(t *testing
 		TotalTokens:         4_000_000,
 	}
 	mock := &mockLangfuseLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3-opus-20240229",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "Response",
 			Usage:   usage,
 		},
 	}
-	costTracker := NewCostTracker()
+	costTracker := llms.NewCostTracker()
 	middleware, err := NewLangfuseOTelMiddleware(mock,
 		WithLangfuseTracer(tracer),
 		WithLangfuseCostTracker(costTracker),
@@ -658,7 +660,7 @@ func TestLangfuseOTelMiddleware_CostUsesTrackerPricingWithCacheTokens(t *testing
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	_, err = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "Hello"}})
+	_, err = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hello"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -677,7 +679,7 @@ func TestLangfuseOTelMiddleware_DisabledCapture(t *testing.T) {
 	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		callResp: "Response",
 	}
@@ -709,7 +711,7 @@ func TestLangfuseOTelMiddleware_DisabledCapture(t *testing.T) {
 // capture options must NOT capture input or output.
 func TestLangfuseOTelMiddleware_CaptureOffByDefault(t *testing.T) {
 	mock := &mockLangfuseLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 	}
 

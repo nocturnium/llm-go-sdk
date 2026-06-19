@@ -1,4 +1,4 @@
-package llms
+package observability
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -21,24 +23,24 @@ const (
 
 // mockOTelLLM is a mock LLM for testing OTel middleware
 type mockOTelLLM struct {
-	provider  Provider
+	provider  llms.Provider
 	model     string
 	callResp  string
 	callErr   error
-	genResp   *Response
+	genResp   *llms.Response
 	genErr    error
-	chunks    []StreamChunk
+	chunks    []llms.StreamChunk
 	streamErr error
 }
 
-func (m *mockOTelLLM) Call(_ context.Context, _ string, _ ...CallOption) (string, error) {
+func (m *mockOTelLLM) Call(_ context.Context, _ string, _ ...llms.CallOption) (string, error) {
 	if m.callErr != nil {
 		return "", m.callErr
 	}
 	return m.callResp, nil
 }
 
-func (m *mockOTelLLM) GenerateContent(_ context.Context, _ []Message, _ ...CallOption) (*Response, error) {
+func (m *mockOTelLLM) GenerateContent(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (*llms.Response, error) {
 	if m.genErr != nil {
 		return nil, m.genErr
 	}
@@ -46,16 +48,16 @@ func (m *mockOTelLLM) GenerateContent(_ context.Context, _ []Message, _ ...CallO
 		return nil, m.callErr
 	}
 	if m.genResp == nil {
-		return &Response{Content: m.callResp}, nil
+		return &llms.Response{Content: m.callResp}, nil
 	}
 	return m.genResp, nil
 }
 
-func (m *mockOTelLLM) Stream(_ context.Context, _ []Message, _ ...CallOption) (<-chan StreamChunk, error) {
+func (m *mockOTelLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	if m.streamErr != nil {
 		return nil, m.streamErr
 	}
-	ch := make(chan StreamChunk, len(m.chunks))
+	ch := make(chan llms.StreamChunk, len(m.chunks))
 	for _, chunk := range m.chunks {
 		ch <- chunk
 	}
@@ -63,11 +65,11 @@ func (m *mockOTelLLM) Stream(_ context.Context, _ []Message, _ ...CallOption) (<
 	return ch, nil
 }
 
-func (m *mockOTelLLM) Provider() Provider { return m.provider }
-func (m *mockOTelLLM) Model() string      { return m.model }
+func (m *mockOTelLLM) Provider() llms.Provider { return m.provider }
+func (m *mockOTelLLM) Model() string           { return m.model }
 
 func TestNewOTelMiddleware(t *testing.T) {
-	llm := &mockOTelLLM{provider: ProviderOpenAI, model: "gpt-4"}
+	llm := &mockOTelLLM{provider: llms.ProviderOpenAI, model: "gpt-4"}
 
 	middleware, err := NewOTelMiddleware(llm)
 	if err != nil {
@@ -92,7 +94,7 @@ func TestOTelMiddleware_Call_Success(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockOTelLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		callResp: "Hello, world!",
 	}
@@ -136,14 +138,14 @@ func TestOTelMiddleware_Call_Error(t *testing.T) {
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
-	expectedErr := &APIError{
+	expectedErr := &llms.APIError{
 		StatusCode: 429,
 		Message:    "rate limited",
 		Type:       "rate_limit_error",
 	}
 
 	llm := &mockOTelLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		callErr:  expectedErr,
 	}
@@ -177,23 +179,23 @@ func TestOTelMiddleware_GenerateContent_Success(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockOTelLLM{
-		provider: ProviderAnthropic,
+		provider: llms.ProviderAnthropic,
 		model:    "claude-3",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content:      "Generated response",
 			FinishReason: "stop",
-			Usage: Usage{
+			Usage: llms.Usage{
 				PromptTokens:     100,
 				CompletionTokens: 50,
 				TotalTokens:      150,
 			},
-			ToolCalls: []ToolCall{{ID: "1"}},
+			ToolCalls: []llms.ToolCall{{ID: "1"}},
 		},
 	}
 
 	middleware, _ := NewOTelMiddleware(llm, WithOTelTracer(tracer))
-	resp, err := middleware.GenerateContent(context.Background(), []Message{
-		{Role: RoleUser, Content: "Hello"},
+	resp, err := middleware.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello"},
 	})
 
 	if err != nil {
@@ -225,18 +227,18 @@ func TestOTelMiddleware_Stream_Success(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockOTelLLM{
-		provider: ProviderGemini,
+		provider: llms.ProviderGemini,
 		model:    "gemini-pro",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "Hello"},
 			{Content: " World"},
-			{FinishReason: "stop", Usage: &Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}},
+			{FinishReason: "stop", Usage: &llms.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}},
 		},
 	}
 
 	middleware, _ := NewOTelMiddleware(llm, WithOTelTracer(tracer))
-	stream, err := middleware.Stream(context.Background(), []Message{
-		{Role: RoleUser, Content: "Hi"},
+	stream, err := middleware.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "Hi"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -274,13 +276,13 @@ func TestOTelMiddleware_Stream_InitError(t *testing.T) {
 
 	expectedErr := errors.New("stream init error")
 	llm := &mockOTelLLM{
-		provider:  ProviderOpenAI,
+		provider:  llms.ProviderOpenAI,
 		model:     "gpt-4",
 		streamErr: expectedErr,
 	}
 
 	middleware, _ := NewOTelMiddleware(llm, WithOTelTracer(tracer))
-	_, err := middleware.Stream(context.Background(), []Message{{Role: RoleUser, Content: "Hi"}})
+	_, err := middleware.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hi"}})
 
 	if !errors.Is(err, expectedErr) {
 		t.Errorf("error = %v, want %v", err, expectedErr)
@@ -302,9 +304,9 @@ func TestOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockOTelLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		chunks: []StreamChunk{
+		chunks: []llms.StreamChunk{
 			{Content: "one"},
 			{Content: "two"},
 			{Content: "three"},
@@ -314,9 +316,9 @@ func TestOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {
 	middleware, _ := NewOTelMiddleware(llm, WithOTelTracer(tracer))
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := middleware.Stream(ctx,
-		[]Message{{Role: RoleUser, Content: "Hi"}},
-		WithStreamBufferSize(1),
-		WithStreamSendTimeout(10*time.Millisecond),
+		[]llms.Message{{Role: llms.RoleUser, Content: "Hi"}},
+		llms.WithStreamBufferSize(1),
+		llms.WithStreamSendTimeout(10*time.Millisecond),
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -347,7 +349,7 @@ func TestOTelMiddleware_WithContentRecording(t *testing.T) {
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	llm := &mockOTelLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		callResp: "response content",
 	}
@@ -367,10 +369,10 @@ func TestOTelMiddleware_WithContentRecording(t *testing.T) {
 }
 
 func TestOTelMiddleware_GetProvider(t *testing.T) {
-	llm := &mockOTelLLM{provider: ProviderOpenAI}
+	llm := &mockOTelLLM{provider: llms.ProviderOpenAI}
 	middleware, _ := NewOTelMiddleware(llm)
 
-	if middleware.Provider() != ProviderOpenAI {
+	if middleware.Provider() != llms.ProviderOpenAI {
 		t.Errorf("provider = %s, want openai", middleware.Provider())
 	}
 }
@@ -400,19 +402,19 @@ func TestOTelMiddleware_Metrics(t *testing.T) {
 	meter := meterProvider.Meter(InstrumentationName)
 
 	llm := &mockOTelLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content:      "test",
 			FinishReason: "stop",
-			Usage:        Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
+			Usage:        llms.Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
 		},
 	}
 
 	middleware, _ := NewOTelMiddleware(llm, WithOTelMeter(meter))
 
 	// Make a request
-	_, _ = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "Hi"}})
+	_, _ = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hi"}})
 
 	// Collect metrics
 	var data metricdata.ResourceMetrics
@@ -481,7 +483,7 @@ func TestTruncateForSpan_UTF8Safe(t *testing.T) {
 }
 
 func TestNormalizeErrorType_BucketsUnknownAPIError(t *testing.T) {
-	err := &APIError{
+	err := &llms.APIError{
 		StatusCode: 418,
 		Message:    "provider-specific failure",
 		Code:       "tenant_12345_model_67890",

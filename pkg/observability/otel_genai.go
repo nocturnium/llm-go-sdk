@@ -1,6 +1,10 @@
-package llms
+package observability
 
-import "go.opentelemetry.io/otel/attribute"
+import (
+	"go.opentelemetry.io/otel/attribute"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+)
 
 // GenAI Semantic Conventions for OpenTelemetry
 // These follow the OpenTelemetry semantic conventions for GenAI/LLM instrumentation
@@ -206,37 +210,37 @@ var (
 )
 
 // ProviderToGenAISystem maps Provider to GenAI system name
-func ProviderToGenAISystem(p Provider) string {
+func ProviderToGenAISystem(p llms.Provider) string {
 	switch p {
-	case ProviderOpenAI:
+	case llms.ProviderOpenAI:
 		return "openai"
-	case ProviderAnthropic:
+	case llms.ProviderAnthropic:
 		return "anthropic"
-	case ProviderGemini:
+	case llms.ProviderGemini:
 		return "google"
-	case ProviderGroq:
+	case llms.ProviderGroq:
 		return "groq"
-	case ProviderFireworks:
+	case llms.ProviderFireworks:
 		return "fireworks"
-	case ProviderPerplexity:
+	case llms.ProviderPerplexity:
 		return "perplexity"
-	case ProviderMistral:
+	case llms.ProviderMistral:
 		return "mistral"
-	case ProviderDeepSeek:
+	case llms.ProviderDeepSeek:
 		return "deepseek"
-	case ProviderCerebras:
+	case llms.ProviderCerebras:
 		return "cerebras"
-	case ProviderOllama:
+	case llms.ProviderOllama:
 		return "ollama"
-	case ProviderAzure:
+	case llms.ProviderAzure:
 		return "azure"
-	case ProviderInfinity:
+	case llms.ProviderInfinity:
 		return "infinity"
-	case ProviderTogetherAI:
+	case llms.ProviderTogetherAI:
 		return "together"
-	case ProviderFeatherless:
+	case llms.ProviderFeatherless:
 		return "featherless"
-	case ProviderRunPod:
+	case llms.ProviderRunPod:
 		return "runpod"
 	default:
 		return string(p)

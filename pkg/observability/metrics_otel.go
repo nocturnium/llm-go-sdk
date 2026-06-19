@@ -1,8 +1,10 @@
-package llms
+package observability
 
 import (
 	"context"
 	"errors"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -119,7 +121,7 @@ func (m *MetricsMiddleware) initMetrics() error {
 }
 
 // recordUsage records token usage metrics and cost
-func (m *MetricsMiddleware) recordUsage(ctx context.Context, span trace.Span, provider Provider, model string, usage Usage, duration float64, attrs []attribute.KeyValue) {
+func (m *MetricsMiddleware) recordUsage(ctx context.Context, span trace.Span, provider llms.Provider, model string, usage llms.Usage, duration float64, attrs []attribute.KeyValue) {
 	m.promptTokens.Add(ctx, int64(usage.PromptTokens), metric.WithAttributes(attrs...))
 	m.completionTokens.Add(ctx, int64(usage.CompletionTokens), metric.WithAttributes(attrs...))
 
@@ -152,7 +154,7 @@ func (m *MetricsMiddleware) recordError(ctx context.Context, span trace.Span, er
 	span.SetStatus(codes.Error, err.Error())
 
 	errorType := normalizeErrorType(err)
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
 		span.SetAttributes(
 			attribute.Int("llm.error.status_code", apiErr.StatusCode),

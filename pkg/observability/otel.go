@@ -1,4 +1,4 @@
-package llms
+package observability
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -33,14 +35,14 @@ const (
 
 	errorCategoryAuthentication        = "authentication"
 	errorCategoryContentFiltered       = "content_filtered"
-	errorCategoryContextLengthExceeded = apiErrorCodeContextLengthExceeded
+	errorCategoryContextLengthExceeded = "context_length_exceeded"
 	errorCategoryInvalidRequest        = "invalid_request"
-	errorCategoryModelNotFound         = apiErrorCodeModelNotFound
+	errorCategoryModelNotFound         = "model_not_found"
 	errorCategoryOther                 = "other"
 	errorCategoryPermissionDenied      = "permission_denied"
-	errorCategoryQuotaExceeded         = apiErrorCodeQuotaExceeded
+	errorCategoryQuotaExceeded         = "quota_exceeded"
 	errorCategoryRateLimited           = "rate_limited"
-	errorCategoryServerError           = apiErrorTypeServer
+	errorCategoryServerError           = "server_error"
 	errorCategoryServiceUnavailable    = "service_unavailable"
 	errorCategoryStreamTimeout         = "stream_timeout"
 	errorCategoryTimeout               = "timeout"
@@ -55,6 +57,16 @@ const (
 	apiErrorCodeSafety                 = "safety"
 	apiErrorCodeTooManyRequests        = "too_many_requests"
 	apiErrorCodeUnauthorized           = "unauthorized"
+	apiErrorCodeContentFilter          = "content_filter"
+	apiErrorCodeContextLengthExceeded  = "context_length_exceeded"
+	apiErrorCodeInsufficientQuota      = "insufficient_quota"
+	apiErrorCodeModelNotFound          = "model_not_found"
+	apiErrorCodeQuotaExceeded          = "quota_exceeded"
+	apiErrorTypeAuthentication         = "authentication_error"
+	apiErrorTypeInvalidRequest         = "invalid_request_error"
+	apiErrorTypePermission             = "permission_error"
+	apiErrorTypeRateLimit              = "rate_limit_error"
+	apiErrorTypeServer                 = "server_error"
 )
 
 // Attribute keys for spans and metrics
@@ -70,7 +82,7 @@ var (
 
 // OTelMiddleware wraps an LLM with OpenTelemetry instrumentation
 type OTelMiddleware struct {
-	llm    LLM
+	llm    llms.LLM
 	tracer trace.Tracer
 	meter  metric.Meter
 
@@ -90,7 +102,7 @@ type OTelMiddleware struct {
 type OTelOption func(*OTelMiddleware)
 
 // NewOTelMiddleware creates a new OpenTelemetry instrumented LLM wrapper
-func NewOTelMiddleware(llm LLM, opts ...OTelOption) (*OTelMiddleware, error) {
+func NewOTelMiddleware(llm llms.LLM, opts ...OTelOption) (*OTelMiddleware, error) {
 	m := &OTelMiddleware{
 		llm:           llm,
 		tracer:        otel.Tracer(InstrumentationName),
@@ -192,7 +204,7 @@ func WithContentRecording(record bool) OTelOption {
 }
 
 // Call wraps the LLM's Call method with tracing and metrics
-func (m *OTelMiddleware) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (m *OTelMiddleware) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	ctx, span := m.tracer.Start(ctx, "llm.call",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -222,7 +234,7 @@ func (m *OTelMiddleware) Call(ctx context.Context, prompt string, options ...Cal
 	}
 	m.requestCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
-	result, err := Call(ctx, m.llm, prompt, options...)
+	result, err := llms.Call(ctx, m.llm, prompt, options...)
 
 	duration := time.Since(start).Seconds()
 	m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
@@ -241,7 +253,7 @@ func (m *OTelMiddleware) Call(ctx context.Context, prompt string, options ...Cal
 }
 
 // GenerateContent wraps the LLM's GenerateContent method with tracing and metrics
-func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
+func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	ctx, span := m.tracer.Start(ctx, "llm.generate_content",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -305,7 +317,7 @@ func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []Message
 }
 
 // Stream wraps the LLM's Stream method with tracing and metrics
-func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	ctx, span := m.tracer.Start(ctx, "llm.stream",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -341,9 +353,9 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options
 	}
 
 	// Apply options to get buffer size and timeout for backpressure handling
-	opts := ApplyOptions(options...)
-	wrappedStream := make(chan StreamChunk, opts.StreamBufferSize)
-	sender := NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
+	opts := llms.ApplyOptions(options...)
+	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
+	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
 
 	go func() {
 		defer close(wrappedStream)
@@ -352,7 +364,7 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options
 		var chunkCount int64
 		var contentBuilder strings.Builder
 		var contentTruncated bool
-		var usage *Usage
+		var usage *llms.Usage
 		var finishReason string
 		var toolCallCount int
 		var hadError bool
@@ -459,7 +471,7 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []Message, options
 }
 
 // Provider returns the underlying LLM's provider
-func (m *OTelMiddleware) Provider() Provider {
+func (m *OTelMiddleware) Provider() llms.Provider {
 	return m.llm.Provider()
 }
 
@@ -469,7 +481,7 @@ func (m *OTelMiddleware) Model() string {
 }
 
 // Unwrap returns the underlying LLM
-func (m *OTelMiddleware) Unwrap() LLM {
+func (m *OTelMiddleware) Unwrap() llms.LLM {
 	return m.llm
 }
 
@@ -478,7 +490,7 @@ func (m *OTelMiddleware) recordError(ctx context.Context, span trace.Span, err e
 	span.SetStatus(codes.Error, err.Error())
 
 	errorType := normalizeErrorType(err)
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
 		span.SetAttributes(
 			attribute.Int("llm.error.status_code", apiErr.StatusCode),
@@ -517,17 +529,17 @@ func truncateUTF8(s string, maxLen int, suffix string) string {
 	return s[:end] + suffix
 }
 
-func streamSendResultError(ctx context.Context, result SendResult) error {
+func streamSendResultError(ctx context.Context, result llms.SendResult) error {
 	switch result {
-	case SendContextCanceled:
+	case llms.SendContextCanceled:
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		return ErrStreamInterrupted
-	case SendTimeout:
-		return ErrStreamTimeout
+		return llms.ErrStreamInterrupted
+	case llms.SendTimeout:
+		return llms.ErrStreamTimeout
 	default:
-		return ErrStreamInterrupted
+		return llms.ErrStreamInterrupted
 	}
 }
 
@@ -537,33 +549,33 @@ func normalizeErrorType(err error) string {
 		return errorCategoryUnknown
 	case errors.Is(err, context.Canceled):
 		return "canceled"
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrTimeout):
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, llms.ErrTimeout):
 		return errorCategoryTimeout
-	case errors.Is(err, ErrStreamTimeout):
+	case errors.Is(err, llms.ErrStreamTimeout):
 		return errorCategoryStreamTimeout
-	case errors.Is(err, ErrRateLimited):
+	case errors.Is(err, llms.ErrRateLimited):
 		return errorCategoryRateLimited
-	case errors.Is(err, ErrQuotaExceeded):
+	case errors.Is(err, llms.ErrQuotaExceeded):
 		return errorCategoryQuotaExceeded
-	case errors.Is(err, ErrAuthenticationFailed):
+	case errors.Is(err, llms.ErrAuthenticationFailed):
 		return errorCategoryAuthentication
-	case errors.Is(err, ErrPermissionDenied):
+	case errors.Is(err, llms.ErrPermissionDenied):
 		return errorCategoryPermissionDenied
-	case errors.Is(err, ErrModelNotFound):
+	case errors.Is(err, llms.ErrModelNotFound):
 		return errorCategoryModelNotFound
-	case errors.Is(err, ErrContextLengthExceeded):
+	case errors.Is(err, llms.ErrContextLengthExceeded):
 		return errorCategoryContextLengthExceeded
-	case errors.Is(err, ErrContentFiltered):
+	case errors.Is(err, llms.ErrContentFiltered):
 		return errorCategoryContentFiltered
-	case errors.Is(err, ErrServiceUnavailable):
+	case errors.Is(err, llms.ErrServiceUnavailable):
 		return errorCategoryServiceUnavailable
-	case errors.Is(err, ErrServerError):
+	case errors.Is(err, llms.ErrServerError):
 		return errorCategoryServerError
-	case errors.Is(err, ErrInvalidParameters), errors.Is(err, ErrEmptyMessages):
+	case errors.Is(err, llms.ErrInvalidParameters), errors.Is(err, llms.ErrEmptyMessages):
 		return errorCategoryInvalidRequest
 	}
 
-	var apiErr *APIError
+	var apiErr *llms.APIError
 	if !errors.As(err, &apiErr) {
 		return errorCategoryUnknown
 	}
@@ -632,4 +644,4 @@ func normalizeAPIErrorType(value string) string {
 }
 
 // Ensure OTelMiddleware implements LLM
-var _ LLM = (*OTelMiddleware)(nil)
+var _ llms.LLM = (*OTelMiddleware)(nil)

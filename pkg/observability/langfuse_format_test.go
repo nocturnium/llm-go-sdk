@@ -1,17 +1,19 @@
-package llms
+package observability
 
 import (
 	"encoding/json"
 	"testing"
 	"unicode/utf8"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 func TestFormatInput_Raw(t *testing.T) {
-	messages := []Message{
-		{Role: RoleSystem, Content: "You are helpful."},
-		{Role: RoleUser, Content: "Hello!"},
-		{Role: RoleAssistant, Content: "Hi there!"},
-		{Role: RoleUser, Content: "How are you?"},
+	messages := []llms.Message{
+		{Role: llms.RoleSystem, Content: "You are helpful."},
+		{Role: llms.RoleUser, Content: "Hello!"},
+		{Role: llms.RoleAssistant, Content: "Hi there!"},
+		{Role: llms.RoleUser, Content: "How are you?"},
 	}
 
 	result := FormatInput(messages, InputFormatRaw)
@@ -21,9 +23,9 @@ func TestFormatInput_Raw(t *testing.T) {
 }
 
 func TestFormatInput_Raw_NoUserMessage(t *testing.T) {
-	messages := []Message{
-		{Role: RoleSystem, Content: "You are helpful."},
-		{Role: RoleAssistant, Content: "Hi there!"},
+	messages := []llms.Message{
+		{Role: llms.RoleSystem, Content: "You are helpful."},
+		{Role: llms.RoleAssistant, Content: "Hi there!"},
 	}
 
 	result := FormatInput(messages, InputFormatRaw)
@@ -33,14 +35,14 @@ func TestFormatInput_Raw_NoUserMessage(t *testing.T) {
 }
 
 func TestFormatInput_Messages(t *testing.T) {
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello!"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello!"},
 	}
 
 	result := FormatInput(messages, InputFormatMessages)
 
 	// Should be valid JSON
-	var parsed []Message
+	var parsed []llms.Message
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
@@ -51,9 +53,9 @@ func TestFormatInput_Messages(t *testing.T) {
 }
 
 func TestFormatInput_Structured(t *testing.T) {
-	messages := []Message{
-		{Role: RoleUser, Content: "Hello!"},
-		{Role: RoleAssistant, Content: "Hi!"},
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "Hello!"},
+		{Role: llms.RoleAssistant, Content: "Hi!"},
 	}
 
 	result := FormatInput(messages, InputFormatStructured)
@@ -78,14 +80,14 @@ func TestFormatInput_Structured(t *testing.T) {
 }
 
 func TestFormatInput_Empty(t *testing.T) {
-	result := FormatInput([]Message{}, InputFormatRaw)
+	result := FormatInput([]llms.Message{}, InputFormatRaw)
 	if result != "" {
 		t.Errorf("expected empty string for empty messages, got '%s'", result)
 	}
 }
 
 func TestFormatOutput_Raw(t *testing.T) {
-	resp := &Response{
+	resp := &llms.Response{
 		Content:      "Hello there!",
 		FinishReason: "stop",
 	}
@@ -97,10 +99,10 @@ func TestFormatOutput_Raw(t *testing.T) {
 }
 
 func TestFormatOutput_Response(t *testing.T) {
-	resp := &Response{
+	resp := &llms.Response{
 		Content:      "Hello!",
 		FinishReason: "stop",
-		Usage: Usage{
+		Usage: llms.Usage{
 			PromptTokens:     10,
 			CompletionTokens: 5,
 			TotalTokens:      15,
@@ -110,7 +112,7 @@ func TestFormatOutput_Response(t *testing.T) {
 	result := FormatOutput(resp, OutputFormatResponse)
 
 	// Should be valid JSON
-	var parsed Response
+	var parsed llms.Response
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
@@ -124,10 +126,10 @@ func TestFormatOutput_Response(t *testing.T) {
 }
 
 func TestFormatOutput_Structured(t *testing.T) {
-	resp := &Response{
+	resp := &llms.Response{
 		Content:      "Hello!",
 		FinishReason: "stop",
-		ToolCalls: []ToolCall{
+		ToolCalls: []llms.ToolCall{
 			{ID: "call-1", Type: "function"},
 		},
 	}
@@ -135,9 +137,9 @@ func TestFormatOutput_Structured(t *testing.T) {
 	result := FormatOutput(resp, OutputFormatStructured)
 
 	var parsed struct {
-		Content      string     `json:"content"`
-		FinishReason string     `json:"finish_reason"`
-		ToolCalls    []ToolCall `json:"tool_calls"`
+		Content      string          `json:"content"`
+		FinishReason string          `json:"finish_reason"`
+		ToolCalls    []llms.ToolCall `json:"tool_calls"`
 	}
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
@@ -162,9 +164,9 @@ func TestFormatOutput_Nil(t *testing.T) {
 }
 
 func TestFormatMessagesCompact(t *testing.T) {
-	messages := []Message{
-		{Role: RoleUser, Content: "This is a short message."},
-		{Role: RoleAssistant, Content: string(make([]byte, 200))}, // Long message
+	messages := []llms.Message{
+		{Role: llms.RoleUser, Content: "This is a short message."},
+		{Role: llms.RoleAssistant, Content: string(make([]byte, 200))}, // Long message
 	}
 
 	result := FormatMessagesCompact(messages)
@@ -189,7 +191,7 @@ func TestFormatMessagesCompact(t *testing.T) {
 }
 
 func TestFormatMessagesCompact_Empty(t *testing.T) {
-	result := FormatMessagesCompact([]Message{})
+	result := FormatMessagesCompact([]llms.Message{})
 	if result != "[]" {
 		t.Errorf("expected '[]' for empty messages, got '%s'", result)
 	}

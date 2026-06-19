@@ -368,20 +368,6 @@ func BenchmarkCostTracker_GetTotalCost(b *testing.B) {
 	}
 }
 
-// Benchmark LogEntry creation (common operation in logging middleware)
-func BenchmarkLogEntry_Creation(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = &LogEntry{
-			RequestID: "req_12345678",
-			Timestamp: time.Now(),
-			Provider:  ProviderOpenAI,
-			Model:     "gpt-4",
-			Operation: "GenerateContent",
-		}
-	}
-}
-
 // Benchmark ToolRegistry - hot path for tool handling
 func BenchmarkToolRegistry_HandleParallel(b *testing.B) {
 	registry := NewToolRegistry()

@@ -29,8 +29,9 @@
 //     when the provider is known at compile time.
 //   - Cost & tokens: [CostTracker], [ModelPricing], [EstimateTokens], [TokenEstimator].
 //   - Resilience middleware: [NewResilientClient], [NewFallbackChain], rate limiting.
-//   - Observability middleware: [NewMetricsMiddleware], [NewOTelMiddleware], the
-//     Langfuse exporters, and the slog/JSON logging middleware.
+//   - Observability middleware: see the pkg/observability package for
+//     NewMetricsMiddleware, NewOTelMiddleware, the Langfuse exporters, and the
+//     slog/JSON logging middleware.
 //   - Errors: the [Err]-prefixed sentinels (match with errors.Is), [APIError],
 //     [IsTemporary], [GetErrorDetails].
 //   - Provider-authoring toolkit (for implementing a new provider): [WrapProviderError],

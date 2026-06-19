@@ -1,7 +1,9 @@
-package llms
+package observability
 
 import (
 	"encoding/json"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // InputFormat represents different ways to capture input for Langfuse
@@ -45,14 +47,14 @@ type structuredInput struct {
 
 // structuredOutput is the Langfuse-style structured output format
 type structuredOutput struct {
-	Content      string     `json:"content"`
-	FinishReason string     `json:"finish_reason,omitempty"`
-	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
-	Usage        *Usage     `json:"usage,omitempty"`
+	Content      string          `json:"content"`
+	FinishReason string          `json:"finish_reason,omitempty"`
+	ToolCalls    []llms.ToolCall `json:"tool_calls,omitempty"`
+	Usage        *llms.Usage     `json:"usage,omitempty"`
 }
 
 // FormatInput converts messages to a string format suitable for Langfuse
-func FormatInput(messages []Message, format InputFormat) string {
+func FormatInput(messages []llms.Message, format InputFormat) string {
 	if len(messages) == 0 {
 		return ""
 	}
@@ -61,7 +63,7 @@ func FormatInput(messages []Message, format InputFormat) string {
 	case InputFormatRaw:
 		// Just return the last user message content
 		for i := len(messages) - 1; i >= 0; i-- {
-			if messages[i].Role == RoleUser {
+			if messages[i].Role == llms.RoleUser {
 				return messages[i].Content
 			}
 		}
@@ -99,7 +101,7 @@ func FormatInput(messages []Message, format InputFormat) string {
 }
 
 // FormatOutput converts a response to a string format suitable for Langfuse
-func FormatOutput(resp *Response, format OutputFormat) string {
+func FormatOutput(resp *llms.Response, format OutputFormat) string {
 	if resp == nil {
 		return ""
 	}
@@ -137,7 +139,7 @@ func FormatOutput(resp *Response, format OutputFormat) string {
 
 // FormatMessagesCompact creates a compact string representation of messages
 // useful for logging and debugging
-func FormatMessagesCompact(messages []Message) string {
+func FormatMessagesCompact(messages []llms.Message) string {
 	if len(messages) == 0 {
 		return "[]"
 	}

@@ -1,8 +1,10 @@
-package llms
+package observability
 
 import (
 	"context"
 	"testing"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -19,15 +21,15 @@ func TestMetricsMiddleware_RecordUsageUsesCustomCostTrackerPricing(t *testing.T)
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
-	tracker := NewCostTracker(map[string]Pricing{
+	tracker := llms.NewCostTracker(map[string]llms.Pricing{
 		"openai:custom-model": {PromptPerMillion: 42.00, CompletionPerMillion: 84.00},
 	})
 	llm := &mockMetricsLLM{
-		provider: ProviderOpenAI,
+		provider: llms.ProviderOpenAI,
 		model:    "custom-model",
-		genResp: &Response{
+		genResp: &llms.Response{
 			Content: "test",
-			Usage:   Usage{PromptTokens: 1_000_000, TotalTokens: 1_000_000},
+			Usage:   llms.Usage{PromptTokens: 1_000_000, TotalTokens: 1_000_000},
 		},
 	}
 
@@ -40,7 +42,7 @@ func TestMetricsMiddleware_RecordUsageUsesCustomCostTrackerPricing(t *testing.T)
 		t.Fatalf("failed to create middleware: %v", err)
 	}
 
-	_, err = middleware.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "test"}})
+	_, err = middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "test"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

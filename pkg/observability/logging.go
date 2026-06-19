@@ -1,4 +1,4 @@
-package llms
+package observability
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
 // maxLoggedStreamContent is the maximum content size (in bytes) to log for streaming responses.
@@ -30,7 +32,7 @@ type LogEntry struct {
 	RequestID string `json:"request_id,omitempty"`
 
 	// Provider is the LLM provider (openai, anthropic, etc.)
-	Provider Provider `json:"provider,omitempty"`
+	Provider llms.Provider `json:"provider,omitempty"`
 
 	// Model is the model name
 	Model string `json:"model,omitempty"`
@@ -39,13 +41,13 @@ type LogEntry struct {
 	Operation string `json:"operation,omitempty"`
 
 	// Messages is the input messages (may be redacted)
-	Messages []Message `json:"messages,omitempty"`
+	Messages []llms.Message `json:"messages,omitempty"`
 
 	// Response content (may be truncated)
 	Content string `json:"content,omitempty"`
 
 	// Token usage
-	Usage *Usage `json:"usage,omitempty"`
+	Usage *llms.Usage `json:"usage,omitempty"`
 
 	// Duration of the request
 	Duration time.Duration `json:"duration,omitempty"`
@@ -57,7 +59,7 @@ type LogEntry struct {
 	FinishReason string `json:"finish_reason,omitempty"`
 
 	// ToolCalls if any were made
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	ToolCalls []llms.ToolCall `json:"tool_calls,omitempty"`
 
 	// Streaming indicates if this was a streaming request
 	Streaming bool `json:"streaming,omitempty"`
@@ -220,7 +222,7 @@ func (e *LogEntry) PopulateFromTraceContext(tc *TraceContext) {
 }
 
 // PopulateFromCallOptions fills LogEntry fields from CallOptions
-func (e *LogEntry) PopulateFromCallOptions(opts *CallOptions) {
+func (e *LogEntry) PopulateFromCallOptions(opts *llms.CallOptions) {
 	if opts == nil {
 		return
 	}
@@ -278,7 +280,7 @@ func (e *LogEntry) PopulateFromCallOptions(opts *CallOptions) {
 	if opts.PresencePenalty != nil {
 		e.RequestParameters["presence_penalty"] = *opts.PresencePenalty
 	}
-	if opts.ResponseFormat != nil && opts.ResponseFormat.Type == ResponseFormatJSONObject {
+	if opts.ResponseFormat != nil && opts.ResponseFormat.Type == llms.ResponseFormatJSONObject {
 		e.RequestParameters["json_mode"] = true
 	}
 }
@@ -314,13 +316,13 @@ func sanitizeLogValue(s string) string {
 
 // LoggingMiddleware wraps an LLM with logging capabilities
 type LoggingMiddleware struct {
-	llm    LLM
+	llm    llms.LLM
 	logger Logger
 	genID  func() string
 }
 
 // NewLoggingMiddleware creates a new logging middleware
-func NewLoggingMiddleware(llm LLM, logger Logger) *LoggingMiddleware {
+func NewLoggingMiddleware(llm llms.LLM, logger Logger) *LoggingMiddleware {
 	return &LoggingMiddleware{
 		llm:    llm,
 		logger: logger,
@@ -335,7 +337,7 @@ func (m *LoggingMiddleware) WithIDGenerator(genID func() string) *LoggingMiddlew
 }
 
 // Call wraps the LLM's Call method with logging
-func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	requestID := m.genID()
 	start := time.Now()
 
@@ -344,14 +346,14 @@ func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...
 		Provider:  m.llm.Provider(),
 		Model:     m.llm.Model(),
 		Operation: "call",
-		Messages:  []Message{{Role: RoleUser, Content: prompt}},
+		Messages:  []llms.Message{{Role: llms.RoleUser, Content: prompt}},
 		Timestamp: start,
 		Streaming: false,
 	}
 
 	m.logger.LogRequest(ctx, entry)
 
-	result, err := Call(ctx, m.llm, prompt, options...)
+	result, err := llms.Call(ctx, m.llm, prompt, options...)
 
 	entry.Duration = time.Since(start)
 
@@ -367,7 +369,7 @@ func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...
 }
 
 // GenerateContent wraps the LLM's GenerateContent method with logging
-func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
+func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	requestID := m.genID()
 	start := time.Now()
 
@@ -402,7 +404,7 @@ func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []Mess
 }
 
 // Stream wraps the LLM's Stream method with logging
-func (m *LoggingMiddleware) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	requestID := m.genID()
 	start := time.Now()
 
@@ -426,17 +428,17 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []Message, opti
 	}
 
 	// Apply options to get buffer size and timeout for backpressure handling
-	opts := ApplyOptions(options...)
-	wrappedStream := make(chan StreamChunk, opts.StreamBufferSize)
-	sender := NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
+	opts := llms.ApplyOptions(options...)
+	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
+	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
 
 	go func() {
 		defer close(wrappedStream)
 
 		var contentBuilder strings.Builder
-		var usage *Usage
+		var usage *llms.Usage
 		var finishReason string
-		var toolCalls []ToolCall
+		var toolCalls []llms.ToolCall
 		contentTruncated := false
 		streamInterrupted := false
 
@@ -494,7 +496,7 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []Message, opti
 }
 
 // Provider returns the underlying LLM's provider
-func (m *LoggingMiddleware) Provider() Provider {
+func (m *LoggingMiddleware) Provider() llms.Provider {
 	return m.llm.Provider()
 }
 
@@ -504,7 +506,7 @@ func (m *LoggingMiddleware) Model() string {
 }
 
 // Unwrap returns the underlying LLM
-func (m *LoggingMiddleware) Unwrap() LLM {
+func (m *LoggingMiddleware) Unwrap() llms.LLM {
 	return m.llm
 }
 
@@ -516,4 +518,4 @@ func defaultIDGenerator() string {
 }
 
 // Ensure LoggingMiddleware implements LLM
-var _ LLM = (*LoggingMiddleware)(nil)
+var _ llms.LLM = (*LoggingMiddleware)(nil)

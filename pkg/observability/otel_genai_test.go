@@ -1,28 +1,32 @@
-package llms
+package observability
 
-import "testing"
+import (
+	"testing"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
+)
 
 func TestProviderToGenAISystem(t *testing.T) {
 	tests := []struct {
-		provider Provider
+		provider llms.Provider
 		expected string
 	}{
-		{ProviderOpenAI, "openai"},
-		{ProviderAnthropic, "anthropic"},
-		{ProviderGemini, "google"},
-		{ProviderGroq, "groq"},
-		{ProviderFireworks, "fireworks"},
-		{ProviderPerplexity, "perplexity"},
-		{ProviderMistral, "mistral"},
-		{ProviderDeepSeek, "deepseek"},
-		{ProviderCerebras, "cerebras"},
-		{ProviderOllama, "ollama"},
-		{ProviderAzure, "azure"},
-		{ProviderInfinity, "infinity"},
-		{ProviderTogetherAI, "together"},
-		{ProviderFeatherless, "featherless"},
-		{ProviderRunPod, "runpod"},
-		{Provider("unknown"), "unknown"},
+		{llms.ProviderOpenAI, "openai"},
+		{llms.ProviderAnthropic, "anthropic"},
+		{llms.ProviderGemini, "google"},
+		{llms.ProviderGroq, "groq"},
+		{llms.ProviderFireworks, "fireworks"},
+		{llms.ProviderPerplexity, "perplexity"},
+		{llms.ProviderMistral, "mistral"},
+		{llms.ProviderDeepSeek, "deepseek"},
+		{llms.ProviderCerebras, "cerebras"},
+		{llms.ProviderOllama, "ollama"},
+		{llms.ProviderAzure, "azure"},
+		{llms.ProviderInfinity, "infinity"},
+		{llms.ProviderTogetherAI, "together"},
+		{llms.ProviderFeatherless, "featherless"},
+		{llms.ProviderRunPod, "runpod"},
+		{llms.Provider("unknown"), "unknown"},
 	}
 
 	for _, tt := range tests {

@@ -1,10 +1,12 @@
-package llms
+package observability
 
 import (
 	"context"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -22,12 +24,12 @@ const (
 // MetricsMiddleware provides enhanced observability combining OTel and cost tracking
 // It wraps an LLM with comprehensive tracing, metrics, and cost estimation
 type MetricsMiddleware struct {
-	llm    LLM
+	llm    llms.LLM
 	tracer trace.Tracer
 	meter  metric.Meter
 
 	// Cost tracking
-	costTracker *CostTracker
+	costTracker *llms.CostTracker
 
 	// Standard metrics (from OTel)
 	requestCounter   metric.Int64Counter
@@ -55,12 +57,12 @@ type MetricsMiddleware struct {
 type MetricsOption func(*MetricsMiddleware)
 
 // NewMetricsMiddleware creates a new enhanced metrics middleware
-func NewMetricsMiddleware(llm LLM, opts ...MetricsOption) (*MetricsMiddleware, error) {
+func NewMetricsMiddleware(llm llms.LLM, opts ...MetricsOption) (*MetricsMiddleware, error) {
 	m := &MetricsMiddleware{
 		llm:            llm,
 		tracer:         otel.Tracer(InstrumentationName),
 		meter:          otel.Meter(InstrumentationName),
-		costTracker:    NewCostTracker(),
+		costTracker:    llms.NewCostTracker(),
 		recordContent:  false,
 		recordCost:     true,
 		windowDuration: 5 * time.Minute,
@@ -94,7 +96,7 @@ func WithMetricsMeter(meter metric.Meter) MetricsOption {
 }
 
 // WithMetricsCostTracker sets a custom cost tracker
-func WithMetricsCostTracker(tracker *CostTracker) MetricsOption {
+func WithMetricsCostTracker(tracker *llms.CostTracker) MetricsOption {
 	return func(m *MetricsMiddleware) {
 		m.costTracker = tracker
 	}
@@ -122,7 +124,7 @@ func WithSuccessRateWindow(duration time.Duration) MetricsOption {
 }
 
 // Call wraps the LLM's Call method with enhanced metrics
-func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
+func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
 	ctx, span := m.tracer.Start(ctx, "llm.call",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -150,7 +152,7 @@ func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...
 	defer m.decrementActive(ctx, attrs)
 
 	// Use GenerateContent internally to get usage info
-	messages := []Message{{Role: RoleUser, Content: prompt}}
+	messages := []llms.Message{{Role: llms.RoleUser, Content: prompt}}
 	resp, err := m.llm.GenerateContent(ctx, messages, options...)
 
 	duration := time.Since(start).Seconds()
@@ -174,7 +176,7 @@ func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...
 }
 
 // GenerateContent wraps the LLM's GenerateContent method with enhanced metrics
-func (m *MetricsMiddleware) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
+func (m *MetricsMiddleware) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	ctx, span := m.tracer.Start(ctx, "llm.generate_content",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -233,7 +235,7 @@ func (m *MetricsMiddleware) GenerateContent(ctx context.Context, messages []Mess
 }
 
 // Stream wraps the LLM's Stream method with enhanced metrics including time-to-first-token
-func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
+func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	ctx, span := m.tracer.Start(ctx, "llm.stream",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
@@ -268,9 +270,9 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 		return nil, err
 	}
 
-	opts := ApplyOptions(options...)
-	wrappedStream := make(chan StreamChunk, opts.StreamBufferSize)
-	sender := NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
+	opts := llms.ApplyOptions(options...)
+	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
+	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
 	go func() {
 		// Order matters: the finalize defer (registered last, runs first under
 		// LIFO) populates the span, then span.End() must run before
@@ -283,7 +285,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 		var chunkCount int64
 		var contentBuilder strings.Builder
 		var contentTruncated bool
-		var usage *Usage
+		var usage *llms.Usage
 		var finishReason string
 		var toolCallCount int
 		var firstTokenTime time.Time
@@ -383,7 +385,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []Message, opti
 }
 
 // Provider returns the underlying LLM's provider
-func (m *MetricsMiddleware) Provider() Provider {
+func (m *MetricsMiddleware) Provider() llms.Provider {
 	return m.llm.Provider()
 }
 
@@ -393,12 +395,12 @@ func (m *MetricsMiddleware) Model() string {
 }
 
 // Unwrap returns the underlying LLM
-func (m *MetricsMiddleware) Unwrap() LLM {
+func (m *MetricsMiddleware) Unwrap() llms.LLM {
 	return m.llm
 }
 
 // CostTracker returns the cost tracker for usage statistics
-func (m *MetricsMiddleware) CostTracker() *CostTracker {
+func (m *MetricsMiddleware) CostTracker() *llms.CostTracker {
 	return m.costTracker
 }
 
@@ -413,4 +415,4 @@ func (m *MetricsMiddleware) ActiveRequests() int64 {
 }
 
 // Ensure MetricsMiddleware implements LLM
-var _ LLM = (*MetricsMiddleware)(nil)
+var _ llms.LLM = (*MetricsMiddleware)(nil)

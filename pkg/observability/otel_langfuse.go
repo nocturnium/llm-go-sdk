@@ -1,9 +1,11 @@
-package llms
+package observability
 
 import (
 	"context"
 	"strings"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v2"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -24,7 +26,7 @@ const (
 // LangfuseOTelMiddleware extends OTelMiddleware with Langfuse-compatible attributes.
 // It uses OpenTelemetry GenAI semantic conventions that Langfuse recognizes.
 type LangfuseOTelMiddleware struct {
-	llm    LLM
+	llm    llms.LLM
 	tracer trace.Tracer
 	meter  metric.Meter
 
@@ -44,14 +46,14 @@ type LangfuseOTelMiddleware struct {
 	maxOutputLen  int
 	inputFormat   InputFormat
 	outputFormat  OutputFormat
-	costTracker   *CostTracker
+	costTracker   *llms.CostTracker
 }
 
 // LangfuseOTelOption configures the LangfuseOTelMiddleware
 type LangfuseOTelOption func(*LangfuseOTelMiddleware)
 
 // NewLangfuseOTelMiddleware creates a new Langfuse-compatible OpenTelemetry middleware
-func NewLangfuseOTelMiddleware(llm LLM, opts ...LangfuseOTelOption) (*LangfuseOTelMiddleware, error) {
+func NewLangfuseOTelMiddleware(llm llms.LLM, opts ...LangfuseOTelOption) (*LangfuseOTelMiddleware, error) {
 	m := &LangfuseOTelMiddleware{
 		llm:    llm,
 		tracer: otel.Tracer(LangfuseInstrumentationName),
@@ -199,15 +201,15 @@ func WithLangfuseMeter(meter metric.Meter) LangfuseOTelOption {
 }
 
 // WithLangfuseCostTracker enables cost tracking
-func WithLangfuseCostTracker(tracker *CostTracker) LangfuseOTelOption {
+func WithLangfuseCostTracker(tracker *llms.CostTracker) LangfuseOTelOption {
 	return func(m *LangfuseOTelMiddleware) {
 		m.costTracker = tracker
 	}
 }
 
 // Call wraps the LLM's Call method with Langfuse-compatible tracing
-func (m *LangfuseOTelMiddleware) Call(ctx context.Context, prompt string, options ...CallOption) (string, error) {
-	opts := ApplyOptions(options...)
+func (m *LangfuseOTelMiddleware) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
+	opts := llms.ApplyOptions(options...)
 	tc := m.resolveTraceContext(ctx, opts)
 
 	ctx, span := m.tracer.Start(ctx, "llm.generation",
@@ -234,7 +236,7 @@ func (m *LangfuseOTelMiddleware) Call(ctx context.Context, prompt string, option
 	attrs := m.getMetricAttributes(opts)
 	m.requestCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
-	result, err := Call(ctx, m.llm, prompt, options...)
+	result, err := llms.Call(ctx, m.llm, prompt, options...)
 
 	duration := time.Since(start)
 	m.requestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
@@ -258,8 +260,8 @@ func (m *LangfuseOTelMiddleware) Call(ctx context.Context, prompt string, option
 }
 
 // GenerateContent wraps the LLM's GenerateContent method with Langfuse-compatible tracing
-func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages []Message, options ...CallOption) (*Response, error) {
-	opts := ApplyOptions(options...)
+func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
+	opts := llms.ApplyOptions(options...)
 	tc := m.resolveTraceContext(ctx, opts)
 
 	ctx, span := m.tracer.Start(ctx, "llm.generation",
@@ -328,8 +330,8 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 }
 
 // Stream wraps the LLM's Stream method with Langfuse-compatible tracing
-func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
-	opts := ApplyOptions(options...)
+func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+	opts := llms.ApplyOptions(options...)
 	tc := m.resolveTraceContext(ctx, opts)
 
 	ctx, span := m.tracer.Start(ctx, "llm.generation",
@@ -365,8 +367,8 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 		return nil, err
 	}
 
-	wrappedStream := make(chan StreamChunk, opts.StreamBufferSize)
-	sender := NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
+	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
+	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
 
 	go func() {
 		defer close(wrappedStream)
@@ -374,7 +376,7 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 
 		var contentBuilder strings.Builder
 		var contentTruncated bool
-		var usage *Usage
+		var usage *llms.Usage
 		var finishReason string
 		var toolCallCount int
 		var hadError bool
@@ -483,7 +485,7 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []Message,
 }
 
 // Provider returns the underlying LLM's provider
-func (m *LangfuseOTelMiddleware) Provider() Provider {
+func (m *LangfuseOTelMiddleware) Provider() llms.Provider {
 	return m.llm.Provider()
 }
 
@@ -493,13 +495,13 @@ func (m *LangfuseOTelMiddleware) Model() string {
 }
 
 // Unwrap returns the underlying LLM
-func (m *LangfuseOTelMiddleware) Unwrap() LLM {
+func (m *LangfuseOTelMiddleware) Unwrap() llms.LLM {
 	return m.llm
 }
 
 // Helper methods
 
-func (m *LangfuseOTelMiddleware) resolveTraceContext(ctx context.Context, opts *CallOptions) *TraceContext {
+func (m *LangfuseOTelMiddleware) resolveTraceContext(ctx context.Context, opts *llms.CallOptions) *TraceContext {
 	tc := GetTraceContext(ctx)
 	if tc == nil {
 		tc = &TraceContext{}
@@ -590,7 +592,7 @@ func (m *LangfuseOTelMiddleware) setLangfuseAttributes(span trace.Span, tc *Trac
 	}
 }
 
-func (m *LangfuseOTelMiddleware) setGenAIRequestAttributes(span trace.Span, opts *CallOptions) {
+func (m *LangfuseOTelMiddleware) setGenAIRequestAttributes(span trace.Span, opts *llms.CallOptions) {
 	model := m.resolveModel(opts)
 
 	span.SetAttributes(
@@ -616,7 +618,7 @@ func (m *LangfuseOTelMiddleware) setGenAIRequestAttributes(span trace.Span, opts
 	}
 }
 
-func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, resp *Response, duration time.Duration) {
+func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, resp *llms.Response, duration time.Duration) {
 	span.SetAttributes(
 		keyGenAIResponseModel.String(m.llm.Model()),
 		keyGenAIResponseFinishReason.String(string(resp.FinishReason)),
@@ -641,14 +643,14 @@ func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, res
 	}
 }
 
-func (m *LangfuseOTelMiddleware) resolveModel(opts *CallOptions) string {
+func (m *LangfuseOTelMiddleware) resolveModel(opts *llms.CallOptions) string {
 	if opts.Model != "" {
 		return opts.Model
 	}
 	return m.llm.Model()
 }
 
-func (m *LangfuseOTelMiddleware) getMetricAttributes(opts *CallOptions) []attribute.KeyValue {
+func (m *LangfuseOTelMiddleware) getMetricAttributes(opts *llms.CallOptions) []attribute.KeyValue {
 	return []attribute.KeyValue{
 		keyGenAISystem.String(ProviderToGenAISystem(m.llm.Provider())),
 		keyGenAIRequestModel.String(m.resolveModel(opts)),
@@ -663,6 +665,6 @@ func (m *LangfuseOTelMiddleware) recordError(ctx context.Context, span trace.Spa
 
 // Ensure LangfuseOTelMiddleware implements LLM and Wrapper
 var (
-	_ LLM     = (*LangfuseOTelMiddleware)(nil)
-	_ Wrapper = (*LangfuseOTelMiddleware)(nil)
+	_ llms.LLM     = (*LangfuseOTelMiddleware)(nil)
+	_ llms.Wrapper = (*LangfuseOTelMiddleware)(nil)
 )
