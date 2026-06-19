@@ -8,14 +8,14 @@ settings, the built-in SSRF / network-security policy, and where retries fit
 The root package is imported as:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v2"
+import llms "github.com/nocturnium/llm-go-sdk/v3"
 ```
 
 Providers live under `pkg/providers/<name>` and each exposes a typed
 `New(...Option)` constructor, for example:
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 
 client, err := openai.New(
     openai.WithModel("gpt-4o"),
@@ -135,7 +135,7 @@ parameters that have no common SDK field are passed through `Config.Extra`:
 | Z.AI | `coding` = `"true"`/`"1"`/`"yes"` | Switches to the Z.AI Coding API endpoint |
 
 ```go
-import _ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all" // register all providers
+import _ "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/all" // register all providers
 
 client, err := llms.New("runpod", llms.Config{
     Model: "meta-llama/Llama-3.1-8B-Instruct",
@@ -281,20 +281,21 @@ Custom providers built on `pkg/openaicompat` expose the same toggles on
     twice.
 
 To add retries (and optionally circuit breaking), wrap any client with
-`llms.NewResilientClient`:
+`resilience.NewResilientClient` (from
+`github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience`):
 
 ```go
 base, _ := openai.New(openai.WithModel("gpt-4o"))
 
-client := llms.NewResilientClient(base,
-    llms.WithMaxRetries(3),
+client := resilience.NewResilientClient(base,
+    resilience.WithMaxRetries(3),
     // Or full control:
-    // llms.WithRetryConfig(&llms.RetryConfig{ ... }),
+    // resilience.WithRetryConfig(&resilience.RetryConfig{ ... }),
 )
 ```
 
 The default retry conditions are `429` and `5xx` responses. The returned
-`*llms.ResilientClient` satisfies the same `llms.LLM` interface, so it is a
+`*resilience.ResilientClient` satisfies the same `llms.LLM` interface, so it is a
 drop-in replacement.
 
 See the [Resilience](guides/resilience.md) guide for the full set of wrappers —

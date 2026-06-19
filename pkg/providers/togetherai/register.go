@@ -1,6 +1,6 @@
 package togetherai
 
-import llms "github.com/nocturnium/llm-go-sdk/v2"
+import llms "github.com/nocturnium/llm-go-sdk/v3"
 
 func init() {
 	llms.RegisterProvider("togetherai", func(cfg llms.Config) (llms.LLM, error) {

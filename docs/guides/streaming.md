@@ -66,8 +66,8 @@ import (
 	"fmt"
 	"os"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func main() {
@@ -284,7 +284,8 @@ Resilience and observability wrappers implement `Stream` too, so they compose tr
 
 ```go
 base, _ := openai.New(openai.WithModel("gpt-4o"))
-client, err := llms.NewOTelMiddleware(base) // tracing wrapper
+// observability lives in pkg/observability
+client, err := observability.NewOTelMiddleware(base) // tracing wrapper
 if err != nil {
 	return err
 }

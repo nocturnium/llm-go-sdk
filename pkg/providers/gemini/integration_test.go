@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
 )
 
 func TestClient_GenerateContent_Integration(t *testing.T) {

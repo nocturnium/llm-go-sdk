@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

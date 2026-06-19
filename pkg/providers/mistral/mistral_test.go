@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 func TestDefaultOptions(t *testing.T) {

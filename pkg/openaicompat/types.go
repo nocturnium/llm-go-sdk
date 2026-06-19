@@ -7,7 +7,7 @@ package openaicompat
 import (
 	"encoding/json"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 const (

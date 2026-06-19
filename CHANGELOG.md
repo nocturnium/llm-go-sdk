@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.0] - 2026-06-19
+
+v3 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v3`
+(Go semantic import versioning). v2 and v3 are distinct module paths and can coexist,
+so consumers may migrate incrementally. See `docs/migration-guide.md` for the full
+v2 → v3 guide.
+
+The single structural change: **the observability and resilience middleware moved out
+of the root `llms` package into leaf subpackages.** Importing `llms` for the core types
+(`Message`, `Response`, `Call`, …) no longer compiles the OpenTelemetry SDK — the OTel
+dependency count of the bare root package drops from ~20 packages to **0**. Exported
+symbol names are unchanged; only the package that holds them moved.
+
+### Changed (BREAKING)
+
+- **Module path → `/v3`.** Update imports to `github.com/nocturnium/llm-go-sdk/v3`
+  (the core package name stays `llms`): `go get github.com/nocturnium/llm-go-sdk/v3@v3.0.0`.
+- **Observability middleware moved to `pkg/observability`.** `llms.NewOTelMiddleware`,
+  `llms.NewMetricsMiddleware`, the Langfuse exporters, the JSON/slog loggers, the GenAI
+  semantic-convention `Attr*` constants, and the trace-context helpers now live in
+  `github.com/nocturnium/llm-go-sdk/v3/pkg/observability` (e.g. `observability.NewOTelMiddleware`).
+- **Resilience middleware moved to `pkg/middleware/resilience`.** `llms.NewResilientClient`,
+  `llms.NewFallbackChain`, the rate limiter, the circuit breaker, `RetryConfig`, and their
+  option helpers now live in `github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience`
+  (e.g. `resilience.NewResilientClient`).
+
+There are **no other breaking changes**: every moved symbol keeps its exact name and
+signature, so migration is a mechanical import/qualifier update (see the migration guide).
+
 ## [2.0.0] - 2026-06-15
 
 v2 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v2`

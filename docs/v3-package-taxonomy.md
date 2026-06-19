@@ -1,12 +1,12 @@
 # v3 Package Taxonomy (design — not yet implemented)
 
-> Status: **planning + a staged prototype.** Nothing here ships in v2. This document
-> captures the one structural change worth a future major version. The extraction has
-> now been **prototyped on the `reorg/middleware-extraction` branch** (not merged, module
-> path unchanged): resilience → `pkg/middleware/resilience`, observability →
-> `pkg/observability`. Verified payoff there: `go list -deps` OTel count on the bare root
+> Status: **realized in v3.0.0.** This document originally captured the plan; it has now
+> been fully executed on the `reorg/middleware-extraction` branch as the v3 release:
+> resilience → `pkg/middleware/resilience`, observability → `pkg/observability`, with the
+> module path bumped to `/v3`. Verified payoff: `go list -deps` OTel count on the bare root
 > dropped **20 → 0**, root shrank 40 → 26 non-test files, 172 middleware symbols moved to
-> the leaf packages, with build/vet/test/lint green. It is the considered output of a
+> the leaf packages, with build/vet/test/lint/apidiff green. See `CHANGELOG.md` (3.0.0) and
+> the v2 → v3 section of `docs/migration-guide.md`. It is the considered output of a
 > CTO / 10x-architect / Go-idioms teardown of the v2 layout.
 
 ## Why a v3 at all

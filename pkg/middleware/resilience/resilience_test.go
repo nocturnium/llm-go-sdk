@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 func TestCircuitBreaker_InitialState(t *testing.T) {

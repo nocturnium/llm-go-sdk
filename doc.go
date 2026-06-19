@@ -105,11 +105,11 @@
 //
 // Import the provider you need from its canonical pkg/providers path:
 //
-//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
-//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
-//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/gemini"
-//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/togetherai"
-//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/featherless"
+//	import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
+//	import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/anthropic"
+//	import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/gemini"
+//	import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/togetherai"
+//	import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/featherless"
 //
 // Each provider reads its API key from environment variables by default.
 // See provider documentation for configuration options.

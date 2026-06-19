@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
 )
 
 // customClient embeds BaseProvider to inherit the full llms.LLM and

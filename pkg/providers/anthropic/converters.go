@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/internal/anthropicapi"
 )
 
 const (

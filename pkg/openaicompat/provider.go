@@ -3,7 +3,7 @@ package openaicompat
 import (
 	"context"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 // ProviderConfig defines the configuration for an OpenAI-compatible provider.

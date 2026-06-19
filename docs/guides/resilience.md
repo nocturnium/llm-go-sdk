@@ -18,17 +18,21 @@ these failures:
     helpers below. Each wrapper implements the same `llms.LLM` interface, so it is a
     drop-in replacement for the client it wraps.
 
-All of these helpers live in the root `llms` package:
+These helpers live in the `resilience` package; core types like `llms.Message`
+remain in the root `llms` package:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v2"
+import (
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience"
+)
 ```
 
 ---
 
 ## Retries: `NewResilientClient`
 
-`llms.NewResilientClient` wraps any `llms.LLM` with retry logic and a circuit
+`resilience.NewResilientClient` wraps any `llms.LLM` with retry logic and a circuit
 breaker. It satisfies `llms.LLM`, so you call `GenerateContent` / `Stream` on it
 exactly as you would the underlying client.
 
@@ -38,8 +42,9 @@ import (
 	"fmt"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func main() {
@@ -49,8 +54,8 @@ func main() {
 	}
 
 	// Wrap with up to 3 retries (4 attempts total) on transient failures.
-	client := llms.NewResilientClient(base,
-		llms.WithMaxRetries(3),
+	client := resilience.NewResilientClient(base,
+		resilience.WithMaxRetries(3),
 	)
 
 	resp, err := client.GenerateContent(context.Background(), []llms.Message{
@@ -65,7 +70,7 @@ func main() {
 
 ### What gets retried
 
-The default retry policy (`llms.DefaultShouldRetry`) only retries errors that are
+The default retry policy (`resilience.DefaultShouldRetry`) only retries errors that are
 genuinely transient:
 
 | Condition | Retried? |
@@ -74,7 +79,7 @@ genuinely transient:
 | HTTP 500 / 502 / 503 / 504 (server errors) | yes |
 | Other 4xx (e.g. 400, 401, 404) | no |
 | `context.Canceled` / `context.DeadlineExceeded` | no |
-| `llms.ErrCircuitOpen` | no |
+| `resilience.ErrCircuitOpen` | no |
 
 Retryable errors are detected via the typed `*llms.APIError` (which exposes
 `StatusCode`, `Type`, `Code`, etc.). Client-side mistakes such as a bad API key or
@@ -84,10 +89,10 @@ an invalid request are returned immediately — retrying them would be pointless
 
 !!! note "ResilientClient defaults to retries enabled"
     Unlike the bare provider clients, a `ResilientClient` **does** retry by default.
-    `NewResilientClient(base)` with no options uses `llms.DefaultRetryConfig()`
+    `NewResilientClient(base)` with no options uses `resilience.DefaultRetryConfig()`
     (3 attempts, 1s initial delay, 2x backoff) and a default circuit breaker.
 
-`NewResilientClient` accepts these `llms.ResilienceOption` values:
+`NewResilientClient` accepts these `resilience.ResilienceOption` values:
 
 | Option | Effect |
 |--------|--------|
@@ -100,10 +105,10 @@ an invalid request are returned immediately — retrying them would be pointless
 The `WithOnRetry` callback is handy for logging or metrics:
 
 ```go
-client := llms.NewResilientClient(base,
-	llms.WithMaxRetries(5),
-	llms.WithRetryDelay(500*time.Millisecond),
-	llms.WithOnRetry(func(attempt int, err error, delay time.Duration) {
+client := resilience.NewResilientClient(base,
+	resilience.WithMaxRetries(5),
+	resilience.WithRetryDelay(500*time.Millisecond),
+	resilience.WithOnRetry(func(attempt int, err error, delay time.Duration) {
 		fmt.Printf("retry #%d after %v (cause: %v)\n", attempt, delay, err)
 	}),
 )
@@ -111,12 +116,12 @@ client := llms.NewResilientClient(base,
 
 ### Tuning backoff with `RetryConfig`
 
-For full control over backoff, build a `llms.RetryConfig` and pass it via
-`WithRetryConfig`. `llms.DefaultRetryConfig()` returns a sensible baseline you can
+For full control over backoff, build a `resilience.RetryConfig` and pass it via
+`WithRetryConfig`. `resilience.DefaultRetryConfig()` returns a sensible baseline you can
 copy and adjust:
 
 ```go
-cfg := llms.DefaultRetryConfig()       // MaxAttempts 3, InitialDelay 1s,
+cfg := resilience.DefaultRetryConfig() // MaxAttempts 3, InitialDelay 1s,
                                         // MaxDelay 30s, BackoffFactor 2.0, Jitter 0.1
 cfg.MaxAttempts = 5                     // total attempts, including the first
 cfg.InitialDelay = 250 * time.Millisecond
@@ -124,7 +129,7 @@ cfg.MaxDelay = 10 * time.Second
 cfg.BackoffFactor = 2.0                 // delay doubles each retry, capped at MaxDelay
 cfg.Jitter = 0.2                        // ±20% randomization to avoid thundering herd
 
-client := llms.NewResilientClient(base, llms.WithRetryConfig(cfg))
+client := resilience.NewResilientClient(base, resilience.WithRetryConfig(cfg))
 ```
 
 The fields of `RetryConfig` are:
@@ -167,23 +172,23 @@ The breaker has three states:
 
 - **`CircuitClosed`** — normal operation; requests pass through.
 - **`CircuitOpen`** — failure threshold exceeded; requests are rejected immediately
-  with `llms.ErrCircuitOpen` (this error is **not** retried).
+  with `resilience.ErrCircuitOpen` (this error is **not** retried).
 - **`CircuitHalfOpen`** — after the reset timeout elapses, a limited number of probe
   requests are allowed through to test recovery. Enough successes close the circuit
   again; any failure re-opens it.
 
 ```go
-cb := llms.NewCircuitBreaker(
-	llms.WithMaxFailures(5),                  // open after 5 consecutive failures
-	llms.WithResetTimeout(30*time.Second),    // wait 30s before probing again
-	llms.WithOnStateChange(func(from, to llms.CircuitState) {
+cb := resilience.NewCircuitBreaker(
+	resilience.WithMaxFailures(5),                  // open after 5 consecutive failures
+	resilience.WithResetTimeout(30*time.Second),    // wait 30s before probing again
+	resilience.WithOnStateChange(func(from, to resilience.CircuitState) {
 		fmt.Printf("circuit: %s -> %s\n", from, to)
 	}),
 )
 
-client := llms.NewResilientClient(base,
-	llms.WithMaxRetries(3),
-	llms.WithCircuitBreaker(cb),
+client := resilience.NewResilientClient(base,
+	resilience.WithMaxRetries(3),
+	resilience.WithCircuitBreaker(cb),
 )
 ```
 
@@ -216,13 +221,13 @@ cb.Reset()                                              // force back to closed
 ## Client-side rate limiting: `NewRateLimitedClient`
 
 Rather than waiting to be told you are over the limit (429), you can pace your own
-requests with a token-bucket rate limiter. `llms.NewRateLimitedClient` wraps an
+requests with a token-bucket rate limiter. `resilience.NewRateLimitedClient` wraps an
 `llms.LLM` and blocks (by default) until capacity is available.
 
 ```go
-client := llms.NewRateLimitedClient(base,
-	llms.WithRequestsPerMinute(60),     // cap at 60 requests/min
-	llms.WithTokensPerMinute(60_000),   // also cap at 60k tokens/min (optional)
+client := resilience.NewRateLimitedClient(base,
+	resilience.WithRequestsPerMinute(60),     // cap at 60 requests/min
+	resilience.WithTokensPerMinute(60_000),   // also cap at 60k tokens/min (optional)
 )
 
 resp, err := client.GenerateContent(ctx, messages)
@@ -252,26 +257,26 @@ resp, err := client.GenerateContent(ctx, messages)
 ### Blocking vs. non-blocking
 
 By default the limiter **blocks** until capacity frees up (or `WithWaitTimeout`
-expires, yielding `llms.ErrRateLimitTimeout`). Set `WithBlocking(false)` to fail
-fast with `llms.ErrRateLimitExceeded` instead:
+expires, yielding `resilience.ErrRateLimitTimeout`). Set `WithBlocking(false)` to fail
+fast with `resilience.ErrRateLimitExceeded` instead:
 
 ```go
-client := llms.NewRateLimitedClient(base,
-	llms.WithRequestsPerMinute(30),
-	llms.WithBlocking(false), // return ErrRateLimitExceeded instead of waiting
+client := resilience.NewRateLimitedClient(base,
+	resilience.WithRequestsPerMinute(30),
+	resilience.WithBlocking(false), // return ErrRateLimitExceeded instead of waiting
 )
 
 resp, err := client.GenerateContent(ctx, messages)
-if errors.Is(err, llms.ErrRateLimitExceeded) {
+if errors.Is(err, resilience.ErrRateLimitExceeded) {
 	// shed load, queue for later, etc.
 }
 ```
 
 !!! tip "Provider defaults & shared limits"
-    `llms.NewProviderRateLimitedClient(base, ...)` seeds the limiter from
-    conservative per-provider defaults (see `llms.ProviderRateLimits`). To enforce a
-    single quota across several clients, create one `*llms.RateLimiter` and share it
-    via `llms.NewRateLimitedClientWithLimiter(base, limiter)`.
+    `resilience.NewProviderRateLimitedClient(base, ...)` seeds the limiter from
+    conservative per-provider defaults (see `resilience.ProviderRateLimits`). To enforce a
+    single quota across several clients, create one `*resilience.RateLimiter` and share it
+    via `resilience.NewRateLimitedClientWithLimiter(base, limiter)`.
 
 ---
 
@@ -283,16 +288,17 @@ overloaded, or down.
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 primary, _ := openai.New(openai.WithModel("gpt-4o"))
 backup, _ := anthropic.New(anthropic.WithModel("claude-sonnet-4-5"))
 
-chain := llms.NewFallbackChain([]llms.LLM{primary, backup},
-	llms.WithOnFallback(func(fromIdx, toIdx int, from, to llms.LLM, err error) {
+chain := resilience.NewFallbackChain([]llms.LLM{primary, backup},
+	resilience.WithOnFallback(func(fromIdx, toIdx int, from, to llms.LLM, err error) {
 		fmt.Printf("falling back from #%d (%s) to #%d (%s): %v\n",
 			fromIdx, from.Provider(), toIdx, to.Provider(), err)
 	}),
@@ -312,7 +318,7 @@ errors that suggest the current provider is the problem:
 - API error types `rate_limit_error`, `overloaded_error`, `server_error`
 - Transport-level failures: connection refused, connection reset, EOF /
   unexpected EOF, and network timeouts (any net.Error)
-- `llms.ErrCircuitOpen` (the wrapped client's breaker is open)
+- `resilience.ErrCircuitOpen` (the wrapped client's breaker is open)
 
 On any **other** error (e.g. a 400 bad request), the chain stops and returns that
 error rather than masking a real bug behind every backup. If all clients have been
@@ -327,10 +333,10 @@ tried and failed, it returns the last error encountered.
 | `WithRecoveryAfter(d time.Duration)` | 30s | Cooldown before a failed client is probed again. |
 | `WithFallbackSelector(s FallbackSelector)` | `DefaultFallbackSelector` | Customize which errors trigger fallback. |
 
-Built-in selectors: `llms.DefaultFallbackSelector{}` (the default, above),
-`llms.AlwaysFallbackSelector{}` (fall back on any error), and
-`llms.NeverFallbackSelector{}` (stop on the first error). Implement the
-`llms.FallbackSelector` interface for custom logic.
+Built-in selectors: `resilience.DefaultFallbackSelector{}` (the default, above),
+`resilience.AlwaysFallbackSelector{}` (fall back on any error), and
+`resilience.NeverFallbackSelector{}` (stop on the first error). Implement the
+`resilience.FallbackSelector` interface for custom logic.
 
 ### Time-based recovery
 
@@ -350,12 +356,12 @@ The recovery is "half-open" style:
   long shot than no shot.
 
 ```go
-chain := llms.NewFallbackChain([]llms.LLM{primary, backup},
-	llms.WithRecoveryAfter(60*time.Second), // keep a failed client out for a full minute
-	llms.WithOnFallback(func(fromIdx, toIdx int, from, to llms.LLM, err error) {
+chain := resilience.NewFallbackChain([]llms.LLM{primary, backup},
+	resilience.WithRecoveryAfter(60*time.Second), // keep a failed client out for a full minute
+	resilience.WithOnFallback(func(fromIdx, toIdx int, from, to llms.LLM, err error) {
 		log.Printf("primary unhealthy, using backup: %v", err)
 	}),
-	llms.WithOnSuccess(func(idx int, client llms.LLM) {
+	resilience.WithOnSuccess(func(idx int, client llms.LLM) {
 		log.Printf("served by client #%d (%s)", idx, client.Provider())
 	}),
 )
@@ -365,9 +371,9 @@ You can also manage health manually: `chain.IsClientHealthy(idx)`,
 `chain.SetClientHealthy(idx, healthy)`, and `chain.ResetHealth()`.
 
 !!! tip "Weighted priorities"
-    `llms.NewWeightedFallbackChain(clients, weights, opts...)` builds a chain that
+    `resilience.NewWeightedFallbackChain(clients, weights, opts...)` builds a chain that
     tries higher-weighted clients first. It returns an error on invalid input; use
-    `llms.MustNewWeightedFallbackChain(...)` to panic instead.
+    `resilience.MustNewWeightedFallbackChain(...)` to panic instead.
 
 ---
 
@@ -386,9 +392,10 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func buildClient() (llms.LLM, error) {
@@ -402,29 +409,29 @@ func buildClient() (llms.LLM, error) {
 	}
 
 	// 1. Rate-limit, then 2. make resilient — once per provider.
-	primary := llms.NewResilientClient(
-		llms.NewRateLimitedClient(openaiBase,
-			llms.WithRequestsPerMinute(60),
-			llms.WithTokensPerMinute(60_000),
+	primary := resilience.NewResilientClient(
+		resilience.NewRateLimitedClient(openaiBase,
+			resilience.WithRequestsPerMinute(60),
+			resilience.WithTokensPerMinute(60_000),
 		),
-		llms.WithMaxRetries(3),
-		llms.WithCircuitBreaker(llms.NewCircuitBreaker(
-			llms.WithMaxFailures(5),
-			llms.WithResetTimeout(30*time.Second),
+		resilience.WithMaxRetries(3),
+		resilience.WithCircuitBreaker(resilience.NewCircuitBreaker(
+			resilience.WithMaxFailures(5),
+			resilience.WithResetTimeout(30*time.Second),
 		)),
 	)
 
-	backup := llms.NewResilientClient(
-		llms.NewRateLimitedClient(anthropicBase,
-			llms.WithRequestsPerMinute(60),
+	backup := resilience.NewResilientClient(
+		resilience.NewRateLimitedClient(anthropicBase,
+			resilience.WithRequestsPerMinute(60),
 		),
-		llms.WithMaxRetries(2),
+		resilience.WithMaxRetries(2),
 	)
 
 	// 3. Fail over from primary to backup.
-	return llms.NewFallbackChain([]llms.LLM{primary, backup},
-		llms.WithRecoveryAfter(60*time.Second),
-		llms.WithOnFallback(func(fromIdx, toIdx int, from, to llms.LLM, err error) {
+	return resilience.NewFallbackChain([]llms.LLM{primary, backup},
+		resilience.WithRecoveryAfter(60*time.Second),
+		resilience.WithOnFallback(func(fromIdx, toIdx int, from, to llms.LLM, err error) {
 			log.Printf("fallback %s -> %s: %v", from.Provider(), to.Provider(), err)
 		}),
 	), nil
@@ -459,11 +466,11 @@ func main() {
 
 | Error | Source | Meaning |
 |-------|--------|---------|
-| `llms.ErrCircuitOpen` | circuit breaker | Requests blocked while the circuit is open. |
-| `llms.ErrRateLimitExceeded` | rate limiter | Non-blocking limiter had no capacity. |
-| `llms.ErrRateLimitTimeout` | rate limiter | Blocking limiter exceeded `WithWaitTimeout`. |
-| `llms.ErrNoClientsAvailable` | fallback chain | The chain was constructed with no clients. |
-| `llms.ErrAllClientsFailed` | fallback chain | Sentinel for an exhausted chain. |
+| `resilience.ErrCircuitOpen` | circuit breaker | Requests blocked while the circuit is open. |
+| `resilience.ErrRateLimitExceeded` | rate limiter | Non-blocking limiter had no capacity. |
+| `resilience.ErrRateLimitTimeout` | rate limiter | Blocking limiter exceeded `WithWaitTimeout`. |
+| `resilience.ErrNoClientsAvailable` | fallback chain | The chain was constructed with no clients. |
+| `resilience.ErrAllClientsFailed` | fallback chain | Sentinel for an exhausted chain. |
 
 Provider HTTP errors are surfaced as `*llms.APIError`; use `errors.As` to inspect
 `StatusCode`, `Type`, and `Code` when writing custom retry or fallback predicates.

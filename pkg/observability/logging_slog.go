@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 // SlogLogger is a Logger implementation using log/slog

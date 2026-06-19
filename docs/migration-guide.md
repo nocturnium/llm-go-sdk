@@ -1,3 +1,69 @@
+# Migrating from v2 to v3
+
+v3 is a major release with **one** structural change: the observability and resilience
+middleware moved out of the root `llms` package into leaf subpackages, so importing
+`llms` for the core types no longer pulls in the OpenTelemetry SDK. Every moved symbol
+keeps its exact name and signature — migration is a mechanical import/qualifier update.
+
+## 1. Update the import path
+
+```bash
+go get github.com/nocturnium/llm-go-sdk/v3@v3.0.0
+```
+
+Rewrite every import of the module from the `/v2` path to `/v3` (the core package name
+stays `llms`):
+
+```bash
+# from the root of your module
+grep -rl 'nocturnium/llm-go-sdk/v2' --include='*.go' . \
+  | xargs sed -i 's#nocturnium/llm-go-sdk/v2#nocturnium/llm-go-sdk/v3#g'
+go mod tidy
+```
+
+If you only use the core API (providers, `Call`, `GenerateContent`, tools, structured
+output, embeddings, cost tracking), that is the entire migration — you are done.
+
+## 2. Repoint moved middleware (only if you used it)
+
+The middleware constructors/types kept their names but now live in two new packages.
+Add the relevant import and change the qualifier:
+
+| v2 (root `llms`) | v3 package | import |
+|---|---|---|
+| `llms.NewResilientClient`, `llms.NewFallbackChain`, `llms.NewRateLimitedClient`, `llms.NewCircuitBreaker`, `RetryConfig`, `ResilienceOption`, fallback/rate-limit/circuit-breaker types & options | `resilience.*` | `github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience` |
+| `llms.NewOTelMiddleware`, `llms.NewMetricsMiddleware`, `llms.NewLangfuseOTelMiddleware`, `llms.NewJSONLogger`, `llms.NewSlogLogger`, the `Attr*` semantic-convention constants, `LogEntry`, `Logger`, trace-context helpers | `observability.*` | `github.com/nocturnium/llm-go-sdk/v3/pkg/observability` |
+
+Example:
+
+```go
+// v2
+import llms "github.com/nocturnium/llm-go-sdk/v2"
+
+client := llms.NewResilientClient(base, llms.WithMaxRetries(3))
+client = llms.NewOTelMiddleware(client)
+
+// v3
+import (
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/observability"
+)
+
+client := resilience.NewResilientClient(base, resilience.WithMaxRetries(3))
+client = observability.NewOTelMiddleware(client)
+```
+
+There are **no other breaking changes** in v3 — no signature changes, no removed
+behavior. If your code does not reference the moved middleware, step 1 is sufficient.
+
+Why the move: it lets a consumer import `llms` for `Message`/`Response`/`Call` without
+transitively compiling the OpenTelemetry SDK (the bare root package's OTel dependency
+count drops from ~20 packages to 0). The middleware is opt-in; you only pay for OTel
+when you import `pkg/observability`.
+
+---
+
 # Migrating from v1 to v2
 
 v2 is a major release. Per Go's semantic import versioning, the module path gains a

@@ -3,8 +3,8 @@ package gemini
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
 )
 
 // FuzzConvertMessages tests that convertMessages handles arbitrary content
