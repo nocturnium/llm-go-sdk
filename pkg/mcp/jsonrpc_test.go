@@ -71,6 +71,67 @@ func TestExtractJSONMessage(t *testing.T) {
 	}
 }
 
+func TestExtractFrames(t *testing.T) {
+	// Bare JSON response, no notifications.
+	resp, notes := extractFrames([]byte(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`))
+	if len(notes) != 0 {
+		t.Errorf("plain response: expected no notifications, got %d", len(notes))
+	}
+	var probe struct {
+		Result struct {
+			OK bool `json:"ok"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("plain response not extracted: %q err %v", resp, err)
+	}
+
+	// SSE stream: a notification before the response.
+	sse := []byte(
+		"event: message\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":1}}\n\n" +
+			"event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}\n\n")
+	resp, notes = extractFrames(sse)
+	if len(notes) != 1 {
+		t.Fatalf("SSE: expected 1 notification, got %d", len(notes))
+	}
+	if !isNotificationFrame(notes[0]) {
+		t.Errorf("frame %q should be a notification", notes[0])
+	}
+	probe.Result.OK = false
+	if err := json.Unmarshal(resp, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("SSE response not extracted: %q err %v", resp, err)
+	}
+
+	// A batch carrying a notification and a response.
+	batch := []byte(`[{"jsonrpc":"2.0","method":"notifications/progress"},{"jsonrpc":"2.0","id":1,"result":{"ok":true}}]`)
+	resp, notes = extractFrames(batch)
+	if len(notes) != 1 {
+		t.Errorf("batch: expected 1 notification, got %d", len(notes))
+	}
+	probe.Result.OK = false
+	if err := json.Unmarshal(resp, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("batch response not extracted: %q err %v", resp, err)
+	}
+}
+
+func TestIsNotificationFrame(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want bool
+	}{
+		{`{"jsonrpc":"2.0","method":"notifications/progress"}`, true},
+		{`{"jsonrpc":"2.0","method":"x","id":null}`, true},
+		{`{"jsonrpc":"2.0","id":1,"result":{}}`, false},
+		{`{"jsonrpc":"2.0","id":1,"method":"server/request"}`, false},
+		{`not json`, false},
+	}
+	for _, tc := range cases {
+		if got := isNotificationFrame([]byte(tc.raw)); got != tc.want {
+			t.Errorf("isNotificationFrame(%s) = %v, want %v", tc.raw, got, tc.want)
+		}
+	}
+}
+
 func TestStdioTransport_StringIDResponse(t *testing.T) {
 	tr, serverReads, serverWrites := newPipeStdioTransport(t)
 	defer func() { _ = tr.close() }()

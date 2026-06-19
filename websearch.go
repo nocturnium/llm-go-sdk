@@ -13,8 +13,10 @@ const (
 	// WebSearchNative forces the provider's native search (fails if unavailable)
 	WebSearchNative WebSearchProvider = "native"
 
-	// External search providers
-	WebSearchBrave  WebSearchProvider = "brave"
+	// WebSearchBrave forces the external Brave Search backend.
+	WebSearchBrave WebSearchProvider = "brave"
+
+	// WebSearchTavily forces the external Tavily search backend.
 	WebSearchTavily WebSearchProvider = "tavily"
 )
 

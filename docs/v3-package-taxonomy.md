@@ -1,4 +1,4 @@
-# v3 Package Taxonomy (design — not yet implemented)
+# v3 Package Taxonomy (realized in v3.0.0)
 
 > Status: **realized in v3.0.0.** This document originally captured the plan; it has now
 > been fully executed on the `reorg/middleware-extraction` branch as the v3 release:
@@ -16,12 +16,13 @@ both types (`llms.Message`) and functions (`llms.ApplyOptions`, `llms.PrepareMes
 `llms.WrapProviderError`), and the root imports **none** of its own sub-packages. That flat
 layout is idiomatic for a Go SDK and should mostly stay.
 
-The one real defect: **importing bare `llms` transitively compiles ~20 OpenTelemetry
-packages.** Verified:
+The one real defect (in v2, the motivation for this work): **importing bare `llms`
+transitively compiled ~20 OpenTelemetry packages.** As verified at the time (the
+command now targets `/v3`, which after the extraction reports 0 — see the status note above):
 
 ```
-GOWORK=off go list -deps github.com/nocturnium/llm-go-sdk/v2 | grep -c go.opentelemetry.io
-# => 20
+GOWORK=off go list -deps github.com/nocturnium/llm-go-sdk/v3 | grep -c go.opentelemetry.io
+# v2 => 20 (pre-extraction); v3 => 0 (post-extraction)
 ```
 
 A library that markets itself as "native Go HTTP calls with no external LLM dependencies"
@@ -43,7 +44,7 @@ shims. v3 does **real package moves with a curated root**, not a re-export shim.
 
 ```
 root  llms/                       # CORE CONTRACT — stays (the leaf everything imports)
-pkg/providers/<name>/             # unchanged (18 providers, self-register via init())
+pkg/providers/<name>/             # unchanged (19 provider packages, 17 chat-registered via init())
 pkg/openaicompat/                 # unchanged (public custom-provider base)
 pkg/observability/                # NEW: OTel + Langfuse + metrics + logging middleware
 pkg/middleware/resilience/        # NEW: retry, circuit breaker, fallback, rate limit
@@ -75,7 +76,7 @@ internal/*                        # unchanged
 Payoff metric after the move:
 
 ```
-GOWORK=off go list -deps github.com/nocturnium/llm-go-sdk/v2 | grep -c go.opentelemetry.io
+GOWORK=off go list -deps github.com/nocturnium/llm-go-sdk/v3 | grep -c go.opentelemetry.io
 # expected => 0
 ```
 
@@ -103,10 +104,10 @@ forces `root → resilience` and re-creates the cycle. So v3 is a clean rename:
 
 | v2 (root) | v3 |
 |---|---|
-| `llms.NewOTelMiddleware(...)` | `observability.NewOTel(...)` |
-| `llms.NewMetricsMiddleware(...)` | `observability.NewMetrics(...)` |
-| `llms.NewLangfuse*` / logging middleware | `observability.New*` |
-| `llms.NewResilientClient(...)` | `resilience.New(...)` |
+| `llms.NewOTelMiddleware(...)` | `observability.NewOTelMiddleware(...)` |
+| `llms.NewMetricsMiddleware(...)` | `observability.NewMetricsMiddleware(...)` |
+| `llms.NewLangfuse*` / logging middleware | `observability.New*` (e.g. `observability.NewLangfuseOTelMiddleware`) |
+| `llms.NewResilientClient(...)` | `resilience.NewResilientClient(...)` |
 | `llms.NewFallbackChain(...)` | `resilience.NewFallbackChain(...)` |
 
 `NewResilientClient` is referenced **only at root** today (verified), so extracting resilience does

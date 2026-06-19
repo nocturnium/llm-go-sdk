@@ -5,7 +5,7 @@ teardown (CTO / 10x / Go-idioms review). Items are grouped by status.
 
 ## Shipped (v2.x, additive / non-breaking)
 
-- **API contract gate** — `apidiff` baseline (`api/v2.txt`) + `make apidiff` in CI guards the
+- **API contract gate** — `apidiff` baseline (`api/v3.txt`) + `make apidiff` in CI guards the
   ~950-symbol public surface (single-version policy, no v1 fallback).
 - **Discoverability** — curated API map in `doc.go`, runnable `Example*` tests, no-facade
   decision recorded in `ARCHITECTURE.md`.
@@ -15,6 +15,14 @@ teardown (CTO / 10x / Go-idioms review). Items are grouped by status.
   `GenerateTypedWithRepair` retries with model feedback on parse failure.
 - **Response caching** — `CachedClient` middleware + pluggable `ResponseCache`
   (in-memory TTL default), complementing the existing provider-neutral prompt-cache control.
+
+## Shipped (v3.0.0)
+
+- ✅ **v3 middleware extraction** — moved the observability + resilience middleware out of the
+  root so bare `llms` stops compiling ~20 OpenTelemetry packages. Observability middleware now
+  lives in `pkg/observability` and resilience middleware in `pkg/middleware/resilience`; the root
+  retains cost tracking and response caching. Shipped in v3.0.0 (the deliberate major it was
+  reserved for). See [`v3-package-taxonomy.md`](./v3-package-taxonomy.md).
 
 ## Planned — follow-up tracks (each a multi-PR effort; deliberately not built inline)
 
@@ -36,16 +44,20 @@ tools, and first-class reasoning items.
 2. ✅ **Statefulness ergonomics.** *(Shipped.)* `llms.Response.ID` is surfaced from both the
    chat-completions and Responses converters; `openai.WithPreviousResponseID(id)` and
    `openai.WithStore(bool)` chain server-side conversation state without touching `ExtraBody`.
-3. ✅ **Streaming.** *(Shipped — mock-tested; wants a live smoke test.)* `Stream` routes through
+3. ✅ **Streaming.** *(Shipped — live-smoke-tested.)* `Stream` routes through
    `/responses` when `WithResponsesAPI()` is set. The typed SSE events
    (`response.output_text.delta`, `response.reasoning_summary_text.delta`, `response.completed`,
    `error`, …) are parsed into the existing `StreamChunk` channel; tool calls, usage, and finish
    reason come from the authoritative `response.completed` payload.
-4. **Reasoning-item round-trip.** For o-series models, pass prior `reasoning` items back on
-   the next turn. Needs live verification.
+4. ✅ **Reasoning-item round-trip.** *(Shipped — live-verified.)* For stateless multi-turn with
+   o-series / gpt-5 reasoning models, `openai.WithReasoningRoundTrip()` requests encrypted
+   reasoning items (`include: ["reasoning.encrypted_content"]`); they are stashed on
+   `Response.Reasoning.Metadata` and replayed as `"reasoning"` input items when that reasoning is
+   carried on the next assistant `Message.Reasoning`. Validated live (`TestLiveResponses_ReasoningRoundTrip`).
 
-> Note: streaming was validated against mock SSE fixtures; the live OpenAI event grammar should
-> be smoke-tested before relying on it in production.
+> Note: streaming is exercised against both mock SSE fixtures and a live OpenAI smoke test
+> (`pkg/providers/openai/responses_live_test.go`, `//go:build integration`, gated on
+> `OPENAI_API_KEY`).
 
 **Risks:** distinct request/response shape and a new SSE event grammar; correctness needs
 live-API testing, hence the staged PRs rather than an inline build.
@@ -69,9 +81,3 @@ wedge, since few Go LLM SDKs have first-class MCP. Worth investing to make it be
 
 **Risks:** spec breadth and transport edge cases; stage behind the audit so hardening lands
 before new surface.
-
-## Notable structural item (separate doc)
-
-- **v3 middleware extraction** — move observability + resilience middleware out of the root so
-  bare `llms` stops compiling ~20 OpenTelemetry packages. Breaking; reserved for a deliberate
-  major. See [`v3-package-taxonomy.md`](./v3-package-taxonomy.md).

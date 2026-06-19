@@ -23,6 +23,7 @@ type mockTransport struct {
 	errs          map[string]*RPCError
 	calls         []recordedCall
 	notifications []string
+	notifyFn      func(raw []byte)
 	closed        bool
 }
 
@@ -90,6 +91,23 @@ func (m *mockTransport) notify(_ context.Context, payload []byte) error {
 	m.notifications = append(m.notifications, probe.Method)
 	m.mu.Unlock()
 	return nil
+}
+
+func (m *mockTransport) onNotification(fn func(raw []byte)) {
+	m.mu.Lock()
+	m.notifyFn = fn
+	m.mu.Unlock()
+}
+
+// emit delivers a server-initiated notification frame to the registered sink,
+// modeling a transport that received a notifications/* frame from the server.
+func (m *mockTransport) emit(raw []byte) {
+	m.mu.Lock()
+	fn := m.notifyFn
+	m.mu.Unlock()
+	if fn != nil {
+		fn(raw)
+	}
 }
 
 func (m *mockTransport) close() error {
