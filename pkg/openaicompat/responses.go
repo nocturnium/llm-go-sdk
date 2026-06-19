@@ -63,7 +63,10 @@ type ResponsesInputItem struct {
 }
 
 // itemTypeReasoning is the Responses item "type" tag for reasoning items.
-const itemTypeReasoning = "reasoning"
+const (
+	itemTypeMessage   = "message"
+	itemTypeReasoning = "reasoning"
+)
 
 // MarshalJSON renders a "reasoning" input item with an always-present "summary"
 // array — the Responses API rejects a replayed reasoning item that omits it, even
@@ -317,7 +320,7 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 			items = append(items, reasoningInputItems(msg)...)
 			if parts := responsesMessageContent(msg, "output_text"); len(parts) > 0 {
 				items = append(items, ResponsesInputItem{
-					Type:    "message",
+					Type:    itemTypeMessage,
 					Role:    string(msg.Role),
 					Content: parts,
 				})
@@ -333,7 +336,7 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 
 		default: // user (and any other role) → input message
 			items = append(items, ResponsesInputItem{
-				Type:    "message",
+				Type:    itemTypeMessage,
 				Role:    string(msg.Role),
 				Content: responsesMessageContent(msg, "input_text"),
 			})
@@ -430,7 +433,7 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 	var reasoningItems []ResponsesReasoningItem
 	for _, item := range resp.Output {
 		switch item.Type {
-		case "message":
+		case itemTypeMessage:
 			for _, c := range item.Content {
 				if c.Type == "output_text" {
 					content += c.Text
