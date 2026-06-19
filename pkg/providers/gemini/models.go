@@ -28,6 +28,31 @@ func titleCase(s string) string {
 // 65,536 output. Gemini 2.5 Pro uses tiered pricing keyed on prompt size (the values
 // here are the base <=200k tier; see per-model comments for the >200k tier).
 var knownModels = map[string]modelMetadata{
+	// Gemini 3.x — current family (ai.google.dev pricing, June 2026). Context
+	// follows the 2.5 family (1,048,576 in / 65,536 out).
+	"gemini-3.5-flash": {
+		displayName: "Gemini 3.5 Flash",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 1.50, Output: 9.00},
+	},
+	// Gemini 3.1 Pro — tiered: Input 2.00 (<=200k) / 4.00 (>200k); Output 12.00 / 18.00.
+	"gemini-3.1-pro-preview": {
+		displayName: "Gemini 3.1 Pro",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 2.00, Output: 12.00},
+	},
+	// Gemini 3.1 Flash-Lite — base text/image/video shown; audio input is higher.
+	"gemini-3.1-flash-lite": {
+		displayName: "Gemini 3.1 Flash-Lite",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 0.25, Output: 1.50},
+	},
+	// Gemini 3 Flash — base text/image/video shown; audio input is higher.
+	"gemini-3-flash-preview": {
+		displayName: "Gemini 3 Flash",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 0.50, Output: 3.00},
+	},
 	// Gemini 2.5 Pro — context 1,048,576 in / 65,536 out.
 	// Tiered: Input 1.25 (<=200k) / 2.50 (>200k); Output 10.00 (<=200k) / 15.00 (>200k).
 	"gemini-2.5-pro": {

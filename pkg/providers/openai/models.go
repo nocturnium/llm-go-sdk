@@ -13,6 +13,50 @@ import (
 // Pricing is per million tokens (verified against the official OpenAI
 // pricing/models docs, June 2026).
 var knownModels = map[string]modelMetadata{
+	// GPT-5.4 / GPT-5.5 — current flagship lineup (developers.openai.com pricing,
+	// June 2026). Context windows follow the gpt-5 family (400k in / 128k out).
+	"gpt-5.5": {
+		displayName:   "GPT-5.5",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 5.00, Output: 30.00},
+	},
+	"gpt-5.5-pro": {
+		displayName:   "GPT-5.5 Pro",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 30.00, Output: 180.00},
+	},
+	"gpt-5.4": {
+		displayName:   "GPT-5.4",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 2.50, Output: 15.00},
+	},
+	"gpt-5.4-mini": {
+		displayName:   "GPT-5.4 Mini",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 0.75, Output: 4.50},
+	},
+	"gpt-5.4-nano": {
+		displayName:   "GPT-5.4 Nano",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 0.20, Output: 1.25},
+	},
+	"gpt-5.4-pro": {
+		displayName:   "GPT-5.4 Pro",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 30.00, Output: 180.00},
+	},
 	// GPT-5 family
 	"gpt-5": {
 		displayName:   "GPT-5",
