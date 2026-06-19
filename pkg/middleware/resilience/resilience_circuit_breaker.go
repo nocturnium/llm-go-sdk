@@ -29,6 +29,8 @@ const (
 	CircuitHalfOpen
 )
 
+// String returns a human-readable name for the circuit state
+// ("closed", "open", or "half-open").
 func (s CircuitState) String() string {
 	switch s {
 	case CircuitClosed:

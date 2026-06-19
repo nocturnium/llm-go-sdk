@@ -7,7 +7,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/nocturnium/llm-go-sdk/v3)](https://goreportcard.com/report/github.com/nocturnium/llm-go-sdk/v3)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nocturnium/llm-go-sdk)](https://github.com/nocturnium/llm-go-sdk/blob/main/go.mod)
 
-> A unified, dependency-light Go SDK for **18 LLM providers** — streaming, tool calling,
+> A unified, dependency-light Go SDK for **19 LLM providers** — streaming, tool calling,
 > vision, embeddings, and built-in resilience over the standard `net/http`.
 
 One `LLM` interface, every provider. Switch from OpenAI to Anthropic to a local
@@ -130,7 +130,8 @@ Requires **Go 1.25+**.
 
 ## Supported Providers
 
-The SDK ships **18 providers**. Import each from its canonical path
+The SDK ships **19 providers** (17 chat-registered; HuggingFace and Infinity are
+embeddings-only). Import each from its canonical path
 `github.com/nocturnium/llm-go-sdk/v3/pkg/providers/<name>`. Every chat provider also
 falls back to `LLM_API_KEY` if its own key var is unset. "OpenAI-compatible"
 providers share the `pkg/openaicompat` base (they speak OpenAI's `/chat/completions`
@@ -200,16 +201,22 @@ via the provider's `WithAPIKey(...)` option. Copy [`.env.example`](./.env.exampl
 The SDK is a single Go module (`github.com/nocturnium/llm-go-sdk/v3`, Go 1.25+) with a
 small, deliberately flat public surface. The **core lives in the root package**
 (`package llms`): the `LLM` interface, all shared types and options, errors,
-streaming, and every middleware. The only other public packages are the provider
-packages under `pkg/providers/*`, the custom-provider base in `pkg/openaicompat`,
-and the MCP client in `pkg/mcp`.
+streaming, and the cost + response-caching middleware. The other public packages
+are the provider packages under `pkg/providers/*`, the custom-provider base in
+`pkg/openaicompat`, the MCP client in `pkg/mcp`, the resilience middleware in
+`pkg/middleware/resilience`, the observability middleware in `pkg/observability`,
+and the standalone tokenizer in `pkg/tokenizer`.
 Everything else lives under `internal/` and is not importable by external code.
 
 | Location | Role |
 |----------|------|
-| Root (`llms "github.com/nocturnium/llm-go-sdk/v3"`) | The entire core: `LLM` interface, `Message`/`Response`/`Tool` types, options, errors, streaming, middleware (cost, resilience, rate limiting, fallback, OTel, logging, metrics), capability registry |
-| `pkg/providers/<name>` | **Provider implementations** (18 providers) |
+| Root (`llms "github.com/nocturnium/llm-go-sdk/v3"`) | The core: `LLM` interface, `Message`/`Response`/`Tool` types, options, errors, streaming, cost-tracking and response-caching middleware, capability registry |
+| `pkg/providers/<name>` | **Provider implementations** (19 providers; 17 chat-registered) |
 | `pkg/openaicompat` | Shared OpenAI-compatible base client; the base for building custom providers |
+| `pkg/mcp` | Model Context Protocol client (`tools/list`, `tools/call`) |
+| `pkg/middleware/resilience` | Resilience middleware: retry, circuit breaker, fallback chain, rate limiting |
+| `pkg/observability` | Observability middleware: OTel tracing, metrics, Langfuse exporters, slog/JSON logging |
+| `pkg/tokenizer` | Standalone token estimation |
 | `internal/*` | Non-public building blocks: `httpclient`, `anthropicapi`, `geminiapi`, `ollamaapi`, `llamacppapi`, `websearch`, `testutil` |
 | `cmd/` | `llms-cli`, the shipping command-line tool |
 
@@ -220,11 +227,17 @@ llm-go-sdk/
 │   ├── message.go vision.go  #   messages / multi-modal
 │   ├── embeddings.go         #   Embedder / Reranker interfaces
 │   ├── tools.go options.go   #   tool calling / call options
-│   ├── cost.go resilience.go ratelimit.go fallback.go otel.go  # middleware
+│   ├── cost.go caching.go    #   cost-tracking + response-caching middleware
 │   └── capabilities_registry.go errors.go apikey.go
 ├── pkg/
 │   ├── openaicompat/                                # shared OpenAI-compatible base
-│   └── providers/<name>/                            # provider impls (18)
+│   ├── mcp/                                         # Model Context Protocol client
+│   ├── tokenizer/                                   # standalone token estimation
+│   ├── middleware/resilience/                       # retry / circuit breaker / fallback / rate limit
+│   │   └── resilience*.go ratelimit*.go fallback*.go
+│   ├── observability/                               # OTel / metrics / Langfuse / logging
+│   │   └── otel*.go metrics*.go langfuse*.go logging*.go
+│   └── providers/<name>/                            # provider impls (19)
 ├── internal/                 # httpclient + per-provider API adapters (non-public)
 ├── cmd/                      # llms-cli CLI
 └── examples/                 # runnable examples

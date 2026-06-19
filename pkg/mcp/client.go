@@ -294,6 +294,8 @@ type ToolError struct {
 	Content string
 }
 
+// Error reports the tool-execution failure message, naming the tool and its
+// error content.
 func (e *ToolError) Error() string {
 	return fmt.Sprintf("mcp tool %q reported an error: %s", e.Tool, e.Content)
 }

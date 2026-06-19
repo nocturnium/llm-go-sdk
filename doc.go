@@ -7,8 +7,9 @@
 // # API Reference Map
 //
 // The package surface is large; this map groups the exported API by role so you
-// can find the right entry point quickly. (The middleware groups will move to
-// dedicated subpackages in a future v3 — see docs/v3-package-taxonomy.md.)
+// can find the right entry point quickly. (As of v3 the observability and
+// resilience middleware live in the pkg/observability and
+// pkg/middleware/resilience subpackages — see docs/v3-package-taxonomy.md.)
 //
 //   - Core types: [Message], [Role], [Response], [StreamChunk], [Usage],
 //     [ToolCall], [FunctionCall], [ContentPart], [FinishReason].
@@ -28,7 +29,9 @@
 //     [RegisteredProviders]. Prefer a provider's own constructor (e.g. openai.New)
 //     when the provider is known at compile time.
 //   - Cost & tokens: [CostTracker], [ModelPricing], [EstimateTokens], [TokenEstimator].
-//   - Resilience middleware: [NewResilientClient], [NewFallbackChain], rate limiting.
+//   - Resilience middleware: see the pkg/middleware/resilience package for
+//     NewResilientClient, NewFallbackChain, NewRateLimitedClient, and the
+//     circuit breaker.
 //   - Observability middleware: see the pkg/observability package for
 //     NewMetricsMiddleware, NewOTelMiddleware, the Langfuse exporters, and the
 //     slog/JSON logging middleware.

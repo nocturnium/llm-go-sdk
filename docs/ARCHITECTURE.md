@@ -15,7 +15,10 @@ add a provider (including coding standards and required tests), see
 - License: Apache-2.0 (see `LICENSE` and `NOTICE`)
 - No external LLM SDK dependencies; the only notable third-party packages are
   `urfave/cli/v2` (for the CLI), `go.opentelemetry.io/otel` (for tracing and
-  metrics), and `golang.org/x/time` (for rate limiting).
+  metrics), and `golang.org/x/time` (for rate limiting). As of v3 OpenTelemetry is
+  pulled in only by `pkg/observability` — the bare `llms` root package no longer
+  compiles OTel (rate limiting moved with the resilience middleware into
+  `pkg/middleware/resilience`).
 
 ---
 
@@ -145,20 +148,22 @@ LoggingMiddleware
                                 └─ provider Client (e.g. openai.Client)
 ```
 
-The available decorators, all in the root package:
+The available decorators. As of v3 cost tracking and response caching stay in the
+root package, while the resilience decorators live in `pkg/middleware/resilience`
+and the observability decorators in `pkg/observability`:
 
 | Concern         | Type / constructor                                   | File                              |
 |-----------------|------------------------------------------------------|-----------------------------------|
-| Retry + breaker | `ResilientClient` / `NewResilientClient`             | `resilience.go`, `resilience_retry.go`, `resilience_circuit_breaker.go` |
-| Circuit breaker | `CircuitBreaker` (closed/open/half-open)             | `resilience_circuit_breaker.go`   |
-| Rate limiting   | `RateLimitedClient` / `NewRateLimitedClient`, `SharedRateLimiter` | `ratelimit.go`        |
-| Fallback        | `FallbackChain`, `WeightedFallbackChain`             | `fallback.go`                     |
+| Retry + breaker | `ResilientClient` / `NewResilientClient`             | `pkg/middleware/resilience/resilience.go`, `resilience_retry.go`, `resilience_circuit_breaker.go` |
+| Circuit breaker | `CircuitBreaker` (closed/open/half-open)             | `pkg/middleware/resilience/resilience_circuit_breaker.go` |
+| Rate limiting   | `RateLimitedClient` / `NewRateLimitedClient`, `SharedRateLimiter` | `pkg/middleware/resilience/ratelimit.go` |
+| Fallback        | `FallbackChain`, `WeightedFallbackChain`             | `pkg/middleware/resilience/fallback.go` |
 | Cost tracking   | `CostMiddleware`, `CostTracker`                      | `cost.go`                         |
 | Token estimation| `TokenEstimator` (also used via `WithEstimateTokens`)| `tokens.go`                       |
-| Logging         | `LoggingMiddleware`, `Logger`                        | `logging.go`, `logging_slog.go`, `logging_json.go` |
-| Metrics         | `MetricsMiddleware`                                  | `metrics.go`, `metrics_otel.go`, `metrics_sliding_window.go` |
-| Tracing (OTel)  | `OTelMiddleware`                                     | `otel.go`, `otel_genai.go`        |
-| Tracing (Langfuse)| `LangfuseOTelMiddleware`                           | `otel_langfuse.go`, `langfuse.go`, `langfuse_format.go` |
+| Logging         | `LoggingMiddleware`, `Logger`                        | `pkg/observability/logging.go`, `logging_slog.go`, `logging_json.go` |
+| Metrics         | `MetricsMiddleware`                                  | `pkg/observability/metrics.go`, `metrics_otel.go`, `metrics_sliding_window.go` |
+| Tracing (OTel)  | `OTelMiddleware`                                     | `pkg/observability/otel.go`, `otel_genai.go` |
+| Tracing (Langfuse)| `LangfuseOTelMiddleware`                           | `pkg/observability/otel_langfuse.go`, `langfuse.go`, `langfuse_format.go` |
 
 Ordering matters and is the consumer's choice. A common convention is to put
 fallback and resilience closest to the provider (so retries and failover happen
@@ -189,7 +194,8 @@ The public surface is exactly:
   each a drop-in `llms.LLM`.
 - **`pkg/observability`** — OpenTelemetry, Langfuse, and structured-logging
   middleware (`observability.NewOTelMiddleware`, `observability.NewLoggingMiddleware`, …).
-- **`pkg/providers/<name>`** — the 18 provider implementations. Import the one you
+- **`pkg/providers/<name>`** — the 19 provider implementations (17 chat-registered;
+  HuggingFace and Infinity are embeddings-only). Import the one you
   need, e.g. `github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai`.
 - **`pkg/openaicompat`** — the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
@@ -244,15 +250,20 @@ llm-go-sdk/
 │   ├── models.go / models_util.go    # ModelInfo, ModelLister, listing helpers
 │   ├── batch.go              #   BatchProcessor, ConcurrentBatcher
 │   ├── cost.go / tokens.go   #   cost tracking + token estimation
-│   ├── resilience*.go        #   retry + circuit breaker
-│   ├── ratelimit.go / fallback.go    # rate limiting + failover
-│   ├── logging*.go / metrics*.go     # logging + metrics middleware
-│   ├── otel*.go / langfuse*.go       # OTel + Langfuse tracing
+│   ├── caching*.go           #   response-caching middleware
 │   └── websearch.go          #   web search config + result types
 │
 ├── pkg/
 │   ├── openaicompat/   # public base for OpenAI-compatible providers
-│   └── providers/<name>/   # provider implementations (18 providers)
+│   ├── mcp/            # Model Context Protocol client
+│   ├── tokenizer/      # standalone token estimation
+│   ├── middleware/resilience/   # resilience middleware (moved out of root in v3)
+│   │   ├── resilience*.go        #   retry + circuit breaker
+│   │   └── ratelimit.go / fallback.go    # rate limiting + failover
+│   ├── observability/  # observability middleware (moved out of root in v3)
+│   │   ├── logging*.go / metrics*.go     # logging + metrics middleware
+│   │   └── otel*.go / langfuse*.go       # OTel + Langfuse tracing
+│   └── providers/<name>/   # provider implementations (19 providers)
 │
 ├── internal/           # not importable by external code
 │   ├── httpclient/     # shared HTTP client: retry, backoff, SSE, security
@@ -416,25 +427,25 @@ middleware, plus logging and cost tracking described earlier.
 
 ### OpenTelemetry (GenAI semantic conventions)
 
-- `OTelMiddleware` (`otel.go`) emits spans and metrics for each operation. It
+- `OTelMiddleware` (`pkg/observability/otel.go`) emits spans and metrics for each operation. It
   records request type, provider, model, finish reason, error type, streaming
   flag, tool-call count, request duration, prompt/completion token counts, and
   stream-chunk counts. It uses the global OTel `TracerProvider`/`MeterProvider`,
   so it integrates with whatever exporters the host application configures.
   **Prompt/response content is not recorded by default**; opt in with
   `WithContentRecording(true)`.
-- `otel_genai.go` defines the OpenTelemetry **GenAI** semantic-convention
+- `pkg/observability/otel_genai.go` defines the OpenTelemetry **GenAI** semantic-convention
   attribute keys (`gen_ai.system`, `gen_ai.request.model`,
   `gen_ai.response.model`, `gen_ai.usage.prompt_tokens`,
   `gen_ai.usage.completion_tokens`, `gen_ai.response.finish_reason`, request
   parameters, etc.), so traces are portable to any GenAI-aware backend.
-- `MetricsMiddleware` (`metrics.go`) combines OTel metrics with cost tracking and
-  a sliding-window aggregator (`metrics_sliding_window.go`) for in-process
+- `MetricsMiddleware` (`pkg/observability/metrics.go`) combines OTel metrics with cost tracking and
+  a sliding-window aggregator (`pkg/observability/metrics_sliding_window.go`) for in-process
   rate/latency stats.
 
 ### Langfuse compatibility
 
-`LangfuseOTelMiddleware` (`otel_langfuse.go`) extends the OTel middleware with
+`LangfuseOTelMiddleware` (`pkg/observability/otel_langfuse.go`) extends the OTel middleware with
 Langfuse's attribute conventions, layered on top of the GenAI conventions so a
 single instrumented call is legible to both generic OTel backends and Langfuse:
 
@@ -448,14 +459,14 @@ single instrumented call is legible to both generic OTel backends and Langfuse:
   `output.value`) keys. **Content capture is off by default** for privacy — prompts
   and responses are not recorded unless you opt in via these options.
 
-Trace context is carried through `context.Context`. `langfuse.go` defines
+Trace context is carried through `context.Context`. `pkg/observability/langfuse.go` defines
 `TraceContext` (user, session, tags, version, release, environment, metadata)
 with `WithTraceContext`/context accessors and `PropagateAttributes`, which clones
 the parent context's attributes into a child so nested calls inherit identity and
 tagging. Per-call trace overrides are supplied through the standard call option
 `WithTrace(llms.TraceOptions{TraceID, SpanID, ParentID, UserID, SessionID, Tags,
 Metadata, Version})`, which the Langfuse middleware reads when annotating a span.
-`langfuse_format.go` handles serializing messages and responses for the captured
+`pkg/observability/langfuse_format.go` handles serializing messages and responses for the captured
 input/output fields.
 
 ### Logging
@@ -463,7 +474,7 @@ input/output fields.
 `Logger` is a small interface; `LoggingMiddleware` records a structured
 `LogEntry` per call (operation, provider, model, duration, usage, and extensible
 metadata, including Langfuse-compatible fields). Adapters ship for `log/slog`
-(`logging_slog.go`) and JSON (`logging_json.go`); `NopLogger` disables logging. Both
+(`pkg/observability/logging_slog.go`) and JSON (`pkg/observability/logging_json.go`); `NopLogger` disables logging. Both
 the slog and JSON adapters **redact prompt/response content by default** for privacy;
 pass `WithRedaction(false)` to opt into logging message content.
 
@@ -619,7 +630,8 @@ Because middleware is just "an `LLM` wrapping an `LLM`," consumers can write
 their own decorators: implement the `LLM` methods, store the wrapped client, and
 implement `Unwrap() LLM` so the wrapper participates in `UnwrapAll` /
 `GetMiddleware` introspection and capability passthrough. The built-in
-decorators in the root package are examples to follow.
+decorators — cost and response caching in the root package, and the wrappers in
+pkg/middleware/resilience and pkg/observability — are examples to follow.
 
 ---
 
