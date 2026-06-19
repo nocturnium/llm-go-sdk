@@ -29,6 +29,8 @@
 //     [RegisteredProviders]. Prefer a provider's own constructor (e.g. openai.New)
 //     when the provider is known at compile time.
 //   - Cost & tokens: [CostTracker], [ModelPricing], [EstimateTokens], [TokenEstimator].
+//   - Middleware composition: [Chain] applies [Middleware] wrappers around a base
+//     client (resilience innermost, observability outermost).
 //   - Resilience middleware: see the pkg/middleware/resilience package for
 //     NewResilientClient, NewFallbackChain, NewRateLimitedClient, and the
 //     circuit breaker.
