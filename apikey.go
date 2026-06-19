@@ -64,4 +64,9 @@ const (
 	EnvRunPodAPIKey      = "RUNPOD_API_KEY"
 	EnvZAIAPIKey         = "ZAI_API_KEY"
 	EnvLLMAPIKey         = "LLM_API_KEY"
+	// EnvHuggingFaceAPIKey and EnvHuggingFaceToken are both consulted for the
+	// HuggingFace Inference Endpoints token (HF_TOKEN is HuggingFace's own
+	// conventional name).
+	EnvHuggingFaceAPIKey = "HUGGINGFACE_API_KEY"
+	EnvHuggingFaceToken  = "HF_TOKEN"
 )
