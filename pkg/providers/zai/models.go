@@ -7,20 +7,82 @@ import (
 	llms "github.com/nocturnium/llm-go-sdk/v2"
 )
 
-// GLM model IDs for Z.AI.
+// GLM model IDs for Z.AI. Model identifiers are verified against the live
+// https://api.z.ai/api/paas/v4/models listing; context/output limits come from
+// the official model guides at https://docs.z.ai/guides/llm.
 const (
-	// ModelGLM47 is the flagship GLM-4.7 model with 200K context and 128K max tokens
+	// ModelGLM52 is the flagship GLM-5.2 model (1M context, 128K max output).
+	ModelGLM52 = "glm-5.2"
+	// ModelGLM51 is GLM-5.1 (200K context, 128K max output).
+	ModelGLM51 = "glm-5.1"
+	// ModelGLM5 is the base GLM-5 model.
+	ModelGLM5 = "glm-5"
+	// ModelGLM5Turbo is the fast GLM-5-Turbo variant for agentic/coding use.
+	ModelGLM5Turbo = "glm-5-turbo"
+	// ModelGLM47 is the GLM-4.7 model (200K context, 128K max output).
 	ModelGLM47 = "glm-4.7"
+	// ModelGLM46 is the GLM-4.6 model (200K context, 128K max output).
+	ModelGLM46 = "glm-4.6"
+	// ModelGLM45 is the GLM-4.5 model (128K context, 96K max output).
+	ModelGLM45 = "glm-4.5"
+	// ModelGLM45Air is the lighter GLM-4.5-Air model (128K context, 96K max output).
+	ModelGLM45Air = "glm-4.5-air"
 
-	// ModelGLM47FlashX is the optimized GLM-4.7-FlashX variant
+	// ModelGLM47FlashX was the GLM-4.7-FlashX variant.
+	//
+	// Deprecated: no longer offered by the Z.AI API (absent from the live model
+	// listing). Use ModelGLM5Turbo or another current model.
 	ModelGLM47FlashX = "glm-4.7-FlashX"
-
-	// ModelGLM47Flash is the free tier GLM-4.7-Flash model
+	// ModelGLM47Flash was the free-tier GLM-4.7-Flash model.
+	//
+	// Deprecated: no longer offered by the Z.AI API (absent from the live model
+	// listing). Use a current model such as ModelGLM45Air.
 	ModelGLM47Flash = "glm-4.7-Flash"
 )
 
-// cachedModels provides metadata for Z.AI GLM models.
+// cachedModels provides metadata for Z.AI GLM models, newest first. IDs are from
+// the live /models endpoint; limits are from the official model guides.
 var cachedModels = []llms.ModelInfo{
+	{
+		ID:            ModelGLM52,
+		DisplayName:   "GLM-5.2",
+		Provider:      llms.ProviderZAI,
+		ContextLength: 1000000,
+		MaxOutput:     128000,
+		Organization:  "Z.AI",
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		Description:   "Flagship GLM-5.2 model with 1M context and 128K max output",
+	},
+	{
+		ID:            ModelGLM51,
+		DisplayName:   "GLM-5.1",
+		Provider:      llms.ProviderZAI,
+		ContextLength: 200000,
+		MaxOutput:     128000,
+		Organization:  "Z.AI",
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		Description:   "GLM-5.1 with 200K context and 128K max output",
+	},
+	{
+		ID:            ModelGLM5,
+		DisplayName:   "GLM-5",
+		Provider:      llms.ProviderZAI,
+		ContextLength: 200000,
+		MaxOutput:     128000,
+		Organization:  "Z.AI",
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		Description:   "GLM-5 base model",
+	},
+	{
+		ID:            ModelGLM5Turbo,
+		DisplayName:   "GLM-5-Turbo",
+		Provider:      llms.ProviderZAI,
+		ContextLength: 200000,
+		MaxOutput:     128000,
+		Organization:  "Z.AI",
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		Description:   "Fast GLM-5-Turbo variant for agentic and coding use (200K context)",
+	},
 	{
 		ID:            ModelGLM47,
 		DisplayName:   "GLM-4.7",
@@ -29,27 +91,37 @@ var cachedModels = []llms.ModelInfo{
 		MaxOutput:     128000,
 		Organization:  "Z.AI",
 		Types:         []llms.ModelType{llms.ModelTypeChat},
-		Description:   "Flagship GLM-4.7 model with 200K context and 128K max tokens",
+		Description:   "GLM-4.7 with 200K context and 128K max output",
 	},
 	{
-		ID:            ModelGLM47FlashX,
-		DisplayName:   "GLM-4.7-FlashX",
+		ID:            ModelGLM46,
+		DisplayName:   "GLM-4.6",
 		Provider:      llms.ProviderZAI,
 		ContextLength: 200000,
 		MaxOutput:     128000,
 		Organization:  "Z.AI",
 		Types:         []llms.ModelType{llms.ModelTypeChat},
-		Description:   "Optimized GLM-4.7-FlashX variant with 200K context",
+		Description:   "GLM-4.6 with 200K context and 128K max output",
 	},
 	{
-		ID:            ModelGLM47Flash,
-		DisplayName:   "GLM-4.7-Flash",
+		ID:            ModelGLM45,
+		DisplayName:   "GLM-4.5",
 		Provider:      llms.ProviderZAI,
-		ContextLength: 200000,
-		MaxOutput:     128000,
+		ContextLength: 128000,
+		MaxOutput:     96000,
 		Organization:  "Z.AI",
 		Types:         []llms.ModelType{llms.ModelTypeChat},
-		Description:   "Free tier GLM-4.7-Flash model with 200K context",
+		Description:   "GLM-4.5 (MoE) with 128K context and 96K max output",
+	},
+	{
+		ID:            ModelGLM45Air,
+		DisplayName:   "GLM-4.5-Air",
+		Provider:      llms.ProviderZAI,
+		ContextLength: 128000,
+		MaxOutput:     96000,
+		Organization:  "Z.AI",
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		Description:   "Lighter GLM-4.5-Air (MoE) with 128K context and 96K max output",
 	},
 }
 

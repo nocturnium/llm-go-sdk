@@ -29,9 +29,9 @@ func TestWithAPIKey(t *testing.T) {
 }
 
 func TestWithModel(t *testing.T) {
-	opts := apply(WithModel(ModelGLM47Flash))
-	if opts.Model != ModelGLM47Flash {
-		t.Errorf("expected Model '%s', got %s", ModelGLM47Flash, opts.Model)
+	opts := apply(WithModel(ModelGLM52))
+	if opts.Model != ModelGLM52 {
+		t.Errorf("expected Model '%s', got %s", ModelGLM52, opts.Model)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestNew_Success(t *testing.T) {
 func TestNew_WithEnvAPIKey(t *testing.T) {
 	t.Setenv("ZAI_API_KEY", "env-test-key")
 
-	client, err := New(WithModel(ModelGLM47FlashX))
+	client, err := New(WithModel(ModelGLM5Turbo))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestClient_GetCapabilities(t *testing.T) {
 func TestApply_MultipleOptions(t *testing.T) {
 	opts := apply(
 		WithAPIKey("my-key"),
-		WithModel(ModelGLM47FlashX),
+		WithModel(ModelGLM5Turbo),
 		WithBaseURL("https://custom.url"),
 		WithEmbeddingModel("my-embedding-model"),
 	)
@@ -133,8 +133,8 @@ func TestApply_MultipleOptions(t *testing.T) {
 	if opts.APIKey != "my-key" {
 		t.Errorf("expected APIKey 'my-key', got %s", opts.APIKey)
 	}
-	if opts.Model != ModelGLM47FlashX {
-		t.Errorf("expected Model '%s', got %s", ModelGLM47FlashX, opts.Model)
+	if opts.Model != ModelGLM5Turbo {
+		t.Errorf("expected Model '%s', got %s", ModelGLM5Turbo, opts.Model)
 	}
 	if opts.BaseURL != "https://custom.url" {
 		t.Errorf("expected BaseURL 'https://custom.url', got %s", opts.BaseURL)
@@ -146,8 +146,8 @@ func TestApply_MultipleOptions(t *testing.T) {
 
 func TestListModels(t *testing.T) {
 	models := ListModels()
-	if len(models) != 3 {
-		t.Errorf("expected 3 models, got %d", len(models))
+	if len(models) != 8 {
+		t.Errorf("expected 8 models, got %d", len(models))
 	}
 
 	// Check that all expected models are present
@@ -156,14 +156,13 @@ func TestListModels(t *testing.T) {
 		modelIDs[m.ID] = true
 	}
 
-	if !modelIDs[ModelGLM47] {
-		t.Error("expected ModelGLM47 to be in list")
-	}
-	if !modelIDs[ModelGLM47FlashX] {
-		t.Error("expected ModelGLM47FlashX to be in list")
-	}
-	if !modelIDs[ModelGLM47Flash] {
-		t.Error("expected ModelGLM47Flash to be in list")
+	for _, want := range []string{
+		ModelGLM52, ModelGLM51, ModelGLM5, ModelGLM5Turbo,
+		ModelGLM47, ModelGLM46, ModelGLM45, ModelGLM45Air,
+	} {
+		if !modelIDs[want] {
+			t.Errorf("expected %q to be in model list", want)
+		}
 	}
 }
 

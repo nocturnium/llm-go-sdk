@@ -38,7 +38,7 @@
 //
 //	client, err := zai.New(
 //	    zai.WithAPIKey("your-api-key"),
-//	    zai.WithModel(zai.ModelGLM47Flash), // Use free tier model
+//	    zai.WithModel(zai.ModelGLM45Air), // Use a lighter model
 //	)
 //
 // # Coding API Endpoint
@@ -96,7 +96,7 @@
 //
 //	client, err := zai.New(
 //	    zai.WithAPIKey("your-api-key"),
-//	    zai.WithModel(zai.ModelGLM47FlashX),
+//	    zai.WithModel(zai.ModelGLM5Turbo),
 //	    zai.WithBaseURL("https://custom.api.z.ai/api/paas/v4"),
 //	    zai.WithTimeout(60*time.Second),
 //	    zai.WithHTTPClient(&http.Client{Timeout: 60 * time.Second}),
