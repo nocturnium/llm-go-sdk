@@ -3,7 +3,7 @@ package zai
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 func TestRegisterNewWithoutCodingExtra(t *testing.T) {

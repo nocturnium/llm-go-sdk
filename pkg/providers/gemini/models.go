@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
 )
 
 // titleCase capitalizes the first letter of a string.

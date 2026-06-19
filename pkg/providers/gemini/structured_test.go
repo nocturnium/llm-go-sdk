@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 func TestClient_GenerateContent_JSONSchemaResponseFormatWireRequest(t *testing.T) {

@@ -123,7 +123,7 @@ for breaking changes. A scope (the provider or area you touched) is encouraged.
 Run the local checks — ideally just `make ci` — and make sure they pass:
 
 ```bash
-make fmt          # or: gofmt -w . && goimports -w -local github.com/nocturnium/llm-go-sdk/v2 .
+make fmt          # or: gofmt -w . && goimports -w -local github.com/nocturnium/llm-go-sdk/v3 .
 make vet
 make lint
 make test         # go test -race ./...
@@ -131,7 +131,7 @@ make test         # go test -race ./...
 
 CI additionally runs `gofmt`, `goimports`, `go mod tidy`, `go vet`,
 `golangci-lint`, `staticcheck`, `govulncheck`, and CodeQL — so format your
-imports with the `-local github.com/nocturnium/llm-go-sdk/v2` prefix and keep
+imports with the `-local github.com/nocturnium/llm-go-sdk/v3` prefix and keep
 `go.mod`/`go.sum` tidy.
 
 ---
@@ -142,7 +142,7 @@ The real implementation of the **core types and interfaces lives in the root
 package**, imported as `llms`:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v2"
+import llms "github.com/nocturnium/llm-go-sdk/v3"
 ```
 
 The `pkg/types`, `pkg/options`, `pkg/errors`, and `pkg/streaming` packages are
@@ -152,7 +152,7 @@ clarity, not as separate sources of truth.
 **Providers** live under their canonical path:
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 ```
 
 > The top-level `providers/<name>` packages are **deprecated backwards-compat

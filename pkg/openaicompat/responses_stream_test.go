@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/internal/httpclient"
 )
 
 // sseBody renders a sequence of (event, data) pairs as an SSE stream body.

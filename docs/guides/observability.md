@@ -11,9 +11,9 @@ This guide covers four pillars:
 
 | Pillar | Constructor | Verified source |
 | --- | --- | --- |
-| OpenTelemetry traces + metrics | `llms.NewOTelMiddleware` | `otel.go` |
-| Langfuse (GenAI semconv) | `llms.NewLangfuseOTelMiddleware` | `otel_langfuse.go`, `otel_genai.go` |
-| Structured logging | `llms.NewLoggingMiddleware` + `NewSlogLogger`/`NewJSONLogger` | `logging.go`, `logging_slog.go`, `logging_json.go` |
+| OpenTelemetry traces + metrics | `observability.NewOTelMiddleware` | `otel.go` |
+| Langfuse (GenAI semconv) | `observability.NewLangfuseOTelMiddleware` | `otel_langfuse.go`, `otel_genai.go` |
+| Structured logging | `observability.NewLoggingMiddleware` + `NewSlogLogger`/`NewJSONLogger` | `logging.go`, `logging_slog.go`, `logging_json.go` |
 | Cost tracking | `llms.NewCostTracker` + `llms.NewCostMiddleware` | `cost.go` |
 
 !!! info "Privacy-safe by default"
@@ -27,7 +27,7 @@ This guide covers four pillars:
 
 ## OpenTelemetry
 
-`llms.NewOTelMiddleware` wraps a client with OpenTelemetry spans and metrics. It
+`observability.NewOTelMiddleware` wraps a client with OpenTelemetry spans and metrics. It
 uses the globally registered tracer and meter providers
 (`otel.Tracer(...)` / `otel.Meter(...)`) unless you override them, so it works
 with whatever OTel SDK exporter you have configured (OTLP, stdout, Prometheus,
@@ -40,8 +40,9 @@ import (
 	"context"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/observability"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func main() {
@@ -52,7 +53,7 @@ func main() {
 
 	// Wrap with OpenTelemetry instrumentation.
 	// Content recording is OFF by default; the false here is explicit for clarity.
-	client, err := llms.NewOTelMiddleware(base, llms.WithContentRecording(false))
+	client, err := observability.NewOTelMiddleware(base, observability.WithContentRecording(false))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -76,12 +77,12 @@ so it exposes `GenerateContent`, `Stream`, `Provider()`, `Model()`, and
 
 | Option | Effect |
 | --- | --- |
-| `llms.WithContentRecording(bool)` | When `true`, records truncated prompt/response text on spans (`llm.prompt`, `llm.last_message`, `llm.response`). Off by default. |
-| `llms.WithOTelTracer(trace.Tracer)` | Use a specific `trace.Tracer` instead of the global one. |
-| `llms.WithOTelMeter(metric.Meter)` | Use a specific `metric.Meter` instead of the global one. |
+| `observability.WithContentRecording(bool)` | When `true`, records truncated prompt/response text on spans (`llm.prompt`, `llm.last_message`, `llm.response`). Off by default. |
+| `observability.WithOTelTracer(trace.Tracer)` | Use a specific `trace.Tracer` instead of the global one. |
+| `observability.WithOTelMeter(metric.Meter)` | Use a specific `metric.Meter` instead of the global one. |
 
-The instrumentation scope name is exported as `llms.InstrumentationName`
-(`"github.com/nocturnium/llm-go-sdk/v2"`).
+The instrumentation scope name is exported as `observability.InstrumentationName`
+(`"github.com/nocturnium/llm-go-sdk/v3"`).
 
 !!! warning "Content recording exposes data in traces"
     `WithContentRecording(true)` writes (truncated) prompt and completion text to
@@ -151,7 +152,7 @@ for chunk := range chunks {
 
 ## Langfuse
 
-`llms.NewLangfuseOTelMiddleware` emits OpenTelemetry spans using the
+`observability.NewLangfuseOTelMiddleware` emits OpenTelemetry spans using the
 [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 that [Langfuse](https://langfuse.com/integrations/native/opentelemetry)
 recognizes natively. Point your OTLP exporter at the Langfuse OTel endpoint and
@@ -165,12 +166,12 @@ if err != nil {
 
 tracker := llms.NewCostTracker()
 
-client, err := llms.NewLangfuseOTelMiddleware(base,
+client, err := observability.NewLangfuseOTelMiddleware(base,
 	// Capture is OFF by default; opt in with an explicit byte budget.
-	llms.WithLangfuseInputCapture(true, 4096),
-	llms.WithLangfuseOutputCapture(true, 4096),
+	observability.WithLangfuseInputCapture(true, 4096),
+	observability.WithLangfuseOutputCapture(true, 4096),
 	// Optional: attach cost estimation to spans + the gen_ai.client.cost metric.
-	llms.WithLangfuseCostTracker(tracker),
+	observability.WithLangfuseCostTracker(tracker),
 )
 if err != nil {
 	log.Fatal(err)
@@ -186,19 +187,19 @@ are named `llm.generation` with client span kind.
 
 | Option | Effect |
 | --- | --- |
-| `llms.WithLangfuseInputCapture(enabled bool, maxLen int)` | Record the input messages on the span. Off by default. `maxLen` caps captured bytes (defaults to 100 KB when `0`). |
-| `llms.WithLangfuseOutputCapture(enabled bool, maxLen int)` | Record the output text on the span. Off by default. |
-| `llms.WithLangfuseInputFormat(llms.InputFormat)` | How input is serialized (`llms.InputFormatMessages` is the default). |
-| `llms.WithLangfuseOutputFormat(llms.OutputFormat)` | How output is serialized (`llms.OutputFormatStructured` is the default). |
-| `llms.WithLangfuseCostTracker(*llms.CostTracker)` | Enables cost estimation: records into the tracker, adds `gen_ai.usage.cost` to spans, and emits the `gen_ai.client.cost` metric. |
-| `llms.WithLangfuseTracer(trace.Tracer)` / `llms.WithLangfuseMeter(metric.Meter)` | Override the tracer/meter. |
+| `observability.WithLangfuseInputCapture(enabled bool, maxLen int)` | Record the input messages on the span. Off by default. `maxLen` caps captured bytes (defaults to 100 KB when `0`). |
+| `observability.WithLangfuseOutputCapture(enabled bool, maxLen int)` | Record the output text on the span. Off by default. |
+| `observability.WithLangfuseInputFormat(observability.InputFormat)` | How input is serialized (`observability.InputFormatMessages` is the default). |
+| `observability.WithLangfuseOutputFormat(observability.OutputFormat)` | How output is serialized (`observability.OutputFormatStructured` is the default). |
+| `observability.WithLangfuseCostTracker(*llms.CostTracker)` | Enables cost estimation: records into the tracker, adds `gen_ai.usage.cost` to spans, and emits the `gen_ai.client.cost` metric. |
+| `observability.WithLangfuseTracer(trace.Tracer)` / `observability.WithLangfuseMeter(metric.Meter)` | Override the tracer/meter. |
 
 ### GenAI attributes & metrics
 
-Span attributes follow the GenAI semconv (exported as `llms.AttrGenAI*` /
-`llms.AttrLangfuse*` constants in `otel_genai.go`):
+Span attributes follow the GenAI semconv (exported as `observability.AttrGenAI*` /
+`observability.AttrLangfuse*` constants in `otel_genai.go`):
 
-- `gen_ai.system` (mapped from the provider via `llms.ProviderToGenAISystem`),
+- `gen_ai.system` (mapped from the provider via `observability.ProviderToGenAISystem`),
   `gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.response.model`
 - request params: `gen_ai.request.temperature`, `gen_ai.request.max_tokens`,
   `gen_ai.request.top_p`, `gen_ai.request.frequency_penalty`,
@@ -212,7 +213,7 @@ Span attributes follow the GenAI semconv (exported as `llms.AttrGenAI*` /
   `langfuse.trace.id`, `langfuse.observation.id`,
   `langfuse.parent_observation.id`, plus `langfuse.metadata.<key>` entries
 
-Metrics (exported as `llms.MetricGenAI*` constants):
+Metrics (exported as `observability.MetricGenAI*` constants):
 
 | Metric name | Type | Meaning |
 | --- | --- | --- |
@@ -254,46 +255,46 @@ resp, err := client.GenerateContent(ctx, messages,
     LLM requests), set them once on the context instead of per call:
 
     ```go
-    ctx = llms.WithTraceContext(ctx, llms.NewTraceContext(
-        llms.WithUserID("user_123"),
-        llms.WithSessionID("sess_abc"),
-        llms.WithTags("production"),
+    ctx = observability.WithTraceContext(ctx, observability.NewTraceContext(
+        observability.WithUserID("user_123"),
+        observability.WithSessionID("sess_abc"),
+        observability.WithTags("production"),
     ))
     ```
 
     Per-call `WithTrace` values override the context-level `TraceContext`. Use
-    `llms.PropagateAttributes(ctx, ...)` to derive a child context that inherits
+    `observability.PropagateAttributes(ctx, ...)` to derive a child context that inherits
     user/session/tags/version/metadata from its parent.
 
 ---
 
 ## Structured logging
 
-`llms.NewLoggingMiddleware(llm, logger)` wraps a client and calls a `Logger`
+`observability.NewLoggingMiddleware(llm, logger)` wraps a client and calls a `Logger`
 implementation on every request, response, and error. The SDK ships two
 loggers — both **redact prompt/response content by default**.
 
 ### slog logger
 
-`llms.NewSlogLogger` adapts the standard library `log/slog`:
+`observability.NewSlogLogger` adapts the standard library `log/slog`:
 
 ```go
 import (
 	"log/slog"
 	"os"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/observability"
 )
 
 handler := slog.NewJSONHandler(os.Stdout, nil)
-logger := llms.NewSlogLogger(slog.New(handler),
-	llms.WithLogLevel(slog.LevelInfo),
+logger := observability.NewSlogLogger(slog.New(handler),
+	observability.WithLogLevel(slog.LevelInfo),
 	// Redaction is ON by default. The line below is the explicit default.
-	llms.WithRedaction(true),
-	llms.WithMaxLength(500),
+	observability.WithRedaction(true),
+	observability.WithMaxLength(500),
 )
 
-client := llms.NewLoggingMiddleware(base, logger)
+client := observability.NewLoggingMiddleware(base, logger)
 ```
 
 It emits `llm_request`, `llm_response`, and `llm_error` records. Response records
@@ -304,18 +305,18 @@ content text are included **only when redaction is disabled**. Errors that are
 
 ### JSON-lines logger
 
-`llms.NewJSONLogger` writes one JSON object per line to a write function you
+`observability.NewJSONLogger` writes one JSON object per line to a write function you
 supply:
 
 ```go
-logger := llms.NewJSONLogger(
+logger := observability.NewJSONLogger(
 	func(b []byte) error { _, err := os.Stdout.Write(b); return err },
 	// Redaction is ON by default; opt out explicitly if you need bodies.
-	llms.WithJSONRedaction(false),
-	llms.WithJSONMaxLength(2000),
+	observability.WithJSONRedaction(false),
+	observability.WithJSONMaxLength(2000),
 )
 
-client := llms.NewLoggingMiddleware(base, logger)
+client := observability.NewLoggingMiddleware(base, logger)
 ```
 
 When redaction is on, `messages` and `content` are stripped from the serialized
@@ -323,7 +324,7 @@ When redaction is on, `messages` and `content` are stripped from the serialized
 
 !!! tip "Opting out of redaction"
     To log full prompts/responses (development, debugging), pass
-    `llms.WithRedaction(false)` (slog) or `llms.WithJSONRedaction(false)` (JSON).
+    `observability.WithRedaction(false)` (slog) or `observability.WithJSONRedaction(false)` (JSON).
     Treat these logs as sensitive.
 
 ### Custom loggers
@@ -333,16 +334,16 @@ metrics pipeline, a Langfuse ingestion API, etc.):
 
 ```go
 type Logger interface {
-	LogRequest(ctx context.Context, req *llms.LogEntry)
-	LogResponse(ctx context.Context, resp *llms.LogEntry)
-	LogError(ctx context.Context, entry *llms.LogEntry, err error)
+	LogRequest(ctx context.Context, req *observability.LogEntry)
+	LogResponse(ctx context.Context, resp *observability.LogEntry)
+	LogError(ctx context.Context, entry *observability.LogEntry, err error)
 }
 ```
 
 `LogEntry` carries Langfuse-friendly fields (`TraceID`, `UserID`, `SessionID`,
 `Tags`, `CostUSD`, `TimeToFirstToken`, …) and a
 `(*LogEntry).ToLangfuseGeneration()` helper that converts an entry into a
-Langfuse `GENERATION` map. Use `llms.NopLogger{}` to discard everything.
+Langfuse `GENERATION` map. Use `observability.NopLogger{}` to discard everything.
 
 ---
 
@@ -360,8 +361,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func main() {
@@ -477,14 +478,14 @@ tracker := llms.NewCostTracker()
 costed := llms.NewCostMiddleware(base, tracker)
 
 // 2. OpenTelemetry traces + metrics.
-traced, err := llms.NewOTelMiddleware(costed)
+traced, err := observability.NewOTelMiddleware(costed)
 if err != nil {
 	log.Fatal(err)
 }
 
 // 3. Structured logging on the outside.
-logged := llms.NewLoggingMiddleware(traced,
-	llms.NewSlogLogger(slog.Default()),
+logged := observability.NewLoggingMiddleware(traced,
+	observability.NewSlogLogger(slog.Default()),
 )
 
 // Use `logged` everywhere; it satisfies llms.LLM.
@@ -493,7 +494,7 @@ resp, err := logged.GenerateContent(ctx, messages)
 
 !!! note "Combining with resilience"
     These wrappers compose cleanly with the resilience helpers
-    (`llms.NewResilientClient`, `llms.NewRateLimitedClient`,
-    `llms.NewFallbackChain`) covered in the resilience guide. A common ordering
+    (`resilience.NewResilientClient`, `resilience.NewRateLimitedClient`,
+    `resilience.NewFallbackChain`) covered in the resilience guide. A common ordering
     puts retries/rate limiting nearest the provider and observability outside, so
     each retry attempt is traced and counted.

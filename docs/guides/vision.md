@@ -11,7 +11,7 @@ plain text (the `Content` field) *or* a list of `Parts` mixing text and images.
 When `Parts` is non-empty it takes precedence over `Content`.
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v2"
+import llms "github.com/nocturnium/llm-go-sdk/v3"
 ```
 
 ## Quick start
@@ -247,10 +247,10 @@ import (
 	"os"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/gemini"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/gemini"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func main() {

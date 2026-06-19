@@ -13,10 +13,11 @@ import (
 	"os"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/gemini"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/gemini"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
 )
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 
 	// Example 1: Basic resilient client with defaults
 	fmt.Println("=== Basic Resilient Client ===")
-	resilientClient := llms.NewResilientClient(baseClient)
+	resilientClient := resilience.NewResilientClient(baseClient)
 
 	resp, err := resilientClient.Call(ctx, "Say 'Hello, resilient world!' and nothing else.")
 	if err != nil {
@@ -42,18 +43,18 @@ func main() {
 
 	// Example 2: Custom retry configuration
 	fmt.Println("=== Custom Retry Configuration ===")
-	customRetry := &llms.RetryConfig{
+	customRetry := &resilience.RetryConfig{
 		MaxAttempts:   5,                      // Try up to 5 times
 		InitialDelay:  500 * time.Millisecond, // Start with 500ms delay
 		MaxDelay:      10 * time.Second,       // Cap at 10 seconds
 		BackoffFactor: 2.0,                    // Double delay each retry
 		Jitter:        0.2,                    // Add 20% randomness
-		ShouldRetry:   llms.DefaultShouldRetry,
+		ShouldRetry:   resilience.DefaultShouldRetry,
 	}
 
-	retryClient := llms.NewResilientClient(baseClient,
-		llms.WithRetryConfig(customRetry),
-		llms.WithOnRetry(func(attempt int, err error, delay time.Duration) {
+	retryClient := resilience.NewResilientClient(baseClient,
+		resilience.WithRetryConfig(customRetry),
+		resilience.WithOnRetry(func(attempt int, err error, delay time.Duration) {
 			fmt.Printf("  Retry attempt %d after %v (error: %v)\n", attempt, delay, err)
 		}),
 	)
@@ -67,18 +68,18 @@ func main() {
 
 	// Example 3: Circuit breaker with custom settings
 	fmt.Println("=== Circuit Breaker ===")
-	cb := llms.NewCircuitBreaker(
-		llms.WithMaxFailures(3),              // Open after 3 failures
-		llms.WithResetTimeout(5*time.Second), // Try again after 5s
-		llms.WithHalfOpenMax(2),              // Allow 2 test requests in half-open
-		llms.WithOnStateChange(func(from, to llms.CircuitState) {
+	cb := resilience.NewCircuitBreaker(
+		resilience.WithMaxFailures(3),              // Open after 3 failures
+		resilience.WithResetTimeout(5*time.Second), // Try again after 5s
+		resilience.WithHalfOpenMax(2),              // Allow 2 test requests in half-open
+		resilience.WithOnStateChange(func(from, to resilience.CircuitState) {
 			fmt.Printf("  Circuit breaker: %s -> %s\n", from, to)
 		}),
 	)
 
-	cbClient := llms.NewResilientClient(baseClient,
-		llms.WithCircuitBreaker(cb),
-		llms.WithMaxRetries(2),
+	cbClient := resilience.NewResilientClient(baseClient,
+		resilience.WithCircuitBreaker(cb),
+		resilience.WithMaxRetries(2),
 	)
 
 	// Make a few requests to demonstrate circuit breaker behavior
@@ -99,15 +100,15 @@ func main() {
 	fmt.Println("=== Combined Rate Limiting + Resilience ===")
 
 	// First wrap with rate limiting
-	rateLimitedClient := llms.NewRateLimitedClient(baseClient,
-		llms.WithRequestsPerMinute(30),
-		llms.WithBlocking(true),
-		llms.WithWaitTimeout(5*time.Second),
+	rateLimitedClient := resilience.NewRateLimitedClient(baseClient,
+		resilience.WithRequestsPerMinute(30),
+		resilience.WithBlocking(true),
+		resilience.WithWaitTimeout(5*time.Second),
 	)
 
 	// Then wrap with resilience
-	fullClient := llms.NewResilientClient(rateLimitedClient,
-		llms.WithMaxRetries(3),
+	fullClient := resilience.NewResilientClient(rateLimitedClient,
+		resilience.WithMaxRetries(3),
 	)
 
 	resp, err = fullClient.Call(ctx, "Demonstrate the full middleware stack.")
@@ -119,9 +120,9 @@ func main() {
 
 	// Example 5: Quick retry settings
 	fmt.Println("=== Quick Retry Settings ===")
-	quickClient := llms.NewResilientClient(baseClient,
-		llms.WithMaxRetries(2),             // Shorthand for MaxAttempts=3
-		llms.WithRetryDelay(1*time.Second), // Shorthand for InitialDelay
+	quickClient := resilience.NewResilientClient(baseClient,
+		resilience.WithMaxRetries(2),             // Shorthand for MaxAttempts=3
+		resilience.WithRetryDelay(1*time.Second), // Shorthand for InitialDelay
 	)
 
 	resp, err = quickClient.Call(ctx, "Quick response please.")

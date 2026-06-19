@@ -8,7 +8,7 @@
 // Retries are OFF by default: a client created with NewClient does not retry.
 // Retry behavior is opt-in via WithRetryPolicy. This keeps the HTTP layer from
 // silently multiplying upstream calls when a resilience wrapper
-// (llms.NewResilientClient) is layered on top — that wrapper is the single retry
+// (resilience.NewResilientClient) is layered on top — that wrapper is the single retry
 // authority. When WithRetryPolicy is set, transient failures (429, 5xx) are
 // retried with exponential backoff. Streaming requests are never retried to
 // avoid duplicate content.
@@ -61,7 +61,7 @@ type ClientOption func(*Client)
 // the LLM_HTTP_TIMEOUT environment variable (e.g., "10m", "300s").
 //
 // Retries are disabled by default (NoRetryPolicy). Callers that want retries
-// should either wrap the provider with llms.NewResilientClient (the recommended
+// should either wrap the provider with resilience.NewResilientClient (the recommended
 // single retry authority) or opt in at the HTTP layer with WithRetryPolicy.
 func NewClient(opts ...ClientOption) *Client {
 	// Default timeout, can be overridden by LLM_HTTP_TIMEOUT env var
@@ -225,7 +225,7 @@ func WithTimeout(timeout time.Duration) ClientOption {
 // WithRetryPolicy sets a custom retry policy, opting this client into HTTP-layer
 // retries. Retries are off by default (see NewClient); pass DefaultRetryPolicy()
 // to enable standard 429/5xx exponential backoff. Prefer wrapping the provider
-// with llms.NewResilientClient instead, so retries have a single authority.
+// with resilience.NewResilientClient instead, so retries have a single authority.
 func WithRetryPolicy(policy *RetryPolicy) ClientOption {
 	return func(c *Client) {
 		c.retryPolicy = policy

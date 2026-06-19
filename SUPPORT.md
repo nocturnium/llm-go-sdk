@@ -15,30 +15,30 @@ There is no long-term support for previous majors.
 
 | Version | Module path | Status |
 |---------|-------------|--------|
-| **v2.x** | `github.com/nocturnium/llm-go-sdk/v2` | **Supported** — current; all fixes and new work land here |
+| **v3.x** | `github.com/nocturnium/llm-go-sdk/v3` | **Supported** — current; all fixes and new work land here |
+| v2.x | `github.com/nocturnium/llm-go-sdk/v2` | **End of life** as of 2026-06-19 — no further releases, bug fixes, or security backports |
 | v1.x | `github.com/nocturnium/llm-go-sdk` | **End of life** as of 2026-06-15 — no further releases, bug fixes, or security backports |
 
-All bug fixes and security patches land on the current major (**v2.x**) only. If you
+All bug fixes and security patches land on the current major (**v3.x**) only. If you
 need a fix on an older major, upgrade to the current major — we do not backport.
 
 > **Rationale:** the library and all of its consumers are developed in lockstep by
 > a single team. A single supported line keeps development focused and avoids the
-> cost (and the security exposure) of maintaining parallel release branches. v1.x
-> remains *installable* from the module proxy, but it is frozen and unsupported.
+> cost (and the security exposure) of maintaining parallel release branches. Older
+> majors remain *installable* from the module proxy, but they are frozen and unsupported.
 
 ## Upgrading
 
-The current major is **v2**. Install it with:
+The current major is **v3**. Install it with:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v2@latest
+go get github.com/nocturnium/llm-go-sdk/v3@latest
 ```
 
-See **[docs/migration-guide.md](docs/migration-guide.md)** for the full v1 → v2
-guide: the import-path change plus three small breaking API changes (tool handlers
-take a `context.Context`, sampling penalties are `*float64`, and the panic-prone
-`MustParseToolArguments` was removed in favor of the error-returning
-`ParseToolArguments`).
+See **[docs/migration-guide.md](docs/migration-guide.md)** for the full migration
+guides. v2 → v3 is a mechanical import/qualifier update: bump the module path to `/v3`
+and, if you used the observability or resilience middleware, repoint it to the new
+`pkg/observability` and `pkg/middleware/resilience` packages (exported names unchanged).
 
 ## Reporting problems
 

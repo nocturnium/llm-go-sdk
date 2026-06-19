@@ -19,7 +19,7 @@
 //
 // Basic usage with environment variable:
 //
-//	import "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/zai"
+//	import "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/zai"
 //
 //	// Create client (uses ZAI_API_KEY environment variable)
 //	client, err := zai.New()
@@ -92,7 +92,7 @@
 // For advanced configuration, supply a standard library *http.Client (for
 // timeouts, proxies, or a custom transport) and use a convenience option for
 // the timeout. For retries and circuit breaking, wrap the client with
-// llms.NewResilientClient.
+// resilience.NewResilientClient.
 //
 //	client, err := zai.New(
 //	    zai.WithAPIKey("your-api-key"),

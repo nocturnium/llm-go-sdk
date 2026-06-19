@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
 // mockTransport implements transport with a queue of canned results per method,

@@ -105,8 +105,8 @@ import (
 	"net/http"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
 )
 
 const (
@@ -272,11 +272,12 @@ fmt.Println(c.Provider(), c.Model(), c.Capabilities().Streaming)
 ```
 
 Because `*Client` is an ordinary `llms.LLM`, it composes with the SDK's
-decorators — for example resilience and observability:
+decorators — for example resilience and observability (from
+`pkg/middleware/resilience` and `pkg/observability`):
 
 ```go
-resilient := llms.NewResilientClient(c, llms.WithMaxRetries(3))
-observed := llms.NewOTelMiddleware(resilient)
+resilient := resilience.NewResilientClient(c, resilience.WithMaxRetries(3))
+observed, _ := observability.NewOTelMiddleware(resilient)
 _ = observed // still an llms.LLM
 ```
 

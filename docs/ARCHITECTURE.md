@@ -11,7 +11,7 @@ It is written for SDK consumers and contributors. For the step-by-step recipe to
 add a provider (including coding standards and required tests), see
 [`AGENTS.md`](https://github.com/nocturnium/llm-go-sdk/blob/main/AGENTS.md).
 
-- Module path: `github.com/nocturnium/llm-go-sdk/v2`
+- Module path: `github.com/nocturnium/llm-go-sdk/v3`
 - License: Apache-2.0 (see `LICENSE` and `NOTICE`)
 - No external LLM SDK dependencies; the only notable third-party packages are
   `urfave/cli/v2` (for the CLI), `go.opentelemetry.io/otel` (for tracing and
@@ -179,13 +179,18 @@ The SDK has a small, flat public surface. The guiding rule:
 
 The public surface is exactly:
 
-- **Root (`llms "github.com/nocturnium/llm-go-sdk/v2"`)** — every shared type and
+- **Root (`llms "github.com/nocturnium/llm-go-sdk/v3"`)** — every shared type and
   function: the `LLM` interface, `Message`/`Response`/`Tool` and friends, the
   `CallOption` builders, errors and sentinels, streaming, the capability registry,
-  and all middleware. A single import reaches everything (`llms.Message`,
-  `llms.WithTemperature`, `llms.NewResilientClient`, …).
+  and cost tracking. A single import reaches the core (`llms.Message`,
+  `llms.WithTemperature`, `llms.NewCostTracker`, …).
+- **`pkg/middleware/resilience`** — retry, circuit-breaker, rate-limiting, and
+  fallback wrappers (`resilience.NewResilientClient`, `resilience.NewFallbackChain`, …),
+  each a drop-in `llms.LLM`.
+- **`pkg/observability`** — OpenTelemetry, Langfuse, and structured-logging
+  middleware (`observability.NewOTelMiddleware`, `observability.NewLoggingMiddleware`, …).
 - **`pkg/providers/<name>`** — the 18 provider implementations. Import the one you
-  need, e.g. `github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai`.
+  need, e.g. `github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai`.
 - **`pkg/openaicompat`** — the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
 
@@ -366,7 +371,7 @@ The `internal/` tree is not importable by external code; it is the engine room.
   and `DoStream`, and includes an `SSEReader` for streaming. **Retries are off by
   default** (`NoRetryPolicy`): a bare provider makes a single attempt per call.
   This is deliberate — the higher-level `ResilientClient` middleware
-  (`llms.NewResilientClient`) is the single authority for retrying whole `LLM`
+  (`resilience.NewResilientClient`) is the single authority for retrying whole `LLM`
   operations (with backoff) and adds the circuit breaker, so retry behavior lives
   in one place rather than being silently duplicated at the HTTP layer. Streaming
   requests are never retried (a partially consumed stream cannot be safely

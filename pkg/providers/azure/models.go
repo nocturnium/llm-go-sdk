@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v3"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
 )
 
 // ListModels retrieves available deployments from Azure OpenAI.
