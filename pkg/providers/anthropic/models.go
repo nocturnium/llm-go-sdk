@@ -22,9 +22,102 @@ func titleCase(s string) string {
 }
 
 // Known Anthropic model metadata that isn't available from the API.
-// Pricing is per million tokens (as of late 2024).
+// Pricing is per million tokens (USD), verified against the official Anthropic
+// models overview and pricing pages (June 2026).
 var knownModels = map[string]modelMetadata{
-	// Claude 3.5 Sonnet
+	// Claude Opus 4.8 (current most capable Opus-tier model)
+	"claude-opus-4-8": {
+		displayName:   "Claude Opus 4.8",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+	},
+	// Claude Opus 4.7
+	"claude-opus-4-7": {
+		displayName:   "Claude Opus 4.7",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+	},
+	// Claude Opus 4.6
+	"claude-opus-4-6": {
+		displayName:   "Claude Opus 4.6",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+	},
+	// Claude Opus 4.5
+	"claude-opus-4-5": {
+		displayName:   "Claude Opus 4.5",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+	},
+	"claude-opus-4-5-20251101": {
+		displayName:   "Claude Opus 4.5 (2025-11-01)",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+	},
+	// Claude Opus 4.1 (deprecated, retires 2026-08-05)
+	"claude-opus-4-1": {
+		displayName:   "Claude Opus 4.1",
+		contextLength: 200000,
+		maxOutput:     32000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+	},
+	"claude-opus-4-1-20250805": {
+		displayName:   "Claude Opus 4.1 (2025-08-05)",
+		contextLength: 200000,
+		maxOutput:     32000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+	},
+	// Claude Sonnet 4.6 (best speed/intelligence balance)
+	"claude-sonnet-4-6": {
+		displayName:   "Claude Sonnet 4.6",
+		contextLength: 1000000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+	},
+	// Claude Sonnet 4.5
+	"claude-sonnet-4-5": {
+		displayName:   "Claude Sonnet 4.5",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+	},
+	"claude-sonnet-4-5-20250929": {
+		displayName:   "Claude Sonnet 4.5 (2025-09-29)",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+	},
+	// Claude Haiku 4.5 (fastest, near-frontier)
+	"claude-haiku-4-5": {
+		displayName:   "Claude Haiku 4.5",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 1.00, Output: 5.00},
+	},
+	"claude-haiku-4-5-20251001": {
+		displayName:   "Claude Haiku 4.5 (2025-10-01)",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 1.00, Output: 5.00},
+	},
+	// Claude 3.5 Sonnet (retired 2025-10-28; metadata retained for historical lookups)
 	"claude-3-5-sonnet-latest": {
 		displayName:   "Claude 3.5 Sonnet",
 		contextLength: 200000,

@@ -20,20 +20,59 @@ func titleCase(s string) string {
 	return string(runes)
 }
 
-// Known Gemini model metadata that isn't available from the API
-// Pricing is per million tokens (as of late 2024)
+// Known Gemini model metadata that isn't available from the API.
+// Pricing is per million tokens, paid Standard tier, in USD (verified against
+// the official Google AI pricing page, https://ai.google.dev/gemini-api/docs/pricing,
+// as of June 2026). Context windows (input/output token limits) come from the API
+// response in convertGeminiModel; the current Gemini 2.x lineup is 1,048,576 input /
+// 65,536 output. Gemini 2.5 Pro uses tiered pricing keyed on prompt size (the values
+// here are the base <=200k tier; see per-model comments for the >200k tier).
 var knownModels = map[string]modelMetadata{
+	// Gemini 2.5 Pro — context 1,048,576 in / 65,536 out.
+	// Tiered: Input 1.25 (<=200k) / 2.50 (>200k); Output 10.00 (<=200k) / 15.00 (>200k).
+	"gemini-2.5-pro": {
+		displayName: "Gemini 2.5 Pro",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 1.25, Output: 10.00},
+	},
+	// Gemini 2.5 Flash — context 1,048,576 in / 65,536 out. No >200k tier.
+	// (Audio input is priced higher at 1.00; base text/image/video shown here.)
+	"gemini-2.5-flash": {
+		displayName: "Gemini 2.5 Flash",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 0.30, Output: 2.50},
+	},
+	// Gemini 2.5 Flash-Lite — context 1,048,576 in / 65,536 out. No >200k tier.
+	// (Audio input is priced higher at 0.30; base text/image/video shown here.)
+	"gemini-2.5-flash-lite": {
+		displayName: "Gemini 2.5 Flash-Lite",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 0.10, Output: 0.40},
+	},
 	// Gemini 2.0 Flash
+	// Deprecated: shut down June 1, 2026 per the official pricing page; retained
+	// for back-compat. Migrate to gemini-2.5-flash.
 	"gemini-2.0-flash": {
 		displayName: "Gemini 2.0 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     &llms.ModelPricing{Input: 0.10, Output: 0.40},
+	},
+	// Gemini 2.0 Flash-Lite
+	// Deprecated: shut down June 1, 2026 per the official pricing page; retained
+	// for back-compat. Migrate to gemini-2.5-flash-lite.
+	"gemini-2.0-flash-lite": {
+		displayName: "Gemini 2.0 Flash-Lite",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     &llms.ModelPricing{Input: 0.075, Output: 0.30},
 	},
 	"gemini-2.0-flash-exp": {
 		displayName: "Gemini 2.0 Flash (Experimental)",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     &llms.ModelPricing{Input: 0.10, Output: 0.40},
 	},
+	// Gemini 1.5 family — no longer listed on the official Gemini API pricing
+	// page (June 2026). Prices below are the last published rates and are kept
+	// unchanged for back-compat with any account still granted access.
 	// Gemini 1.5 Pro
 	"gemini-1.5-pro": {
 		displayName: "Gemini 1.5 Pro",
@@ -109,6 +148,13 @@ var knownModels = map[string]modelMetadata{
 		pricing:     &llms.ModelPricing{Input: 0.50, Output: 1.50},
 	},
 	// Embedding models
+	// Gemini Embedding 001 — current paid embedding model (0.15 per 1M input
+	// tokens per the official pricing page, June 2026).
+	"gemini-embedding-001": {
+		displayName: "Gemini Embedding 001",
+		types:       []llms.ModelType{llms.ModelTypeEmbedding},
+		pricing:     &llms.ModelPricing{Input: 0.15},
+	},
 	"text-embedding-004": {
 		displayName: "Text Embedding 004",
 		types:       []llms.ModelType{llms.ModelTypeEmbedding},

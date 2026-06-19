@@ -10,8 +10,53 @@ import (
 )
 
 // Known OpenAI model metadata that isn't available from the API.
-// Pricing is per million tokens (as of late 2024).
+// Pricing is per million tokens (verified against the official OpenAI
+// pricing/models docs, June 2026).
 var knownModels = map[string]modelMetadata{
+	// GPT-5 family
+	"gpt-5": {
+		displayName:   "GPT-5",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 1.25, Output: 10.00},
+	},
+	"gpt-5-mini": {
+		displayName:   "GPT-5 Mini",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 0.25, Output: 2.00},
+	},
+	"gpt-5-nano": {
+		displayName:   "GPT-5 Nano",
+		contextLength: 400000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 0.05, Output: 0.40},
+	},
+	// GPT-4.1 family
+	"gpt-4.1": {
+		displayName:   "GPT-4.1",
+		contextLength: 1047576,
+		maxOutput:     32768,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 2.00, Output: 8.00},
+	},
+	"gpt-4.1-mini": {
+		displayName:   "GPT-4.1 Mini",
+		contextLength: 1047576,
+		maxOutput:     32768,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 0.40, Output: 1.60},
+	},
+	"gpt-4.1-nano": {
+		displayName:   "GPT-4.1 Nano",
+		contextLength: 1047576,
+		maxOutput:     32768,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 0.10, Output: 0.40},
+	},
 	// GPT-4o models
 	"gpt-4o": {
 		displayName:   "GPT-4o",
@@ -93,12 +138,33 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat},
 		pricing:       &llms.ModelPricing{Input: 0.50, Output: 1.50},
 	},
-	// o1 reasoning models
+	// o-series reasoning models
+	"o4-mini": {
+		displayName:   "o4-mini",
+		contextLength: 200000,
+		maxOutput:     100000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 1.10, Output: 4.40},
+	},
+	"o3": {
+		displayName:   "o3",
+		contextLength: 200000,
+		maxOutput:     100000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 2.00, Output: 8.00},
+	},
+	"o3-mini": {
+		displayName:   "o3-mini",
+		contextLength: 200000,
+		maxOutput:     100000,
+		types:         []llms.ModelType{llms.ModelTypeChat},
+		pricing:       &llms.ModelPricing{Input: 1.10, Output: 4.40},
+	},
 	"o1": {
 		displayName:   "o1",
 		contextLength: 200000,
 		maxOutput:     100000,
-		types:         []llms.ModelType{llms.ModelTypeChat},
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       &llms.ModelPricing{Input: 15.00, Output: 60.00},
 	},
 	"o1-preview": {

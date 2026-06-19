@@ -7,29 +7,43 @@ import (
 	llms "github.com/nocturnium/llm-go-sdk/v3"
 )
 
-// cachedModels contains metadata for popular models available on Featherless.
-// Featherless provides access to thousands of open-source models via an OpenAI-compatible API.
-// This is a curated list of commonly used models - the actual catalog is much larger.
-// Pricing on Featherless is typically $0.10-0.20 per million tokens for most models.
+// cachedModels is a curated, ILLUSTRATIVE subset of the open-weight models
+// Featherless AI serves via its OpenAI-compatible API. Featherless hosts tens of
+// thousands of Hugging Face models, so this is intentionally a small, representative
+// sample of popular models, NOT the full catalog (use ListModels against the live
+// API for that). Model IDs are the underlying Hugging Face repo IDs.
+//
+// ContextLength here reflects the context window Featherless SERVES the model at
+// (from https://api.featherless.ai/v1/models, the platform's `context_length`),
+// which for most models on the serverless plans is 32768 even when the base model
+// supports more; the newest large models are served at 131072 or 262144. Featherless
+// has no per-model pricing field (plans are flat subscriptions), so none is recorded.
+//
+// Verified June 2026 against https://featherless.ai/models and the Featherless models
+// API. A handful of legacy entries (e.g. Mixtral-8x7B, DeepSeek-V2.5, Command R+) are
+// retained as illustrative even though they are no longer in the live serverless
+// catalog; their context windows are left at the base model's native values.
 var cachedModels = []llms.ModelInfo{
-	// Llama 3.3 Models
+	// Llama 4 family — not served under canonical meta-llama/ IDs on Featherless as of
+	// June 2026, so intentionally omitted rather than guessed. See notes in the PR.
+
+	// Llama 3.x Models (Meta)
 	{
 		ID:            "meta-llama/Llama-3.3-70B-Instruct",
 		DisplayName:   "Llama 3.3 70B Instruct",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Meta",
-		ContextLength: 128000,
+		ContextLength: 32768,
 		MaxOutput:     4096,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// Llama 3.1 Models
 	{
 		ID:            "meta-llama/Llama-3.1-8B-Instruct",
 		DisplayName:   "Llama 3.1 8B Instruct",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Meta",
-		ContextLength: 128000,
+		ContextLength: 32768,
 		MaxOutput:     4096,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
@@ -39,46 +53,25 @@ var cachedModels = []llms.ModelInfo{
 		DisplayName:   "Llama 3.1 70B Instruct",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Meta",
-		ContextLength: 128000,
+		ContextLength: 32768,
 		MaxOutput:     4096,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
 	{
-		ID:            "meta-llama/Llama-3.1-405B-Instruct",
-		DisplayName:   "Llama 3.1 405B Instruct",
+		ID:            "meta-llama/Llama-3.2-3B-Instruct",
+		DisplayName:   "Llama 3.2 3B Instruct",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Meta",
-		ContextLength: 128000,
+		ContextLength: 32768,
 		MaxOutput:     4096,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// Llama 3 Models
+	// Qwen3 family (Alibaba)
 	{
-		ID:            "meta-llama/Meta-Llama-3-8B-Instruct",
-		DisplayName:   "Llama 3 8B Instruct",
-		Provider:      llms.ProviderFeatherless,
-		Organization:  "Meta",
-		ContextLength: 8192,
-		MaxOutput:     4096,
-		Types:         []llms.ModelType{llms.ModelTypeChat},
-		FromCache:     true,
-	},
-	{
-		ID:            "meta-llama/Meta-Llama-3-70B-Instruct",
-		DisplayName:   "Llama 3 70B Instruct",
-		Provider:      llms.ProviderFeatherless,
-		Organization:  "Meta",
-		ContextLength: 8192,
-		MaxOutput:     4096,
-		Types:         []llms.ModelType{llms.ModelTypeChat},
-		FromCache:     true,
-	},
-	// Qwen 2.5 Models
-	{
-		ID:            "Qwen/Qwen2.5-7B-Instruct",
-		DisplayName:   "Qwen 2.5 7B Instruct",
+		ID:            "Qwen/Qwen3-32B",
+		DisplayName:   "Qwen3 32B",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Qwen",
 		ContextLength: 32768,
@@ -87,8 +80,8 @@ var cachedModels = []llms.ModelInfo{
 		FromCache:     true,
 	},
 	{
-		ID:            "Qwen/Qwen2.5-14B-Instruct",
-		DisplayName:   "Qwen 2.5 14B Instruct",
+		ID:            "Qwen/Qwen3-235B-A22B-Thinking-2507",
+		DisplayName:   "Qwen3 235B A22B Thinking 2507",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Qwen",
 		ContextLength: 32768,
@@ -97,8 +90,8 @@ var cachedModels = []llms.ModelInfo{
 		FromCache:     true,
 	},
 	{
-		ID:            "Qwen/Qwen2.5-32B-Instruct",
-		DisplayName:   "Qwen 2.5 32B Instruct",
+		ID:            "Qwen/Qwen3-Next-80B-A3B-Instruct",
+		DisplayName:   "Qwen3 Next 80B A3B Instruct",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Qwen",
 		ContextLength: 32768,
@@ -106,6 +99,28 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
+	// Qwen3 Coder models
+	{
+		ID:            "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+		DisplayName:   "Qwen3 Coder 30B A3B Instruct",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Qwen",
+		ContextLength: 32768,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeCode},
+		FromCache:     true,
+	},
+	{
+		ID:            "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+		DisplayName:   "Qwen3 Coder 480B A35B Instruct",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Qwen",
+		ContextLength: 32768,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeCode},
+		FromCache:     true,
+	},
+	// Qwen 2.5 Models (still widely served)
 	{
 		ID:            "Qwen/Qwen2.5-72B-Instruct",
 		DisplayName:   "Qwen 2.5 72B Instruct",
@@ -137,10 +152,41 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeCode},
 		FromCache:     true,
 	},
-	// Mistral Models
+	// DeepSeek Models
 	{
-		ID:            "mistralai/Mistral-7B-Instruct-v0.3",
-		DisplayName:   "Mistral 7B Instruct v0.3",
+		ID:            "deepseek-ai/DeepSeek-V3.1-Terminus",
+		DisplayName:   "DeepSeek V3.1 Terminus",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "DeepSeek",
+		ContextLength: 131072,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	{
+		ID:            "deepseek-ai/DeepSeek-R1-0528",
+		DisplayName:   "DeepSeek R1 (0528)",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "DeepSeek",
+		ContextLength: 131072,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	{
+		ID:            "deepseek-ai/DeepSeek-V4-Flash",
+		DisplayName:   "DeepSeek V4 Flash",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "DeepSeek",
+		ContextLength: 262144,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	// Mistral AI Models
+	{
+		ID:            "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+		DisplayName:   "Mistral Small 3.2 24B Instruct (2506)",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "Mistral AI",
 		ContextLength: 32768,
@@ -148,6 +194,38 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
+	{
+		ID:            "mistralai/Mistral-Nemo-Instruct-2407",
+		DisplayName:   "Mistral Nemo Instruct (2407)",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Mistral AI",
+		ContextLength: 32768,
+		MaxOutput:     4096,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	{
+		ID:            "mistralai/Devstral-Small-2507",
+		DisplayName:   "Devstral Small (2507)",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Mistral AI",
+		ContextLength: 32768,
+		MaxOutput:     4096,
+		Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeCode},
+		FromCache:     true,
+	},
+	{
+		ID:            "mistralai/Magistral-Small-2509",
+		DisplayName:   "Magistral Small (2509)",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Mistral AI",
+		ContextLength: 32768,
+		MaxOutput:     4096,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	// Legacy Mistral entry — retained as illustrative; no longer in the live serverless
+	// catalog under this exact ID. Context window left at the model's native 32K.
 	{
 		ID:            "mistralai/Mixtral-8x7B-Instruct-v0.1",
 		DisplayName:   "Mixtral 8x7B Instruct v0.1",
@@ -158,17 +236,61 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
+	// OpenAI gpt-oss (open-weight) Models
 	{
-		ID:            "mistralai/Mixtral-8x22B-Instruct-v0.1",
-		DisplayName:   "Mixtral 8x22B Instruct v0.1",
+		ID:            "openai/gpt-oss-120b",
+		DisplayName:   "gpt-oss 120B",
 		Provider:      llms.ProviderFeatherless,
-		Organization:  "Mistral AI",
-		ContextLength: 65536,
-		MaxOutput:     4096,
+		Organization:  "OpenAI",
+		ContextLength: 131072,
+		MaxOutput:     8192,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// DeepSeek Models
+	{
+		ID:            "openai/gpt-oss-20b",
+		DisplayName:   "gpt-oss 20B",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "OpenAI",
+		ContextLength: 131072,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	// Z.ai GLM Models
+	{
+		ID:            "zai-org/GLM-5.2",
+		DisplayName:   "GLM-5.2",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Z.ai",
+		ContextLength: 262144,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	{
+		ID:            "zai-org/GLM-4.6",
+		DisplayName:   "GLM-4.6",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Z.ai",
+		ContextLength: 202752,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	// Moonshot AI Kimi
+	{
+		ID:            "moonshotai/Kimi-K2-Instruct",
+		DisplayName:   "Kimi K2 Instruct",
+		Provider:      llms.ProviderFeatherless,
+		Organization:  "Moonshot AI",
+		ContextLength: 32768,
+		MaxOutput:     8192,
+		Types:         []llms.ModelType{llms.ModelTypeChat},
+		FromCache:     true,
+	},
+	// DeepSeek legacy entry — retained as illustrative; no longer in the live serverless
+	// catalog under this exact ID. Context window left at the model's native 32K.
 	{
 		ID:            "deepseek-ai/DeepSeek-V2.5",
 		DisplayName:   "DeepSeek V2.5",
@@ -179,6 +301,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
+	// DeepSeek legacy coder entry — retained as illustrative.
 	{
 		ID:            "deepseek-ai/DeepSeek-Coder-V2-Instruct",
 		DisplayName:   "DeepSeek Coder V2 Instruct",
@@ -189,18 +312,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeCode},
 		FromCache:     true,
 	},
-	// Yi Models
-	{
-		ID:            "01-ai/Yi-1.5-34B-Chat",
-		DisplayName:   "Yi 1.5 34B Chat",
-		Provider:      llms.ProviderFeatherless,
-		Organization:  "01.AI",
-		ContextLength: 4096,
-		MaxOutput:     2048,
-		Types:         []llms.ModelType{llms.ModelTypeChat},
-		FromCache:     true,
-	},
-	// Phi Models
+	// Phi legacy entry — retained as illustrative; context left at the model's native 128K.
 	{
 		ID:            "microsoft/Phi-3-medium-128k-instruct",
 		DisplayName:   "Phi 3 Medium 128K Instruct",
@@ -211,17 +323,18 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
+	// Gemma Models (Google)
 	{
-		ID:            "microsoft/Phi-3.5-mini-instruct",
-		DisplayName:   "Phi 3.5 Mini Instruct",
+		ID:            "google/gemma-3-27b-it",
+		DisplayName:   "Gemma 3 27B Instruct",
 		Provider:      llms.ProviderFeatherless,
-		Organization:  "Microsoft",
-		ContextLength: 128000,
+		Organization:  "Google",
+		ContextLength: 32768,
 		MaxOutput:     4096,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// Gemma Models
+	// Gemma 2 legacy entry — retained as illustrative; context left at the model's native 8K.
 	{
 		ID:            "google/gemma-2-9b-it",
 		DisplayName:   "Gemma 2 9B Instruct",
@@ -232,17 +345,8 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	{
-		ID:            "google/gemma-2-27b-it",
-		DisplayName:   "Gemma 2 27B Instruct",
-		Provider:      llms.ProviderFeatherless,
-		Organization:  "Google",
-		ContextLength: 8192,
-		MaxOutput:     4096,
-		Types:         []llms.ModelType{llms.ModelTypeChat},
-		FromCache:     true,
-	},
-	// Command R Models
+	// Command R+ legacy entry — retained as illustrative; no longer in the live
+	// serverless catalog under this exact ID. Context left at the model's native 128K.
 	{
 		ID:            "CohereForAI/c4ai-command-r-plus",
 		DisplayName:   "Command R+",
@@ -259,7 +363,7 @@ var cachedModels = []llms.ModelInfo{
 		DisplayName:   "Llama 3.1 Nemotron 70B Instruct",
 		Provider:      llms.ProviderFeatherless,
 		Organization:  "NVIDIA",
-		ContextLength: 128000,
+		ContextLength: 32768,
 		MaxOutput:     4096,
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
