@@ -104,6 +104,53 @@ func TestSlogLogger_LogError(t *testing.T) {
 	}
 }
 
+// TestSlogLogger_LogError_SanitizesCRLF asserts the logged error string is
+// CR/LF-escaped (CWE-117). A provider/upstream error can echo user-controlled
+// input; decoded from the slog JSON output, the error must contain no raw CR/LF
+// that could forge a log line.
+func TestSlogLogger_LogError_SanitizesCRLF(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewSlogLogger(slog.New(slog.NewJSONHandler(&buf, nil)))
+
+	logger.LogError(context.Background(), &LogEntry{RequestID: "r1"},
+		errors.New("boom\r\nERROR forged=log line"))
+
+	var rec map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatalf("parse slog output: %v\n%s", err, buf.String())
+	}
+	gotErr, _ := rec["error"].(string)
+	if strings.ContainsAny(gotErr, "\r\n") {
+		t.Errorf("error field has raw CR/LF (log-injection): %q", gotErr)
+	}
+	if !strings.Contains(gotErr, `\n`) {
+		t.Errorf("expected CR/LF escaped to a literal sequence, got %q", gotErr)
+	}
+}
+
+// TestJSONLogger_LogError_SanitizesCRLF asserts the same for the JSON logger:
+// after round-tripping through JSON, the decoded error has no raw CR/LF.
+func TestJSONLogger_LogError_SanitizesCRLF(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewJSONLogger(func(b []byte) error { buf.Write(b); return nil })
+
+	logger.LogError(context.Background(), &LogEntry{RequestID: "r1"},
+		errors.New("boom\r\nERROR forged=log line"))
+
+	var result map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("parse JSON: %v", err)
+	}
+	entryData, _ := result["entry"].(map[string]any)
+	gotErr, _ := entryData["error"].(string)
+	if strings.ContainsAny(gotErr, "\r\n") {
+		t.Errorf("error field has raw CR/LF (log-injection): %q", gotErr)
+	}
+	if !strings.Contains(gotErr, `\n`) {
+		t.Errorf("expected CR/LF escaped to a literal sequence, got %q", gotErr)
+	}
+}
+
 func TestSlogLogger_WithRedaction(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewJSONHandler(&buf, nil)

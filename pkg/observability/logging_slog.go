@@ -147,7 +147,10 @@ func (l *SlogLogger) buildErrorAttrs(entry *LogEntry, err error) []slog.Attr {
 		slog.String("model", entry.Model),
 		slog.String("operation", entry.Operation),
 		slog.Duration("duration", entry.Duration),
-		slog.String("error", err.Error()),
+		// Sanitize CR/LF in the error: an upstream/provider error can echo
+		// user-controlled input, so escape it like other user-influenced values
+		// to prevent forged log lines (CWE-117).
+		slog.String("error", sanitizeLogValue(err.Error())),
 	}
 
 	// Add structured error information
