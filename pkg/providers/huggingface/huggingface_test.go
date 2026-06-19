@@ -105,8 +105,10 @@ func TestNew_ResolvesTokenFromEnv(t *testing.T) {
 func TestCapabilities(t *testing.T) {
 	c, _ := New(WithEndpoint("https://x"), WithAPIKey("k"))
 	caps := c.Capabilities()
-	if !caps.Embeddings || caps.Streaming || caps.Tools {
-		t.Errorf("capabilities = %+v, want embeddings-only", caps)
+	// A HuggingFace Inference Endpoint serves either chat (TGI) or embeddings (TEI),
+	// so the provider advertises both surfaces.
+	if !caps.Embeddings || !caps.Streaming || !caps.Tools {
+		t.Errorf("capabilities = %+v, want chat + embeddings", caps)
 	}
 	if c.Provider() != llms.ProviderHuggingFace {
 		t.Errorf("provider = %q", c.Provider())
@@ -138,5 +140,67 @@ func TestEmbed_ErrorWrapped(t *testing.T) {
 	_, err := client.Embed(context.Background(), []string{"x"})
 	if err == nil || !strings.Contains(err.Error(), "huggingface") {
 		t.Fatalf("err = %v, want a huggingface-wrapped error", err)
+	}
+}
+
+// TestGenerateContent_Chat verifies the TGI chat path: GenerateContent posts to
+// the endpoint's OpenAI-compatible /v1/chat/completions route with the WithModel
+// value and the bearer token, and parses the reply.
+func TestGenerateContent_Chat(t *testing.T) {
+	var gotPath, gotAuth, gotModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		gotModel, _ = req["model"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":     "chatcmpl-1",
+			"object": "chat.completion",
+			"model":  "tgi",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "hello from TGI"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+		})
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithEndpoint(server.URL),
+		WithAPIKey("hf_test"),
+		WithModel("meta-llama/Llama-3.1-8B-Instruct"),
+		WithAllowPrivateIPs(true), WithAllowHTTP(true),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.GenerateContent(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "hi"},
+	})
+	if err != nil {
+		t.Fatalf("GenerateContent: %v", err)
+	}
+	if gotPath != "/v1/chat/completions" {
+		t.Errorf("path = %s, want /v1/chat/completions", gotPath)
+	}
+	if gotAuth != "Bearer hf_test" {
+		t.Errorf("auth = %q, want Bearer hf_test", gotAuth)
+	}
+	if gotModel != "meta-llama/Llama-3.1-8B-Instruct" {
+		t.Errorf("model = %q, want the WithModel value", gotModel)
+	}
+	if resp.Content != "hello from TGI" {
+		t.Errorf("content = %q", resp.Content)
+	}
+	if resp.Usage.TotalTokens != 7 {
+		t.Errorf("usage total = %d, want 7", resp.Usage.TotalTokens)
+	}
+	if resp.FinishReason != llms.FinishReasonStop {
+		t.Errorf("finishReason = %q, want stop", resp.FinishReason)
 	}
 }
