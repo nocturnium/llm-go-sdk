@@ -1,33 +1,104 @@
-# llm-go-sdk
+---
+hide:
+  - navigation
+---
 
-> One Go interface for every LLM provider — streaming, tool calling, vision, embeddings, and built-in resilience over the standard `net/http`.
+<div class="noct-hero" markdown>
+<span class="noct-hero__eyebrow">github.com/nocturnium/llm-go-sdk/v3</span>
 
-`llm-go-sdk` is a unified, dependency-light Go SDK for **18 LLM providers**. A single
-`LLM` interface works everywhere: switch from OpenAI to Anthropic to a local Ollama
-server by changing one import and one constructor — streaming, tools, retries, fallback,
-cost tracking, and tracing all stay the same.
+# One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
+
+<p class="noct-hero__tagline" markdown>
+Streaming, tool calling, vision, embeddings, and built-in resilience — across **18 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
+</p>
+
+<div class="noct-hero__cta" markdown>
+[Get started](getting-started.md){ .md-button .md-button--primary }
+[60-second quickstart ↓](#60-second-quickstart){ .md-button }
+[GitHub](https://github.com/nocturnium/llm-go-sdk){ .md-button }
+</div>
+</div>
 
 !!! info "At a glance"
-    - **Module:** `github.com/nocturnium/llm-go-sdk/v3`
-    - **Import alias:** `llms "github.com/nocturnium/llm-go-sdk/v3"`
-    - **Version:** v2.0.0 · **License:** Apache-2.0 · **Go:** 1.25+
-
----
+    **Module** `github.com/nocturnium/llm-go-sdk/v3` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v3"` · **Version** v3.0.0 · **License** Apache-2.0 · **Go** 1.25+
 
 ## Why this SDK
 
-- **Unified interface** — one `LLM` interface (`GenerateContent`, `Stream`, `Provider`, `Model`) across all providers.
-- **Native HTTP, zero LLM dependencies** — built directly on `net/http`; no vendor SDKs pulled in.
-- **Streaming** — real-time token streaming over Go channels.
-- **Tool / function calling** — a consistent tool-calling API, plus an automatic `RunTools` agent loop with typed tool choice.
-- **Structured outputs** — typed JSON via JSON Schema with the generic `GenerateTyped[T]` and `WithJSONSchema`.
-- **Vision** — multi-modal image input (PNG, JPEG, GIF, WebP) via simple message helpers.
-- **Embeddings & reranking** — first-class embeddings (`[]float32`) for semantic search and RAG, plus reranking via the Infinity provider.
-- **Resilience (opt-in)** — circuit breaker, retries with backoff, rate limiting, and fallback chains as composable wrappers.
-- **Observability & cost** — OpenTelemetry and Langfuse middleware, per-call tracing, and a built-in cost tracker.
-- **Security by default** — SSRF protection blocks private/loopback/link-local/cloud-metadata targets and re-validates redirects.
+<div class="grid cards" markdown>
 
----
+-   :material-vector-link:{ .lg .middle } __Unified interface__
+
+    ---
+
+    One `LLM` interface — `GenerateContent`, `Stream`, `Provider`, `Model` — works identically across every provider.
+
+-   :material-language-go:{ .lg .middle } __Native HTTP, zero LLM deps__
+
+    ---
+
+    Built directly on `net/http`. No vendor SDKs are pulled into your build.
+
+-   :material-lightning-bolt:{ .lg .middle } __Streaming__
+
+    ---
+
+    Real-time token streaming over Go channels, with the terminal error surfaced explicitly.
+
+-   :material-tools:{ .lg .middle } __Tools & agents__
+
+    ---
+
+    A consistent tool-calling API plus an automatic `RunTools` agent loop with typed tool choice.
+
+-   :material-code-json:{ .lg .middle } __Structured outputs__
+
+    ---
+
+    Typed JSON via JSON Schema with the generic `GenerateTyped[T]` and `WithJSONSchema`.
+
+-   :material-image-multiple:{ .lg .middle } __Vision__
+
+    ---
+
+    Multi-modal image input (PNG, JPEG, GIF, WebP) through simple message helpers.
+
+-   :material-vector-triangle:{ .lg .middle } __Embeddings & reranking__
+
+    ---
+
+    First-class embeddings (`[]float32`) for semantic search and RAG, plus reranking.
+
+-   :material-shield-refresh:{ .lg .middle } __Resilience (opt-in)__
+
+    ---
+
+    Circuit breaker, retries with backoff, rate limiting, and fallback chains as composable wrappers.
+
+-   :material-chart-line:{ .lg .middle } __Observability & cost__
+
+    ---
+
+    OpenTelemetry and Langfuse middleware, per-call tracing, and a built-in cost tracker.
+
+-   :material-power-plug:{ .lg .middle } __Model Context Protocol__
+
+    ---
+
+    A first-class MCP client — tools, resources, prompts, and progress — that drops into `RunTools`.
+
+-   :material-shield-lock:{ .lg .middle } __Secure by default__
+
+    ---
+
+    SSRF protection blocks private/loopback/link-local/cloud-metadata targets and re-validates redirects.
+
+-   :material-layers-triple:{ .lg .middle } __Composable middleware__
+
+    ---
+
+    Wrap a client with `llms.Chain(base, ...)` — resilience innermost, observability outermost.
+
+</div>
 
 ## Supported providers
 
@@ -41,8 +112,6 @@ cost tracking, and tracing all stay the same.
     Blank-import `github.com/nocturnium/llm-go-sdk/v3/pkg/providers/all` to register every chat
     provider, then build one with `llms.New(name, llms.Config{...})`. Call
     `llms.RegisteredProviders()` for the live list.
-
----
 
 ## 60-second quickstart
 
@@ -110,17 +179,32 @@ fmt.Println(client.Provider(), client.Model())
     or `ollama.New(ollama.WithModel("llama3.1"))` — and everything below the constructor
     is unchanged.
 
----
-
 ## Where to next
 
-- **[Getting Started](getting-started.md)** — installation, environment variables, and your first project.
-- **[Providers](providers.md)** — per-provider setup, models, and configuration for all 18.
-- **Guides** — deeper how-tos:
-    - [Streaming](guides/streaming.md) — token streaming over channels.
-    - [Tool calling & agents](guides/tools.md) — function calling and the `RunTools` loop.
-    - [Structured outputs](guides/structured-outputs.md) — `GenerateTyped[T]` and JSON Schema.
-    - [Vision](guides/vision.md) — multi-modal image input.
-    - [Embeddings & reranking](guides/embeddings.md) — semantic search and RAG building blocks.
-    - [Resilience](guides/resilience.md) — retries, circuit breakers, rate limiting, fallback.
-    - [Observability & cost](guides/observability.md) — OpenTelemetry, Langfuse, and cost tracking.
+<div class="grid cards" markdown>
+
+-   :material-rocket-launch:{ .lg .middle } __[Getting Started](getting-started.md)__
+
+    ---
+
+    Installation, environment variables, and your first project.
+
+-   :material-server-network:{ .lg .middle } __[Providers](providers.md)__
+
+    ---
+
+    Per-provider setup, models, and configuration for all 18.
+
+-   :material-tools:{ .lg .middle } __[Tool calling & agents](guides/tools.md)__
+
+    ---
+
+    Function calling and the `RunTools` loop.
+
+-   :material-shield-refresh:{ .lg .middle } __[Resilience](guides/resilience.md)__
+
+    ---
+
+    Retries, circuit breakers, rate limiting, and fallback.
+
+</div>
