@@ -25,6 +25,15 @@ func titleCase(s string) string {
 // Pricing is per million tokens (USD), verified against the official Anthropic
 // models overview and pricing pages (June 2026).
 var knownModels = map[string]modelMetadata{
+	// Claude Fable 5 (current flagship; includes the full 1M-token context window
+	// at standard pricing per the official long-context note).
+	"claude-fable-5": {
+		displayName:   "Claude Fable 5",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       &llms.ModelPricing{Input: 10.00, Output: 50.00},
+	},
 	// Claude Opus 4.8 (current most capable Opus-tier model)
 	"claude-opus-4-8": {
 		displayName:   "Claude Opus 4.8",

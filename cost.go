@@ -85,6 +85,17 @@ var DefaultPricing = map[string]Pricing{
 	"openai:gpt-4.1":                {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
 	"openai:gpt-4.1-mini":           {PromptPerMillion: 0.40, CompletionPerMillion: 1.60, CacheReadPerMillion: 0.10},
 	"openai:gpt-4.1-nano":           {PromptPerMillion: 0.10, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.025},
+	// GPT-5 family (cached input ≈0.1× prompt). 5.4/5.5 are the current flagships
+	// (developers.openai.com pricing, June 2026); pro variants priced per the page.
+	"openai:gpt-5":        {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.125},
+	"openai:gpt-5-mini":   {PromptPerMillion: 0.25, CompletionPerMillion: 2.00, CacheReadPerMillion: 0.025},
+	"openai:gpt-5-nano":   {PromptPerMillion: 0.05, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.005},
+	"openai:gpt-5.4":      {PromptPerMillion: 2.50, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.25},
+	"openai:gpt-5.4-mini": {PromptPerMillion: 0.75, CompletionPerMillion: 4.50, CacheReadPerMillion: 0.075},
+	"openai:gpt-5.4-nano": {PromptPerMillion: 0.20, CompletionPerMillion: 1.25, CacheReadPerMillion: 0.02},
+	"openai:gpt-5.4-pro":  {PromptPerMillion: 30.00, CompletionPerMillion: 180.00},
+	"openai:gpt-5.5":      {PromptPerMillion: 5.00, CompletionPerMillion: 30.00, CacheReadPerMillion: 0.50},
+	"openai:gpt-5.5-pro":  {PromptPerMillion: 30.00, CompletionPerMillion: 180.00},
 
 	// OpenAI Embeddings
 	"openai:text-embedding-3-small": {PromptPerMillion: 0.02},
@@ -104,19 +115,41 @@ var DefaultPricing = map[string]Pricing{
 	"anthropic:claude-3-opus-20240229":     {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
 	"anthropic:claude-3-sonnet-20240229":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-3-haiku-20240307":    {PromptPerMillion: 0.25, CompletionPerMillion: 1.25, CacheReadPerMillion: 0.03, CacheWritePerMillion: 0.30},
+	// Current Claude lineup (claude.com pricing, June 2026): Opus 4.5+ at $5/$25,
+	// Sonnet 4.x at $3/$15, Haiku 4.5 at $1/$5, Fable 5 at $10/$50; cache read ≈0.1×,
+	// 5m cache write ≈1.25×. Opus 4.1 retains the older $15/$75. Both alias and dated
+	// model ids are covered.
+	"anthropic:claude-fable-5":             {PromptPerMillion: 10.00, CompletionPerMillion: 50.00, CacheReadPerMillion: 1.00, CacheWritePerMillion: 12.50},
+	"anthropic:claude-opus-4-8":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
+	"anthropic:claude-opus-4-7":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
+	"anthropic:claude-opus-4-6":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
+	"anthropic:claude-opus-4-5":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
+	"anthropic:claude-opus-4-5-20251101":   {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
+	"anthropic:claude-opus-4-1":            {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
+	"anthropic:claude-sonnet-4-6":          {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-sonnet-4-5":          {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-sonnet-4-5-20250929": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-haiku-4-5":           {PromptPerMillion: 1.00, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.10, CacheWritePerMillion: 1.25},
+	"anthropic:claude-haiku-4-5-20251001":  {PromptPerMillion: 1.00, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.10, CacheWritePerMillion: 1.25},
 
 	// Google Gemini (cached content billed at ~0.25× prompt). 2.5 Pro uses tiered
 	// pricing (≤200K context shown here).
-	"gemini:gemini-2.5-pro":        {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-2.5-flash":      {PromptPerMillion: 0.30, CompletionPerMillion: 2.50, CacheReadPerMillion: 0.075},
-	"gemini:gemini-2.5-flash-lite": {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
-	"gemini:gemini-2.0-flash-exp":  {}, // Free during preview
-	"gemini:gemini-2.0-flash":      {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash":      {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash-8b":   {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
-	"gemini:gemini-1.5-pro":        {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.0-pro":        {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:text-embedding-004":    {}, // Free
+	// Gemini 3.x — current family (ai.google.dev pricing, June 2026; cache ≈0.25×).
+	// 3.1 Pro is tiered (≤200K shown). 2.0 models were shut down June 2026.
+	"gemini:gemini-3.5-flash":       {PromptPerMillion: 1.50, CompletionPerMillion: 9.00, CacheReadPerMillion: 0.375},
+	"gemini:gemini-3.1-pro-preview": {PromptPerMillion: 2.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 0.50},
+	"gemini:gemini-3.1-flash-lite":  {PromptPerMillion: 0.25, CompletionPerMillion: 1.50},
+	"gemini:gemini-3-flash-preview": {PromptPerMillion: 0.50, CompletionPerMillion: 3.00},
+	"gemini:gemini-2.5-pro":         {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-2.5-flash":       {PromptPerMillion: 0.30, CompletionPerMillion: 2.50, CacheReadPerMillion: 0.075},
+	"gemini:gemini-2.5-flash-lite":  {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
+	"gemini:gemini-2.0-flash-exp":   {}, // Free during preview
+	"gemini:gemini-2.0-flash":       {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash":       {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash-8b":    {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
+	"gemini:gemini-1.5-pro":         {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.0-pro":         {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:text-embedding-004":     {}, // Free
 
 	// DeepSeek (cache hits billed at a steep discount).
 	"deepseek:deepseek-chat":     {PromptPerMillion: 0.27, CompletionPerMillion: 1.10, CacheReadPerMillion: 0.07},
@@ -126,7 +159,14 @@ var DefaultPricing = map[string]Pricing{
 	"groq:llama-3.3-70b-versatile":                                {PromptPerMillion: 0.59, CompletionPerMillion: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
 	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {PromptPerMillion: 0.90, CompletionPerMillion: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
 	"perplexity:sonar":                                            {PromptPerMillion: 1.00, CompletionPerMillion: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar) — excludes per-request search fee; verified 2026-06
-	"zai:glm-4.7":                                                 {PromptPerMillion: 0.40, CompletionPerMillion: 1.75}, // Z.AI GLM-4.7 (openrouter.ai/z-ai/glm-4.7, docs.z.ai), verified 2026-06
+	"zai:glm-5.2":                                                 {PromptPerMillion: 1.40, CompletionPerMillion: 4.40}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-06
+	"zai:glm-5.1":                                                 {PromptPerMillion: 1.40, CompletionPerMillion: 4.40}, // docs.z.ai, verified 2026-06
+	"zai:glm-5":                                                   {PromptPerMillion: 1.00, CompletionPerMillion: 3.20}, // docs.z.ai, verified 2026-06
+	"zai:glm-5-turbo":                                             {PromptPerMillion: 1.20, CompletionPerMillion: 4.00}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.7":                                                 {PromptPerMillion: 0.60, CompletionPerMillion: 2.20}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-06
+	"zai:glm-4.6":                                                 {PromptPerMillion: 0.60, CompletionPerMillion: 2.20}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.5":                                                 {PromptPerMillion: 0.60, CompletionPerMillion: 2.20}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.5-air":                                             {PromptPerMillion: 0.20, CompletionPerMillion: 1.10}, // docs.z.ai, verified 2026-06
 	"zai:glm-4.7-Flash":                                           {PromptPerMillion: 0.06, CompletionPerMillion: 0.40}, // Z.AI GLM-4.7-Flash (pricepertoken.com/z-ai/glm-4.7-flash), verified 2026-06
 
 	// TogetherAI (varies by model, these are examples)
