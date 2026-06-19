@@ -40,6 +40,13 @@ jobs:
       - name: Run tests
         run: GOWORK=off go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+      # Compile the integration-tagged tests on every PR (no API keys, runs no
+      # tests). The full integration-test job below only runs on push to main, so
+      # without this a build break under -tags=integration would slip past PR
+      # checks and only fail post-merge.
+      - name: Compile integration tests (keyless)
+        run: GOWORK=off go test -tags=integration -run '^$' ./...
+
       - name: Upload coverage to Codecov
         if: matrix.go-version == '1.25.x'
         uses: codecov/codecov-action@v4
