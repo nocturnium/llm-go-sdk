@@ -1,8 +1,12 @@
 # v3 Package Taxonomy (design — not yet implemented)
 
-> Status: **planning only.** Nothing here ships in v2. This document captures the one
-> structural change worth a future major version, so that when v3 is cut it is a
-> near-mechanical move rather than a redesign. It is the considered output of a
+> Status: **planning + a staged prototype.** Nothing here ships in v2. This document
+> captures the one structural change worth a future major version. The extraction has
+> now been **prototyped on the `reorg/middleware-extraction` branch** (not merged, module
+> path unchanged): resilience → `pkg/middleware/resilience`, observability →
+> `pkg/observability`. Verified payoff there: `go list -deps` OTel count on the bare root
+> dropped **20 → 0**, root shrank 40 → 26 non-test files, 172 middleware symbols moved to
+> the leaf packages, with build/vet/test/lint green. It is the considered output of a
 > CTO / 10x-architect / Go-idioms teardown of the v2 layout.
 
 ## Why a v3 at all
