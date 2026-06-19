@@ -1,0 +1,337 @@
+/*
+ * Nocturnium theme for Material for MkDocs.
+ *
+ * Re-skins Material by overriding its CSS variables with the "Nocturnium" design
+ * tokens from @nocturnium/svelte-ide (deep ocean-night structure + a single warm
+ * ember accent, Inter / JetBrains Mono, aurora syntax palette). Dark-first; a
+ * Nocturnium-flavored light variant rides the [data-md-color-scheme="default"].
+ */
+
+/* ───────────────────────── Nocturnium tokens ───────────────────────── */
+:root {
+  --noct-night:  #0d1421;
+  --noct-deep:   #1a2744;
+  --noct-ocean:  #2d5a7b;
+  --noct-wave:   #4a8db7;
+  --noct-foam:   #a8c5d9;
+  --noct-ember:  #d4793a;
+  --noct-flame:  #e9a456;
+  --noct-moon:   #f4f1e0;
+  --noct-glow:   #fffdf5;
+  --noct-teal:   #5eead4;
+
+  --noct-aurora-blue:   #60a5fa;
+  --noct-aurora-purple: #a78bfa;
+  --noct-aurora-green:  #4ade80;
+  --noct-aurora-yellow: #facc15;
+  --noct-aurora-pink:   #f472b6;
+  --noct-error:         #f87171;
+
+  /* Brand accent shared by both schemes (the ember signature). */
+  --md-primary-fg-color:        var(--noct-deep);
+  --md-primary-fg-color--light: var(--noct-ocean);
+  --md-primary-fg-color--dark:  var(--noct-night);
+  --md-primary-bg-color:        var(--noct-moon);
+  --md-primary-bg-color--light: var(--noct-foam);
+  --md-accent-fg-color:         var(--noct-flame);
+  --md-accent-fg-color--transparent: rgba(233, 164, 86, 0.1);
+
+  --md-default-font: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --md-code-font: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, monospace;
+}
+
+/* ───────────────────────── Dark scheme (default) ───────────────────────── */
+[data-md-color-scheme="slate"] {
+  --md-hue: 222;
+
+  --md-default-bg-color:           var(--noct-night);
+  --md-default-bg-color--light:    color-mix(in srgb, var(--noct-night) 92%, white 8%);
+  --md-default-bg-color--lighter:  color-mix(in srgb, var(--noct-night) 85%, white 15%);
+  --md-default-fg-color:           var(--noct-moon);
+  --md-default-fg-color--light:    var(--noct-foam);
+  --md-default-fg-color--lighter:  color-mix(in srgb, var(--noct-foam) 60%, transparent);
+  --md-default-fg-color--lightest: color-mix(in srgb, var(--noct-foam) 24%, transparent);
+
+  --md-typeset-color:    var(--noct-moon);
+  --md-typeset-a-color:  var(--noct-wave);
+  --md-typeset-mark-color: rgba(233, 164, 86, 0.28);
+  --md-typeset-kbd-color: var(--noct-deep);
+  --md-typeset-kbd-accent-color: var(--noct-ocean);
+  --md-typeset-kbd-border-color: var(--noct-ocean);
+
+  /* Code */
+  --md-code-fg-color: var(--noct-foam);
+  --md-code-bg-color: color-mix(in srgb, var(--noct-deep) 80%, var(--noct-night) 20%);
+  --md-code-hl-color: rgba(233, 164, 86, 0.16);
+  --md-code-hl-comment-color:     #7d93a8; /* solid, ~4.6:1 on the deep code bg (AA) */
+  --md-code-hl-keyword-color:     var(--noct-aurora-purple);
+  --md-code-hl-string-color:      var(--noct-aurora-green);
+  --md-code-hl-number-color:      var(--noct-aurora-yellow);
+  --md-code-hl-constant-color:    var(--noct-aurora-yellow);
+  --md-code-hl-special-color:     var(--noct-aurora-pink);
+  --md-code-hl-function-color:    var(--noct-aurora-blue);
+  --md-code-hl-name-color:        var(--noct-moon);
+  --md-code-hl-operator-color:    var(--noct-foam);
+  --md-code-hl-punctuation-color: var(--noct-foam);
+  --md-code-hl-variable-color:    var(--noct-foam);
+  --md-code-hl-generic-color:     var(--noct-foam);
+
+  /* Admonition / footer / tables */
+  --md-footer-bg-color:        color-mix(in srgb, var(--noct-night) 80%, black 20%);
+  --md-footer-bg-color--dark:  var(--noct-night);
+  --md-footer-fg-color:        var(--noct-foam);
+
+  color-scheme: dark;
+}
+
+/* ───────────────────────── Light scheme (Nocturnium daybreak) ───────────────────────── */
+[data-md-color-scheme="default"] {
+  --md-default-bg-color:           var(--noct-glow);
+  --md-default-bg-color--light:    color-mix(in srgb, var(--noct-glow) 96%, var(--noct-ocean) 4%);
+  --md-default-fg-color:           var(--noct-night);
+  --md-default-fg-color--light:    var(--noct-deep);
+  --md-default-fg-color--lighter:  color-mix(in srgb, var(--noct-ocean) 70%, transparent);
+  --md-default-fg-color--lightest: color-mix(in srgb, var(--noct-ocean) 30%, transparent);
+
+  --md-typeset-color:    var(--noct-night);
+  --md-typeset-a-color:  var(--noct-ocean);
+  --md-typeset-mark-color: rgba(212, 121, 58, 0.22);
+
+  --md-code-fg-color: color-mix(in srgb, var(--noct-night) 92%, transparent);
+  --md-code-bg-color: color-mix(in srgb, var(--noct-foam) 22%, var(--noct-glow) 78%);
+  --md-code-hl-color: rgba(212, 121, 58, 0.14);
+  --md-code-hl-comment-color:     #5b6b7a; /* solid, ~4.7:1 on the light code bg (AA) */
+  --md-code-hl-keyword-color:     #7c3aed;
+  --md-code-hl-string-color:      #15803d;
+  --md-code-hl-number-color:      #9a3412;
+  --md-code-hl-constant-color:    #9a3412;
+  --md-code-hl-special-color:     #be185d;
+  --md-code-hl-function-color:    #1d4ed8;
+  --md-code-hl-name-color:        var(--noct-night);
+  --md-code-hl-operator-color:    var(--noct-deep);
+  --md-code-hl-punctuation-color: var(--noct-deep);
+  --md-code-hl-variable-color:    var(--noct-deep);
+
+  --md-footer-bg-color:        var(--noct-deep);
+  --md-footer-bg-color--dark:  var(--noct-night);
+  --md-footer-fg-color:        var(--noct-foam);
+
+  color-scheme: light;
+}
+
+/* ───────────────────────── Header (dark + ember underline, both schemes) ───────────────────────── */
+.md-header {
+  background: linear-gradient(100deg, var(--noct-night) 0%, var(--noct-deep) 55%, var(--noct-ocean) 140%);
+  box-shadow: 0 1px 0 rgba(233, 164, 86, 0.35), 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.md-tabs {
+  background: linear-gradient(180deg, rgba(45, 90, 123, 0.16), transparent);
+  border-top: 1px solid rgba(168, 197, 217, 0.12);
+}
+.md-header__title { font-weight: 650; letter-spacing: -0.01em; }
+.md-tabs__link { opacity: 0.78; transition: opacity 120ms ease; }
+.md-tabs__link:hover,
+.md-tabs__link--active { opacity: 1; }
+.md-tabs__item--active .md-tabs__link { color: var(--noct-flame); }
+
+/* Search */
+.md-search__form { border-radius: 0.5rem; background: rgba(168, 197, 217, 0.12); }
+.md-search__form:hover { background: rgba(168, 197, 217, 0.18); }
+
+/* ───────────────────────── Typography ───────────────────────── */
+.md-typeset { line-height: 1.65; }
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 { letter-spacing: -0.02em; font-weight: 700; }
+.md-typeset h1 { color: var(--md-default-fg-color); }
+.md-typeset h2 {
+  margin-top: 2.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-typeset a { transition: color 120ms ease; }
+.md-typeset a:hover { color: var(--noct-flame); }
+
+/* Inline code — authored Nocturnium treatment (not default Material). */
+.md-typeset :not(pre) > code {
+  border-radius: 0.3rem;
+  padding: 0.12em 0.36em;
+}
+[data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
+  background: color-mix(in srgb, var(--noct-ocean) 24%, transparent);
+  color: var(--noct-foam);
+}
+[data-md-color-scheme="default"] .md-typeset :not(pre) > code {
+  background: color-mix(in srgb, var(--noct-foam) 34%, transparent);
+  color: var(--noct-deep);
+}
+/* Code blocks — rounded, bordered, with room for the copy button. */
+.md-typeset pre > code {
+  border-radius: 0.6rem;
+  box-shadow: var(--noct-shadow, 0 4px 14px rgba(0, 0, 0, 0.25));
+  border: 1px solid color-mix(in srgb, var(--noct-ocean) 28%, transparent);
+  padding-right: 2.6rem;
+}
+[data-md-color-scheme="slate"] .md-typeset .highlight > pre > code,
+[data-md-color-scheme="slate"] .highlighttable .code pre > code {
+  background-color: var(--md-code-bg-color);
+}
+
+/* Builtins (Go: panic/recover/make/len, .nb/.bp) read as keyword-family, never
+   the brand ember; ember stays the signature accent, not a syntax token. */
+[data-md-color-scheme="slate"] .highlight :is(.nb, .bp) { color: var(--noct-aurora-purple); }
+[data-md-color-scheme="default"] .highlight :is(.nb, .bp) { color: #7c3aed; }
+/* Type names + Go declared-function call sites (.nx) get the function blue. */
+[data-md-color-scheme="slate"] .highlight .nx { color: var(--noct-foam); }
+[data-md-color-scheme="default"] .highlight .nx { color: var(--noct-night); }
+
+/* ───────────────────────── Admonitions (aurora-tinted) ───────────────────────── */
+.md-typeset .admonition,
+.md-typeset details { border-radius: 0.55rem; border-left-width: 0.25rem; }
+/* In light mode give admonition bodies a faint fill so they read as callouts. */
+[data-md-color-scheme="default"] .md-typeset .admonition,
+[data-md-color-scheme="default"] .md-typeset details {
+  background: color-mix(in srgb, var(--noct-foam) 9%, var(--noct-glow));
+}
+.md-typeset .admonition.note,    .md-typeset details.note    { border-color: var(--noct-aurora-blue); }
+.md-typeset .note > .admonition-title,    .md-typeset .note > summary    { background-color: rgba(96, 165, 250, 0.12); }
+.md-typeset .admonition.tip,     .md-typeset details.tip     { border-color: var(--noct-teal); }
+.md-typeset .tip > .admonition-title,     .md-typeset .tip > summary     { background-color: rgba(94, 234, 212, 0.12); }
+.md-typeset .admonition.info,    .md-typeset details.info    { border-color: var(--noct-aurora-blue); }
+.md-typeset .info > .admonition-title,    .md-typeset .info > summary    { background-color: rgba(96, 165, 250, 0.1); }
+.md-typeset .admonition.success, .md-typeset details.success { border-color: var(--noct-aurora-green); }
+.md-typeset .success > .admonition-title, .md-typeset .success > summary { background-color: rgba(74, 222, 128, 0.12); }
+.md-typeset .admonition.warning, .md-typeset details.warning { border-color: var(--noct-aurora-yellow); }
+.md-typeset .warning > .admonition-title, .md-typeset .warning > summary { background-color: rgba(250, 204, 21, 0.12); }
+.md-typeset .admonition.danger,  .md-typeset details.danger  { border-color: var(--noct-error); }
+.md-typeset .danger > .admonition-title,  .md-typeset .danger > summary  { background-color: rgba(248, 113, 113, 0.12); }
+.md-typeset .admonition.example, .md-typeset details.example { border-color: var(--noct-aurora-purple); }
+.md-typeset .example > .admonition-title, .md-typeset .example > summary { background-color: rgba(167, 139, 250, 0.12); }
+
+/* ───────────────────────── Tables ───────────────────────── */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.md-typeset table:not([class]) th {
+  background: color-mix(in srgb, var(--noct-ocean) 18%, transparent);
+  font-weight: 650;
+}
+
+/* ───────────────────────── Buttons ───────────────────────── */
+.md-typeset .md-button {
+  border-radius: 0.5rem;
+  border-width: 1px;
+  font-weight: 600;
+  transition: transform 120ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.md-typeset .md-button:hover { transform: translateY(-1px); }
+.md-typeset .md-button--primary {
+  background: linear-gradient(135deg, var(--noct-ember) 0%, var(--noct-flame) 100%);
+  border-color: transparent;
+  color: var(--noct-night);
+  box-shadow: 0 6px 18px rgba(212, 121, 58, 0.35);
+}
+.md-typeset .md-button--primary:hover {
+  background: linear-gradient(135deg, var(--noct-flame) 0%, var(--noct-ember) 100%);
+  color: var(--noct-night);
+}
+
+/* ───────────────────────── Hero (landing) ───────────────────────── */
+.noct-hero {
+  position: relative;
+  margin: 0 0 2.5rem;
+  padding: 3.2rem 0 2.6rem;
+  text-align: center;
+  overflow: hidden;
+}
+.noct-hero::before {
+  content: "";
+  position: absolute;
+  inset: -40% 10% auto 10%;
+  height: 360px;
+  background:
+    radial-gradient(46% 62% at 28% 42%, rgba(96, 165, 250, 0.26), transparent 72%),
+    radial-gradient(44% 58% at 74% 36%, rgba(233, 164, 86, 0.30), transparent 72%);
+  filter: blur(34px);
+  z-index: 0;
+  pointer-events: none;
+}
+.noct-hero > * { position: relative; z-index: 1; }
+.noct-hero__eyebrow {
+  display: inline-block;
+  font-family: var(--md-code-font);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--noct-flame);
+  padding: 0.25rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--noct-flame) 40%, transparent);
+  border-radius: 999px;
+  margin-bottom: 1.1rem;
+}
+.md-typeset .noct-hero__title {
+  font-size: 3.1rem;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0.2rem 0 0.6rem;
+}
+.noct-hero__title .accent {
+  background: linear-gradient(120deg, var(--noct-ember), var(--noct-flame));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.md-typeset .noct-hero__tagline {
+  font-size: 1.15rem;
+  max-width: 44rem;
+  margin: 0 auto 1.6rem;
+  color: var(--md-default-fg-color--light);
+}
+.noct-hero__cta { display: flex; gap: 0.7rem; justify-content: center; flex-wrap: wrap; }
+
+/* ───────────────────────── Feature grid cards ───────────────────────── */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > :is(ul, ol) > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--noct-deep) 14%, transparent);
+  transition: transform 140ms ease, box-shadow 180ms ease, border-color 140ms ease;
+}
+[data-md-color-scheme="default"] .md-typeset .grid.cards > :is(ul, ol) > li {
+  background: color-mix(in srgb, var(--noct-foam) 12%, transparent);
+}
+.md-typeset .grid.cards > :is(ul, ol) > li:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--noct-ember) 55%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+.md-typeset .grid.cards > :is(ul, ol) > li > hr { display: none; }
+.md-typeset .grid.cards .twemoji,
+.md-typeset .grid.cards :is(.lg, .xl) {
+  color: var(--noct-flame);
+}
+.md-typeset .grid.cards :is(.lg, .xl) svg,
+.md-typeset .grid.cards .twemoji svg { fill: var(--noct-flame); }
+
+/* ───────────────────────── Nav / TOC active accents ───────────────────────── */
+.md-nav__link--active,
+.md-nav__link:hover { color: var(--noct-flame); }
+.md-typeset .headerlink:hover { color: var(--noct-flame); }
+
+/* ───────────────────────── Selection, scrollbar, focus ───────────────────────── */
+::selection { background: rgba(212, 121, 58, 0.32); }
+[data-md-color-scheme="slate"] { scrollbar-color: var(--noct-ocean) transparent; }
+[data-md-color-scheme="slate"] ::-webkit-scrollbar { width: 12px; height: 12px; }
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb {
+  background: var(--noct-ocean);
+  border-radius: 999px;
+  border: 3px solid var(--noct-night);
+}
+[data-md-color-scheme="slate"] ::-webkit-scrollbar-thumb:hover { background: var(--noct-wave); }
+:focus-visible { outline: 2px solid var(--noct-aurora-blue); outline-offset: 2px; }
+
+/* Hide the auto H1 on the landing (the hero supplies the title). */
+.noct-home .md-typeset > h1:first-of-type { display: none; }
