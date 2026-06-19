@@ -63,7 +63,10 @@ func (l *JSONLogger) LogResponse(_ context.Context, entry *LogEntry) {
 // LogError logs an error as JSON
 func (l *JSONLogger) LogError(_ context.Context, entry *LogEntry, err error) {
 	e := l.prepareEntry(entry, false)
-	e.Error = err.Error()
+	// Sanitize CR/LF: an upstream/provider error can echo user-controlled input,
+	// so escape it like other user-influenced values to prevent forged log lines
+	// (CWE-117).
+	e.Error = sanitizeLogValue(err.Error())
 	l.writeEntry("error", e)
 }
 
