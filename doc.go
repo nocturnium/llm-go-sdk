@@ -134,9 +134,11 @@
 //	| Ollama      | ✓         | ✓     | ✓      | ✓          | ✗         | ✓         | ✓             |
 //	| Azure       | ✓         | ✓     | ✓      | ✓          | ✗         | ✓         | ✓             |
 //	| Infinity    | ✗         | ✗     | ✗      | ✓          | ✓         | ✗         | ✗             |
+//	| HuggingFace | ✗         | ✗     | ✗      | ✓          | ✗         | ✗         | ✗             |
 //
 // Notes:
-//   - Infinity is an embeddings-only service and does not implement the LLM interface
+//   - Infinity and HuggingFace are embeddings-only and do not implement the LLM interface
+//   - HuggingFace targets Inference Endpoints (TEI) via the OpenAI-compatible embeddings route
 //   - Vision support may depend on the specific model being used
 //   - Tool support may vary by model within a provider
 //   - Use SupportsEmbeddings() and AsEmbedder() to check embedding capability at runtime
