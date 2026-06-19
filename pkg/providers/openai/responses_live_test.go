@@ -9,6 +9,7 @@ import (
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
 	"github.com/nocturnium/llm-go-sdk/v3/internal/testutil"
+	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
 )
 
 // These tests exercise the OpenAI Responses API (POST /responses) against the
@@ -144,4 +145,61 @@ func TestLiveResponses_Stateful(t *testing.T) {
 		t.Error("expected non-empty content on threaded turn")
 	}
 	t.Logf("first.id=%s second.content=%q", first.ID, second.Content)
+}
+
+// TestLiveResponses_ReasoningRoundTrip is the Track A.4 smoke test: it exercises
+// the STATELESS encrypted-reasoning round-trip for a reasoning model. Turn 1 asks
+// for encrypted reasoning items (WithReasoningRoundTrip, store disabled); turn 2
+// echoes them back on the assistant message and asks a dependent follow-up. The
+// point is to validate the wire format end to end — the API rejects malformed
+// reasoning items with a 400, so a passing second turn proves the round-trip.
+func TestLiveResponses_ReasoningRoundTrip(t *testing.T) {
+	apiKey := testutil.RequireEnvAPIKey(t, "OPENAI_API_KEY")
+
+	client, err := New(
+		WithAPIKey(apiKey),
+		WithModel("o4-mini"), // a reasoning model
+		WithResponsesAPI(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	const q = "Think step by step: what is 17 * 23? Reply with just the number."
+	first, err := client.GenerateContent(ctx,
+		[]llms.Message{{Role: llms.RoleUser, Content: q}},
+		llms.WithMaxTokens(2000),
+		WithStore(false),
+		WithReasoningRoundTrip(),
+	)
+	if err != nil {
+		t.Fatalf("first turn failed: %v", err)
+	}
+	if first.Reasoning == nil {
+		t.Skipf("model returned no encrypted reasoning items; nothing to round-trip (content=%q)", first.Content)
+	}
+	if _, ok := first.Reasoning.Metadata[openaicompat.MetadataKeyResponsesReasoning]; !ok {
+		t.Skip("no encrypted reasoning items present; skipping round-trip")
+	}
+
+	second, err := client.GenerateContent(ctx,
+		[]llms.Message{
+			{Role: llms.RoleUser, Content: q},
+			{Role: llms.RoleAssistant, Content: first.Content, Reasoning: first.Reasoning},
+			{Role: llms.RoleUser, Content: "Now multiply that result by 2. Reply with just the number."},
+		},
+		llms.WithMaxTokens(2000),
+		WithStore(false),
+		WithReasoningRoundTrip(),
+	)
+	if err != nil {
+		t.Fatalf("second (reasoning round-trip) turn failed: %v", err)
+	}
+	if second.Content == "" {
+		t.Error("expected non-empty content on the round-trip turn")
+	}
+	t.Logf("first=%q second=%q", first.Content, second.Content)
 }

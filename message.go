@@ -19,6 +19,16 @@ type Message struct {
 	// Honored by providers with explicit cache breakpoints (Anthropic); ignored by
 	// providers that cache automatically. See WithCache for call-level caching.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
+
+	// Reasoning carries an assistant turn's reasoning ("thinking") output back into
+	// a follow-up request. Some providers require the prior reasoning to be echoed
+	// to preserve the thinking context across turns without server-side state:
+	// Anthropic extended-thinking blocks (via ReasoningContent.Signature) and the
+	// OpenAI Responses API's encrypted reasoning items (via ReasoningContent.Metadata).
+	// Copy a Response.Reasoning onto the assistant Message you append to the history
+	// to round-trip it. Ignored on non-assistant messages and by providers that do
+	// not need it.
+	Reasoning *ReasoningContent `json:"reasoning,omitempty"`
 }
 
 // Role represents the role of a message sender

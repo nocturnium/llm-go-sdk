@@ -8,6 +8,7 @@ package openaicompat
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
@@ -28,6 +29,9 @@ type ResponsesRequest struct {
 	ToolChoice      any                  `json:"tool_choice,omitempty"`
 	Text            *ResponsesText       `json:"text,omitempty"`
 	Reasoning       *ResponsesReasoning  `json:"reasoning,omitempty"`
+	// Include requests additional output, e.g. "reasoning.encrypted_content" to get
+	// encrypted reasoning items back for stateless multi-turn round-tripping.
+	Include []string `json:"include,omitempty"`
 	// Store and PreviousResponseID drive server-side conversation state. They are
 	// populated from CallOptions.ExtraBody ("store", "previous_response_id"); full
 	// chaining ergonomics are a follow-up (see docs/roadmap.md).
@@ -40,7 +44,7 @@ type ResponsesRequest struct {
 // represents all input item kinds (message, function_call, function_call_output);
 // omitempty keeps the unused fields out of the wire form.
 type ResponsesInputItem struct {
-	Type string `json:"type"` // "message" | "function_call" | "function_call_output"
+	Type string `json:"type"` // "message" | "function_call" | "function_call_output" | "reasoning"
 
 	// message
 	Role    string                 `json:"role,omitempty"`
@@ -51,6 +55,35 @@ type ResponsesInputItem struct {
 	Name      string `json:"name,omitempty"`
 	Arguments string `json:"arguments,omitempty"`
 	Output    string `json:"output,omitempty"`
+
+	// reasoning (an encrypted reasoning item echoed back on a stateless follow-up)
+	ID               string                 `json:"id,omitempty"`
+	EncryptedContent string                 `json:"encrypted_content,omitempty"`
+	Summary          []ResponsesSummaryPart `json:"summary,omitempty"`
+}
+
+// itemTypeReasoning is the Responses item "type" tag for reasoning items.
+const itemTypeReasoning = "reasoning"
+
+// MarshalJSON renders a "reasoning" input item with an always-present "summary"
+// array — the Responses API rejects a replayed reasoning item that omits it, even
+// when empty — and emits only the reasoning fields. Other item kinds keep their
+// omitempty semantics.
+func (i ResponsesInputItem) MarshalJSON() ([]byte, error) {
+	if i.Type == itemTypeReasoning {
+		summary := i.Summary
+		if summary == nil {
+			summary = []ResponsesSummaryPart{}
+		}
+		return json.Marshal(struct {
+			Type             string                 `json:"type"`
+			ID               string                 `json:"id,omitempty"`
+			EncryptedContent string                 `json:"encrypted_content,omitempty"`
+			Summary          []ResponsesSummaryPart `json:"summary"`
+		}{i.Type, i.ID, i.EncryptedContent, summary})
+	}
+	type alias ResponsesInputItem
+	return json.Marshal(alias(i))
 }
 
 // ResponsesContentPart is a typed content part of an input message.
@@ -123,7 +156,8 @@ type ResponsesOutputItem struct {
 	Arguments string `json:"arguments,omitempty"`
 
 	// reasoning
-	Summary []ResponsesSummaryPart `json:"summary,omitempty"`
+	Summary          []ResponsesSummaryPart `json:"summary,omitempty"`
+	EncryptedContent string                 `json:"encrypted_content,omitempty"`
 }
 
 // ResponsesOutputContent is a content part of an output message.
@@ -137,6 +171,20 @@ type ResponsesOutputContent struct {
 type ResponsesSummaryPart struct {
 	Type string `json:"type"` // "summary_text"
 	Text string `json:"text,omitempty"`
+}
+
+// MetadataKeyResponsesReasoning is the ReasoningContent.Metadata key under which
+// ConvertResponsesResponse stashes the raw encrypted reasoning items from a
+// Responses turn. Copy a Response.Reasoning onto the next assistant Message to
+// round-trip the model's thinking on a stateless follow-up (see Message.Reasoning).
+const MetadataKeyResponsesReasoning = "openai_responses_reasoning_items"
+
+// ResponsesReasoningItem is one encrypted reasoning item produced by a Responses
+// turn, retained so it can be replayed verbatim on a follow-up request.
+type ResponsesReasoningItem struct {
+	ID               string                 `json:"id"`
+	EncryptedContent string                 `json:"encrypted_content"`
+	Summary          []ResponsesSummaryPart `json:"summary,omitempty"`
 }
 
 // ResponsesUsage is the Responses-API usage payload.
@@ -223,6 +271,9 @@ func BuildResponsesRequest(model string, messages []llms.Message, opts *llms.Cal
 	}
 
 	applyResponsesState(req, opts.ExtraBody)
+	if v, ok := opts.ExtraBody["include_encrypted_reasoning"].(bool); ok && v {
+		req.Include = append(req.Include, "reasoning.encrypted_content")
+	}
 	return req
 }
 
@@ -262,6 +313,8 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 			})
 
 		case llms.RoleAssistant:
+			// Encrypted reasoning items must precede the message they belong to.
+			items = append(items, reasoningInputItems(msg)...)
 			if parts := responsesMessageContent(msg, "output_text"); len(parts) > 0 {
 				items = append(items, ResponsesInputItem{
 					Type:    "message",
@@ -287,6 +340,33 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 		}
 	}
 	return items, instructions
+}
+
+// reasoningInputItems reconstructs Responses "reasoning" input items from an
+// assistant message's stored encrypted reasoning (set by ConvertResponsesResponse),
+// so a stateless follow-up can replay the model's prior thinking. Returns nil when
+// the message carries no encrypted reasoning.
+func reasoningInputItems(msg llms.Message) []ResponsesInputItem {
+	if msg.Reasoning == nil || msg.Reasoning.Metadata == nil {
+		return nil
+	}
+	stored, ok := msg.Reasoning.Metadata[MetadataKeyResponsesReasoning].([]ResponsesReasoningItem)
+	if !ok {
+		return nil
+	}
+	items := make([]ResponsesInputItem, 0, len(stored))
+	for _, it := range stored {
+		if it.EncryptedContent == "" {
+			continue
+		}
+		items = append(items, ResponsesInputItem{
+			Type:             itemTypeReasoning,
+			ID:               it.ID,
+			EncryptedContent: it.EncryptedContent,
+			Summary:          it.Summary,
+		})
+	}
+	return items
 }
 
 // responsesMessageContent builds the content parts for a message, using textType
@@ -347,6 +427,7 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 	result := &llms.Response{ID: resp.ID}
 
 	var content, reasoning string
+	var reasoningItems []ResponsesReasoningItem
 	for _, item := range resp.Output {
 		switch item.Type {
 		case "message":
@@ -364,16 +445,28 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 					Arguments: item.Arguments,
 				},
 			})
-		case "reasoning":
+		case itemTypeReasoning:
 			for _, s := range item.Summary {
 				reasoning += s.Text
+			}
+			// Retain encrypted items so a stateless follow-up can replay them.
+			if item.EncryptedContent != "" {
+				reasoningItems = append(reasoningItems, ResponsesReasoningItem{
+					ID:               item.ID,
+					EncryptedContent: item.EncryptedContent,
+					Summary:          item.Summary,
+				})
 			}
 		}
 	}
 
 	result.Content = content
-	if reasoning != "" {
-		result.SetReasoning(&llms.ReasoningContent{Content: reasoning})
+	if reasoning != "" || len(reasoningItems) > 0 {
+		rc := &llms.ReasoningContent{Content: reasoning}
+		if len(reasoningItems) > 0 {
+			rc.Metadata = map[string]any{MetadataKeyResponsesReasoning: reasoningItems}
+		}
+		result.SetReasoning(rc)
 	}
 	result.FinishReason = responsesFinishReason(resp, len(result.ToolCalls) > 0)
 

@@ -49,8 +49,11 @@ tools, and first-class reasoning items.
    (`response.output_text.delta`, `response.reasoning_summary_text.delta`, `response.completed`,
    `error`, …) are parsed into the existing `StreamChunk` channel; tool calls, usage, and finish
    reason come from the authoritative `response.completed` payload.
-4. **Reasoning-item round-trip.** For o-series models, pass prior `reasoning` items back on
-   the next turn. Needs live verification.
+4. ✅ **Reasoning-item round-trip.** *(Shipped — live-verified.)* For stateless multi-turn with
+   o-series / gpt-5 reasoning models, `openai.WithReasoningRoundTrip()` requests encrypted
+   reasoning items (`include: ["reasoning.encrypted_content"]`); they are stashed on
+   `Response.Reasoning.Metadata` and replayed as `"reasoning"` input items when that reasoning is
+   carried on the next assistant `Message.Reasoning`. Validated live (`TestLiveResponses_ReasoningRoundTrip`).
 
 > Note: streaming is exercised against both mock SSE fixtures and a live OpenAI smoke test
 > (`pkg/providers/openai/responses_live_test.go`, `//go:build integration`, gated on
