@@ -3,13 +3,13 @@ package anthropic
 import (
 	"context"
 	"errors"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/testutil"
 )
 
 var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
@@ -41,50 +41,20 @@ var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
 }
 
 func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
-	const epsilon = 1e-12
+	testutil.AssertKnownModelTokenPricingReconcilesWithDefaultPricing(
+		t,
+		llms.ProviderAnthropic,
+		knownModelTokenPricing(),
+		expectedKnownModelTokenPricing,
+	)
+}
 
-	for modelID, expected := range expectedKnownModelTokenPricing {
-		metadata, ok := knownModels[modelID]
-		if !ok {
-			t.Fatalf("knownModels missing priced model %s", modelID)
-		}
-		if metadata.pricing == nil {
-			t.Fatalf("knownModels[%s].pricing is nil", modelID)
-		}
-		if metadata.pricing.Input != expected.Input {
-			t.Errorf("%s Input = %f, want %f", modelID, metadata.pricing.Input, expected.Input)
-		}
-		if metadata.pricing.Output != expected.Output {
-			t.Errorf("%s Output = %f, want %f", modelID, metadata.pricing.Output, expected.Output)
-		}
-
-		central, ok := llms.DefaultPricing[string(llms.ProviderAnthropic)+":"+modelID]
-		if !ok {
-			t.Fatalf("DefaultPricing missing anthropic:%s", modelID)
-		}
-		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
-			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
-		}
-		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
-			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
-		}
-	}
-
+func knownModelTokenPricing() map[string]*llms.ModelPricing {
+	pricing := make(map[string]*llms.ModelPricing, len(knownModels))
 	for modelID, metadata := range knownModels {
-		central, ok := llms.DefaultPricing[string(llms.ProviderAnthropic)+":"+modelID]
-		if !ok {
-			continue
-		}
-		if metadata.pricing == nil {
-			t.Fatalf("knownModels[%s].pricing is nil but DefaultPricing has token pricing", modelID)
-		}
-		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
-			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
-		}
-		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
-			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
-		}
+		pricing[modelID] = metadata.pricing
 	}
+	return pricing
 }
 
 func TestConvertAnthropicModel(t *testing.T) {
