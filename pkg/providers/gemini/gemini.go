@@ -21,6 +21,10 @@ type Client struct {
 	options *options
 }
 
+var readStreamChunk = func(stream *geminiapi.StreamReader) (*geminiapi.StreamChunk, error) {
+	return stream.Read()
+}
+
 // New creates a new Gemini client with the given options
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
@@ -163,10 +167,20 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	estimateTokens := opts.EstimateTokens
 
 	go func() {
+		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+
 		defer close(chunks)
+		// A malformed/hostile provider response must never crash the host process.
+		// Convert any panic in stream processing into a terminal error chunk.
+		defer func() {
+			if r := recover(); r != nil {
+				sender.DeliverTerminal(llms.StreamChunk{
+					Error: fmt.Errorf("gemini: panic during stream processing: %v", r),
+				})
+			}
+		}()
 		defer func() { _ = stream.Close() }()
 
-		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		readDone := make(chan struct{})
 		defer close(readDone)
 		go func() {
@@ -199,7 +213,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 			default:
 			}
 
-			chunk, err := stream.Read()
+			chunk, err := readStreamChunk(stream)
 			if errors.Is(err, io.EOF) {
 				if ctx.Err() != nil {
 					sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})

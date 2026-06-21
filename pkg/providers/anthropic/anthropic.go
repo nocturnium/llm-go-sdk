@@ -3,6 +3,7 @@ package anthropic
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
@@ -33,6 +34,10 @@ func anthropicModelDeprecatesTemperature(model string) bool {
 type Client struct {
 	client  *anthropicapi.Client
 	options *options
+}
+
+var readStreamEvent = func(stream *anthropicapi.StreamReader) (*anthropicapi.StreamEvent, error) {
+	return stream.Read()
 }
 
 // New creates a new Anthropic client with the given options.
@@ -174,10 +179,20 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	estimateTokens := opts.EstimateTokens
 
 	go func() {
+		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+
 		defer close(chunks)
+		// A malformed/hostile provider response must never crash the host process.
+		// Convert any panic in stream processing into a terminal error chunk.
+		defer func() {
+			if r := recover(); r != nil {
+				sender.DeliverTerminal(llms.StreamChunk{
+					Error: fmt.Errorf("anthropic: panic during stream processing: %v", r),
+				})
+			}
+		}()
 		defer func() { _ = stream.Close() }()
 
-		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		readDone := make(chan struct{})
 		defer close(readDone)
 		go func() {
@@ -212,7 +227,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 			default:
 			}
 
-			event, err := stream.Read()
+			event, err := readStreamEvent(stream)
 			if err != nil {
 				if ctx.Err() != nil {
 					sender.ForwardTerminalOnEarlyExit(llms.SendContextCanceled)
