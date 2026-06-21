@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
@@ -468,5 +469,8 @@ func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
 	_, err = client.ModelInfo(context.Background(), "missing-model")
 	if !errors.Is(err, llms.ErrModelNotFound) {
 		t.Fatalf("ModelInfo() error = %v, want ErrModelNotFound", err)
+	}
+	if strings.Contains(err.Error(), "404") {
+		t.Fatalf("ModelInfo() error = %q, want no literal 404", err)
 	}
 }

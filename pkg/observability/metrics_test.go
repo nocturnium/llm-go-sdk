@@ -85,6 +85,24 @@ func (m *mockMetricsLLM) Stream(ctx context.Context, _ []llms.Message, _ ...llms
 func (m *mockMetricsLLM) Provider() llms.Provider { return m.provider }
 func (m *mockMetricsLLM) Model() string           { return m.model }
 
+func waitForMetricsSpans(t *testing.T, recorder *tracetest.SpanRecorder, want int) []sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	deadline := time.After(500 * time.Millisecond)
+	for {
+		spans := recorder.Ended()
+		if len(spans) >= want {
+			return spans
+		}
+
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d ended span(s), got %d", want, len(spans))
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
+
 func TestNewMetricsMiddleware(t *testing.T) {
 	llm := &mockMetricsLLM{provider: llms.ProviderOpenAI, model: "gpt-4"}
 
@@ -241,10 +259,7 @@ func TestMetricsMiddleware_Stream_TimeToFirstToken(t *testing.T) {
 		t.Errorf("content = %s, want 'Hello World'", content)
 	}
 
-	// Wait for span to end
-	time.Sleep(20 * time.Millisecond)
-
-	spans := spanRecorder.Ended()
+	spans := waitForMetricsSpans(t, spanRecorder, 1)
 	if len(spans) != 1 {
 		t.Fatalf("expected 1 span, got %d", len(spans))
 	}

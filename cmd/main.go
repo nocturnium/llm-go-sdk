@@ -33,10 +33,7 @@ import (
 )
 
 func main() {
-	if err := run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 type commandContext struct {
@@ -52,32 +49,40 @@ func (c commandContext) nArg() int {
 	return len(c.args)
 }
 
-func run(args []string) error {
-	if len(args) < 2 {
-		printUsage(os.Stdout)
+func run(args []string, stdout, stderr io.Writer) int {
+	if err := runCommand(args, stdout, stderr); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func runCommand(args []string, stdout, stderr io.Writer) error {
+	if len(args) < 1 {
+		printUsage(stdout)
 		return nil
 	}
 
-	switch args[1] {
+	switch args[0] {
 	case "-h", "--help", "help":
-		printUsage(os.Stdout)
+		printUsage(stdout)
 		return nil
 	case "--version", "-v":
-		fmt.Printf("llms-cli version %s\n", llms.Version)
+		_, _ = fmt.Fprintf(stdout, "llms-cli version %s\n", llms.Version)
 		return nil
 	case "chat":
-		return runChat(args[2:])
+		return runChat(args[1:], stdout)
 	case "complete":
-		return runComplete(args[2:])
+		return runComplete(args[1:], stdout)
 	case "providers":
-		return runProviders(args[2:])
+		return runProviders(args[1:], stdout)
 	case "tool-demo":
-		return runToolDemo(args[2:])
+		return runToolDemo(args[1:], stdout)
 	case "version":
-		return runVersion(args[2:])
+		return runVersion(args[1:], stdout)
 	default:
-		printUsage(os.Stderr)
-		return fmt.Errorf("unknown command: %s", args[1])
+		printUsage(stderr)
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
 }
 
@@ -98,12 +103,12 @@ Use "llms-cli <command> -h" for command-specific help.
 `)
 }
 
-func newFlagSet(name, usage string) *flag.FlagSet {
+func newFlagSet(name, usage string, stdout io.Writer) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stdout, "Usage: llms-cli %s [options] [arguments]\n\n%s\n\nOptions:\n", name, usage)
-		fs.SetOutput(os.Stdout)
+		_, _ = fmt.Fprintf(stdout, "Usage: llms-cli %s [options] [arguments]\n\n%s\n\nOptions:\n", name, usage)
+		fs.SetOutput(stdout)
 		fs.PrintDefaults()
 		fs.SetOutput(io.Discard)
 	}
@@ -120,7 +125,7 @@ func parseCommand(fs *flag.FlagSet, args []string) (bool, error) {
 	return false, nil
 }
 
-func runChat(args []string) error {
+func runChat(args []string, stdout io.Writer) error {
 	ctx := commandContext{
 		provider:    envString("LLM_PROVIDER", ""),
 		model:       envString("LLM_MODEL", ""),
@@ -128,7 +133,7 @@ func runChat(args []string) error {
 		temperature: envFloat64("LLM_TEMPERATURE", 0.7),
 		maxTokens:   envInt("LLM_MAX_TOKENS", 1024),
 	}
-	fs := newFlagSet("chat", "Send a chat message to an LLM provider")
+	fs := newFlagSet("chat", "Send a chat message to an LLM provider", stdout)
 	fs.StringVar(&ctx.provider, "provider", ctx.provider, "LLM provider (openai, anthropic, gemini, togetherai, featherless) [$LLM_PROVIDER]")
 	fs.StringVar(&ctx.provider, "p", ctx.provider, "LLM provider (shorthand)")
 	fs.StringVar(&ctx.model, "model", ctx.model, "Model to use (uses provider default if not specified) [$LLM_MODEL]")
@@ -150,12 +155,12 @@ func runChat(args []string) error {
 	return chatAction(ctx)
 }
 
-func runComplete(args []string) error {
+func runComplete(args []string, stdout io.Writer) error {
 	ctx := commandContext{
 		temperature: 0.7,
 		maxTokens:   1024,
 	}
-	fs := newFlagSet("complete", "Send a completion prompt to an LLM provider")
+	fs := newFlagSet("complete", "Send a completion prompt to an LLM provider", stdout)
 	fs.StringVar(&ctx.provider, "provider", "", "LLM provider (openai, anthropic, gemini, togetherai, featherless)")
 	fs.StringVar(&ctx.provider, "p", "", "LLM provider (shorthand)")
 	fs.StringVar(&ctx.model, "model", "", "Model to use (uses provider default if not specified)")
@@ -175,8 +180,8 @@ func runComplete(args []string) error {
 	return completeAction(ctx)
 }
 
-func runProviders(args []string) error {
-	fs := newFlagSet("providers", "List available providers and their default models")
+func runProviders(args []string, stdout io.Writer) error {
+	fs := newFlagSet("providers", "List available providers and their default models", stdout)
 	help, err := parseCommand(fs, args)
 	if err != nil || help {
 		return err
@@ -187,12 +192,12 @@ func runProviders(args []string) error {
 	return providersAction()
 }
 
-func runToolDemo(args []string) error {
+func runToolDemo(args []string, stdout io.Writer) error {
 	ctx := commandContext{
 		provider: envString("LLM_PROVIDER", ""),
 		model:    envString("LLM_MODEL", ""),
 	}
-	fs := newFlagSet("tool-demo", "Demonstrate tool calling with a weather example")
+	fs := newFlagSet("tool-demo", "Demonstrate tool calling with a weather example", stdout)
 	fs.StringVar(&ctx.provider, "provider", ctx.provider, "LLM provider (openai, anthropic, gemini) [$LLM_PROVIDER]")
 	fs.StringVar(&ctx.provider, "p", ctx.provider, "LLM provider (shorthand)")
 	fs.StringVar(&ctx.model, "model", ctx.model, "Model to use (uses provider default if not specified) [$LLM_MODEL]")
@@ -210,8 +215,8 @@ func runToolDemo(args []string) error {
 	return toolDemoAction(ctx)
 }
 
-func runVersion(args []string) error {
-	fs := newFlagSet("version", "Print detailed version information")
+func runVersion(args []string, stdout io.Writer) error {
+	fs := newFlagSet("version", "Print detailed version information", stdout)
 	help, err := parseCommand(fs, args)
 	if err != nil || help {
 		return err
@@ -219,7 +224,7 @@ func runVersion(args []string) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("version does not accept arguments")
 	}
-	fmt.Println(llms.VersionInfo())
+	_, _ = fmt.Fprintln(stdout, llms.VersionInfo())
 	return nil
 }
 
