@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-06-21
+
+Additive, non-breaking fast-follow on top of v4.0.0 — observability for two
+previously-silent failure paths, plus internal cleanups. Every change is API-compatible
+(the `apidiff` baseline grows, with no removals).
+
+### Added
+
+- **`mcp.Client.DroppedNotifications() uint64`** — exposes the cumulative count of
+  notifications dropped when a slow or wedged handler overflows the bounded notification
+  queue, so consumers can observe otherwise-silent notification loss.
+- **`resilience.WithOnCallbackPanic(func(recovered any, from, to CircuitState))`** — an
+  opt-in circuit-breaker option that delivers a panicking `onStateChange` callback's
+  recovered value (and the state transition) to a hook instead of silently discarding it.
+  Default behavior is unchanged (the panic is still recovered with no output) unless the
+  option is set; the hook runs inside the existing single recovered goroutine.
+
+### Changed
+
+- **Consolidated the CR/LF log-injection sanitizer** into a single canonical
+  `internal/logsanitize` used by both the HTTP client and the observability loggers. The
+  unified implementation is a strict superset of the previous per-package copies — it
+  neutralizes CR, LF, tab, NUL, ESC, DEL, and all Unicode control runes.
+- **HTTP-client error messages** are now extracted from provider error JSON envelopes
+  (`{"error":{"message":…}}`, `{"error":"…"}`, `{"message":…}`) when present, falling back
+  to the bounded, sanitized response body. `APIError.Code` / `Type` (and therefore error
+  classification via `errors.Is`) are unchanged.
+- **`llamacpp` caches the `/props` response** after the first successful fetch, so
+  `Model()` and `Capabilities()` no longer issue a network request on every call (a failed
+  fetch stays uncached and is retried on the next call).
+
 ## [4.0.0] - 2026-06-21
 
 v4 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v4`
