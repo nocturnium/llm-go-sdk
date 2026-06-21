@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/nocturnium/llm-go-sdk/v3/internal/httpclient"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
 )
 
 const mcpSessionIDHeader = "Mcp-Session-Id"

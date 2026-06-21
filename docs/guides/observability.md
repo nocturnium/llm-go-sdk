@@ -40,9 +40,9 @@ import (
 	"context"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/observability"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/observability"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
 )
 
 func main() {
@@ -82,7 +82,7 @@ so it exposes `GenerateContent`, `Stream`, `Provider()`, `Model()`, and
 | `observability.WithOTelMeter(metric.Meter)` | Use a specific `metric.Meter` instead of the global one. |
 
 The instrumentation scope name is exported as `observability.InstrumentationName`
-(`"github.com/nocturnium/llm-go-sdk/v3"`).
+(`"github.com/nocturnium/llm-go-sdk/v4"`).
 
 !!! warning "Content recording exposes data in traces"
     `WithContentRecording(true)` writes (truncated) prompt and completion text to
@@ -283,7 +283,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/observability"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/observability"
 )
 
 handler := slog.NewJSONHandler(os.Stdout, nil)
@@ -361,8 +361,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
 )
 
 func main() {

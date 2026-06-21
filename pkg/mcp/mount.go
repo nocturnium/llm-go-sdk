@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // MountStdio launches a stdio MCP server, registers its tools into reg, and

@@ -1,6 +1,6 @@
 package gemini
 
-import llms "github.com/nocturnium/llm-go-sdk/v3"
+import llms "github.com/nocturnium/llm-go-sdk/v4"
 
 func init() {
 	llms.RegisterProvider("gemini", func(cfg llms.Config) (llms.LLM, error) {

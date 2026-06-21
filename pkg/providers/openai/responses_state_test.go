@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // The response id must be surfaced on llms.Response so callers can chain turns.

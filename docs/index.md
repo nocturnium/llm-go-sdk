@@ -4,7 +4,7 @@ hide:
 ---
 
 <div class="noct-hero" markdown>
-<span class="noct-hero__eyebrow">github.com/nocturnium/llm-go-sdk/v3</span>
+<span class="noct-hero__eyebrow">github.com/nocturnium/llm-go-sdk/v4</span>
 
 # One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
 
@@ -20,7 +20,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 </div>
 
 !!! info "At a glance"
-    **Module** `github.com/nocturnium/llm-go-sdk/v3` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v3"` · **Version** v3.0.0 · **License** Apache-2.0 · **Go** 1.25+
+    **Module** `github.com/nocturnium/llm-go-sdk/v4` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v4"` · **Version** v3.0.0 · **License** Apache-2.0 · **Go** 1.25+
 
 ## Why this SDK
 
@@ -109,7 +109,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 | anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | infinity |
 
 !!! tip "Construct by name"
-    Blank-import `github.com/nocturnium/llm-go-sdk/v3/pkg/providers/all` to register every chat
+    Blank-import `github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all` to register every chat
     provider, then build one with `llms.New(name, llms.Config{...})`. Call
     `llms.RegisteredProviders()` for the live list.
 
@@ -118,7 +118,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 Install the module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v3
+go get github.com/nocturnium/llm-go-sdk/v4
 ```
 
 Make your first call. The package-level helper `llms.Call` sends a single prompt and
@@ -132,8 +132,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
 )
 
 func main() {

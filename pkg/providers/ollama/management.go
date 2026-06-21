@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/ollamaapi"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/ollamaapi"
 )
 
 // PullProgress represents the progress of a model pull operation.

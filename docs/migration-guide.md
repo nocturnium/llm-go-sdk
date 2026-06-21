@@ -1,3 +1,70 @@
+# Migrating from v3 to v4
+
+v4 is a major release whose changes are dominated by a security / correctness / resilience
+hardening sweep — the breaking surface is small and migration is mostly a mechanical
+import-path bump. The core API (`Call`, `GenerateContent`, `Stream`, tools, structured
+output, embeddings, providers, middleware) is unchanged.
+
+## 1. Update the import path
+
+```bash
+go get github.com/nocturnium/llm-go-sdk/v4@v4.0.0
+```
+
+Rewrite every import of the module from the `/v3` path to `/v4` (the core package name
+stays `llms`):
+
+```bash
+# from the root of your module
+grep -rl 'nocturnium/llm-go-sdk/v3' --include='*.go' . \
+  | xargs sed -i 's#nocturnium/llm-go-sdk/v3#nocturnium/llm-go-sdk/v4#g'
+go mod tidy
+```
+
+If you only use the core API, that is the entire migration — you are done.
+
+## 2. Replace the deprecated `Thinking` fields with `Reasoning`
+
+`Response.Thinking` and `StreamChunk.Thinking` were removed as *fields* and are now
+deprecated *methods*. Read chain-of-thought from the canonical `Reasoning` field (or call
+the `Thinking()` method):
+
+```go
+// v3
+rc := resp.Thinking          // exported field
+// v4
+rc := resp.Reasoning         // canonical field (preferred)
+rc := resp.Thinking()        // deprecated method, returns resp.Reasoning
+```
+
+If you built a `Response` / `StreamChunk` struct literal with `Thinking:`, set `Reasoning:`
+instead.
+
+## 3. Drop any use of the `ErrorMapper` registry (it was dead code)
+
+`ErrorMapper`, `ErrorMapperRegistry`, `MapProviderError`, `RegisterErrorMapper`, and
+`DefaultErrorMapperRegistry` were never used on any production path and have been removed.
+Error classification is automatic — match the exported sentinels with `errors.Is`:
+
+```go
+if errors.Is(err, llms.ErrModelNotFound) { ... }      // now also fires for a bare HTTP 404
+if errors.Is(err, llms.ErrServiceUnavailable) { ... } // now also fires for 502 / 504 / 529
+```
+
+## 4. Note: `gemini-2.0-flash` cost estimate corrected
+
+`EstimateCost` / `CostTracker` priced `gemini-2.0-flash` at the Flash-Lite rate by mistake;
+it is now $0.10 / $0.40 per 1M input/output tokens (its actual price). No API change — only
+the computed cost differs.
+
+## 5. `llms-cli` flag parsing (only if you script the demo CLI)
+
+The `llms-cli` binary was rewritten on the standard-library `flag` package, removing the
+`urfave/cli` dependency from the module. All commands and flags are preserved; only the
+help-text formatting differs.
+
+---
+
 # Migrating from v2 to v3
 
 v3 is a major release with **one** structural change: the observability and resilience

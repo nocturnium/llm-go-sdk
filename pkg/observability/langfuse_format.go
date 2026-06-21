@@ -3,7 +3,7 @@ package observability
 import (
 	"encoding/json"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // InputFormat represents different ways to capture input for Langfuse

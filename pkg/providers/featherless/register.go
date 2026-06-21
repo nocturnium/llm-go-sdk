@@ -1,6 +1,6 @@
 package featherless
 
-import llms "github.com/nocturnium/llm-go-sdk/v3"
+import llms "github.com/nocturnium/llm-go-sdk/v4"
 
 func init() {
 	llms.RegisterProvider("featherless", func(cfg llms.Config) (llms.LLM, error) {

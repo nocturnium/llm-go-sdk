@@ -3,8 +3,8 @@
 package togetherai
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
 )
 
 // providerConfig defines TogetherAI-specific configuration

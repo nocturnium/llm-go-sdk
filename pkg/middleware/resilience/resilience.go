@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // ResilientClient wraps an LLM with retry logic and circuit breaker

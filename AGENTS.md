@@ -2,7 +2,7 @@
 
 This document defines strict code quality standards for AI coding assistants working on the `llms` package. These guidelines exist to prevent architectural drift and maintain consistency across providers.
 
-**Scope**: This applies to all code in the module root `github.com/nocturnium/llm-go-sdk/v3` (this repository), including providers, internal packages, and core interfaces.
+**Scope**: This applies to all code in the module root `github.com/nocturnium/llm-go-sdk/v4` (this repository), including providers, internal packages, and core interfaces.
 
 ---
 
@@ -169,7 +169,7 @@ pkg/providers/<name>/
 └── integration_test.go # Integration tests (build tag: integration)
 ```
 
-**Canonical location**: All provider code lives in `pkg/providers/<name>/`. This is the only provider location — import providers as `github.com/nocturnium/llm-go-sdk/v3/pkg/providers/<name>`. (Earlier builds had a top-level `providers/*` backwards-compat shim and `pkg/*` alias packages; both have been removed. The shared types now live only in the root `llms` package.)
+**Canonical location**: All provider code lives in `pkg/providers/<name>/`. This is the only provider location — import providers as `github.com/nocturnium/llm-go-sdk/v4/pkg/providers/<name>`. (Earlier builds had a top-level `providers/*` backwards-compat shim and `pkg/*` alias packages; both have been removed. The shared types now live only in the root `llms` package.)
 
 ### Required Interfaces
 
@@ -723,8 +723,8 @@ and pass the HTTP/SSRF knobs through to `openaicompat.ClientConfig`.
 package <name>
 
 import (
-    llms "github.com/nocturnium/llm-go-sdk/v3"
-    "github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
+    llms "github.com/nocturnium/llm-go-sdk/v4"
+    "github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
 )
 
 const defaultBaseURL = "https://api.<provider>.com/v1"

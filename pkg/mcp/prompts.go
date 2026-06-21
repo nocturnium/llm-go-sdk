@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // ListPrompts returns every prompt template the server advertises, following

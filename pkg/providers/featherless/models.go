@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // cachedModels is a curated, ILLUSTRATIVE subset of the open-weight models

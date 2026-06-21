@@ -4,6 +4,74 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-06-21
+
+v4 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v4`
+(Go semantic import versioning); v3 and v4 are distinct module paths and can coexist, so
+consumers may migrate incrementally. See `docs/migration-guide.md` for the v3 → v4 guide.
+The release is dominated by a security / correctness / resilience hardening sweep (each
+fix gated by an independent expert review); the breaking surface is deliberately small.
+
+### Changed (BREAKING)
+
+- **Module path → `/v4`.** `go get github.com/nocturnium/llm-go-sdk/v4@v4.0.0` (the core
+  package name stays `llms`).
+- **Removed the deprecated `Thinking` fields.** `Response.Thinking` and
+  `StreamChunk.Thinking` were exported, mutable alias *fields* that had to be hand-synced
+  with `Reasoning` — a desync foot-gun (`Response{Reasoning: x}` left `Thinking` nil). They
+  are now deprecated *methods* `Thinking() *ReasoningContent` computed from `Reasoning`. Use
+  `Reasoning` (or call `.Thinking()`).
+- **Removed the unused `ErrorMapper` registry.** `ErrorMapper`, `ErrorMapperRegistry`,
+  `MapProviderError`, `RegisterErrorMapper`, `DefaultErrorMapperRegistry`, and related
+  symbols were never wired into any production path (dead code). Error classification is
+  automatic — match the exported sentinels with `errors.Is`.
+
+### Security
+
+- **SSRF: DNS-rebinding is closed on the custom-`DialContext` path.** When a caller
+  supplied an `*http.Client` whose transport already had a `DialContext`, the resolved-IP
+  guard was silently skipped; the resolved remote IP is now re-validated on every dial path.
+- **`WithHTTPClient` no longer mutates the caller's `*http.Client`** — it shallow-copies
+  before installing the SSRF dialer / redirect policy, leaving the caller's `Transport` and
+  `CheckRedirect` untouched.
+- **The Ollama NDJSON stream reader is bounded** (4 MB cap) against unbounded-allocation /
+  OOM from a hostile endpoint, matching the SSE and JSON readers.
+- Reject NAT64-embedded private IPv6 addresses; strip userinfo / query / fragment from
+  `APIError` messages so query-string secrets are not leaked in error text.
+
+### Fixed
+
+- **Streaming requests are no longer bound by the unary `http.Client.Timeout`** (default
+  5 m), which previously tore down long streams mid-read; streams are bounded by `ctx`.
+- **MCP notification handlers are never invoked concurrently** (the documented contract):
+  the overflow path no longer spawns a goroutine per notification — overflow is counted
+  atomically and drained by the single serial pump.
+- **Error classification now maps 404 → `ErrModelNotFound` and 502/504/529 →
+  `ErrServiceUnavailable`**, with the classify and retry tables driven from one source so
+  they cannot disagree.
+- **The circuit-breaker `onStateChange` path no longer leaks a watchdog goroutine + timer**
+  per transition; the callback runs in a single recovered goroutine.
+- **`MetricsMiddleware.Stream` no longer permanently skews `ActiveRequests()`** if the
+  wrapped stream panics synchronously.
+- **The Gemini and Anthropic streaming goroutines recover panics** and deliver a terminal
+  stream error instead of crashing the host process (matching the shared streaming path).
+- **Model token pricing has a single source of truth** (`DefaultPricing`); displayed and
+  billed prices can no longer drift, enforced by reconciliation tests. Corrected
+  `gemini-2.0-flash` to $0.10 / $0.40 per 1M tokens (it was mistakenly priced at
+  Flash-Lite's rate).
+- **Reasoning options compose order-independently** — `WithReasoning` now merges into a
+  previously-set `WithReasoningEffort` / `WithReasoningBudget` / `WithThinkingMode` instead
+  of clobbering it.
+- Retryable response bodies are drained before close, restoring keep-alive connection reuse.
+
+### Changed
+
+- **The `llms-cli` demo no longer depends on `urfave/cli`.** It was rewritten on the
+  standard-library `flag` package, removing `urfave/cli/v2`, `russross/blackfriday/v2`,
+  `cpuguy83/go-md2man/v2`, and `xrash/smetrics` from the module's dependency graph entirely
+  — they no longer appear in a library consumer's `go.sum`. CLI commands and flags are
+  unchanged; only help-text formatting differs.
+
 ## [3.1.0] - 2026-06-21
 
 Additive, non-breaking changes on top of v3.0.0. The module path is unchanged and

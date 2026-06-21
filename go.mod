@@ -1,4 +1,4 @@
-module github.com/nocturnium/llm-go-sdk/v3
+module github.com/nocturnium/llm-go-sdk/v4
 
 go 1.25.0
 

@@ -6,7 +6,7 @@ import (
 )
 
 // TestVersionInfo guards the build-time version wiring. The release ldflags inject
-// Version/Commit/Date via -X github.com/nocturnium/llm-go-sdk/v3.<Var>; if the
+// Version/Commit/Date via -X github.com/nocturnium/llm-go-sdk/v4.<Var>; if the
 // module path and this package's import path ever drift apart, the injection
 // silently no-ops. This test pins the defaults and the formatted shape so such a
 // drift is caught by a failing assertion rather than a release with "0.0.0-dev".

@@ -266,9 +266,9 @@ import (
     "os"
     "time"
 
-    llms "github.com/nocturnium/llm-go-sdk/v3"
-    "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/gemini"
-    "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
+    llms "github.com/nocturnium/llm-go-sdk/v4"
+    "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/gemini"
+    "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
 )
 
 func main() {

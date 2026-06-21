@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 func TestBuildWebSearchTool_Disabled(t *testing.T) {

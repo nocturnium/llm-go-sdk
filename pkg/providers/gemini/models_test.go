@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
 )
 
 var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
