@@ -91,6 +91,15 @@ func (c *Client) OnLog(fn func(LogMessage)) *Client {
 	return c
 }
 
+// DroppedNotifications returns the cumulative number of server notifications
+// dropped because the client's bounded notification queue was full.
+func (c *Client) DroppedNotifications() uint64 {
+	if c == nil || c.notifier == nil {
+		return 0
+	}
+	return c.notifier.dropped.Load()
+}
+
 // dispatchNotification parses a raw server-initiated JSON-RPC notification frame
 // and routes it to the registered typed handler. It is the sink installed on the
 // transport; unknown or unparseable notifications are ignored.

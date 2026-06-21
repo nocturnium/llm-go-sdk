@@ -38,9 +38,9 @@ type Client struct {
 	options      *options
 
 	// Lazy-loaded model properties
-	propsOnce sync.Once
-	props     *llamacppapi.PropsResponse
-	propsErr  error
+	propsMu     sync.Mutex
+	props       *llamacppapi.PropsResponse
+	propsLoaded bool
 }
 
 // New creates a new llama.cpp client with the given options.
@@ -144,10 +144,21 @@ func (c *Client) Capabilities() llms.Capabilities {
 
 // getPropsLazy fetches /props once and caches the result.
 func (c *Client) getPropsLazy(ctx context.Context) (*llamacppapi.PropsResponse, error) {
-	c.propsOnce.Do(func() {
-		c.props, c.propsErr = c.nativeClient.GetProps(ctx)
-	})
-	return c.props, c.propsErr
+	c.propsMu.Lock()
+	defer c.propsMu.Unlock()
+
+	if c.propsLoaded {
+		return c.props, nil
+	}
+
+	props, err := c.nativeClient.GetProps(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	c.props = props
+	c.propsLoaded = true
+	return c.props, nil
 }
 
 // Ensure Client implements the LLM interface.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/logsanitize"
 )
 
 // maxLoggedStreamContent is the maximum content size (in bytes) to log for streaming responses.
@@ -303,15 +304,12 @@ func truncateString(s string, maxLength int) string {
 	return truncateUTF8(s, maxLength, "...")
 }
 
-// logValueReplacer neutralizes the carriage-return and line-feed characters that
-// an attacker could use to forge additional log entries (CWE-117 log injection).
-var logValueReplacer = strings.NewReplacer("\r", "\\r", "\n", "\\n")
-
-// sanitizeLogValue escapes CR/LF in user-controlled content (prompts, responses)
-// so it cannot break out of its log field and inject forged log lines. It is
-// applied at the point such values are formatted for logging.
+// sanitizeLogValue escapes control characters in user-controlled content
+// (prompts, responses) so it cannot break out of its log field and inject
+// forged log lines. It is applied at the point such values are formatted for
+// logging.
 func sanitizeLogValue(s string) string {
-	return logValueReplacer.Replace(s)
+	return logsanitize.Value(s)
 }
 
 // LoggingMiddleware wraps an LLM with logging capabilities

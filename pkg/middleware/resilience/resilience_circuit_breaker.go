@@ -50,10 +50,11 @@ type CircuitBreaker struct {
 	mu sync.RWMutex
 
 	// Configuration
-	maxFailures   int           // Failures before opening
-	resetTimeout  time.Duration // Time before trying again
-	halfOpenMax   int           // Max requests in half-open state
-	onStateChange func(from, to CircuitState)
+	maxFailures     int           // Failures before opening
+	resetTimeout    time.Duration // Time before trying again
+	halfOpenMax     int           // Max requests in half-open state
+	onStateChange   func(from, to CircuitState)
+	onCallbackPanic func(recovered any, from, to CircuitState)
 
 	// State
 	state           CircuitState
@@ -115,6 +116,16 @@ func WithHalfOpenMax(n int) CircuitBreakerOption {
 func WithOnStateChange(fn func(from, to CircuitState)) CircuitBreakerOption {
 	return func(cb *CircuitBreaker) {
 		cb.onStateChange = fn
+	}
+}
+
+// WithOnCallbackPanic sets a callback invoked when the state-change callback
+// panics. The recovered panic value and transition states are passed to fn. The
+// panic hook runs in the same recovered goroutine as the state-change callback,
+// and a panic in fn is also recovered.
+func WithOnCallbackPanic(fn func(recovered any, from, to CircuitState)) CircuitBreakerOption {
+	return func(cb *CircuitBreaker) {
+		cb.onCallbackPanic = fn
 	}
 }
 
@@ -231,9 +242,10 @@ func (cb *CircuitBreaker) Reset() {
 
 // stateTransition holds info about a state transition for callback invocation
 type stateTransition struct {
-	callback func(from, to CircuitState)
-	oldState CircuitState
-	newState CircuitState
+	callback      func(from, to CircuitState)
+	panicCallback func(recovered any, from, to CircuitState)
+	oldState      CircuitState
+	newState      CircuitState
 }
 
 // invokeCallback invokes the state change callback if one was captured.
@@ -255,7 +267,12 @@ func (t *stateTransition) invokeCallback() {
 		go func() {
 			// Recover from panics in callbacks to prevent goroutine crashes.
 			defer func() {
-				_ = recover() // Silently ignore panics.
+				if recovered := recover(); recovered != nil && t.panicCallback != nil {
+					func() {
+						defer func() { _ = recover() }()
+						t.panicCallback(recovered, t.oldState, t.newState)
+					}()
+				}
 			}()
 			t.callback(t.oldState, t.newState)
 		}()
@@ -290,9 +307,10 @@ func (cb *CircuitBreaker) transitionTo(newState CircuitState) *stateTransition {
 	// Return transition info for caller to invoke callback after releasing lock
 	if cb.onStateChange != nil {
 		return &stateTransition{
-			callback: cb.onStateChange,
-			oldState: oldState,
-			newState: newState,
+			callback:      cb.onStateChange,
+			panicCallback: cb.onCallbackPanic,
+			oldState:      oldState,
+			newState:      newState,
 		}
 	}
 	return nil

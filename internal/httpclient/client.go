@@ -29,6 +29,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/nocturnium/llm-go-sdk/v4/internal/logsanitize"
 )
 
 // maxErrorResponseSize is the maximum size of error response body to read.
@@ -226,16 +228,10 @@ func debugEnabled() bool {
 	return os.Getenv("LLM_DEBUG_REQUESTS") != ""
 }
 
-// logValueReplacer neutralizes the carriage-return and line-feed characters that
-// could be used to forge log entries (CWE-117) when untrusted values (URLs,
-// server error bodies) are printed by the debug logger.
-var logValueReplacer = strings.NewReplacer("\r", "\\r", "\n", "\\n")
-
-// sanitizeLogValue escapes CR/LF in a value before it is written to the debug
-// log. Duplicated (unexported, three lines) from package llms to avoid coupling
-// this internal HTTP client to the root package.
+// sanitizeLogValue escapes control characters in a value before it is written
+// to the debug log.
 func sanitizeLogValue(s string) string {
-	return logValueReplacer.Replace(s)
+	return logsanitize.Value(s)
 }
 
 // WithTimeout sets the HTTP client timeout.
@@ -636,54 +632,77 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 		}
 	}
 
-	// Try to parse as JSON error
-	var errResp struct {
-		Error struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
-			Code    string `json:"code"`
-			Param   string `json:"param"`
-		} `json:"error"`
-		// Anthropic format
-		Message string `json:"message"`
-		Type    string `json:"type"`
-	}
-
-	if err := json.Unmarshal(body, &errResp); err == nil {
-		if errResp.Error.Message != "" {
-			return &APIError{
-				StatusCode:    resp.StatusCode,
-				Message:       errResp.Error.Message,
-				Type:          errResp.Error.Type,
-				Code:          errResp.Error.Code,
-				Param:         errResp.Error.Param,
-				RequestID:     requestID,
-				RetryAfter:    retryAfter,
-				RequestURL:    reqURL,
-				RequestMethod: reqMethod,
-			}
-		}
-		if errResp.Message != "" {
-			return &APIError{
-				StatusCode:    resp.StatusCode,
-				Message:       errResp.Message,
-				Type:          errResp.Type,
-				RequestID:     requestID,
-				RetryAfter:    retryAfter,
-				RequestURL:    reqURL,
-				RequestMethod: reqMethod,
-			}
+	if parsed, ok := parseAPIErrorBody(body); ok {
+		return &APIError{
+			StatusCode:    resp.StatusCode,
+			Message:       parsed.Message,
+			Type:          parsed.Type,
+			Code:          parsed.Code,
+			Param:         parsed.Param,
+			RequestID:     requestID,
+			RetryAfter:    retryAfter,
+			RequestURL:    reqURL,
+			RequestMethod: reqMethod,
 		}
 	}
 
 	return &APIError{
 		StatusCode:    resp.StatusCode,
-		Message:       string(body),
+		Message:       sanitizeLogValue(string(body)),
 		RequestID:     requestID,
 		RetryAfter:    retryAfter,
 		RequestURL:    reqURL,
 		RequestMethod: reqMethod,
 	}
+}
+
+type parsedAPIErrorBody struct {
+	Message string
+	Type    string
+	Code    string
+	Param   string
+}
+
+func parseAPIErrorBody(body []byte) (parsedAPIErrorBody, bool) {
+	var envelope struct {
+		Error   json.RawMessage `json:"error"`
+		Message string          `json:"message"`
+		Type    string          `json:"type"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return parsedAPIErrorBody{}, false
+	}
+
+	if len(envelope.Error) > 0 && !bytes.Equal(bytes.TrimSpace(envelope.Error), []byte("null")) {
+		var nested struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    string `json:"code"`
+			Param   string `json:"param"`
+		}
+		if err := json.Unmarshal(envelope.Error, &nested); err == nil && nested.Message != "" {
+			return parsedAPIErrorBody{
+				Message: sanitizeLogValue(nested.Message),
+				Type:    sanitizeLogValue(nested.Type),
+				Code:    sanitizeLogValue(nested.Code),
+				Param:   sanitizeLogValue(nested.Param),
+			}, true
+		}
+
+		var message string
+		if err := json.Unmarshal(envelope.Error, &message); err == nil && message != "" {
+			return parsedAPIErrorBody{Message: sanitizeLogValue(message)}, true
+		}
+	}
+
+	if envelope.Message != "" {
+		return parsedAPIErrorBody{
+			Message: sanitizeLogValue(envelope.Message),
+			Type:    sanitizeLogValue(envelope.Type),
+		}, true
+	}
+
+	return parsedAPIErrorBody{}, false
 }
 
 // APIError represents an error from the LLM API with full request context

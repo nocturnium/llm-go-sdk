@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v4"
@@ -88,6 +90,115 @@ func TestGetCapabilities(t *testing.T) {
 
 	if !caps.JSONMode {
 		t.Error("Expected JSONMode capability")
+	}
+}
+
+func TestModelAndCapabilitiesCacheProps(t *testing.T) {
+	var propsRequests atomic.Int64
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/props" {
+			t.Errorf("Expected path /props, got %s", r.URL.Path)
+		}
+		propsRequests.Add(1)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"default_generation_settings": map[string]any{
+				"model":     "llama-3.2-1b",
+				"n_ctx":     4096,
+				"n_predict": 512,
+			},
+		})
+	})
+
+	if got := client.Model(); got != "llama-3.2-1b" {
+		t.Fatalf("Model() = %q, want %q", got, "llama-3.2-1b")
+	}
+	for range 5 {
+		caps := client.Capabilities()
+		if caps.MaxContextTokens != 4096 {
+			t.Fatalf("Capabilities().MaxContextTokens = %d, want 4096", caps.MaxContextTokens)
+		}
+		if caps.MaxOutputTokens != 512 {
+			t.Fatalf("Capabilities().MaxOutputTokens = %d, want 512", caps.MaxOutputTokens)
+		}
+		if got := client.Model(); got != "llama-3.2-1b" {
+			t.Fatalf("Model() = %q, want %q", got, "llama-3.2-1b")
+		}
+	}
+
+	if got := propsRequests.Load(); got != 1 {
+		t.Fatalf("/props requests = %d, want 1", got)
+	}
+}
+
+func TestModelAndCapabilitiesCachePropsConcurrent(t *testing.T) {
+	var propsRequests atomic.Int64
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/props" {
+			t.Errorf("Expected path /props, got %s", r.URL.Path)
+		}
+		propsRequests.Add(1)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"default_generation_settings": map[string]any{
+				"model":     "llama-3.2-1b",
+				"n_ctx":     4096,
+				"n_predict": 512,
+			},
+		})
+	})
+
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if got := client.Model(); got != "llama-3.2-1b" {
+				t.Errorf("Model() = %q, want %q", got, "llama-3.2-1b")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			caps := client.Capabilities()
+			if caps.MaxContextTokens != 4096 {
+				t.Errorf("Capabilities().MaxContextTokens = %d, want 4096", caps.MaxContextTokens)
+			}
+			if caps.MaxOutputTokens != 512 {
+				t.Errorf("Capabilities().MaxOutputTokens = %d, want 512", caps.MaxOutputTokens)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := propsRequests.Load(); got != 1 {
+		t.Fatalf("/props requests = %d, want 1", got)
+	}
+}
+
+func TestModelAndCapabilitiesPropsFailureUsesDefaults(t *testing.T) {
+	var propsRequests atomic.Int64
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/props" {
+			t.Errorf("Expected path /props, got %s", r.URL.Path)
+		}
+		propsRequests.Add(1)
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	})
+
+	if got := client.Model(); got != "default" {
+		t.Fatalf("Model() = %q, want %q", got, "default")
+	}
+	caps := client.Capabilities()
+	if caps.MaxContextTokens != 0 {
+		t.Fatalf("Capabilities().MaxContextTokens = %d, want 0", caps.MaxContextTokens)
+	}
+	if caps.MaxOutputTokens != 0 {
+		t.Fatalf("Capabilities().MaxOutputTokens = %d, want 0", caps.MaxOutputTokens)
+	}
+	if got := propsRequests.Load(); got != 2 {
+		t.Fatalf("/props requests = %d, want 2 retries after failures", got)
 	}
 }
 
