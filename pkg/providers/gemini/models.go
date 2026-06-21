@@ -34,46 +34,46 @@ var knownModels = map[string]modelMetadata{
 	"gemini-3.5-flash": {
 		displayName: "Gemini 3.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 1.50, Output: 9.00},
+		pricing:     tokenPricing("gemini-3.5-flash"),
 	},
 	// Gemini 3.1 Pro — tiered: Input 2.00 (<=200k) / 4.00 (>200k); Output 12.00 / 18.00.
 	"gemini-3.1-pro-preview": {
 		displayName: "Gemini 3.1 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 2.00, Output: 12.00},
+		pricing:     tokenPricing("gemini-3.1-pro-preview"),
 	},
 	// Gemini 3.1 Flash-Lite — base text/image/video shown; audio input is higher.
 	"gemini-3.1-flash-lite": {
 		displayName: "Gemini 3.1 Flash-Lite",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.25, Output: 1.50},
+		pricing:     tokenPricing("gemini-3.1-flash-lite"),
 	},
 	// Gemini 3 Flash — base text/image/video shown; audio input is higher.
 	"gemini-3-flash-preview": {
 		displayName: "Gemini 3 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.50, Output: 3.00},
+		pricing:     tokenPricing("gemini-3-flash-preview"),
 	},
 	// Gemini 2.5 Pro — context 1,048,576 in / 65,536 out.
 	// Tiered: Input 1.25 (<=200k) / 2.50 (>200k); Output 10.00 (<=200k) / 15.00 (>200k).
 	"gemini-2.5-pro": {
 		displayName: "Gemini 2.5 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 1.25, Output: 10.00},
+		pricing:     tokenPricing("gemini-2.5-pro"),
 	},
 	// Gemini 2.5 Flash — context 1,048,576 in / 65,536 out. No >200k tier.
 	// (Audio input is priced higher at 1.00; base text/image/video shown here.)
 	"gemini-2.5-flash": {
 		displayName: "Gemini 2.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.30, Output: 2.50},
+		pricing:     tokenPricing("gemini-2.5-flash"),
 	},
 	// Gemini 2.5 Flash-Lite — context 1,048,576 in / 65,536 out. No >200k tier.
 	// (Audio input is priced higher at 0.30; base text/image/video shown here.)
 	"gemini-2.5-flash-lite": {
 		displayName: "Gemini 2.5 Flash-Lite",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.10, Output: 0.40},
+		pricing:     tokenPricing("gemini-2.5-flash-lite"),
 	},
 	// Gemini 2.0 Flash
 	// Deprecated: shut down June 1, 2026 per the official pricing page; retained
@@ -81,7 +81,7 @@ var knownModels = map[string]modelMetadata{
 	"gemini-2.0-flash": {
 		displayName: "Gemini 2.0 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.10, Output: 0.40},
+		pricing:     tokenPricing("gemini-2.0-flash"),
 	},
 	// Gemini 2.0 Flash-Lite
 	// Deprecated: shut down June 1, 2026 per the official pricing page; retained
@@ -89,12 +89,12 @@ var knownModels = map[string]modelMetadata{
 	"gemini-2.0-flash-lite": {
 		displayName: "Gemini 2.0 Flash-Lite",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.075, Output: 0.30},
+		pricing:     tokenPricing("gemini-2.0-flash-lite"),
 	},
 	"gemini-2.0-flash-exp": {
 		displayName: "Gemini 2.0 Flash (Experimental)",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.10, Output: 0.40},
+		pricing:     tokenPricing("gemini-2.0-flash-exp"),
 	},
 	// Gemini 1.5 family — no longer listed on the official Gemini API pricing
 	// page (June 2026). Prices below are the last published rates and are kept
@@ -103,75 +103,75 @@ var knownModels = map[string]modelMetadata{
 	"gemini-1.5-pro": {
 		displayName: "Gemini 1.5 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 1.25, Output: 5.00}, // Up to 128K context
+		pricing:     tokenPricing("gemini-1.5-pro"), // Up to 128K context
 	},
 	"gemini-1.5-pro-latest": {
 		displayName: "Gemini 1.5 Pro (Latest)",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 1.25, Output: 5.00},
+		pricing:     tokenPricing("gemini-1.5-pro-latest"),
 	},
 	"gemini-1.5-pro-001": {
 		displayName: "Gemini 1.5 Pro 001",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 1.25, Output: 5.00},
+		pricing:     tokenPricing("gemini-1.5-pro-001"),
 	},
 	"gemini-1.5-pro-002": {
 		displayName: "Gemini 1.5 Pro 002",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 1.25, Output: 5.00},
+		pricing:     tokenPricing("gemini-1.5-pro-002"),
 	},
 	// Gemini 1.5 Flash
 	"gemini-1.5-flash": {
 		displayName: "Gemini 1.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.075, Output: 0.30}, // Up to 128K context
+		pricing:     tokenPricing("gemini-1.5-flash"), // Up to 128K context
 	},
 	"gemini-1.5-flash-latest": {
 		displayName: "Gemini 1.5 Flash (Latest)",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.075, Output: 0.30},
+		pricing:     tokenPricing("gemini-1.5-flash-latest"),
 	},
 	"gemini-1.5-flash-001": {
 		displayName: "Gemini 1.5 Flash 001",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.075, Output: 0.30},
+		pricing:     tokenPricing("gemini-1.5-flash-001"),
 	},
 	"gemini-1.5-flash-002": {
 		displayName: "Gemini 1.5 Flash 002",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.075, Output: 0.30},
+		pricing:     tokenPricing("gemini-1.5-flash-002"),
 	},
 	"gemini-1.5-flash-8b": {
 		displayName: "Gemini 1.5 Flash 8B",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.0375, Output: 0.15},
+		pricing:     tokenPricing("gemini-1.5-flash-8b"),
 	},
 	// Gemini 1.0 Pro
 	"gemini-1.0-pro": {
 		displayName: "Gemini 1.0 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat},
-		pricing:     &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:     tokenPricing("gemini-1.0-pro"),
 	},
 	"gemini-1.0-pro-latest": {
 		displayName: "Gemini 1.0 Pro (Latest)",
 		types:       []llms.ModelType{llms.ModelTypeChat},
-		pricing:     &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:     tokenPricing("gemini-1.0-pro-latest"),
 	},
 	"gemini-pro": {
 		displayName: "Gemini Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat},
-		pricing:     &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:     tokenPricing("gemini-pro"),
 	},
 	// Gemini 1.0 Pro Vision
 	"gemini-1.0-pro-vision": {
 		displayName: "Gemini 1.0 Pro Vision",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:     tokenPricing("gemini-1.0-pro-vision"),
 	},
 	"gemini-pro-vision": {
 		displayName: "Gemini Pro Vision",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:     tokenPricing("gemini-pro-vision"),
 	},
 	// Embedding models
 	// Gemini Embedding 001 — current paid embedding model (0.15 per 1M input
@@ -179,17 +179,17 @@ var knownModels = map[string]modelMetadata{
 	"gemini-embedding-001": {
 		displayName: "Gemini Embedding 001",
 		types:       []llms.ModelType{llms.ModelTypeEmbedding},
-		pricing:     &llms.ModelPricing{Input: 0.15},
+		pricing:     tokenPricing("gemini-embedding-001"),
 	},
 	"text-embedding-004": {
 		displayName: "Text Embedding 004",
 		types:       []llms.ModelType{llms.ModelTypeEmbedding},
-		pricing:     &llms.ModelPricing{Input: 0.00}, // Free tier available
+		pricing:     tokenPricing("text-embedding-004"), // Free tier available
 	},
 	"embedding-001": {
 		displayName: "Embedding 001",
 		types:       []llms.ModelType{llms.ModelTypeEmbedding},
-		pricing:     &llms.ModelPricing{Input: 0.00},
+		pricing:     tokenPricing("embedding-001"),
 	},
 }
 
@@ -197,6 +197,14 @@ type modelMetadata struct {
 	displayName string
 	types       []llms.ModelType
 	pricing     *llms.ModelPricing
+}
+
+func tokenPricing(model string) *llms.ModelPricing {
+	pricing, ok := llms.ModelTokenPricing(llms.ProviderGemini, model)
+	if !ok {
+		return nil
+	}
+	return pricing
 }
 
 // ListModels retrieves available models from the Gemini API.

@@ -69,6 +69,35 @@ func TestPricing_DefaultPricing(t *testing.T) {
 	}
 }
 
+func TestModelTokenPricing(t *testing.T) {
+	pricing, ok := ModelTokenPricing(ProviderOpenAI, "gpt-4o")
+	if !ok {
+		t.Fatal("expected pricing for openai:gpt-4o")
+	}
+	if pricing.Input != 2.50 {
+		t.Errorf("Input = %f, want 2.50", pricing.Input)
+	}
+	if pricing.Output != 10.00 {
+		t.Errorf("Output = %f, want 10.00", pricing.Output)
+	}
+
+	freePricing, ok := ModelTokenPricing(ProviderGemini, "text-embedding-004")
+	if !ok {
+		t.Fatal("expected central free pricing entry for gemini:text-embedding-004")
+	}
+	if freePricing.Input != 0 || freePricing.Output != 0 {
+		t.Errorf("free pricing = %+v, want zero input/output", freePricing)
+	}
+
+	unknownPricing, ok := ModelTokenPricing(ProviderOpenAI, "unknown-model")
+	if ok {
+		t.Fatal("expected unknown model pricing to return ok=false")
+	}
+	if unknownPricing != nil {
+		t.Errorf("unknown pricing = %+v, want nil", unknownPricing)
+	}
+}
+
 func TestNewCostTracker_Defaults(t *testing.T) {
 	tracker := NewCostTracker()
 

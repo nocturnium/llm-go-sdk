@@ -20,42 +20,42 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 5.00, Output: 30.00},
+		pricing:       tokenPricing("gpt-5.5"),
 	},
 	"gpt-5.5-pro": {
 		displayName:   "GPT-5.5 Pro",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 30.00, Output: 180.00},
+		pricing:       tokenPricing("gpt-5.5-pro"),
 	},
 	"gpt-5.4": {
 		displayName:   "GPT-5.4",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 2.50, Output: 15.00},
+		pricing:       tokenPricing("gpt-5.4"),
 	},
 	"gpt-5.4-mini": {
 		displayName:   "GPT-5.4 Mini",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.75, Output: 4.50},
+		pricing:       tokenPricing("gpt-5.4-mini"),
 	},
 	"gpt-5.4-nano": {
 		displayName:   "GPT-5.4 Nano",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.20, Output: 1.25},
+		pricing:       tokenPricing("gpt-5.4-nano"),
 	},
 	"gpt-5.4-pro": {
 		displayName:   "GPT-5.4 Pro",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 30.00, Output: 180.00},
+		pricing:       tokenPricing("gpt-5.4-pro"),
 	},
 	// GPT-5 family
 	"gpt-5": {
@@ -63,21 +63,21 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 1.25, Output: 10.00},
+		pricing:       tokenPricing("gpt-5"),
 	},
 	"gpt-5-mini": {
 		displayName:   "GPT-5 Mini",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.25, Output: 2.00},
+		pricing:       tokenPricing("gpt-5-mini"),
 	},
 	"gpt-5-nano": {
 		displayName:   "GPT-5 Nano",
 		contextLength: 400000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.05, Output: 0.40},
+		pricing:       tokenPricing("gpt-5-nano"),
 	},
 	// GPT-4.1 family
 	"gpt-4.1": {
@@ -85,21 +85,21 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 1047576,
 		maxOutput:     32768,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 2.00, Output: 8.00},
+		pricing:       tokenPricing("gpt-4.1"),
 	},
 	"gpt-4.1-mini": {
 		displayName:   "GPT-4.1 Mini",
 		contextLength: 1047576,
 		maxOutput:     32768,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.40, Output: 1.60},
+		pricing:       tokenPricing("gpt-4.1-mini"),
 	},
 	"gpt-4.1-nano": {
 		displayName:   "GPT-4.1 Nano",
 		contextLength: 1047576,
 		maxOutput:     32768,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.10, Output: 0.40},
+		pricing:       tokenPricing("gpt-4.1-nano"),
 	},
 	// GPT-4o models
 	"gpt-4o": {
@@ -107,35 +107,35 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 128000,
 		maxOutput:     16384,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 2.50, Output: 10.00},
+		pricing:       tokenPricing("gpt-4o"),
 	},
 	"gpt-4o-mini": {
 		displayName:   "GPT-4o Mini",
 		contextLength: 128000,
 		maxOutput:     16384,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.15, Output: 0.60},
+		pricing:       tokenPricing("gpt-4o-mini"),
 	},
 	"gpt-4o-2024-11-20": {
 		displayName:   "GPT-4o (2024-11-20)",
 		contextLength: 128000,
 		maxOutput:     16384,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 2.50, Output: 10.00},
+		pricing:       tokenPricing("gpt-4o-2024-11-20"),
 	},
 	"gpt-4o-2024-08-06": {
 		displayName:   "GPT-4o (2024-08-06)",
 		contextLength: 128000,
 		maxOutput:     16384,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 2.50, Output: 10.00},
+		pricing:       tokenPricing("gpt-4o-2024-08-06"),
 	},
 	"gpt-4o-mini-2024-07-18": {
 		displayName:   "GPT-4o Mini (2024-07-18)",
 		contextLength: 128000,
 		maxOutput:     16384,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.15, Output: 0.60},
+		pricing:       tokenPricing("gpt-4o-mini-2024-07-18"),
 	},
 	// GPT-4 Turbo
 	"gpt-4-turbo": {
@@ -143,14 +143,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 128000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 10.00, Output: 30.00},
+		pricing:       tokenPricing("gpt-4-turbo"),
 	},
 	"gpt-4-turbo-preview": {
 		displayName:   "GPT-4 Turbo Preview",
 		contextLength: 128000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 10.00, Output: 30.00},
+		pricing:       tokenPricing("gpt-4-turbo-preview"),
 	},
 	// GPT-4
 	"gpt-4": {
@@ -158,14 +158,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 8192,
 		maxOutput:     8192,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 30.00, Output: 60.00},
+		pricing:       tokenPricing("gpt-4"),
 	},
 	"gpt-4-32k": {
 		displayName:   "GPT-4 32K",
 		contextLength: 32768,
 		maxOutput:     32768,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 60.00, Output: 120.00},
+		pricing:       tokenPricing("gpt-4-32k"),
 	},
 	// GPT-3.5
 	"gpt-3.5-turbo": {
@@ -173,14 +173,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 16385,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:       tokenPricing("gpt-3.5-turbo"),
 	},
 	"gpt-3.5-turbo-16k": {
 		displayName:   "GPT-3.5 Turbo 16K",
 		contextLength: 16385,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 0.50, Output: 1.50},
+		pricing:       tokenPricing("gpt-3.5-turbo-16k"),
 	},
 	// o-series reasoning models
 	"o4-mini": {
@@ -188,61 +188,61 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     100000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 1.10, Output: 4.40},
+		pricing:       tokenPricing("o4-mini"),
 	},
 	"o3": {
 		displayName:   "o3",
 		contextLength: 200000,
 		maxOutput:     100000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 2.00, Output: 8.00},
+		pricing:       tokenPricing("o3"),
 	},
 	"o3-mini": {
 		displayName:   "o3-mini",
 		contextLength: 200000,
 		maxOutput:     100000,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 1.10, Output: 4.40},
+		pricing:       tokenPricing("o3-mini"),
 	},
 	"o1": {
 		displayName:   "o1",
 		contextLength: 200000,
 		maxOutput:     100000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 15.00, Output: 60.00},
+		pricing:       tokenPricing("o1"),
 	},
 	"o1-preview": {
 		displayName:   "o1 Preview",
 		contextLength: 128000,
 		maxOutput:     32768,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 15.00, Output: 60.00},
+		pricing:       tokenPricing("o1-preview"),
 	},
 	"o1-mini": {
 		displayName:   "o1 Mini",
 		contextLength: 128000,
 		maxOutput:     65536,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 12.00},
+		pricing:       tokenPricing("o1-mini"),
 	},
 	// Embedding models
 	"text-embedding-3-large": {
 		displayName:   "Text Embedding 3 Large",
 		contextLength: 8191,
 		types:         []llms.ModelType{llms.ModelTypeEmbedding},
-		pricing:       &llms.ModelPricing{Input: 0.13},
+		pricing:       tokenPricing("text-embedding-3-large"),
 	},
 	"text-embedding-3-small": {
 		displayName:   "Text Embedding 3 Small",
 		contextLength: 8191,
 		types:         []llms.ModelType{llms.ModelTypeEmbedding},
-		pricing:       &llms.ModelPricing{Input: 0.02},
+		pricing:       tokenPricing("text-embedding-3-small"),
 	},
 	"text-embedding-ada-002": {
 		displayName:   "Text Embedding Ada 002",
 		contextLength: 8191,
 		types:         []llms.ModelType{llms.ModelTypeEmbedding},
-		pricing:       &llms.ModelPricing{Input: 0.10},
+		pricing:       tokenPricing("text-embedding-ada-002"),
 	},
 	// Image models
 	"dall-e-3": {
@@ -287,6 +287,14 @@ type modelMetadata struct {
 	maxOutput     int
 	types         []llms.ModelType
 	pricing       *llms.ModelPricing
+}
+
+func tokenPricing(model string) *llms.ModelPricing {
+	pricing, ok := llms.ModelTokenPricing(llms.ProviderOpenAI, model)
+	if !ok {
+		return nil
+	}
+	return pricing
 }
 
 // ListModels retrieves available models from the OpenAI API.
