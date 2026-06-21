@@ -555,7 +555,6 @@ func ProcessStream(
 					rc := &llms.ReasoningContent{Content: reasoning}
 					if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{
 						Reasoning: rc,
-						Thinking:  rc,
 					})) {
 						return
 					}

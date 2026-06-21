@@ -7,6 +7,9 @@ import (
 // Message represents a chat message.
 // Messages can contain either simple text (using Content) or multi-part content
 // including images (using Parts). If Parts is non-empty, it takes precedence over Content.
+// Message methods use value receivers because Message is a small value type
+// passed by value in slices; Response and StreamChunk methods use pointer
+// receivers for nil-safety.
 type Message struct {
 	Role       Role          `json:"role"`
 	Content    string        `json:"content,omitempty"`      // Simple text content (for backward compatibility)

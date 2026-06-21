@@ -156,9 +156,8 @@ func TestResponseReasoningText(t *testing.T) {
 	if got := resp.ReasoningText(); got != "because" {
 		t.Errorf("expected %q, got %q", "because", got)
 	}
-	// SetReasoning populates both the canonical field and the deprecated alias.
-	if resp.Reasoning != resp.Thinking {
-		t.Error("expected Reasoning and Thinking to point at the same value")
+	if resp.Reasoning != resp.Thinking() {
+		t.Error("expected Thinking method to return Reasoning")
 	}
 }
 

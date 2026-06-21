@@ -354,9 +354,6 @@ func TestResponseMarshal_SnakeCase(t *testing.T) {
 		},
 		ToolCalls: []ToolCall{{ID: "call-1", Type: ToolTypeFunction}},
 	}
-	// The deprecated Thinking alias points at the same value but is not serialized.
-	resp.Thinking = resp.Reasoning
-
 	data, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatalf("marshal response: %v", err)

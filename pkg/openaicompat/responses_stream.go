@@ -169,7 +169,7 @@ func ProcessResponsesStream(
 		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
 			if env.Delta != "" {
 				rc := &llms.ReasoningContent{Content: env.Delta}
-				if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
+				if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc})) {
 					return
 				}
 			}

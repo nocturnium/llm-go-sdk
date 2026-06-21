@@ -291,7 +291,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 							accumulatedReasoning += event.Delta.Thinking
 							rc := &llms.ReasoningContent{Content: event.Delta.Thinking}
 							reasoningDeltaEmitted = true
-							if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
+							if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc})) {
 								return
 							}
 						}
@@ -348,7 +348,6 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 				sender.SendFinal(llms.StreamChunk{
 					Reasoning:    finalReasoning,
-					Thinking:     finalReasoning,
 					ToolCalls:    accumulatedToolCalls,
 					FinishReason: finishReason,
 					Usage:        finalUsage,
