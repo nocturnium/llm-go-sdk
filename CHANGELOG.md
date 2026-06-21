@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-06-21
+
 Additive, non-breaking changes on top of v3.0.0. The module path is unchanged and
 every change is API-compatible (the `apidiff` baseline grows, with no removals).
 
