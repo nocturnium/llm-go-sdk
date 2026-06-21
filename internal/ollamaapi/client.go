@@ -15,7 +15,14 @@ import (
 	"github.com/nocturnium/llm-go-sdk/v3/internal/httpclient"
 )
 
-const defaultBaseURL = "http://localhost:11434"
+const (
+	defaultBaseURL = "http://localhost:11434"
+
+	// maxNDJSONLineSize bounds a single Ollama streaming NDJSON/progress line.
+	// This matches the order of the SSE reader cap and prevents unbounded growth
+	// if a peer never emits a newline.
+	maxNDJSONLineSize = 4 << 20
+)
 
 // Client is a client for Ollama's native API.
 type Client struct {
@@ -120,6 +127,9 @@ func (c *Client) PullModel(ctx context.Context, name string, callback func(PullR
 	defer func() { _ = body.Close() }()
 
 	scanner := bufio.NewScanner(body)
+	// Ollama pull progress is NDJSON; allow large progress payloads explicitly
+	// while keeping a hard cap instead of Scanner's small default token limit.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxNDJSONLineSize)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -371,7 +381,7 @@ func (r *ChatStreamReader) Close() error {
 
 func readNDJSONLine(reader *bufio.Reader) (string, error) {
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := readBoundedLine(reader)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				if strings.TrimSpace(line) == "" {
@@ -385,6 +395,31 @@ func readNDJSONLine(reader *bufio.Reader) (string, error) {
 			continue
 		}
 		return line, nil
+	}
+}
+
+func readBoundedLine(reader *bufio.Reader) (string, error) {
+	var line []byte
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		if len(line)+len(fragment) > maxNDJSONLineSize {
+			return "", fmt.Errorf("ollama ndjson line exceeds %d bytes", maxNDJSONLineSize)
+		}
+		line = append(line, fragment...)
+
+		if err == nil {
+			return string(line), nil
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			if len(line) == 0 {
+				return "", io.EOF
+			}
+			return string(line), io.EOF
+		}
+		return "", err
 	}
 }
 
