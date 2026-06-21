@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
 )
 
 func TestClient_GenerateContent_Integration(t *testing.T) {
@@ -379,6 +379,55 @@ func TestClient_Stream_Integration(t *testing.T) {
 		t.Error("expected usage in final chunk")
 	} else if finalChunk.Usage.TotalTokens != 8 {
 		t.Errorf("unexpected total_tokens: %d", finalChunk.Usage.TotalTokens)
+	}
+}
+
+func TestClient_Stream_RecoversPanic(t *testing.T) {
+	originalReadStreamChunk := readStreamChunk
+	readStreamChunk = func(_ *geminiapi.StreamReader) (*geminiapi.StreamChunk, error) {
+		panic("test stream panic")
+	}
+	defer func() {
+		readStreamChunk = originalReadStreamChunk
+	}()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("ResponseWriter does not implement http.Flusher")
+		}
+		_, _ = w.Write([]byte(`data: {"candidates":[{"content":{"parts":[{"text":"Hello"}],"role":"model"}}]}` + "\n\n"))
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-api-key"),
+		WithBaseURL(server.URL),
+		WithAllowPrivateIPs(), WithAllowHTTP(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	chunks, err := client.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hi"}})
+	if err != nil {
+		t.Fatalf("Stream failed: %v", err)
+	}
+
+	var streamErr error
+	for chunk := range chunks {
+		if chunk.Error != nil {
+			streamErr = chunk.Error
+		}
+	}
+
+	if streamErr == nil {
+		t.Fatal("expected terminal stream error")
+	}
+	if !strings.Contains(streamErr.Error(), "gemini: panic during stream processing: test stream panic") {
+		t.Fatalf("unexpected stream error: %v", streamErr)
 	}
 }
 

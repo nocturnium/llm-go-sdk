@@ -1,11 +1,94 @@
 package gemini
 
 import (
+	"context"
+	"errors"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
 )
+
+var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+	"gemini-3.5-flash":        {Input: 1.50, Output: 9.00},
+	"gemini-3.1-pro-preview":  {Input: 2.00, Output: 12.00},
+	"gemini-3.1-flash-lite":   {Input: 0.25, Output: 1.50},
+	"gemini-3-flash-preview":  {Input: 0.50, Output: 3.00},
+	"gemini-2.5-pro":          {Input: 1.25, Output: 10.00},
+	"gemini-2.5-flash":        {Input: 0.30, Output: 2.50},
+	"gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40},
+	"gemini-2.0-flash":        {Input: 0.10, Output: 0.40},
+	"gemini-2.0-flash-lite":   {Input: 0.075, Output: 0.30},
+	"gemini-2.0-flash-exp":    {Input: 0.10, Output: 0.40},
+	"gemini-1.5-pro":          {Input: 1.25, Output: 5.00},
+	"gemini-1.5-pro-latest":   {Input: 1.25, Output: 5.00},
+	"gemini-1.5-pro-001":      {Input: 1.25, Output: 5.00},
+	"gemini-1.5-pro-002":      {Input: 1.25, Output: 5.00},
+	"gemini-1.5-flash":        {Input: 0.075, Output: 0.30},
+	"gemini-1.5-flash-latest": {Input: 0.075, Output: 0.30},
+	"gemini-1.5-flash-001":    {Input: 0.075, Output: 0.30},
+	"gemini-1.5-flash-002":    {Input: 0.075, Output: 0.30},
+	"gemini-1.5-flash-8b":     {Input: 0.0375, Output: 0.15},
+	"gemini-1.0-pro":          {Input: 0.50, Output: 1.50},
+	"gemini-1.0-pro-latest":   {Input: 0.50, Output: 1.50},
+	"gemini-pro":              {Input: 0.50, Output: 1.50},
+	"gemini-1.0-pro-vision":   {Input: 0.50, Output: 1.50},
+	"gemini-pro-vision":       {Input: 0.50, Output: 1.50},
+	"gemini-embedding-001":    {Input: 0.15},
+	"text-embedding-004":      {},
+	"embedding-001":           {},
+}
+
+func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
+	const epsilon = 1e-12
+
+	for modelID, expected := range expectedKnownModelTokenPricing {
+		metadata, ok := knownModels[modelID]
+		if !ok {
+			t.Fatalf("knownModels missing priced model %s", modelID)
+		}
+		if metadata.pricing == nil {
+			t.Fatalf("knownModels[%s].pricing is nil", modelID)
+		}
+		if metadata.pricing.Input != expected.Input {
+			t.Errorf("%s Input = %f, want %f", modelID, metadata.pricing.Input, expected.Input)
+		}
+		if metadata.pricing.Output != expected.Output {
+			t.Errorf("%s Output = %f, want %f", modelID, metadata.pricing.Output, expected.Output)
+		}
+
+		central, ok := llms.DefaultPricing[string(llms.ProviderGemini)+":"+modelID]
+		if !ok {
+			t.Fatalf("DefaultPricing missing gemini:%s", modelID)
+		}
+		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
+			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
+		}
+		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
+			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
+		}
+	}
+
+	for modelID, metadata := range knownModels {
+		central, ok := llms.DefaultPricing[string(llms.ProviderGemini)+":"+modelID]
+		if !ok {
+			continue
+		}
+		if metadata.pricing == nil {
+			t.Fatalf("knownModels[%s].pricing is nil but DefaultPricing has token pricing", modelID)
+		}
+		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
+			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
+		}
+		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
+			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
+		}
+	}
+}
 
 func TestConvertGeminiModel(t *testing.T) {
 	tests := []struct {
@@ -373,6 +456,36 @@ func TestKnownModelsCategories(t *testing.T) {
 func TestClientImplementsModelLister(_ *testing.T) {
 	// This is a compile-time check, but we include it as a test for documentation
 	var _ llms.ModelLister = (*Client)(nil)
+}
+
+func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/missing-model" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"missing resource","type":"invalid_request_error"}}`))
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-key"),
+		WithBaseURL(server.URL),
+		WithAllowHTTP(),
+		WithAllowPrivateIPs(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = client.ModelInfo(context.Background(), "missing-model")
+	if !errors.Is(err, llms.ErrModelNotFound) {
+		t.Fatalf("ModelInfo() error = %v, want ErrModelNotFound", err)
+	}
+	if strings.Contains(err.Error(), "404") {
+		t.Fatalf("ModelInfo() error = %q, want no literal 404", err)
+	}
 }
 
 func TestModelIDExtraction(t *testing.T) {

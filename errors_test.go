@@ -2,6 +2,7 @@ package llms
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -59,6 +60,12 @@ func TestAPIError_Is(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "404 is ErrModelNotFound",
+			err:      &APIError{StatusCode: 404},
+			target:   ErrModelNotFound,
+			expected: true,
+		},
+		{
 			name:     "429 is ErrRateLimited",
 			err:      &APIError{StatusCode: 429},
 			target:   ErrRateLimited,
@@ -68,6 +75,24 @@ func TestAPIError_Is(t *testing.T) {
 			name:     "500 is ErrServerError",
 			err:      &APIError{StatusCode: 500},
 			target:   ErrServerError,
+			expected: true,
+		},
+		{
+			name:     "502 is ErrServiceUnavailable",
+			err:      &APIError{StatusCode: 502},
+			target:   ErrServiceUnavailable,
+			expected: true,
+		},
+		{
+			name:     "504 is ErrServiceUnavailable",
+			err:      &APIError{StatusCode: 504},
+			target:   ErrServiceUnavailable,
+			expected: true,
+		},
+		{
+			name:     "529 is ErrServiceUnavailable",
+			err:      &APIError{StatusCode: 529},
+			target:   ErrServiceUnavailable,
 			expected: true,
 		},
 		{
@@ -100,6 +125,54 @@ func TestAPIError_Is(t *testing.T) {
 	}
 }
 
+func TestAPIError_StatusClassification(t *testing.T) {
+	tests := []struct {
+		status    int
+		wantErr   error
+		retryable bool
+	}{
+		{401, ErrAuthenticationFailed, false},
+		{403, ErrPermissionDenied, false},
+		{404, ErrModelNotFound, false},
+		{429, ErrRateLimited, true},
+		{500, ErrServerError, true},
+		{502, ErrServiceUnavailable, true},
+		{503, ErrServiceUnavailable, true},
+		{504, ErrServiceUnavailable, true},
+		{529, ErrServiceUnavailable, true},
+	}
+
+	if len(apiStatusClassifications) != len(tests) {
+		t.Fatalf("apiStatusClassifications has %d statuses, want %d", len(apiStatusClassifications), len(tests))
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("status_%d", tt.status), func(t *testing.T) {
+			classification, ok := apiStatusClassifications[tt.status]
+			if !ok {
+				t.Fatalf("missing status classification for %d", tt.status)
+			}
+			if !errors.Is(classification.err, tt.wantErr) {
+				t.Fatalf("classification error = %v, want %v", classification.err, tt.wantErr)
+			}
+			if classification.retryable != tt.retryable {
+				t.Fatalf("classification retryable = %v, want %v", classification.retryable, tt.retryable)
+			}
+
+			err := &APIError{StatusCode: tt.status}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("errors.Is(APIError{%d}, %v) = false", tt.status, tt.wantErr)
+			}
+			if got := err.IsRetryable(); got != tt.retryable {
+				t.Fatalf("IsRetryable(%d) = %v, want %v", tt.status, got, tt.retryable)
+			}
+			if !errors.Is(err.underlyingError(), classification.err) {
+				t.Fatalf("underlyingError(%d) = %v, want classification error %v", tt.status, err.underlyingError(), classification.err)
+			}
+		})
+	}
+}
+
 func TestAPIError_IsRetryable(t *testing.T) {
 	tests := []struct {
 		statusCode int
@@ -109,11 +182,13 @@ func TestAPIError_IsRetryable(t *testing.T) {
 		{400, false},
 		{401, false},
 		{403, false},
+		{404, false},
 		{429, true},
 		{500, true},
 		{502, true},
 		{503, true},
 		{504, true},
+		{529, true},
 	}
 
 	for _, tc := range tests {
@@ -154,6 +229,10 @@ func TestValidationError_Is(t *testing.T) {
 
 	if !errors.Is(err, ErrInvalidParameters) {
 		t.Error("ValidationError should match ErrInvalidParameters")
+	}
+
+	if !errors.Is(fmt.Errorf("wrapped: %w", err), ErrInvalidParameters) {
+		t.Error("wrapped ValidationError should match ErrInvalidParameters")
 	}
 }
 
@@ -244,6 +323,10 @@ func TestStreamError_Is(t *testing.T) {
 
 	if !errors.Is(err, ErrStreamInterrupted) {
 		t.Error("StreamError should match ErrStreamInterrupted")
+	}
+
+	if !errors.Is(fmt.Errorf("wrapped: %w", err), ErrStreamInterrupted) {
+		t.Error("wrapped StreamError should match ErrStreamInterrupted")
 	}
 }
 

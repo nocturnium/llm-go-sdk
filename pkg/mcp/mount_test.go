@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // MountHTTP must connect, register the server's tools into the registry, and

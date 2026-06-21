@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // TestReasoningInputItemMarshalsSummary guards the wire-format invariant the live

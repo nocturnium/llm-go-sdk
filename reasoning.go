@@ -95,40 +95,48 @@ func ReasoningBudgetForEffort(e ReasoningEffort) int {
 	}
 }
 
-// WithReasoning sets the full reasoning configuration for a call.
+// WithReasoning merges the reasoning configuration for a call.
+//
+// Non-zero Effort and BudgetTokens values overwrite any existing reasoning
+// settings, while zero values mean "unspecified" and preserve values already set
+// by options such as WithReasoningEffort or WithReasoningBudget. Enabled is
+// explicit because it is a pointer: nil preserves the existing setting, while
+// non-nil true or false overwrites it. For same-field conflicts, the later
+// option still wins.
 func WithReasoning(cfg ReasoningConfig) CallOption {
 	return func(o *CallOptions) {
-		c := cfg
-		if cfg.Enabled != nil {
-			b := *cfg.Enabled
-			c.Enabled = &b
-		}
-		o.Reasoning = &c
+		reasoning := ensureReasoningConfig(o)
+		mergeReasoningConfig(reasoning, cfg)
 	}
 }
 
 // WithReasoningEffort requests reasoning at the given qualitative effort level.
+// It composes with WithReasoning, WithReasoningBudget, and WithThinkingMode:
+// orthogonal fields are preserved regardless of option order, while later
+// effort options overwrite earlier effort settings.
 func WithReasoningEffort(effort ReasoningEffort) CallOption {
 	return func(o *CallOptions) {
-		if o.Reasoning == nil {
-			o.Reasoning = &ReasoningConfig{}
-		}
-		o.Reasoning.Effort = effort
+		ensureReasoningConfig(o).Effort = effort
 	}
 }
 
 // WithReasoningBudget caps the tokens the model may spend reasoning. Honored by
-// providers with an explicit thinking budget (Anthropic, Gemini).
+// providers with an explicit thinking budget (Anthropic, Gemini). It composes
+// with WithReasoning, WithReasoningEffort, and WithThinkingMode: orthogonal
+// fields are preserved regardless of option order, while later budget options
+// overwrite earlier budget settings.
 func WithReasoningBudget(tokens int) CallOption {
 	return func(o *CallOptions) {
-		if o.Reasoning == nil {
-			o.Reasoning = &ReasoningConfig{}
-		}
-		o.Reasoning.BudgetTokens = tokens
+		ensureReasoningConfig(o).BudgetTokens = tokens
 	}
 }
 
 // WithThinkingMode enables or disables the model's reasoning ("thinking") mode.
+// It composes with WithReasoning, WithReasoningEffort, and WithReasoningBudget:
+// orthogonal fields are preserved regardless of option order, while later
+// enabled/disabled settings overwrite earlier Enabled settings. Unlike the
+// value fields on ReasoningConfig, false is explicit here because it is carried
+// through a non-nil *bool.
 //
 // Deprecated: use WithReasoning, WithReasoningEffort, or WithReasoningBudget.
 // This forwards to ReasoningConfig.Enabled and is retained for backward
@@ -136,9 +144,26 @@ func WithReasoningBudget(tokens int) CallOption {
 func WithThinkingMode(enabled bool) CallOption {
 	return func(o *CallOptions) {
 		b := enabled
-		if o.Reasoning == nil {
-			o.Reasoning = &ReasoningConfig{}
-		}
-		o.Reasoning.Enabled = &b
+		ensureReasoningConfig(o).Enabled = &b
+	}
+}
+
+func ensureReasoningConfig(o *CallOptions) *ReasoningConfig {
+	if o.Reasoning == nil {
+		o.Reasoning = &ReasoningConfig{}
+	}
+	return o.Reasoning
+}
+
+func mergeReasoningConfig(dst *ReasoningConfig, src ReasoningConfig) {
+	if src.Effort != "" {
+		dst.Effort = src.Effort
+	}
+	if src.BudgetTokens != 0 {
+		dst.BudgetTokens = src.BudgetTokens
+	}
+	if src.Enabled != nil {
+		b := *src.Enabled
+		dst.Enabled = &b
 	}
 }

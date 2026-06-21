@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"net"
 	"strings"
 	"testing"
 )
@@ -212,6 +213,33 @@ func TestValidateURL_ObfuscatedIPv4Literals(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected obfuscated loopback URL %q to be blocked", url)
 		}
+	}
+}
+
+func TestValidateNotPrivateIP_NAT64EmbeddedPrivateIPv4(t *testing.T) {
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{name: "loopback", ip: "64:ff9b::7f00:1"},
+		{name: "metadata", ip: "64:ff9b::a9fe:a9fe"},
+		{name: "private", ip: "64:ff9b::a00:1"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateNotPrivateIP(net.ParseIP(tc.ip))
+			if err == nil {
+				t.Fatalf("expected NAT64-embedded private IPv4 %s to be blocked", tc.ip)
+			}
+			if !strings.Contains(err.Error(), "NAT64-embedded") {
+				t.Fatalf("expected NAT64 error, got %v", err)
+			}
+		})
+	}
+
+	if err := validateNotPrivateIP(net.ParseIP("64:ff9b::808:808")); err != nil {
+		t.Fatalf("expected NAT64-embedded public IPv4 to be allowed, got %v", err)
 	}
 }
 

@@ -3,8 +3,8 @@ package tokenizer_test
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/tokenizer"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/tokenizer"
 )
 
 func TestForModel_KnownCounts(t *testing.T) {

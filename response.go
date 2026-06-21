@@ -1,7 +1,5 @@
 package llms
 
-import "encoding/json"
-
 // FinishReason describes why a model stopped generating output.
 type FinishReason string
 
@@ -16,7 +14,8 @@ const (
 	FinishReasonContentFilter FinishReason = "content_filter"
 )
 
-// Response represents the response from an LLM
+// Response represents the response from an LLM.
+// Response methods use pointer receivers for nil-safety.
 type Response struct {
 	// ID is the provider's identifier for this response, when one is returned
 	// (e.g. the OpenAI chat completion id, or the Responses API response id). It
@@ -29,39 +28,27 @@ type Response struct {
 	// Reasoning is the model's reasoning/chain-of-thought output, when the
 	// provider/model supports it (OpenAI o-series, Anthropic extended thinking,
 	// Gemini, Z.AI GLM, DeepSeek, Qwen). Nil otherwise.
-	Reasoning *ReasoningContent `json:"reasoning,omitempty"`
-	// Thinking is the former name of Reasoning, populated to the same value.
-	//
-	// Deprecated: use Reasoning. Retained for backward compatibility; it is not
-	// serialized (Reasoning is the canonical JSON field) and is repopulated from
-	// Reasoning when a Response is unmarshaled from JSON. Removed in a future major
-	// version.
-	Thinking      *ReasoningContent `json:"-"`
+	Reasoning     *ReasoningContent `json:"reasoning,omitempty"`
 	FinishReason  FinishReason      `json:"finish_reason,omitempty"`
 	Usage         Usage             `json:"usage"`
 	ToolCalls     []ToolCall        `json:"tool_calls,omitempty"`     // Tool calls requested by the model
 	SearchResults []SearchResult    `json:"search_results,omitempty"` // Web search results when WebSearch.IncludeResults is true
 }
 
-// UnmarshalJSON restores the deprecated Thinking alias from the canonical
-// Reasoning JSON field.
-func (r *Response) UnmarshalJSON(data []byte) error {
-	type responseAlias Response
-	var alias responseAlias
-	if err := json.Unmarshal(data, &alias); err != nil {
-		return err
+// Thinking returns the model's reasoning content.
+//
+// Deprecated: use Reasoning.
+func (r *Response) Thinking() *ReasoningContent {
+	if r == nil {
+		return nil
 	}
-	*r = Response(alias)
-	r.Thinking = r.Reasoning
-	return nil
+	return r.Reasoning
 }
 
-// SetReasoning sets the canonical Reasoning field and the deprecated Thinking
-// alias to the same value, so callers reading either field observe the result.
-// Providers use this to surface reasoning output without duplicating assignments.
+// SetReasoning sets the canonical Reasoning field. Providers use this to
+// surface reasoning output without duplicating assignments.
 func (r *Response) SetReasoning(rc *ReasoningContent) {
 	r.Reasoning = rc
-	r.Thinking = rc
 }
 
 // ReasoningText returns the model's reasoning text, or "" if the response has no
@@ -92,7 +79,8 @@ type Usage struct {
 	ReasoningTokens     int `json:"reasoning_tokens,omitempty"`
 }
 
-// StreamChunk represents a chunk of streamed content
+// StreamChunk represents a chunk of streamed content.
+// StreamChunk methods use pointer receivers for nil-safety.
 type StreamChunk struct {
 	// Content is the text content in this chunk
 	Content string `json:"content,omitempty"`
@@ -100,14 +88,6 @@ type StreamChunk struct {
 	// Reasoning contains the model's reasoning ("thinking") content in this chunk,
 	// when the provider/model supports it.
 	Reasoning *ReasoningContent `json:"reasoning,omitempty"`
-
-	// Thinking is the former name of Reasoning, populated to the same value.
-	//
-	// Deprecated: use Reasoning. Retained for backward compatibility; it is not
-	// serialized (Reasoning is the canonical JSON field) and is repopulated from
-	// Reasoning when a StreamChunk is unmarshaled from JSON. Removed in a future
-	// major version.
-	Thinking *ReasoningContent `json:"-"`
 
 	// ToolCalls contains any tool calls in this chunk (may be partial)
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
@@ -125,15 +105,12 @@ type StreamChunk struct {
 	Done bool `json:"done,omitempty"`
 }
 
-// UnmarshalJSON restores the deprecated Thinking alias from the canonical
-// Reasoning JSON field.
-func (c *StreamChunk) UnmarshalJSON(data []byte) error {
-	type streamChunkAlias StreamChunk
-	var alias streamChunkAlias
-	if err := json.Unmarshal(data, &alias); err != nil {
-		return err
+// Thinking returns the model's reasoning content for this chunk.
+//
+// Deprecated: use Reasoning.
+func (c *StreamChunk) Thinking() *ReasoningContent {
+	if c == nil {
+		return nil
 	}
-	*c = StreamChunk(alias)
-	c.Thinking = c.Reasoning
-	return nil
+	return c.Reasoning
 }

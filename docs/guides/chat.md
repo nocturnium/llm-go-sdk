@@ -8,8 +8,8 @@ own guides — here we focus on plain text generation and multi-turn conversatio
 !!! info "Imports used on this page"
     ```go
     import (
-        llms "github.com/nocturnium/llm-go-sdk/v3"
-        "github.com/nocturnium/llm-go-sdk/v3/pkg/providers/openai"
+        llms "github.com/nocturnium/llm-go-sdk/v4"
+        "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
     )
     ```
     Every provider follows the same pattern; swap the `openai` import and

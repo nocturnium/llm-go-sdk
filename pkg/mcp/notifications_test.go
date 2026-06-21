@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -160,6 +162,150 @@ func TestClient_DispatchNotificationIgnoresJunk(t *testing.T) {
 	if fired {
 		t.Error("handler fired for malformed/unknown notifications")
 	}
+}
+
+func TestNotifier_OverflowDoesNotInvokeHandlersConcurrently(t *testing.T) {
+	n := newNotifier()
+	defer n.stop()
+
+	const total = notifyQueueSize * 4
+
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	deliveredEnough := make(chan struct{})
+	var deliveredOnce sync.Once
+	var mu sync.Mutex
+	delivered := make([]int, 0, notifyQueueSize+1)
+	var inFlight atomic.Int32
+	var overlapped atomic.Bool
+
+	handler := func(seq int) func() {
+		return func() {
+			if inFlight.Add(1) != 1 {
+				overlapped.Store(true)
+			}
+			defer inFlight.Add(-1)
+
+			mu.Lock()
+			delivered = append(delivered, seq)
+			if len(delivered) == notifyQueueSize+1 {
+				deliveredOnce.Do(func() { close(deliveredEnough) })
+			}
+			mu.Unlock()
+
+			if seq == 0 {
+				close(firstStarted)
+				<-releaseFirst
+			}
+		}
+	}
+
+	n.enqueue(handler(0))
+	select {
+	case <-firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first handler did not start")
+	}
+
+	for i := 1; i < total; i++ {
+		n.enqueue(handler(i))
+	}
+	if got, want := n.dropped.Load(), uint64(total-(notifyQueueSize+1)); got != want {
+		t.Fatalf("dropped = %d, want %d", got, want)
+	}
+
+	close(releaseFirst)
+	select {
+	case <-deliveredEnough:
+	case <-time.After(2 * time.Second):
+		t.Fatal("queued notifications were not drained")
+	}
+
+	mu.Lock()
+	got := append([]int(nil), delivered...)
+	mu.Unlock()
+	if len(got) != notifyQueueSize+1 {
+		t.Fatalf("delivered %d notifications, want %d", len(got), notifyQueueSize+1)
+	}
+	for i, seq := range got {
+		if seq != i {
+			t.Fatalf("delivered order[%d] = %d, want %d; full order: %v", i, seq, i, got)
+		}
+	}
+	if overlapped.Load() {
+		t.Fatal("notification handlers overlapped")
+	}
+}
+
+func TestNotifier_OverflowLoggingIsBounded(t *testing.T) {
+	var records atomic.Int64
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(countingSlogHandler{records: &records}))
+	t.Cleanup(func() { slog.SetDefault(oldLogger) })
+
+	n := newNotifier()
+	defer n.stop()
+
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	n.enqueue(func() {
+		close(firstStarted)
+		<-releaseFirst
+	})
+	select {
+	case <-firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first handler did not start")
+	}
+
+	const total = notifyQueueSize * 8
+	for i := 1; i < total; i++ {
+		n.enqueue(func() {})
+	}
+
+	if got := n.dropped.Load(); got == 0 {
+		t.Fatal("expected notification overflow to drop work")
+	}
+	if got := records.Load(); got > 1 {
+		t.Fatalf("overflow emitted %d log records, want at most 1 bounded record", got)
+	}
+
+	close(releaseFirst)
+}
+
+func TestNotifier_EnqueueAfterStopIsNoop(t *testing.T) {
+	n := newNotifier()
+	n.stop()
+
+	fired := make(chan struct{})
+	n.enqueue(func() { close(fired) })
+
+	select {
+	case <-fired:
+		t.Fatal("handler fired after notifier was stopped")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+type countingSlogHandler struct {
+	records *atomic.Int64
+}
+
+func (h countingSlogHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h countingSlogHandler) Handle(context.Context, slog.Record) error {
+	h.records.Add(1)
+	return nil
+}
+
+func (h countingSlogHandler) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h countingSlogHandler) WithGroup(string) slog.Handler {
+	return h
 }
 
 // End-to-end over the stdio transport: a notification frame interleaved on the

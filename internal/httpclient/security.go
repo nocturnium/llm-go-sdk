@@ -13,6 +13,11 @@ const (
 	schemeHTTP = "http"
 )
 
+var nat64WellKnownPrefix = net.IPNet{
+	IP:   net.ParseIP("64:ff9b::"),
+	Mask: net.CIDRMask(96, 128),
+}
+
 // DefaultAllowedHosts contains the default list of allowed API hosts.
 var DefaultAllowedHosts = []string{
 	"api.openai.com",
@@ -244,6 +249,12 @@ func validateNotPrivateIP(ip net.IP) error {
 		return errors.New("unspecified addresses not allowed")
 	}
 
+	if ip4 := nat64EmbeddedIPv4(ip); ip4 != nil {
+		if err := validateNotPrivateIP(ip4); err != nil {
+			return fmt.Errorf("NAT64-embedded IPv4 address not allowed: %w", err)
+		}
+	}
+
 	// Check for IPv6-mapped IPv4 addresses that are private
 	if ip4 := ip.To4(); ip4 != nil {
 		if ip4.IsLoopback() || ip4.IsPrivate() {
@@ -262,6 +273,17 @@ func validateNotPrivateIP(ip net.IP) error {
 	}
 
 	return nil
+}
+
+func nat64EmbeddedIPv4(ip net.IP) net.IP {
+	ip16 := ip.To16()
+	if ip16 == nil || ip.To4() != nil {
+		return nil
+	}
+	if !nat64WellKnownPrefix.Contains(ip16) {
+		return nil
+	}
+	return net.IPv4(ip16[12], ip16[13], ip16[14], ip16[15])
 }
 
 // SanitizeModelName removes potentially dangerous characters from model names

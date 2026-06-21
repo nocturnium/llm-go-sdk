@@ -2,12 +2,13 @@ package anthropic
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
 )
 
 // titleCase capitalizes the first letter of a string.
@@ -32,7 +33,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 1000000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 10.00, Output: 50.00},
+		pricing:       tokenPricing("claude-fable-5"),
 	},
 	// Claude Opus 4.8 (current most capable Opus-tier model)
 	"claude-opus-4-8": {
@@ -40,7 +41,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 1000000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+		pricing:       tokenPricing("claude-opus-4-8"),
 	},
 	// Claude Opus 4.7
 	"claude-opus-4-7": {
@@ -48,7 +49,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 1000000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+		pricing:       tokenPricing("claude-opus-4-7"),
 	},
 	// Claude Opus 4.6
 	"claude-opus-4-6": {
@@ -56,7 +57,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 1000000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+		pricing:       tokenPricing("claude-opus-4-6"),
 	},
 	// Claude Opus 4.5
 	"claude-opus-4-5": {
@@ -64,14 +65,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+		pricing:       tokenPricing("claude-opus-4-5"),
 	},
 	"claude-opus-4-5-20251101": {
 		displayName:   "Claude Opus 4.5 (2025-11-01)",
 		contextLength: 200000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 5.00, Output: 25.00},
+		pricing:       tokenPricing("claude-opus-4-5-20251101"),
 	},
 	// Claude Opus 4.1 (deprecated, retires 2026-08-05)
 	"claude-opus-4-1": {
@@ -79,14 +80,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     32000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+		pricing:       tokenPricing("claude-opus-4-1"),
 	},
 	"claude-opus-4-1-20250805": {
 		displayName:   "Claude Opus 4.1 (2025-08-05)",
 		contextLength: 200000,
 		maxOutput:     32000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+		pricing:       tokenPricing("claude-opus-4-1-20250805"),
 	},
 	// Claude Sonnet 4.6 (best speed/intelligence balance)
 	"claude-sonnet-4-6": {
@@ -94,7 +95,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 1000000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-sonnet-4-6"),
 	},
 	// Claude Sonnet 4.5
 	"claude-sonnet-4-5": {
@@ -102,14 +103,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-sonnet-4-5"),
 	},
 	"claude-sonnet-4-5-20250929": {
 		displayName:   "Claude Sonnet 4.5 (2025-09-29)",
 		contextLength: 200000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-sonnet-4-5-20250929"),
 	},
 	// Claude Haiku 4.5 (fastest, near-frontier)
 	"claude-haiku-4-5": {
@@ -117,14 +118,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 1.00, Output: 5.00},
+		pricing:       tokenPricing("claude-haiku-4-5"),
 	},
 	"claude-haiku-4-5-20251001": {
 		displayName:   "Claude Haiku 4.5 (2025-10-01)",
 		contextLength: 200000,
 		maxOutput:     64000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 1.00, Output: 5.00},
+		pricing:       tokenPricing("claude-haiku-4-5-20251001"),
 	},
 	// Claude 3.5 Sonnet (retired 2025-10-28; metadata retained for historical lookups)
 	"claude-3-5-sonnet-latest": {
@@ -132,21 +133,21 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     8192,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-3-5-sonnet-latest"),
 	},
 	"claude-3-5-sonnet-20241022": {
 		displayName:   "Claude 3.5 Sonnet (2024-10-22)",
 		contextLength: 200000,
 		maxOutput:     8192,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-3-5-sonnet-20241022"),
 	},
 	"claude-3-5-sonnet-20240620": {
 		displayName:   "Claude 3.5 Sonnet (2024-06-20)",
 		contextLength: 200000,
 		maxOutput:     8192,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-3-5-sonnet-20240620"),
 	},
 	// Claude 3.5 Haiku
 	"claude-3-5-haiku-latest": {
@@ -154,14 +155,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     8192,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.80, Output: 4.00},
+		pricing:       tokenPricing("claude-3-5-haiku-latest"),
 	},
 	"claude-3-5-haiku-20241022": {
 		displayName:   "Claude 3.5 Haiku (2024-10-22)",
 		contextLength: 200000,
 		maxOutput:     8192,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.80, Output: 4.00},
+		pricing:       tokenPricing("claude-3-5-haiku-20241022"),
 	},
 	// Claude 3 Opus
 	"claude-3-opus-latest": {
@@ -169,14 +170,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+		pricing:       tokenPricing("claude-3-opus-latest"),
 	},
 	"claude-3-opus-20240229": {
 		displayName:   "Claude 3 Opus (2024-02-29)",
 		contextLength: 200000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+		pricing:       tokenPricing("claude-3-opus-20240229"),
 	},
 	// Claude 3 Sonnet
 	"claude-3-sonnet-20240229": {
@@ -184,7 +185,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+		pricing:       tokenPricing("claude-3-sonnet-20240229"),
 	},
 	// Claude 3 Haiku
 	"claude-3-haiku-20240307": {
@@ -192,7 +193,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:       &llms.ModelPricing{Input: 0.25, Output: 1.25},
+		pricing:       tokenPricing("claude-3-haiku-20240307"),
 	},
 	// Claude 2
 	"claude-2.1": {
@@ -200,14 +201,14 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 200000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 8.00, Output: 24.00},
+		pricing:       tokenPricing("claude-2.1"),
 	},
 	"claude-2.0": {
 		displayName:   "Claude 2.0",
 		contextLength: 100000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 8.00, Output: 24.00},
+		pricing:       tokenPricing("claude-2.0"),
 	},
 	// Claude Instant
 	"claude-instant-1.2": {
@@ -215,7 +216,7 @@ var knownModels = map[string]modelMetadata{
 		contextLength: 100000,
 		maxOutput:     4096,
 		types:         []llms.ModelType{llms.ModelTypeChat},
-		pricing:       &llms.ModelPricing{Input: 0.80, Output: 2.40},
+		pricing:       tokenPricing("claude-instant-1.2"),
 	},
 }
 
@@ -225,6 +226,14 @@ type modelMetadata struct {
 	maxOutput     int
 	types         []llms.ModelType
 	pricing       *llms.ModelPricing
+}
+
+func tokenPricing(model string) *llms.ModelPricing {
+	pricing, ok := llms.ModelTokenPricing(llms.ProviderAnthropic, model)
+	if !ok {
+		return nil
+	}
+	return pricing
 }
 
 // ListModels retrieves available models from the Anthropic API.
@@ -295,11 +304,11 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	// Anthropic has a dedicated endpoint for getting a single model
 	resp, err := c.client.GetModel(ctx, modelID)
 	if err != nil {
-		// Check if it's a 404 error
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		wrapped := anthropicapi.WrapError("get model", err)
+		if errors.Is(wrapped, llms.ErrModelNotFound) {
 			return nil, llms.ErrModelNotFound
 		}
-		return nil, llms.WrapProviderError(llms.ProviderAnthropic, "get model", err)
+		return nil, wrapped
 	}
 
 	info := convertAnthropicModel(resp)

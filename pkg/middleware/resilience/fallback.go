@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // Fallback-related errors

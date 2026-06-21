@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 )
 
-// notifyQueueSize bounds the notification pump's hand-off buffer. When the buffer
-// fills (a persistently slow handler), further notifications are run in their own
-// goroutine instead of blocking the transport read path — delivery is preserved
-// and the read goroutine is never stalled.
+// notifyQueueSize bounds the notification pump's hand-off buffer. When the
+// buffer fills behind a persistently slow handler, later notifications are
+// dropped instead of blocking the transport read path or invoking handlers
+// concurrently.
 const notifyQueueSize = 64
 
 // newNotifier constructs a notifier with its serial pump goroutine running. The
@@ -22,8 +22,8 @@ func newNotifier() *notifier {
 	return n
 }
 
-// run drains queued handler invocations serially, preserving notification order
-// in the common case. It exits when stop closes done.
+// run drains queued handler invocations serially, preserving FIFO order for
+// delivered notifications. It exits when stop closes done.
 func (n *notifier) run() {
 	for {
 		select {
@@ -36,10 +36,10 @@ func (n *notifier) run() {
 }
 
 // enqueue hands a handler invocation to the pump without ever blocking the
-// caller (the transport read goroutine). If the pump's buffer is momentarily
-// full, the work runs in its own goroutine so a wedged handler cannot apply
-// backpressure to response delivery; if the notifier is stopped, the work is
-// dropped.
+// caller (the transport read goroutine). If the pump's buffer is full, the work
+// is dropped and counted so a wedged handler cannot apply backpressure to
+// response delivery; if the notifier is stopped, the work is dropped. The
+// dropped counter is the source of truth for overflow accounting.
 func (n *notifier) enqueue(fn func()) {
 	select {
 	case <-n.done:
@@ -50,7 +50,7 @@ func (n *notifier) enqueue(fn func()) {
 	case n.queue <- fn:
 	case <-n.done:
 	default:
-		go fn()
+		n.dropped.Add(1)
 	}
 }
 
@@ -65,11 +65,12 @@ func (n *notifier) stop() {
 // the handler. Handlers run on a single serial pump goroutine off the transport
 // read path, so a slow handler does not stall in-flight RPCs and a handler may
 // safely call back into the Client; handlers are not invoked concurrently with
-// one another, and a handler that blocks forever will stall delivery of later
-// notifications (but not RPC responses).
+// one another. If a handler blocks forever, later notifications fill the bounded
+// hand-off queue and are then dropped rather than stalling RPC responses.
 //
-// Transport boundary: stdio surfaces every progress notification the server
-// sends. The Streamable HTTP transport only surfaces notifications that arrive
+// Transport boundary: stdio reads progress notifications the server sends and
+// offers them to this bounded pump. The Streamable HTTP transport only surfaces
+// notifications that arrive
 // interleaved on a POST response's SSE stream (e.g. progress emitted by the
 // server while a tools/call is in flight); it has no standalone GET SSE listener,
 // so out-of-band server pushes are not delivered.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -18,15 +18,16 @@ import (
 
 // mockMetricsLLM is a mock LLM for testing metrics middleware
 type mockMetricsLLM struct {
-	provider  llms.Provider
-	model     string
-	callResp  string
-	callErr   error
-	genResp   *llms.Response
-	genErr    error
-	chunks    []llms.StreamChunk
-	streamErr error
-	delay     time.Duration
+	provider    llms.Provider
+	model       string
+	callResp    string
+	callErr     error
+	genResp     *llms.Response
+	genErr      error
+	chunks      []llms.StreamChunk
+	streamErr   error
+	streamPanic any
+	delay       time.Duration
 }
 
 func (m *mockMetricsLLM) Call(ctx context.Context, _ string, _ ...llms.CallOption) (string, error) {
@@ -58,6 +59,9 @@ func (m *mockMetricsLLM) GenerateContent(ctx context.Context, _ []llms.Message, 
 }
 
 func (m *mockMetricsLLM) Stream(ctx context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+	if m.streamPanic != nil {
+		panic(m.streamPanic)
+	}
 	if m.streamErr != nil {
 		return nil, m.streamErr
 	}
@@ -80,6 +84,24 @@ func (m *mockMetricsLLM) Stream(ctx context.Context, _ []llms.Message, _ ...llms
 
 func (m *mockMetricsLLM) Provider() llms.Provider { return m.provider }
 func (m *mockMetricsLLM) Model() string           { return m.model }
+
+func waitForMetricsSpans(t *testing.T, recorder *tracetest.SpanRecorder, want int) []sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	deadline := time.After(500 * time.Millisecond)
+	for {
+		spans := recorder.Ended()
+		if len(spans) >= want {
+			return spans
+		}
+
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d ended span(s), got %d", want, len(spans))
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
 
 func TestNewMetricsMiddleware(t *testing.T) {
 	llm := &mockMetricsLLM{provider: llms.ProviderOpenAI, model: "gpt-4"}
@@ -237,10 +259,7 @@ func TestMetricsMiddleware_Stream_TimeToFirstToken(t *testing.T) {
 		t.Errorf("content = %s, want 'Hello World'", content)
 	}
 
-	// Wait for span to end
-	time.Sleep(20 * time.Millisecond)
-
-	spans := spanRecorder.Ended()
+	spans := waitForMetricsSpans(t, spanRecorder, 1)
 	if len(spans) != 1 {
 		t.Fatalf("expected 1 span, got %d", len(spans))
 	}
@@ -312,6 +331,74 @@ func TestMetricsMiddleware_Stream_AbandonedConsumerDecrementsActiveRequests(t *t
 	}
 	if middleware.SuccessRate() != 0 {
 		t.Errorf("success rate = %f, want 0", middleware.SuccessRate())
+	}
+}
+
+func TestMetricsMiddleware_Stream_PanicDecrementsActiveRequests(t *testing.T) {
+	llm := &mockMetricsLLM{
+		provider:    llms.ProviderOpenAI,
+		model:       "gpt-4",
+		streamPanic: "stream panic",
+	}
+
+	middleware, err := NewMetricsMiddleware(llm)
+	if err != nil {
+		t.Fatalf("failed to create middleware: %v", err)
+	}
+	before := middleware.ActiveRequests()
+
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("expected panic")
+		}
+		if got := middleware.ActiveRequests(); got != before {
+			t.Fatalf("active requests after panic = %d, want %d", got, before)
+		}
+	}()
+
+	_, _ = middleware.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hi"}})
+}
+
+func TestMetricsMiddleware_Stream_SuccessDecrementsActiveRequestsOnce(t *testing.T) {
+	llm := &mockMetricsLLM{
+		provider: llms.ProviderOpenAI,
+		model:    "gpt-4",
+		chunks: []llms.StreamChunk{
+			{Content: "one"},
+			{Content: "two"},
+			{Done: true, FinishReason: "stop"},
+		},
+	}
+
+	middleware, err := NewMetricsMiddleware(llm)
+	if err != nil {
+		t.Fatalf("failed to create middleware: %v", err)
+	}
+	before := middleware.ActiveRequests()
+
+	stream, err := middleware.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "Hi"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := middleware.ActiveRequests(); got != before+1 {
+		t.Fatalf("active requests after stream start = %d, want %d", got, before+1)
+	}
+
+	var chunks int
+	for range stream {
+		chunks++
+	}
+	t.Logf("drained %d chunks", chunks)
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		if got := middleware.ActiveRequests(); got == before {
+			return
+		} else if time.Now().After(deadline) {
+			t.Fatalf("active requests after stream drain = %d, want %d", got, before)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

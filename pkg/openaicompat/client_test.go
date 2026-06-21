@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nocturnium/llm-go-sdk/v3/internal/httpclient"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
 )
 
 func TestNewClient(t *testing.T) {

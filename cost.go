@@ -48,11 +48,13 @@ func (p Pricing) cost(usage Usage) float64 {
 		float64(usage.CacheCreationTokens)/perMillion*p.cacheWriteRate()
 }
 
-// DefaultPricing contains known pricing for common models.
-// Prices are in USD per 1 million tokens. Cache rates are set where the provider
-// charges a distinct cache-read/cache-write rate (e.g. Anthropic read ≈0.1×,
-// write ≈1.25×; OpenAI cached read ≈0.5×); when omitted, cache reads/writes fall
-// back to the prompt rate.
+// DefaultPricing is the single source of truth for built-in token pricing.
+// Prices are in USD per 1 million tokens. Provider model metadata derives its
+// displayed token pricing from this table via ModelTokenPricing; do not duplicate
+// token Input/Output pricing literals in provider known-model tables. Cache
+// rates are set where the provider charges a distinct cache-read/cache-write
+// rate (e.g. Anthropic read ≈0.1×, write ≈1.25×; OpenAI cached read ≈0.5×);
+// when omitted, cache reads/writes fall back to the prompt rate.
 //
 // Coverage is intentionally partial: models without an entry have no built-in
 // pricing data, so cost lookups report them as unknown (the pricing lookup
@@ -76,11 +78,16 @@ var DefaultPricing = map[string]Pricing{
 	"openai:gpt-4o-mini":            {PromptPerMillion: 0.15, CompletionPerMillion: 0.60, CacheReadPerMillion: 0.075},
 	"openai:gpt-4o-mini-2024-07-18": {PromptPerMillion: 0.15, CompletionPerMillion: 0.60, CacheReadPerMillion: 0.075},
 	"openai:gpt-4-turbo":            {PromptPerMillion: 10.00, CompletionPerMillion: 30.00},
+	"openai:gpt-4-turbo-preview":    {PromptPerMillion: 10.00, CompletionPerMillion: 30.00},
 	"openai:gpt-4":                  {PromptPerMillion: 30.00, CompletionPerMillion: 60.00},
+	"openai:gpt-4-32k":              {PromptPerMillion: 60.00, CompletionPerMillion: 120.00},
 	"openai:gpt-3.5-turbo":          {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"openai:gpt-3.5-turbo-16k":      {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
 	"openai:o1":                     {PromptPerMillion: 15.00, CompletionPerMillion: 60.00, CacheReadPerMillion: 7.50},
+	"openai:o1-preview":             {PromptPerMillion: 15.00, CompletionPerMillion: 60.00, CacheReadPerMillion: 7.50},
 	"openai:o1-mini":                {PromptPerMillion: 3.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 1.50},
 	"openai:o3":                     {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
+	"openai:o3-mini":                {PromptPerMillion: 1.10, CompletionPerMillion: 4.40, CacheReadPerMillion: 0.275},
 	"openai:o4-mini":                {PromptPerMillion: 1.10, CompletionPerMillion: 4.40, CacheReadPerMillion: 0.275},
 	"openai:gpt-4.1":                {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
 	"openai:gpt-4.1-mini":           {PromptPerMillion: 0.40, CompletionPerMillion: 1.60, CacheReadPerMillion: 0.10},
@@ -126,30 +133,50 @@ var DefaultPricing = map[string]Pricing{
 	"anthropic:claude-opus-4-5":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
 	"anthropic:claude-opus-4-5-20251101":   {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
 	"anthropic:claude-opus-4-1":            {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
+	"anthropic:claude-opus-4-1-20250805":   {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
 	"anthropic:claude-sonnet-4-6":          {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-sonnet-4-5":          {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-sonnet-4-5-20250929": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
 	"anthropic:claude-haiku-4-5":           {PromptPerMillion: 1.00, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.10, CacheWritePerMillion: 1.25},
 	"anthropic:claude-haiku-4-5-20251001":  {PromptPerMillion: 1.00, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.10, CacheWritePerMillion: 1.25},
+	"anthropic:claude-3-5-sonnet-latest":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
+	"anthropic:claude-3-5-haiku-latest":    {PromptPerMillion: 0.80, CompletionPerMillion: 4.00, CacheReadPerMillion: 0.08, CacheWritePerMillion: 1.00},
+	"anthropic:claude-3-opus-latest":       {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
+	"anthropic:claude-2.1":                 {PromptPerMillion: 8.00, CompletionPerMillion: 24.00},
+	"anthropic:claude-2.0":                 {PromptPerMillion: 8.00, CompletionPerMillion: 24.00},
+	"anthropic:claude-instant-1.2":         {PromptPerMillion: 0.80, CompletionPerMillion: 2.40},
 
 	// Google Gemini (cached content billed at ~0.25× prompt). 2.5 Pro uses tiered
 	// pricing (≤200K context shown here).
 	// Gemini 3.x — current family (ai.google.dev pricing, June 2026; cache ≈0.25×).
 	// 3.1 Pro is tiered (≤200K shown). 2.0 models were shut down June 2026.
-	"gemini:gemini-3.5-flash":       {PromptPerMillion: 1.50, CompletionPerMillion: 9.00, CacheReadPerMillion: 0.375},
-	"gemini:gemini-3.1-pro-preview": {PromptPerMillion: 2.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 0.50},
-	"gemini:gemini-3.1-flash-lite":  {PromptPerMillion: 0.25, CompletionPerMillion: 1.50},
-	"gemini:gemini-3-flash-preview": {PromptPerMillion: 0.50, CompletionPerMillion: 3.00},
-	"gemini:gemini-2.5-pro":         {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-2.5-flash":       {PromptPerMillion: 0.30, CompletionPerMillion: 2.50, CacheReadPerMillion: 0.075},
-	"gemini:gemini-2.5-flash-lite":  {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
-	"gemini:gemini-2.0-flash-exp":   {}, // Free during preview
-	"gemini:gemini-2.0-flash":       {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash":       {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash-8b":    {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
-	"gemini:gemini-1.5-pro":         {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.0-pro":         {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:text-embedding-004":     {}, // Free
+	"gemini:gemini-3.5-flash":        {PromptPerMillion: 1.50, CompletionPerMillion: 9.00, CacheReadPerMillion: 0.375},
+	"gemini:gemini-3.1-pro-preview":  {PromptPerMillion: 2.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 0.50},
+	"gemini:gemini-3.1-flash-lite":   {PromptPerMillion: 0.25, CompletionPerMillion: 1.50},
+	"gemini:gemini-3-flash-preview":  {PromptPerMillion: 0.50, CompletionPerMillion: 3.00},
+	"gemini:gemini-2.5-pro":          {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-2.5-flash":        {PromptPerMillion: 0.30, CompletionPerMillion: 2.50, CacheReadPerMillion: 0.075},
+	"gemini:gemini-2.5-flash-lite":   {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
+	"gemini:gemini-2.0-flash-exp":    {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
+	"gemini:gemini-2.0-flash":        {PromptPerMillion: 0.10, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.025},
+	"gemini:gemini-2.0-flash-lite":   {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash":        {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash-8b":     {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
+	"gemini:gemini-1.5-pro":          {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.5-pro-latest":   {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.5-pro-001":      {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.5-pro-002":      {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
+	"gemini:gemini-1.5-flash-latest": {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash-001":    {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.5-flash-002":    {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
+	"gemini:gemini-1.0-pro":          {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:gemini-1.0-pro-latest":   {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:gemini-pro":              {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:gemini-1.0-pro-vision":   {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:gemini-pro-vision":       {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
+	"gemini:gemini-embedding-001":    {PromptPerMillion: 0.15},
+	"gemini:text-embedding-004":      {}, // Free
+	"gemini:embedding-001":           {}, // Free
 
 	// DeepSeek (cache hits billed at a steep discount).
 	"deepseek:deepseek-chat":     {PromptPerMillion: 0.27, CompletionPerMillion: 1.10, CacheReadPerMillion: 0.07},
@@ -175,6 +202,22 @@ var DefaultPricing = map[string]Pricing{
 	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},
 	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {PromptPerMillion: 0.18, CompletionPerMillion: 0.18},
 	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {PromptPerMillion: 0.60, CompletionPerMillion: 0.60},
+}
+
+// ModelTokenPricing returns display token pricing for a provider/model from
+// DefaultPricing. PromptPerMillion maps to ModelPricing.Input and
+// CompletionPerMillion maps to ModelPricing.Output. The returned boolean is
+// false when DefaultPricing has no entry for the model; callers must not treat
+// that as a fabricated zero price.
+func ModelTokenPricing(provider Provider, model string) (*ModelPricing, bool) {
+	pricing, ok := DefaultPricing[fmt.Sprintf("%s:%s", provider, model)]
+	if !ok {
+		return nil, false
+	}
+	return &ModelPricing{
+		Input:  pricing.PromptPerMillion,
+		Output: pricing.CompletionPerMillion,
+	}, true
 }
 
 // ModelUsage tracks usage for a specific model.

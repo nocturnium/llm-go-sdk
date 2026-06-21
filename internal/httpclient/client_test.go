@@ -311,6 +311,66 @@ func TestClient_DoStream_Error(t *testing.T) {
 	}
 }
 
+func TestClient_DoStream_OutlivesUnaryTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("expected ResponseWriter to support flushing")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: start\n\n"))
+		flusher.Flush()
+		time.Sleep(75 * time.Millisecond)
+		_, _ = w.Write([]byte("data: done\n\n"))
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithTimeout(20*time.Millisecond),
+		WithAllowPrivateIPs(true),
+		WithAllowHTTP(true),
+	)
+
+	body, err := client.DoStream(context.Background(), Request{
+		Method: http.MethodGet,
+		URL:    server.URL,
+	})
+	if err != nil {
+		t.Fatalf("DoStream returned error: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("expected stream body read to outlive unary timeout, got %v", err)
+	}
+	if !strings.Contains(string(data), "data: done") {
+		t.Fatalf("stream data = %q, want final chunk", string(data))
+	}
+}
+
+func TestClient_DoRawKeepsUnaryTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(75 * time.Millisecond)
+		_, _ = w.Write([]byte("too late"))
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithTimeout(20*time.Millisecond),
+		WithAllowPrivateIPs(true),
+		WithAllowHTTP(true),
+	)
+
+	_, err := client.DoRaw(context.Background(), Request{
+		Method: http.MethodGet,
+		URL:    server.URL,
+	})
+	if err == nil {
+		t.Fatal("expected DoRaw to keep unary client timeout")
+	}
+}
+
 func TestClient_ContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -344,6 +404,15 @@ func TestAPIError_Error(t *testing.T) {
 		{
 			err:      &APIError{StatusCode: 401, Message: "Unauthorized", Type: "auth_error"},
 			expected: "API error (status 401, type auth_error): Unauthorized",
+		},
+		{
+			err: &APIError{
+				StatusCode:    400,
+				Message:       "Bad Request",
+				RequestMethod: http.MethodGet,
+				RequestURL:    "https://user:secret@example.com/v1/chat?api_key=secret&prompt=test#frag",
+			},
+			expected: "API error (status 400): Bad Request [GET https://example.com/v1/chat]",
 		},
 	}
 

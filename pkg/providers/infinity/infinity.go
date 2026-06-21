@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"sort"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/httpclient"
-	"github.com/nocturnium/llm-go-sdk/v3/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
 )
 
 // Client is an Infinity embeddings client.

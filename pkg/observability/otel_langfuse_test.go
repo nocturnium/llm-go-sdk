@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -64,6 +65,51 @@ func (m *mockLangfuseLLM) Provider() llms.Provider {
 
 func (m *mockLangfuseLLM) Model() string {
 	return m.model
+}
+
+func waitForLangfuseSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	deadline := time.After(500 * time.Millisecond)
+	for {
+		spans := recorder.Ended()
+		if len(spans) > 0 {
+			return spans[0]
+		}
+
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for Langfuse stream span to end")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
+
+func assertLangfuseAttribute(t *testing.T, attrs []attribute.KeyValue, key string, expected any) {
+	t.Helper()
+	for _, attr := range attrs {
+		if string(attr.Key) != key {
+			continue
+		}
+		switch v := expected.(type) {
+		case string:
+			if attr.Value.AsString() != v {
+				t.Fatalf("attribute %s = %q, want %q", key, attr.Value.AsString(), v)
+			}
+		case int64:
+			if attr.Value.AsInt64() != v {
+				t.Fatalf("attribute %s = %d, want %d", key, attr.Value.AsInt64(), v)
+			}
+		case bool:
+			if attr.Value.AsBool() != v {
+				t.Fatalf("attribute %s = %t, want %t", key, attr.Value.AsBool(), v)
+			}
+		default:
+			t.Fatalf("unsupported expected type %T for attribute %s", expected, key)
+		}
+		return
+	}
+	t.Fatalf("attribute %s not found", key)
 }
 
 func TestNewLangfuseOTelMiddleware(t *testing.T) {
@@ -144,7 +190,11 @@ func TestLangfuseOTelMiddleware_Call(t *testing.T) {
 		callResp: "Hello response",
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -179,7 +229,11 @@ func TestLangfuseOTelMiddleware_Call_Error(t *testing.T) {
 		callErr:  expectedErr,
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,7 +265,11 @@ func TestLangfuseOTelMiddleware_GenerateContent(t *testing.T) {
 		},
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -374,7 +432,11 @@ func TestLangfuseOTelMiddleware_Stream(t *testing.T) {
 		},
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -398,8 +460,25 @@ func TestLangfuseOTelMiddleware_Stream(t *testing.T) {
 		t.Errorf("expected 'Hello World', got %s", content)
 	}
 
-	// Wait for span to complete
-	time.Sleep(100 * time.Millisecond)
+	span := waitForLangfuseSpan(t, spanRecorder)
+	if span.Name() != "llm.generation" {
+		t.Fatalf("span name = %q, want llm.generation", span.Name())
+	}
+	if span.Status().Code != codes.Ok {
+		t.Fatalf("span status = %v, want Ok", span.Status().Code)
+	}
+
+	attrs := span.Attributes()
+	assertLangfuseAttribute(t, attrs, AttrGenAISystem, "openai")
+	assertLangfuseAttribute(t, attrs, AttrGenAIOperationName, "chat")
+	assertLangfuseAttribute(t, attrs, AttrGenAIRequestModel, "gpt-4")
+	assertLangfuseAttribute(t, attrs, "gen_ai.streaming", true)
+	assertLangfuseAttribute(t, attrs, AttrGenAIUsagePromptTokens, int64(10))
+	assertLangfuseAttribute(t, attrs, AttrGenAIUsageCompletionTokens, int64(5))
+	assertLangfuseAttribute(t, attrs, AttrGenAIUsageTotalTokens, int64(15))
+	assertLangfuseAttribute(t, attrs, AttrGenAIResponseFinishReason, "stop")
+	assertLangfuseAttribute(t, attrs, AttrGenAIPrompt, `[{"role":"user","content":"Hello"}]`)
+	assertLangfuseAttribute(t, attrs, AttrGenAICompletion, "Hello World")
 }
 
 func TestLangfuseOTelMiddleware_Stream_Error(t *testing.T) {
@@ -414,7 +493,11 @@ func TestLangfuseOTelMiddleware_Stream_Error(t *testing.T) {
 		streamErr: expectedErr,
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -449,7 +532,11 @@ func TestLangfuseOTelMiddleware_Stream_WithToolCalls(t *testing.T) {
 		},
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -475,7 +562,19 @@ func TestLangfuseOTelMiddleware_Stream_WithToolCalls(t *testing.T) {
 		t.Error("expected tool calls in stream")
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	span := waitForLangfuseSpan(t, spanRecorder)
+	if span.Status().Code != codes.Ok {
+		t.Fatalf("span status = %v, want Ok", span.Status().Code)
+	}
+
+	attrs := span.Attributes()
+	assertLangfuseAttribute(t, attrs, AttrGenAISystem, "openai")
+	assertLangfuseAttribute(t, attrs, AttrGenAIRequestModel, "gpt-4")
+	assertLangfuseAttribute(t, attrs, "gen_ai.streaming", true)
+	assertLangfuseAttribute(t, attrs, "gen_ai.tool_calls", int64(1))
+	assertLangfuseAttribute(t, attrs, AttrGenAIResponseFinishReason, "tool_calls")
+	assertLangfuseAttribute(t, attrs, AttrGenAIPrompt, `[{"role":"user","content":"What's the weather?"}]`)
+	assertLangfuseAttribute(t, attrs, AttrGenAICompletion, "Let me help you")
 }
 
 func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
@@ -492,7 +591,11 @@ func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
 		},
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+		WithLangfuseInputCapture(true, 1000),
+		WithLangfuseOutputCapture(true, 1000),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -518,7 +621,17 @@ func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
 		t.Error("expected error in stream")
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	span := waitForLangfuseSpan(t, spanRecorder)
+	if span.Status().Code != codes.Error {
+		t.Fatalf("span status = %v, want Error", span.Status().Code)
+	}
+
+	attrs := span.Attributes()
+	assertLangfuseAttribute(t, attrs, AttrGenAISystem, "openai")
+	assertLangfuseAttribute(t, attrs, AttrGenAIRequestModel, "gpt-4")
+	assertLangfuseAttribute(t, attrs, "gen_ai.streaming", true)
+	assertLangfuseAttribute(t, attrs, AttrGenAIPrompt, `[{"role":"user","content":"Hello"}]`)
+	assertLangfuseAttribute(t, attrs, AttrGenAICompletion, "Hello")
 }
 
 func TestLangfuseOTelMiddleware_Stream_CanceledSpanIsError(t *testing.T) {

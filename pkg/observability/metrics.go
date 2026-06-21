@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -258,21 +258,27 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 
 	m.requestCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 	m.incrementActive(ctx, attrs)
+	activeOwned := true
+	defer func() {
+		if activeOwned {
+			m.decrementActive(ctx, attrs)
+			span.End()
+		}
+	}()
 
 	stream, err := m.llm.Stream(ctx, messages, options...)
 	if err != nil {
 		duration := time.Since(start).Seconds()
 		m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 		m.recordError(ctx, span, err, attrs)
-		m.decrementActive(ctx, attrs)
 		m.successRateWindow.Record(false)
-		span.End()
 		return nil, err
 	}
 
 	opts := llms.ApplyOptions(options...)
 	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
 	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
+	activeOwned = false
 	go func() {
 		// Order matters: the finalize defer (registered last, runs first under
 		// LIFO) populates the span, then span.End() must run before

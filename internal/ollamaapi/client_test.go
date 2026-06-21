@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,26 @@ import (
 	"testing"
 	"time"
 )
+
+type countingByteReader struct {
+	remaining int
+	read      int
+}
+
+func (r *countingByteReader) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	if len(p) > r.remaining {
+		p = p[:r.remaining]
+	}
+	for i := range p {
+		p[i] = 'x'
+	}
+	r.remaining -= len(p)
+	r.read += len(p)
+	return len(p), nil
+}
 
 func TestNewClient(t *testing.T) {
 	client := NewClient(ClientConfig{AllowPrivateIPs: true, AllowHTTP: true})
@@ -259,6 +280,43 @@ func TestCopyModel(t *testing.T) {
 	}
 }
 
+func TestPullModel_LargeProgressLine(t *testing.T) {
+	largeDigest := strings.Repeat("x", 70*1024)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/pull" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		if err := json.NewEncoder(w).Encode(PullResponse{
+			Status: "pulling manifest",
+			Digest: largeDigest,
+		}); err != nil {
+			t.Errorf("encode progress: %v", err)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(PullResponse{Status: "success"}); err != nil {
+			t.Errorf("encode success: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	var gotDigest string
+	err := client.PullModel(context.Background(), "llama3.2", func(progress PullResponse) {
+		if progress.Digest != "" {
+			gotDigest = progress.Digest
+		}
+	})
+	if err != nil {
+		t.Fatalf("PullModel failed: %v", err)
+	}
+	if gotDigest != largeDigest {
+		t.Fatalf("expected digest length %d, got %d", len(largeDigest), len(gotDigest))
+	}
+}
+
 func TestGenerate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/generate" || r.Method != http.MethodPost {
@@ -366,6 +424,32 @@ func TestStreamReader_Read_LargeLine(t *testing.T) {
 	}
 	if resp.Response != largeResponse {
 		t.Fatalf("expected response length %d, got %d", len(largeResponse), len(resp.Response))
+	}
+}
+
+func TestReadNDJSONLine_OversizedLineNoNewline(t *testing.T) {
+	const readerBufferSize = 1024
+	source := &countingByteReader{remaining: maxNDJSONLineSize * 3}
+	reader := bufio.NewReaderSize(source, readerBufferSize)
+
+	line, err := readNDJSONLine(reader)
+	if err == nil {
+		t.Fatal("expected oversized line error")
+	}
+	if errors.Is(err, io.EOF) {
+		t.Fatalf("expected non-EOF oversized line error, got %v", err)
+	}
+	if line != "" {
+		t.Fatalf("expected empty line on error, got length %d", len(line))
+	}
+	if !strings.Contains(err.Error(), "ollama ndjson line exceeds") {
+		t.Fatalf("expected clear size error, got %v", err)
+	}
+	if source.read >= maxNDJSONLineSize*3 {
+		t.Fatalf("reader consumed entire oversized input: read %d bytes", source.read)
+	}
+	if source.read > maxNDJSONLineSize+2*readerBufferSize {
+		t.Fatalf("reader consumed too far past cap: read %d, cap %d", source.read, maxNDJSONLineSize)
 	}
 }
 

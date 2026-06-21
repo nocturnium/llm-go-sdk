@@ -1,10 +1,91 @@
 package anthropic
 
 import (
+	"context"
+	"errors"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
+
+var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+	"claude-fable-5":             {Input: 10.00, Output: 50.00},
+	"claude-opus-4-8":            {Input: 5.00, Output: 25.00},
+	"claude-opus-4-7":            {Input: 5.00, Output: 25.00},
+	"claude-opus-4-6":            {Input: 5.00, Output: 25.00},
+	"claude-opus-4-5":            {Input: 5.00, Output: 25.00},
+	"claude-opus-4-5-20251101":   {Input: 5.00, Output: 25.00},
+	"claude-opus-4-1":            {Input: 15.00, Output: 75.00},
+	"claude-opus-4-1-20250805":   {Input: 15.00, Output: 75.00},
+	"claude-sonnet-4-6":          {Input: 3.00, Output: 15.00},
+	"claude-sonnet-4-5":          {Input: 3.00, Output: 15.00},
+	"claude-sonnet-4-5-20250929": {Input: 3.00, Output: 15.00},
+	"claude-haiku-4-5":           {Input: 1.00, Output: 5.00},
+	"claude-haiku-4-5-20251001":  {Input: 1.00, Output: 5.00},
+	"claude-3-5-sonnet-latest":   {Input: 3.00, Output: 15.00},
+	"claude-3-5-sonnet-20241022": {Input: 3.00, Output: 15.00},
+	"claude-3-5-sonnet-20240620": {Input: 3.00, Output: 15.00},
+	"claude-3-5-haiku-latest":    {Input: 0.80, Output: 4.00},
+	"claude-3-5-haiku-20241022":  {Input: 0.80, Output: 4.00},
+	"claude-3-opus-latest":       {Input: 15.00, Output: 75.00},
+	"claude-3-opus-20240229":     {Input: 15.00, Output: 75.00},
+	"claude-3-sonnet-20240229":   {Input: 3.00, Output: 15.00},
+	"claude-3-haiku-20240307":    {Input: 0.25, Output: 1.25},
+	"claude-2.1":                 {Input: 8.00, Output: 24.00},
+	"claude-2.0":                 {Input: 8.00, Output: 24.00},
+	"claude-instant-1.2":         {Input: 0.80, Output: 2.40},
+}
+
+func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
+	const epsilon = 1e-12
+
+	for modelID, expected := range expectedKnownModelTokenPricing {
+		metadata, ok := knownModels[modelID]
+		if !ok {
+			t.Fatalf("knownModels missing priced model %s", modelID)
+		}
+		if metadata.pricing == nil {
+			t.Fatalf("knownModels[%s].pricing is nil", modelID)
+		}
+		if metadata.pricing.Input != expected.Input {
+			t.Errorf("%s Input = %f, want %f", modelID, metadata.pricing.Input, expected.Input)
+		}
+		if metadata.pricing.Output != expected.Output {
+			t.Errorf("%s Output = %f, want %f", modelID, metadata.pricing.Output, expected.Output)
+		}
+
+		central, ok := llms.DefaultPricing[string(llms.ProviderAnthropic)+":"+modelID]
+		if !ok {
+			t.Fatalf("DefaultPricing missing anthropic:%s", modelID)
+		}
+		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
+			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
+		}
+		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
+			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
+		}
+	}
+
+	for modelID, metadata := range knownModels {
+		central, ok := llms.DefaultPricing[string(llms.ProviderAnthropic)+":"+modelID]
+		if !ok {
+			continue
+		}
+		if metadata.pricing == nil {
+			t.Fatalf("knownModels[%s].pricing is nil but DefaultPricing has token pricing", modelID)
+		}
+		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
+			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
+		}
+		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
+			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
+		}
+	}
+}
 
 func TestConvertAnthropicModel(t *testing.T) {
 	tests := []struct {
@@ -362,4 +443,34 @@ func TestKnownModelsCategories(t *testing.T) {
 func TestClientImplementsModelLister(_ *testing.T) {
 	// This is a compile-time check, but we include it as a test for documentation
 	var _ llms.ModelLister = (*Client)(nil)
+}
+
+func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/missing-model" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"missing resource","type":"invalid_request_error"}}`))
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-key"),
+		WithBaseURL(server.URL),
+		WithAllowHTTP(),
+		WithAllowPrivateIPs(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = client.ModelInfo(context.Background(), "missing-model")
+	if !errors.Is(err, llms.ErrModelNotFound) {
+		t.Fatalf("ModelInfo() error = %v, want ErrModelNotFound", err)
+	}
+	if strings.Contains(err.Error(), "404") {
+		t.Fatalf("ModelInfo() error = %q, want no literal 404", err)
+	}
 }

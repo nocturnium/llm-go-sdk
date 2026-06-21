@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
 )
 
 const (
@@ -387,6 +388,59 @@ data: {"type":"message_stop"}`,
 	}
 	if finalChunk.FinishReason != "stop" {
 		t.Errorf("unexpected finish_reason: %s", finalChunk.FinishReason)
+	}
+}
+
+func TestClient_Stream_RecoversPanic(t *testing.T) {
+	originalReadStreamEvent := readStreamEvent
+	readStreamEvent = func(_ *anthropicapi.StreamReader) (*anthropicapi.StreamEvent, error) {
+		panic("test stream panic")
+	}
+	defer func() {
+		readStreamEvent = originalReadStreamEvent
+	}()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("ResponseWriter does not implement http.Flusher")
+		}
+		_, _ = w.Write([]byte(`event: message_stop
+data: {"type":"message_stop"}` + "\n\n"))
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-api-key"),
+		WithBaseURL(server.URL+"/v1"),
+		WithAllowPrivateIPs(), WithAllowHTTP(),
+	)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	chunks, err := client.Stream(
+		context.Background(),
+		[]llms.Message{{Role: llms.RoleUser, Content: "Hi"}},
+	)
+	if err != nil {
+		t.Fatalf("Stream failed: %v", err)
+	}
+
+	var streamErr error
+	for chunk := range chunks {
+		if chunk.Error != nil {
+			streamErr = chunk.Error
+		}
+	}
+
+	if streamErr == nil {
+		t.Fatal("expected terminal stream error")
+	}
+	if !strings.Contains(streamErr.Error(), "anthropic: panic during stream processing: test stream panic") {
+		t.Fatalf("unexpected stream error: %v", streamErr)
 	}
 }
 

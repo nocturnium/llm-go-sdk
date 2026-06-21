@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // streamMock is an LLM whose Stream emits a fixed set of chunks (used to simulate

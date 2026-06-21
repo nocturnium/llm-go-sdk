@@ -3,11 +3,12 @@ package openai
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // Mock response data matching OpenAI API format.
@@ -82,6 +83,88 @@ var mockModelsResponse = `{
 		}
 	]
 }`
+
+var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+	"gpt-5.5":                {Input: 5.00, Output: 30.00},
+	"gpt-5.5-pro":            {Input: 30.00, Output: 180.00},
+	"gpt-5.4":                {Input: 2.50, Output: 15.00},
+	"gpt-5.4-mini":           {Input: 0.75, Output: 4.50},
+	"gpt-5.4-nano":           {Input: 0.20, Output: 1.25},
+	"gpt-5.4-pro":            {Input: 30.00, Output: 180.00},
+	"gpt-5":                  {Input: 1.25, Output: 10.00},
+	"gpt-5-mini":             {Input: 0.25, Output: 2.00},
+	"gpt-5-nano":             {Input: 0.05, Output: 0.40},
+	"gpt-4.1":                {Input: 2.00, Output: 8.00},
+	"gpt-4.1-mini":           {Input: 0.40, Output: 1.60},
+	"gpt-4.1-nano":           {Input: 0.10, Output: 0.40},
+	"gpt-4o":                 {Input: 2.50, Output: 10.00},
+	"gpt-4o-mini":            {Input: 0.15, Output: 0.60},
+	"gpt-4o-2024-11-20":      {Input: 2.50, Output: 10.00},
+	"gpt-4o-2024-08-06":      {Input: 2.50, Output: 10.00},
+	"gpt-4o-mini-2024-07-18": {Input: 0.15, Output: 0.60},
+	"gpt-4-turbo":            {Input: 10.00, Output: 30.00},
+	"gpt-4-turbo-preview":    {Input: 10.00, Output: 30.00},
+	"gpt-4":                  {Input: 30.00, Output: 60.00},
+	"gpt-4-32k":              {Input: 60.00, Output: 120.00},
+	"gpt-3.5-turbo":          {Input: 0.50, Output: 1.50},
+	"gpt-3.5-turbo-16k":      {Input: 0.50, Output: 1.50},
+	"o4-mini":                {Input: 1.10, Output: 4.40},
+	"o3":                     {Input: 2.00, Output: 8.00},
+	"o3-mini":                {Input: 1.10, Output: 4.40},
+	"o1":                     {Input: 15.00, Output: 60.00},
+	"o1-preview":             {Input: 15.00, Output: 60.00},
+	"o1-mini":                {Input: 3.00, Output: 12.00},
+	"text-embedding-3-large": {Input: 0.13},
+	"text-embedding-3-small": {Input: 0.02},
+	"text-embedding-ada-002": {Input: 0.10},
+}
+
+func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
+	const epsilon = 1e-12
+
+	for modelID, expected := range expectedKnownModelTokenPricing {
+		metadata, ok := knownModels[modelID]
+		if !ok {
+			t.Fatalf("knownModels missing priced model %s", modelID)
+		}
+		if metadata.pricing == nil {
+			t.Fatalf("knownModels[%s].pricing is nil", modelID)
+		}
+		if metadata.pricing.Input != expected.Input {
+			t.Errorf("%s Input = %f, want %f", modelID, metadata.pricing.Input, expected.Input)
+		}
+		if metadata.pricing.Output != expected.Output {
+			t.Errorf("%s Output = %f, want %f", modelID, metadata.pricing.Output, expected.Output)
+		}
+
+		central, ok := llms.DefaultPricing[string(llms.ProviderOpenAI)+":"+modelID]
+		if !ok {
+			t.Fatalf("DefaultPricing missing openai:%s", modelID)
+		}
+		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
+			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
+		}
+		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
+			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
+		}
+	}
+
+	for modelID, metadata := range knownModels {
+		central, ok := llms.DefaultPricing[string(llms.ProviderOpenAI)+":"+modelID]
+		if !ok {
+			continue
+		}
+		if metadata.pricing == nil {
+			t.Fatalf("knownModels[%s].pricing is nil but DefaultPricing has token pricing", modelID)
+		}
+		if math.Abs(metadata.pricing.Input-central.PromptPerMillion) > epsilon {
+			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, metadata.pricing.Input, central.PromptPerMillion)
+		}
+		if math.Abs(metadata.pricing.Output-central.CompletionPerMillion) > epsilon {
+			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, metadata.pricing.Output, central.CompletionPerMillion)
+		}
+	}
+}
 
 func setupMockServer(t *testing.T, handler http.HandlerFunc) *Client {
 	server := httptest.NewServer(handler)

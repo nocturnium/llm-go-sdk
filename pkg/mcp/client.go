@@ -37,8 +37,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
 )
 
 const (
@@ -67,9 +67,11 @@ type Client struct {
 //
 // Handler invocation runs OFF the transport read path: dispatchNotification only
 // parses the frame and hands the typed work to a single serial pump goroutine via
-// queue. A slow or re-entrant handler (one that calls back into the Client) can
-// therefore never stall response delivery or wedge in-flight RPCs on the read
-// goroutine (stdio readLoop / the HTTP request goroutine).
+// queue. If that bounded hand-off queue fills, later notifications are dropped
+// rather than invoked concurrently or allowed to stall response delivery. A slow
+// or re-entrant handler (one that calls back into the Client) can therefore never
+// wedge in-flight RPCs on the read goroutine (stdio readLoop / the HTTP request
+// goroutine).
 type notifier struct {
 	mu           sync.RWMutex
 	progressFn   func(ProgressNotification)
@@ -79,6 +81,7 @@ type notifier struct {
 	queue     chan func() // buffered hand-off of handler invocations to the pump
 	done      chan struct{}
 	closeOnce sync.Once
+	dropped   atomic.Uint64
 }
 
 type config struct {

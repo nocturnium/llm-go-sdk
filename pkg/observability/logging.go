@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 // maxLoggedStreamContent is the maximum content size (in bytes) to log for streaming responses.

@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v3"
-	"github.com/nocturnium/llm-go-sdk/v3/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
 )
 
 // Client is a Google Gemini LLM client.
@@ -19,6 +19,10 @@ import (
 type Client struct {
 	client  *geminiapi.Client
 	options *options
+}
+
+var readStreamChunk = func(stream *geminiapi.StreamReader) (*geminiapi.StreamChunk, error) {
+	return stream.Read()
 }
 
 // New creates a new Gemini client with the given options
@@ -163,10 +167,20 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	estimateTokens := opts.EstimateTokens
 
 	go func() {
+		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+
 		defer close(chunks)
+		// A malformed/hostile provider response must never crash the host process.
+		// Convert any panic in stream processing into a terminal error chunk.
+		defer func() {
+			if r := recover(); r != nil {
+				sender.DeliverTerminal(llms.StreamChunk{
+					Error: fmt.Errorf("gemini: panic during stream processing: %v", r),
+				})
+			}
+		}()
 		defer func() { _ = stream.Close() }()
 
-		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		readDone := make(chan struct{})
 		defer close(readDone)
 		go func() {
@@ -199,7 +213,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 			default:
 			}
 
-			chunk, err := stream.Read()
+			chunk, err := readStreamChunk(stream)
 			if errors.Is(err, io.EOF) {
 				if ctx.Err() != nil {
 					sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
@@ -238,7 +252,6 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 				sender.SendFinal(llms.StreamChunk{
 					Reasoning:    finalReasoning,
-					Thinking:     finalReasoning,
 					ToolCalls:    accumulatedToolCalls,
 					FinishReason: finishReason,
 					Usage:        finalUsage,
@@ -270,7 +283,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 						accumulatedReasoning += thought
 						reasoningDeltaEmitted = true
 						rc := &llms.ReasoningContent{Content: thought}
-						if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc, Thinking: rc})) {
+						if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Reasoning: rc})) {
 							return
 						}
 					}

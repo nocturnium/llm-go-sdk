@@ -12,11 +12,11 @@ most recent patch release before reporting an issue, as it may already be fixed.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.2.x   | :white_check_mark: |
-| 1.1.x   | :x:                |
-| 0.0.x   | :x:                |
+| 4.0.x   | :white_check_mark: |
+| 3.x     | :x:                |
+| < 3.0   | :x:                |
 
-The current latest release is `v1.2.1`. We recommend pinning to a released tag
+The current latest release is `v4.0.0`. We recommend pinning to a released tag
 and keeping your dependency current with `go get -u` so you receive fixes
 promptly.
 

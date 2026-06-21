@@ -3,7 +3,7 @@
 
 # Project info
 PROJECT_NAME := llms
-MODULE := github.com/nocturnium/llm-go-sdk/v3
+MODULE := github.com/nocturnium/llm-go-sdk/v4
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "v0.0.0-dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -86,7 +86,7 @@ fmt:
 	@echo "Formatting code..."
 	gofmt -w .
 	@if command -v goimports >/dev/null 2>&1; then \
-		goimports -w -local github.com/nocturnium/llm-go-sdk/v3 .; \
+		goimports -w -local github.com/nocturnium/llm-go-sdk/v4 .; \
 	fi
 
 # Check formatting
@@ -140,7 +140,7 @@ install-tools:
 
 # Tidy dependencies
 # Path to the committed public-API baseline (apidiff export data).
-API_BASELINE := api/v3.txt
+API_BASELINE := api/v4.txt
 
 # apidiff: fail if the exported API surface has changed since the committed
 # baseline. Guards the single-version v2 contract — every exported change must
