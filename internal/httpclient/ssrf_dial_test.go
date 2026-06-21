@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestSSRFDialControl verifies the dial-time Control hook rejects connections to
@@ -122,9 +123,77 @@ func TestSSRFDialerClonesTransportAndPreservesDialContext(t *testing.T) {
 	}
 }
 
+func TestSSRFDialerCustomDialContextBlocksResolvedPrivateRemote(t *testing.T) {
+	called := false
+	base := &http.Transport{
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			called = true
+			return &fakeConn{remoteAddr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 443}}, nil
+		},
+	}
+
+	client := NewClient(WithHTTPClient(&http.Client{Transport: base}))
+	tr, ok := client.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("expected cloned transport")
+	}
+
+	conn, err := tr.DialContext(context.Background(), "tcp", "public.example:443")
+	if conn != nil {
+		_ = conn.Close()
+		t.Fatal("expected blocked private remote to return nil conn")
+	}
+	if err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("expected loopback remote address to be blocked, got %v", err)
+	}
+	if !called {
+		t.Fatal("expected custom DialContext to be called for hostname")
+	}
+}
+
+func TestWithHTTPClientDoesNotMutateCallerClient(t *testing.T) {
+	base := &http.Transport{}
+	checkRedirect := func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	caller := &http.Client{
+		Transport:     base,
+		CheckRedirect: checkRedirect,
+		Timeout:       time.Second,
+	}
+
+	client := NewClient(WithHTTPClient(caller))
+	if client.httpClient == caller {
+		t.Fatal("expected SDK client to use a shallow copy of caller client")
+	}
+	if caller.Transport != base {
+		t.Fatal("expected caller Transport to remain unchanged")
+	}
+	if caller.CheckRedirect == nil || reflect.ValueOf(caller.CheckRedirect).Pointer() != reflect.ValueOf(checkRedirect).Pointer() {
+		t.Fatal("expected caller CheckRedirect to remain unchanged")
+	}
+	if caller.Timeout != time.Second {
+		t.Fatalf("caller Timeout = %v, want %v", caller.Timeout, time.Second)
+	}
+}
+
 func dialContextPointer(fn func(context.Context, string, string) (net.Conn, error)) uintptr {
 	if fn == nil {
 		return 0
 	}
 	return reflect.ValueOf(fn).Pointer()
 }
+
+type fakeConn struct {
+	remoteAddr net.Addr
+	closed     bool
+}
+
+func (f *fakeConn) Read([]byte) (int, error)    { return 0, io.EOF }
+func (f *fakeConn) Write(b []byte) (int, error) { return len(b), nil }
+func (f *fakeConn) Close() error                { f.closed = true; return nil }
+func (f *fakeConn) LocalAddr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("203.0.113.1"), Port: 12345}
+}
+func (f *fakeConn) RemoteAddr() net.Addr             { return f.remoteAddr }
+func (f *fakeConn) SetDeadline(time.Time) error      { return nil }
+func (f *fakeConn) SetReadDeadline(time.Time) error  { return nil }
+func (f *fakeConn) SetWriteDeadline(time.Time) error { return nil }

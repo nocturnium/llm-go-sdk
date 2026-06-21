@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -131,11 +132,33 @@ func (c *Client) installSSRFDialer() {
 			if err := validateNotPrivateHostFromAddress(address); err != nil {
 				return nil, err
 			}
-			return originalDialContext(ctx, network, address)
+			conn, err := originalDialContext(ctx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateConnRemoteAddr(conn); err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			return conn, nil
 		}
 		return
 	}
 	tr.DialContext = dialer.DialContext
+}
+
+func validateConnRemoteAddr(conn net.Conn) error {
+	if conn == nil || conn.RemoteAddr() == nil {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		host = conn.RemoteAddr().String()
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return validateNotPrivateIP(ip)
+	}
+	return nil
 }
 
 // ssrfDialControl is a net.Dialer Control hook that rejects connections whose
@@ -154,8 +177,8 @@ func ssrfDialControl(_, address string, _ syscall.RawConn) error {
 }
 
 // installRedirectPolicy wraps the underlying *http.Client.CheckRedirect so that
-// each redirect hop's URL is re-validated with the client's SSRF options. It
-// preserves the caller's Timeout/Transport and bounds redirects to maxRedirects.
+// each redirect hop's URL is re-validated with the client's SSRF options.
+// It bounds redirects to maxRedirects.
 func (c *Client) installRedirectPolicy() {
 	if c.httpClient == nil {
 		c.httpClient = &http.Client{}
@@ -234,12 +257,16 @@ func WithRetryPolicy(policy *RetryPolicy) ClientOption {
 
 // WithHTTPClient sets a custom HTTP client.
 //
-// The client's redirect policy is still wrapped after options are applied so
-// SSRF validation runs on every redirect hop; the supplied client's Timeout and
-// Transport are preserved.
+// The supplied client is shallow-copied before SDK redirect and SSRF policies
+// are installed, so the caller-owned *http.Client is not mutated.
 func WithHTTPClient(client *http.Client) ClientOption {
 	return func(c *Client) {
-		c.httpClient = client
+		if client == nil {
+			c.httpClient = nil
+			return
+		}
+		copied := *client
+		c.httpClient = &copied
 	}
 }
 
@@ -425,8 +452,10 @@ func (c *Client) DoStream(ctx context.Context, req Request) (io.ReadCloser, erro
 		return nil, fmt.Errorf("URL validation failed: %w", err)
 	}
 
-	// For streaming, we don't retry on non-error responses
-	resp, err := c.httpClient.Do(httpReq)
+	// For streaming, we don't retry on non-error responses. Use a timeout-free
+	// shallow copy so http.Client.Timeout does not keep running while the caller
+	// consumes resp.Body; cancellation is controlled by the request context.
+	resp, err := c.streamHTTPClient().Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -437,6 +466,12 @@ func (c *Client) DoStream(ctx context.Context, req Request) (io.ReadCloser, erro
 	}
 
 	return resp.Body, nil
+}
+
+func (c *Client) streamHTTPClient() *http.Client {
+	streamClient := *c.httpClient
+	streamClient.Timeout = 0
+	return &streamClient
 }
 
 func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Response, error) {
@@ -503,7 +538,7 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Resp
 			if req.Body != nil && req.GetBody == nil {
 				return resp, nil
 			}
-			_ = resp.Body.Close()
+			drainAndClose(resp.Body)
 			lastErr = fmt.Errorf("received retryable status code: %d", resp.StatusCode)
 			continue
 		}
@@ -512,6 +547,14 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Resp
 	}
 
 	return nil, fmt.Errorf("request failed after %d retries: %w", c.retryPolicy.MaxRetries, lastErr)
+}
+
+func drainAndClose(body io.ReadCloser) {
+	if body == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxErrorResponseSize))
+	_ = body.Close()
 }
 
 // IsRetryable returns true when a status code or error represents a transient
@@ -688,7 +731,7 @@ func (e *APIError) Error() string {
 			sb.WriteString(" ")
 		}
 		if e.RequestURL != "" {
-			sb.WriteString(e.RequestURL)
+			sb.WriteString(sanitizeRequestURL(e.RequestURL))
 		}
 		sb.WriteString("]")
 	}
@@ -701,6 +744,21 @@ func (e *APIError) Error() string {
 	}
 
 	return sb.String()
+}
+
+func sanitizeRequestURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		if idx := strings.Index(rawURL, "?"); idx >= 0 {
+			return rawURL[:idx]
+		}
+		return rawURL
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String()
 }
 
 // IsRetryable returns true if the error is likely transient and can be retried.

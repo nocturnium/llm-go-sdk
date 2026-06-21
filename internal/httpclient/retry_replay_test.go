@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -156,4 +157,84 @@ func TestDoWithRetry_DoesNotRetryBodyWithoutGetBody(t *testing.T) {
 	if req.GetBody != nil {
 		t.Fatal("caller request GetBody was set")
 	}
+}
+
+func TestDoWithRetry_DrainsRetryableResponseBeforeClose(t *testing.T) {
+	retryBody := &trackingReadCloser{reader: bytes.NewReader([]byte("retry body"))}
+	rt := &sequenceRoundTripper{
+		responses: []*http.Response{
+			{
+				StatusCode: http.StatusServiceUnavailable,
+				Body:       retryBody,
+				Header:     make(http.Header),
+			},
+			{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("ok")),
+				Header:     make(http.Header),
+			},
+		},
+	}
+	client := NewClient(
+		WithHTTPClient(&http.Client{Transport: rt}),
+		WithRetryPolicy(&RetryPolicy{
+			MaxRetries:           1,
+			InitialDelay:         0,
+			MaxDelay:             0,
+			Multiplier:           1,
+			RetryableStatusCodes: []int{http.StatusServiceUnavailable},
+		}),
+	)
+
+	data, err := client.DoRaw(context.Background(), Request{
+		Method: http.MethodGet,
+		URL:    "https://example.com/v1",
+	})
+	if err != nil {
+		t.Fatalf("DoRaw returned error: %v", err)
+	}
+	if string(data) != "ok" {
+		t.Fatalf("response body = %q, want ok", string(data))
+	}
+	if retryBody.readBytes != len("retry body") {
+		t.Fatalf("retry body read bytes = %d, want %d", retryBody.readBytes, len("retry body"))
+	}
+	if !retryBody.closed {
+		t.Fatal("expected retry body to be closed")
+	}
+	if rt.calls != 2 {
+		t.Fatalf("round trip calls = %d, want 2", rt.calls)
+	}
+}
+
+type sequenceRoundTripper struct {
+	responses []*http.Response
+	calls     int
+}
+
+func (s *sequenceRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if s.calls >= len(s.responses) {
+		return nil, io.EOF
+	}
+	resp := s.responses[s.calls]
+	s.calls++
+	resp.Request = req
+	return resp, nil
+}
+
+type trackingReadCloser struct {
+	reader    *bytes.Reader
+	readBytes int
+	closed    bool
+}
+
+func (t *trackingReadCloser) Read(p []byte) (int, error) {
+	n, err := t.reader.Read(p)
+	t.readBytes += n
+	return n, err
+}
+
+func (t *trackingReadCloser) Close() error {
+	t.closed = true
+	return nil
 }
