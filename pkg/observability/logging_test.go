@@ -789,6 +789,8 @@ func TestSanitizeLogValue(t *testing.T) {
 		{"newline", "line1\nline2", "line1\\nline2"},
 		{"carriage_return", "a\rb", "a\\rb"},
 		{"crlf", "a\r\nb", "a\\r\\nb"},
+		{"tab", "a\tb", "a\\tb"},
+		{"escape", "a\x1bb", "a\\x1bb"},
 		{"forged_entry", "ok\nERROR forged log line", "ok\\nERROR forged log line"},
 		{"empty", "", ""},
 	}
@@ -797,9 +799,9 @@ func TestSanitizeLogValue(t *testing.T) {
 			if got := sanitizeLogValue(tt.in); got != tt.want {
 				t.Errorf("sanitizeLogValue(%q) = %q, want %q", tt.in, got, tt.want)
 			}
-			// A sanitized value must never contain a raw CR or LF.
-			if got := sanitizeLogValue(tt.in); strings.ContainsAny(got, "\r\n") {
-				t.Errorf("sanitizeLogValue(%q) = %q still contains a raw CR/LF", tt.in, got)
+			// A sanitized value must never contain raw log-breaking controls.
+			if got := sanitizeLogValue(tt.in); strings.ContainsAny(got, "\r\n\x1b") {
+				t.Errorf("sanitizeLogValue(%q) = %q still contains a raw control character", tt.in, got)
 			}
 		})
 	}

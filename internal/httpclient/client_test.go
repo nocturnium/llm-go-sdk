@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v4"
 )
 
 func TestNewClient_Defaults(t *testing.T) {
@@ -160,10 +162,37 @@ func TestClient_DoJSON_AnthropicError(t *testing.T) {
 	}
 }
 
+func TestClient_DoJSON_StringErrorEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"plain provider message"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithRetryPolicy(NoRetryPolicy()), WithAllowPrivateIPs(true), WithAllowHTTP(true))
+
+	err := client.DoJSON(context.Background(), Request{
+		Method: http.MethodPost,
+		URL:    server.URL,
+	}, nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if apiErr.Message != "plain provider message" {
+		t.Fatalf("Message = %q, want string error message", apiErr.Message)
+	}
+}
+
 func TestClient_DoJSON_PlainTextError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error\r\n\x1b[31m"))
 	}))
 	defer server.Close()
 
@@ -186,7 +215,67 @@ func TestClient_DoJSON_PlainTextError(t *testing.T) {
 		t.Errorf("expected status=500, got %d", apiErr.StatusCode)
 	}
 	if !strings.Contains(apiErr.Message, "Internal Server Error") {
-		t.Errorf("expected message to contain 'Internal Server Error', got '%s'", apiErr.Message)
+		t.Errorf("expected message to contain 'Internal Server Error', got %q", apiErr.Message)
+	}
+	if strings.ContainsAny(apiErr.Message, "\r\n\x1b") {
+		t.Errorf("expected fallback message to be sanitized, got %q", apiErr.Message)
+	}
+	if !strings.Contains(apiErr.Message, `\r\n\x1b`) {
+		t.Errorf("expected fallback message to preserve escaped controls, got %q", apiErr.Message)
+	}
+}
+
+func TestClient_DoJSON_JSONErrorPreservesCodeTypeForClassification(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": map[string]any{
+				"message": "model not found\ntry another",
+				"type":    "invalid_request_error",
+				"code":    "model_not_found",
+				"param":   "model",
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(WithRetryPolicy(NoRetryPolicy()), WithAllowPrivateIPs(true), WithAllowHTTP(true))
+
+	err := client.DoJSON(context.Background(), Request{
+		Method: http.MethodPost,
+		URL:    server.URL,
+	}, nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if apiErr.Message != `model not found\ntry another` {
+		t.Fatalf("Message = %q, want sanitized JSON error message", apiErr.Message)
+	}
+	if apiErr.Type != "invalid_request_error" {
+		t.Fatalf("Type = %q, want invalid_request_error", apiErr.Type)
+	}
+	if apiErr.Code != "model_not_found" {
+		t.Fatalf("Code = %q, want model_not_found", apiErr.Code)
+	}
+	if apiErr.Param != "model" {
+		t.Fatalf("Param = %q, want model", apiErr.Param)
+	}
+
+	unified := llms.NewAPIErrorFromHTTP(llms.ProviderOpenAI, llms.HTTPAPIError{
+		StatusCode: apiErr.StatusCode,
+		Message:    apiErr.Message,
+		Type:       apiErr.Type,
+		Code:       apiErr.Code,
+		Param:      apiErr.Param,
+	})
+	if !errors.Is(unified, llms.ErrModelNotFound) {
+		t.Fatalf("errors.Is(unified, ErrModelNotFound) = false for %#v", unified)
 	}
 }
 
