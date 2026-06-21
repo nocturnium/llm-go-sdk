@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/url"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -224,6 +225,143 @@ func TestCircuitBreaker_StateChangeCallback(t *testing.T) {
 	}
 	if stateChanges[0].from != CircuitClosed || stateChanges[0].to != CircuitOpen {
 		t.Errorf("change = %v->%v, want Closed->Open", stateChanges[0].from, stateChanges[0].to)
+	}
+}
+
+func TestCircuitBreaker_StateChangeCallbackPanicRecovered(t *testing.T) {
+	callbackStarted := make(chan struct{})
+	transitions := make(chan struct{ from, to CircuitState }, 1)
+
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithOnStateChange(func(from, to CircuitState) {
+			transitions <- struct{ from, to CircuitState }{from, to}
+			close(callbackStarted)
+			panic("callback panic")
+		}),
+	)
+
+	cb.Allow()
+	cb.RecordFailure()
+
+	select {
+	case <-callbackStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for callback")
+	}
+
+	transition := <-transitions
+	if transition.from != CircuitClosed || transition.to != CircuitOpen {
+		t.Errorf("change = %v->%v, want Closed->Open", transition.from, transition.to)
+	}
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want Open", cb.State())
+	}
+	if cb.Allow() {
+		t.Fatal("circuit should still block requests after callback panic")
+	}
+}
+
+func TestCircuitBreaker_StateChangeCallbackUsesSingleGoroutine(t *testing.T) {
+	before := waitForStableGoroutineCount(t)
+	callbackEntered := make(chan struct{})
+	releaseCallback := make(chan struct{})
+	callbackDone := make(chan struct{})
+	transitions := make(chan struct{ from, to CircuitState }, 1)
+	var releaseOnce sync.Once
+	t.Cleanup(func() {
+		releaseOnce.Do(func() {
+			close(releaseCallback)
+		})
+	})
+
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithOnStateChange(func(from, to CircuitState) {
+			transitions <- struct{ from, to CircuitState }{from, to}
+			close(callbackEntered)
+			<-releaseCallback
+			close(callbackDone)
+		}),
+	)
+
+	cb.Allow()
+	cb.RecordFailure()
+
+	select {
+	case <-callbackEntered:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for callback to enter")
+	}
+
+	transition := <-transitions
+	if transition.from != CircuitClosed || transition.to != CircuitOpen {
+		t.Errorf("change = %v->%v, want Closed->Open", transition.from, transition.to)
+	}
+
+	if got := waitForGoroutineDelta(t, before, 1); got != 1 {
+		t.Fatalf("callback goroutine delta = %d, want 1", got)
+	}
+
+	releaseOnce.Do(func() {
+		close(releaseCallback)
+	})
+	select {
+	case <-callbackDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for callback to finish")
+	}
+}
+
+func waitForStableGoroutineCount(t *testing.T) int {
+	t.Helper()
+
+	prev := runtime.NumGoroutine()
+	stableSamples := 0
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			next := runtime.NumGoroutine()
+			if next == prev {
+				stableSamples++
+				if stableSamples == 5 {
+					return next
+				}
+				continue
+			}
+			prev = next
+			stableSamples = 0
+		case <-deadline.C:
+			return runtime.NumGoroutine()
+		}
+	}
+}
+
+func waitForGoroutineDelta(t *testing.T, baseline, want int) int {
+	t.Helper()
+
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(200 * time.Millisecond)
+	defer deadline.Stop()
+
+	last := runtime.NumGoroutine() - baseline
+	for {
+		if last == want {
+			return last
+		}
+
+		select {
+		case <-ticker.C:
+			last = runtime.NumGoroutine() - baseline
+		case <-deadline.C:
+			return last
+		}
 	}
 }
 

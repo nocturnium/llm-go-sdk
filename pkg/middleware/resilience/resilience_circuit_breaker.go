@@ -229,10 +229,6 @@ func (cb *CircuitBreaker) Reset() {
 	transition.invokeCallback()
 }
 
-// callbackTimeout is the maximum time allowed for circuit breaker callbacks.
-// Callbacks that take longer are abandoned (but the goroutine continues).
-const callbackTimeout = 5 * time.Second
-
 // stateTransition holds info about a state transition for callback invocation
 type stateTransition struct {
 	callback func(from, to CircuitState)
@@ -252,31 +248,16 @@ type stateTransition struct {
 // If you need to perform work that requires a context (e.g., logging with trace context),
 // capture the context in a closure when setting up the callback.
 //
-// Callbacks are protected by a timeout (callbackTimeout) to prevent resource exhaustion
-// from slow or hanging callbacks. If a callback takes too long, it will be abandoned
-// but the goroutine will continue running in the background.
+// The circuit breaker cannot cancel callbacks. A blocking callback will retain
+// the goroutine running it, so callbacks must not block indefinitely.
 func (t *stateTransition) invokeCallback() {
 	if t != nil && t.callback != nil {
 		go func() {
-			// Use a done channel to detect callback completion
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				// Recover from panics in callbacks to prevent goroutine crashes
-				defer func() {
-					_ = recover() // Silently ignore panics
-				}()
-				t.callback(t.oldState, t.newState)
+			// Recover from panics in callbacks to prevent goroutine crashes.
+			defer func() {
+				_ = recover() // Silently ignore panics.
 			}()
-
-			// Wait for callback with timeout
-			select {
-			case <-done:
-				// Callback completed successfully
-			case <-time.After(callbackTimeout):
-				// Callback timed out - we abandon waiting but the goroutine continues
-				// This prevents resource exhaustion from accumulating blocked goroutines
-			}
+			t.callback(t.oldState, t.newState)
 		}()
 	}
 }
