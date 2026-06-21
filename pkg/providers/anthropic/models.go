@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 	"unicode"
@@ -295,11 +296,11 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	// Anthropic has a dedicated endpoint for getting a single model
 	resp, err := c.client.GetModel(ctx, modelID)
 	if err != nil {
-		// Check if it's a 404 error
-		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+		wrapped := anthropicapi.WrapError("get model", err)
+		if errors.Is(wrapped, llms.ErrModelNotFound) {
 			return nil, llms.ErrModelNotFound
 		}
-		return nil, llms.WrapProviderError(llms.ProviderAnthropic, "get model", err)
+		return nil, wrapped
 	}
 
 	info := convertAnthropicModel(resp)

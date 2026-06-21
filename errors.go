@@ -93,6 +93,23 @@ type APIError struct {
 	RequestMethod string
 }
 
+type apiStatusClassification struct {
+	err       error
+	retryable bool
+}
+
+var apiStatusClassifications = map[int]apiStatusClassification{
+	401: {err: ErrAuthenticationFailed},
+	403: {err: ErrPermissionDenied},
+	404: {err: ErrModelNotFound},
+	429: {err: ErrRateLimited, retryable: true},
+	500: {err: ErrServerError, retryable: true},
+	502: {err: ErrServiceUnavailable, retryable: true},
+	503: {err: ErrServiceUnavailable, retryable: true},
+	504: {err: ErrServiceUnavailable, retryable: true},
+	529: {err: ErrServiceUnavailable, retryable: true},
+}
+
 // Error implements the error interface.
 // The error message includes status code, type, code, message, and optionally
 // request context (URL, method) and request ID for debugging.
@@ -142,17 +159,8 @@ func (e *APIError) Is(target error) bool {
 // underlyingError maps status codes and error types to sentinel errors
 func (e *APIError) underlyingError() error {
 	// Check by status code first
-	switch e.StatusCode {
-	case 401:
-		return ErrAuthenticationFailed
-	case 403:
-		return ErrPermissionDenied
-	case 429:
-		return ErrRateLimited
-	case 500:
-		return ErrServerError
-	case 503:
-		return ErrServiceUnavailable
+	if classification, ok := apiStatusClassifications[e.StatusCode]; ok {
+		return classification.err
 	}
 
 	// Check by error code
@@ -188,11 +196,7 @@ func (e *APIError) underlyingError() error {
 
 // IsRetryable returns true if the error is likely transient and the request can be retried
 func (e *APIError) IsRetryable() bool {
-	switch e.StatusCode {
-	case 429, 500, 502, 503, 504:
-		return true
-	}
-	return false
+	return apiStatusClassifications[e.StatusCode].retryable
 }
 
 // ValidationError represents a parameter validation error
@@ -209,7 +213,7 @@ func (e ValidationError) Error() string {
 
 // Is reports whether the error matches ErrInvalidParameters
 func (e ValidationError) Is(target error) bool {
-	return target == ErrInvalidParameters
+	return errors.Is(ErrInvalidParameters, target)
 }
 
 // ValidationErrors is a collection of validation errors
@@ -245,7 +249,7 @@ func (e ValidationErrors) Error() string {
 // Is reports whether any contained error matches the target
 func (e ValidationErrors) Is(target error) bool {
 	for _, err := range e {
-		if err.Is(target) {
+		if errors.Is(err, target) {
 			return true
 		}
 	}
@@ -277,7 +281,7 @@ func (e *StreamError) Unwrap() error {
 
 // Is reports whether the error matches common stream errors
 func (e *StreamError) Is(target error) bool {
-	if target == ErrStreamInterrupted {
+	if errors.Is(ErrStreamInterrupted, target) {
 		return true
 	}
 	return errors.Is(e.Cause, target)

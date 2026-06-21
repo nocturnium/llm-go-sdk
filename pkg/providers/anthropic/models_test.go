@@ -1,6 +1,10 @@
 package anthropic
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v3"
@@ -362,4 +366,31 @@ func TestKnownModelsCategories(t *testing.T) {
 func TestClientImplementsModelLister(_ *testing.T) {
 	// This is a compile-time check, but we include it as a test for documentation
 	var _ llms.ModelLister = (*Client)(nil)
+}
+
+func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/missing-model" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"missing resource","type":"invalid_request_error"}}`))
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-key"),
+		WithBaseURL(server.URL),
+		WithAllowHTTP(),
+		WithAllowPrivateIPs(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = client.ModelInfo(context.Background(), "missing-model")
+	if !errors.Is(err, llms.ErrModelNotFound) {
+		t.Fatalf("ModelInfo() error = %v, want ErrModelNotFound", err)
+	}
 }
