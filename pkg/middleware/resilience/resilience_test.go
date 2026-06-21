@@ -262,6 +262,48 @@ func TestCircuitBreaker_StateChangeCallbackPanicRecovered(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_StateChangeCallbackPanicHook(t *testing.T) {
+	const panicValue = "callback panic"
+	panicReports := make(chan struct {
+		recovered any
+		from      CircuitState
+		to        CircuitState
+	}, 1)
+
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithOnStateChange(func(from, to CircuitState) {
+			panic(panicValue)
+		}),
+		WithOnCallbackPanic(func(recovered any, from, to CircuitState) {
+			panicReports <- struct {
+				recovered any
+				from      CircuitState
+				to        CircuitState
+			}{recovered: recovered, from: from, to: to}
+		}),
+	)
+
+	cb.Allow()
+	cb.RecordFailure()
+
+	select {
+	case report := <-panicReports:
+		if report.recovered != panicValue {
+			t.Fatalf("recovered = %v, want %q", report.recovered, panicValue)
+		}
+		if report.from != CircuitClosed || report.to != CircuitOpen {
+			t.Fatalf("change = %v->%v, want Closed->Open", report.from, report.to)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for callback panic hook")
+	}
+
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want Open", cb.State())
+	}
+}
+
 func TestCircuitBreaker_StateChangeCallbackUsesSingleGoroutine(t *testing.T) {
 	before := waitForStableGoroutineCount(t)
 	callbackEntered := make(chan struct{})

@@ -42,6 +42,7 @@ func TestClient_OnProgress(t *testing.T) {
 func TestClient_OnLog(t *testing.T) {
 	m := newMockTransport()
 	c := mustClient(t, m)
+	defer func() { _ = c.Close() }()
 
 	var got LogMessage
 	var wg sync.WaitGroup
@@ -60,6 +61,70 @@ func TestClient_OnLog(t *testing.T) {
 	if string(got.Data) != `{"k":"v"}` {
 		t.Errorf("log data = %s, want {\"k\":\"v\"}", got.Data)
 	}
+}
+
+func TestClient_DroppedNotificationsZeroWhenNoDrops(t *testing.T) {
+	m := newMockTransport()
+	c := mustClient(t, m)
+	defer func() { _ = c.Close() }()
+
+	if got := c.DroppedNotifications(); got != 0 {
+		t.Fatalf("DroppedNotifications() = %d, want 0", got)
+	}
+
+	delivered := make(chan struct{})
+	c.OnProgress(func(ProgressNotification) { close(delivered) })
+	m.emit([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":1}}`))
+	select {
+	case <-delivered:
+	case <-time.After(time.Second):
+		t.Fatal("notification was not delivered")
+	}
+
+	if got := c.DroppedNotifications(); got != 0 {
+		t.Fatalf("DroppedNotifications() after delivered notification = %d, want 0", got)
+	}
+}
+
+func TestClient_DroppedNotificationsReportsOverflow(t *testing.T) {
+	m := newMockTransport()
+	c := mustClient(t, m)
+
+	firstStarted := make(chan struct{})
+	releaseHandlers := make(chan struct{})
+	var startOnce sync.Once
+	var releaseOnce sync.Once
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseHandlers) })
+		_ = c.Close()
+	})
+
+	c.OnProgress(func(ProgressNotification) {
+		startOnce.Do(func() { close(firstStarted) })
+		<-releaseHandlers
+	})
+
+	const total = notifyQueueSize * 4
+	m.emit([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":0}}`))
+	select {
+	case <-firstStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first notification handler did not start")
+	}
+
+	for i := 1; i < total; i++ {
+		m.emit([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":1}}`))
+	}
+
+	want := uint64(total - (notifyQueueSize + 1))
+	if got := c.DroppedNotifications(); got != want {
+		t.Fatalf("DroppedNotifications() = %d, want %d", got, want)
+	}
+	if got := c.notifier.dropped.Load(); got != c.DroppedNotifications() {
+		t.Fatalf("notifier dropped counter = %d, accessor = %d", got, c.DroppedNotifications())
+	}
+
+	releaseOnce.Do(func() { close(releaseHandlers) })
 }
 
 // WithProgress must inject a progress token into the tools/call request and route
