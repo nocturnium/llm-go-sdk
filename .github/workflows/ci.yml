@@ -192,7 +192,10 @@ jobs:
           cache: true
 
       - name: Run integration tests
-        run: GOWORK=off go test -v -tags=integration ./...
+        # -race matches the Makefile's test-integration target and the unit-test
+        # job above; concurrency bugs in streaming/transport paths are most likely
+        # to surface against real provider servers.
+        run: GOWORK=off go test -v -race -tags=integration ./...
         env:
           # Provider API keys for integration tests (optional)
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
