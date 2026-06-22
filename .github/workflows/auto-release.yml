@@ -1,0 +1,193 @@
+name: Auto Release
+
+# Automatically cuts a release when releasable conventional commits land on main.
+#
+# git-cliff computes the next semantic version from the commits since the latest
+# tag (feat -> minor, fix -> patch, ! / BREAKING CHANGE -> major). If nothing
+# releasable landed (only docs/chore/ci/refactor/style/test/build commits), the
+# run skips without tagging.
+#
+# This path is SELF-CONTAINED: it creates+pushes the tag AND runs GoReleaser in
+# the same run. A tag pushed by the default GITHUB_TOKEN does NOT trigger the
+# tag-gated release.yml (GitHub suppresses workflow recursion for GITHUB_TOKEN),
+# so we release inline here rather than depending on that. release.yml remains
+# the path for manual / emergency tags (`git push origin vX.Y.Z`).
+#
+# NOTE: PR squash-commit subjects must follow Conventional Commits for the bump
+# to be computed correctly (feat:, fix:, feat!:, etc.). Non-conventional or
+# docs/chore/ci-only changes intentionally do not produce a release.
+
+on:
+  push:
+    branches: [main]
+
+# Serialize releases; never cancel an in-flight one.
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.25'
+
+jobs:
+  version:
+    name: Compute next version
+    runs-on: ubuntu-latest
+    # Fast-path skip for the changelog bot's own merges. Even if it runs, a
+    # docs-only delta yields no version bump, so this is an optimization only.
+    if: "!startsWith(github.event.head_commit.message, 'docs: update CHANGELOG.md')"
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pinned git-cliff binary (not the floating action) so we control stdout:
+      # `--bumped-version` prints the next version to stdout, and `--context`
+      # gives the per-commit JSON we gate the release decision on.
+      - name: Install git-cliff
+        env:
+          GIT_CLIFF_VERSION: '2.13.1'
+        run: |
+          curl -sSL "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz" | tar xz
+          echo "${PWD}/git-cliff-${GIT_CLIFF_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Decide whether to release
+        id: decide
+        run: |
+          LATEST="$(git describe --tags --abbrev=0 2>/dev/null || echo none)"
+          # A release is warranted ONLY when a feat/fix/perf/breaking commit landed
+          # since the last tag (feat -> minor, fix/perf -> patch, breaking -> major).
+          # NOTE: `git cliff --bumped-version` alone bumps a PATCH for ANY commit
+          # (including docs/chore/ci), so we must gate on the count of releasable
+          # commits rather than on "did the version change". Other types
+          # (docs/chore/ci/refactor/style/test/build) intentionally do not release.
+          RELEASABLE="$(git cliff --config cliff.toml --unreleased --bump --context 2>/dev/null \
+            | jq '[.[].commits[]? | select(.group=="Features" or .group=="Bug Fixes" or .group=="Performance" or .breaking==true)] | length' 2>/dev/null)"
+          case "$RELEASABLE" in ''|*[!0-9]*) RELEASABLE=0 ;; esac
+          echo "Releasable (feat/fix/breaking) commits since ${LATEST}: ${RELEASABLE}"
+          if [ "$RELEASABLE" -eq 0 ]; then
+            echo "::notice::No releasable feat/fix/breaking commits since ${LATEST}; skipping release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          NEXT="$(git cliff --config cliff.toml --bumped-version 2>/dev/null | tr -d '[:space:]')"
+          # Fail closed: never release on an unparseable version.
+          if ! printf '%s' "$NEXT" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::git-cliff returned an unparseable version ('${NEXT}'); not releasing."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$NEXT" in v*) ;; *) NEXT="v${NEXT}" ;; esac
+          if [ "$NEXT" = "$LATEST" ]; then
+            echo "::warning::Releasable commits found but computed version ${NEXT} equals latest tag; skipping."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::notice::Releasing ${NEXT} (previous tag ${LATEST}; ${RELEASABLE} releasable commit(s))."
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Tag & Release
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "Tag ${VERSION} already exists; aborting to avoid clobber."
+            exit 1
+          fi
+          git tag -a "${VERSION}" -m "${VERSION}"
+          git push origin "${VERSION}"
+
+      # GoReleaser's SBOM step shells out to syft, which is not preinstalled.
+      - name: Install Syft (SBOM generation)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ needs.version.outputs.version }}
+          path: dist/*
+          retention-days: 30
+
+  changelog:
+    name: Changelog
+    needs: [version, release]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Open changelog PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: CHANGELOG.md
+          branch: changelog/${{ needs.version.outputs.version }}
+          base: main
+          delete-branch: true
+          commit-message: "docs: update CHANGELOG.md for ${{ needs.version.outputs.version }}"
+          title: "docs: update CHANGELOG.md for ${{ needs.version.outputs.version }}"
+          body: |
+            Automated `CHANGELOG.md` regeneration for **${{ needs.version.outputs.version }}** via git-cliff.
+            The GitHub Release notes are generated separately by GoReleaser.
+          labels: |
+            changelog
+            automated
+          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
