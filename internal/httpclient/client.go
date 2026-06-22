@@ -45,6 +45,16 @@ const maxResponseSize = 100 * 1024 * 1024 // 100MB
 // Each hop is re-validated against the same SSRF policy as the initial request.
 const maxRedirects = 10
 
+// crossHostRedirectCredentialHeaders are provider API-key/auth headers that
+// must not be forwarded when a redirect leaves the original request host.
+var crossHostRedirectCredentialHeaders = []string{
+	"x-goog-api-key",
+	"api-key",
+	"x-api-key",
+	"Authorization",
+	"Proxy-Authorization",
+}
+
 // Client is an HTTP client with retry support.
 type Client struct {
 	httpClient  *http.Client
@@ -192,8 +202,20 @@ func (c *Client) installRedirectPolicy() {
 		if err := c.validateURL(req.URL.String()); err != nil {
 			return fmt.Errorf("redirect blocked: %w", err)
 		}
+		if len(via) > 0 && !sameRedirectHostname(req, via[0]) {
+			for _, header := range crossHostRedirectCredentialHeaders {
+				req.Header.Del(header)
+			}
+		}
 		return nil
 	}
+}
+
+func sameRedirectHostname(req, original *http.Request) bool {
+	if req == nil || req.URL == nil || original == nil || original.URL == nil {
+		return false
+	}
+	return strings.EqualFold(req.URL.Hostname(), original.URL.Hostname())
 }
 
 // validationOptions builds the URL validation policy from the client's flags.

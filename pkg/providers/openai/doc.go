@@ -45,7 +45,7 @@
 //	client, err := openai.New(openai.WithEmbeddingModel("text-embedding-3-small"))
 //	embedder, ok := llms.AsEmbedder(client)
 //	if ok {
-//	    vectors, err := embedder.EmbedDocuments(ctx, []string{"text1", "text2"})
+//	    vectors, err := llms.EmbedDocuments(ctx, embedder, []string{"text1", "text2"})
 //	}
 //
 // # Thread Safety

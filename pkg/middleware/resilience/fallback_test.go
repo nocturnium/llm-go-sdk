@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -501,6 +502,62 @@ func TestFallbackChain_RemoveClient(t *testing.T) {
 	if chain.RemoveClient(5) {
 		t.Error("remove with invalid index should return false")
 	}
+}
+
+func TestFallbackChain_ConcurrentCallWithClientMutation(t *testing.T) {
+	const (
+		initialClients = 8
+		readerCount    = 8
+		callIterations = 1000
+		mutations      = 1000
+	)
+
+	allClients := make([]llms.LLM, initialClients+mutations)
+	for i := range allClients {
+		allClients[i] = &mockFallbackLLM{
+			provider: llms.ProviderOpenAI,
+			model:    testGPT4,
+			callErr:  &llms.APIError{StatusCode: 503, Message: "service unavailable"},
+			genErr:   &llms.APIError{StatusCode: 503, Message: "service unavailable"},
+		}
+	}
+
+	chain := NewFallbackChain(allClients[:initialClients],
+		WithFallbackSelector(AlwaysFallbackSelector{}),
+		WithOnFallback(func(_, _ int, from, to llms.LLM, _ error) {
+			_ = from.Provider()
+			_ = to.Provider()
+		}),
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(readerCount + 1)
+
+	for i := 0; i < readerCount; i++ {
+		go func() {
+			defer wg.Done()
+			for j := 0; j < callIterations; j++ {
+				_, err := chain.Call(context.Background(), "test")
+				if err != nil && !errors.Is(err, ErrAllClientsFailed) {
+					t.Errorf("Call() error = %v, want ErrAllClientsFailed", err)
+					return
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < mutations; i++ {
+			if !chain.RemoveClient(0) {
+				t.Error("RemoveClient(0) returned false")
+				return
+			}
+			chain.AddClient(allClients[initialClients+i])
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestFallbackChain_HealthTracking(t *testing.T) {
