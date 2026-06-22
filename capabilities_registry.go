@@ -204,6 +204,24 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
+	// GPT-5 family — current flagship reasoning lineup. Limits mirror
+	// pkg/providers/openai/models.go knownModels (400k context / 128k output, all
+	// Chat+Vision). Reasoning is flagged in registerReasoningAndCaching below, which
+	// matches openaicompat.isOpenAIReasoningModel (any "gpt-5" prefix reasons).
+	for _, id := range []string{
+		"gpt-5", "gpt-5-mini", "gpt-5-nano",
+		"gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
+		"gpt-5.5", "gpt-5.5-pro",
+	} {
+		r.capabilities["openai:"+id] = ModelCapabilities{
+			MaxContextTokens:  400000,
+			MaxOutputTokens:   128000,
+			SupportsVision:    true,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      true,
+		}
+	}
 
 	// Anthropic defaults
 	r.defaults[ProviderAnthropic] = ModelCapabilities{
@@ -272,6 +290,30 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      false,
 	}
+	// Current Anthropic flagships. Limits mirror pkg/providers/anthropic/models.go
+	// knownModels. SupportsJSON stays false (Anthropic uses tool_choice for
+	// structured output, like every entry above). Reasoning is flagged below — the
+	// same extended-thinking generation as claude-sonnet-4, which is already flagged.
+	for _, id := range []string{"claude-fable-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6"} {
+		r.capabilities["anthropic:"+id] = ModelCapabilities{
+			MaxContextTokens:  1000000,
+			MaxOutputTokens:   128000,
+			SupportsVision:    true,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      false,
+		}
+	}
+	for _, id := range []string{"claude-opus-4-5", "claude-opus-4-5-20251101"} {
+		r.capabilities["anthropic:"+id] = ModelCapabilities{
+			MaxContextTokens:  200000,
+			MaxOutputTokens:   64000,
+			SupportsVision:    true,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      false,
+		}
+	}
 
 	// Gemini defaults
 	r.defaults[ProviderGemini] = ModelCapabilities{
@@ -323,6 +365,20 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsTools:     true,
 		SupportsStreaming: true,
 		SupportsJSON:      true,
+	}
+	// Gemini 3.x family. pkg/providers/gemini/models.go knownModels carry no static
+	// limits (they come from the API; the documented current lineup is 1,048,576 in /
+	// 65,536 out), so limits here match the existing gemini-2.5 entries. Reasoning is
+	// flagged below for pro/flash, mirroring the 2.5 treatment (flash-lite unflagged).
+	for _, id := range []string{"gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview"} {
+		r.capabilities["gemini:"+id] = ModelCapabilities{
+			MaxContextTokens:  1048576,
+			MaxOutputTokens:   65536,
+			SupportsVision:    true,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      true,
+		}
 	}
 
 	// Groq defaults (fast inference)
@@ -503,8 +559,17 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 	// Reasoning ("thinking") is model-specific. Mark known reasoning models...
 	reasoningModels := []string{
 		"openai:o1", "openai:o1-mini", "openai:o3", "openai:o4-mini",
+		// GPT-5 family — every "gpt-5" prefix reasons per isOpenAIReasoningModel.
+		"openai:gpt-5", "openai:gpt-5-mini", "openai:gpt-5-nano",
+		"openai:gpt-5.4", "openai:gpt-5.4-mini", "openai:gpt-5.4-nano", "openai:gpt-5.4-pro",
+		"openai:gpt-5.5", "openai:gpt-5.5-pro",
 		"anthropic:claude-sonnet-4", "anthropic:claude-sonnet-4-20250514",
+		// Current Anthropic flagships (same extended-thinking generation).
+		"anthropic:claude-fable-5", "anthropic:claude-opus-4-8", "anthropic:claude-opus-4-7",
+		"anthropic:claude-opus-4-6", "anthropic:claude-opus-4-5", "anthropic:claude-opus-4-5-20251101",
 		"gemini:gemini-2.5-pro", "gemini:gemini-2.5-flash",
+		// Gemini 3.x pro/flash, mirroring the 2.5 treatment (flash-lite left unflagged).
+		"gemini:gemini-3.1-pro-preview", "gemini:gemini-3.5-flash", "gemini:gemini-3-flash-preview",
 	}
 	for _, key := range reasoningModels {
 		if caps, ok := r.capabilities[key]; ok {

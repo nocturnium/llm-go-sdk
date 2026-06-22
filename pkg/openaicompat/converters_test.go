@@ -757,6 +757,47 @@ func TestBuildChatRequest_NonReasoningModelUnchanged(t *testing.T) {
 	}
 }
 
+func TestBuildChatRequest_StreamOptionsSerialization(t *testing.T) {
+	messages := []llms.Message{{Role: llms.RoleUser, Content: "Hello"}}
+	opts := llms.ApplyOptions()
+
+	streamReq := BuildChatRequest("gpt-4o", messages, opts, true)
+	streamData, err := json.Marshal(streamReq)
+	if err != nil {
+		t.Fatalf("marshal streaming request: %v", err)
+	}
+	var streamBody map[string]any
+	if err := json.Unmarshal(streamData, &streamBody); err != nil {
+		t.Fatalf("unmarshal streaming request: %v", err)
+	}
+	if streamBody["stream"] != true {
+		t.Fatalf("expected stream=true in streaming JSON, got %v in %s", streamBody["stream"], streamData)
+	}
+	streamOptions, ok := streamBody["stream_options"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected stream_options object in streaming JSON, got %v in %s", streamBody["stream_options"], streamData)
+	}
+	if streamOptions["include_usage"] != true {
+		t.Fatalf("expected stream_options.include_usage=true, got %v in %s", streamOptions["include_usage"], streamData)
+	}
+
+	nonStreamReq := BuildChatRequest("gpt-4o", messages, opts, false)
+	nonStreamData, err := json.Marshal(nonStreamReq)
+	if err != nil {
+		t.Fatalf("marshal non-streaming request: %v", err)
+	}
+	var nonStreamBody map[string]any
+	if err := json.Unmarshal(nonStreamData, &nonStreamBody); err != nil {
+		t.Fatalf("unmarshal non-streaming request: %v", err)
+	}
+	if _, ok := nonStreamBody["stream"]; ok {
+		t.Fatalf("expected stream omitted in non-streaming JSON, got %s", nonStreamData)
+	}
+	if _, ok := nonStreamBody["stream_options"]; ok {
+		t.Fatalf("expected stream_options omitted in non-streaming JSON, got %s", nonStreamData)
+	}
+}
+
 func TestBuildChatRequest_ReasoningEffort(t *testing.T) {
 	opts := llms.ApplyOptions(llms.WithReasoningEffort(llms.ReasoningEffortHigh))
 	req := BuildChatRequest("gpt-5", nil, opts, false)

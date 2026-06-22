@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Security and correctness hardening sweep (the five HIGH-severity items from the
+post-v4.1.0 CTO deficiency review). All changes are additive and backward-compatible;
+no public contracts change.
+
+### Security
+
+- **Strip provider API-key headers on cross-host redirects.** The HTTP client's
+  redirect policy now deletes `x-goog-api-key`, `api-key`, `x-api-key`, `Authorization`,
+  and `Proxy-Authorization` before following a redirect whose host differs from the
+  original request's host. Go's standard library only auto-strips a fixed set of headers
+  on cross-domain redirects and never touches these custom provider auth headers, so a
+  redirect to a foreign host previously leaked the raw API key (CWE-200).
+
+### Fixed
+
+- **FallbackChain data race.** `Call`, `GenerateContent`, and `Stream` took only a
+  slice-header copy of the client list while `AddClient`/`RemoveClient` mutated the
+  backing array in place, racing the dispatch reads (reproducible under `-race`). They
+  now iterate an immutable contents snapshot taken under the read lock.
+- **Streaming token usage silently lost on OpenAI-compatible providers.** Streaming
+  chat requests now send `stream_options.include_usage: true`, so the terminal usage
+  chunk (and thus token/cost accounting) is actually emitted. Non-streaming requests are
+  unchanged.
+- **Stale model capabilities for current flagships.** `GetModelCapabilities` /
+  `Capabilities()` returned stale provider defaults (wrong context/output limits,
+  `SupportsReasoning=false`) for the current GPT-5, Claude (Fable 5 / Opus 4.x), and
+  Gemini 3.x flagships. Added per-model entries (limits sourced from each provider's
+  `knownModels` overlay) and extended the reasoning-model list.
+- **Non-compiling embeddings godoc.** The OpenAI and Gemini package docs called
+  `embedder.EmbedDocuments(...)` — a method that does not exist; `EmbedDocuments` is a
+  package-level `llms` function. Corrected both examples and added compile-guard example
+  tests so the snippet form cannot regress.
+
 ## [4.1.0] - 2026-06-21
 
 Additive, non-breaking fast-follow on top of v4.0.0 — observability for two

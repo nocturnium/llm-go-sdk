@@ -45,7 +45,7 @@
 //	client, err := gemini.New()
 //	embedder, ok := llms.AsEmbedder(client)
 //	if ok {
-//	    vectors, err := embedder.EmbedDocuments(ctx, texts,
+//	    vectors, err := llms.EmbedDocuments(ctx, embedder, texts,
 //	        llms.WithTaskType(llms.TaskTypeRetrievalDocument),
 //	    )
 //	}

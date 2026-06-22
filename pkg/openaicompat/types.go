@@ -29,6 +29,7 @@ type ChatCompletionRequest struct {
 	PresencePenalty     *float64        `json:"presence_penalty,omitempty"`
 	Stop                []string        `json:"stop,omitempty"`
 	Stream              bool            `json:"stream,omitempty"`
+	StreamOptions       *StreamOptions  `json:"stream_options,omitempty"`
 	Tools               []Tool          `json:"tools,omitempty"`
 	ToolChoice          any             `json:"tool_choice,omitempty"`
 	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
@@ -40,6 +41,11 @@ type ChatCompletionRequest struct {
 	// Used for provider-specific extensions like LoRAX adapter_id.
 	// These fields are flattened into the request JSON, not nested under "extra_body".
 	ExtraBody map[string]any `json:"-"` // Excluded from default marshaling, handled by MarshalJSON
+}
+
+// StreamOptions specifies options for streaming chat completions.
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
 // ResponseFormat specifies the response format
@@ -89,6 +95,9 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 	}
 	if r.Stream {
 		m["stream"] = r.Stream
+	}
+	if r.StreamOptions != nil {
+		m["stream_options"] = r.StreamOptions
 	}
 	if len(r.Tools) > 0 {
 		m["tools"] = r.Tools

@@ -323,6 +323,9 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 		Stop:             opts.StopWords,
 		Stream:           stream,
 	}
+	if stream {
+		req.StreamOptions = &StreamOptions{IncludeUsage: true}
+	}
 
 	// OpenAI reasoning models (o-series, gpt-5) reject `max_tokens` (they require
 	// `max_completion_tokens`) and reject `temperature`/`top_p`/penalties with an

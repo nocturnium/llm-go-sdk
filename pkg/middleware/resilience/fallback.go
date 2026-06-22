@@ -158,10 +158,7 @@ func withFallbackClock(now func() time.Time) FallbackOption {
 
 // Call tries each client in order until one succeeds
 func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
-	fc.mu.RLock()
-	clients := fc.clients
-	fc.mu.RUnlock()
-
+	clients := fc.clientsSnapshot()
 	if len(clients) == 0 {
 		return "", ErrNoClientsAvailable
 	}
@@ -204,10 +201,7 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llm
 // The operation function receives a client and returns a result and error.
 // This helper centralizes the retry/fallback logic used by GenerateContent and Stream.
 func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LLM) (T, error)) (T, error) {
-	fc.mu.RLock()
-	clients := fc.clients
-	fc.mu.RUnlock()
-
+	clients := fc.clientsSnapshot()
 	var zero T
 	if len(clients) == 0 {
 		return zero, ErrNoClientsAvailable
@@ -261,9 +255,7 @@ func (fc *FallbackChain) GenerateContent(ctx context.Context, messages []llms.Me
 // the next client; once content flows, that client is committed and streamed
 // through (a later mid-stream error marks it unhealthy but cannot fail over).
 func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
-	fc.mu.RLock()
-	clients := fc.clients
-	fc.mu.RUnlock()
+	clients := fc.clientsSnapshot()
 	if len(clients) == 0 {
 		return nil, ErrNoClientsAvailable
 	}
@@ -402,6 +394,10 @@ func (fc *FallbackChain) Model() string {
 
 // Clients returns all clients in the chain
 func (fc *FallbackChain) Clients() []llms.LLM {
+	return fc.clientsSnapshot()
+}
+
+func (fc *FallbackChain) clientsSnapshot() []llms.LLM {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
