@@ -2,7 +2,7 @@ module github.com/nocturnium/llm-go-sdk/v4
 
 go 1.25.0
 
-toolchain go1.25.11
+toolchain go1.25.12
 
 require (
 	github.com/pkoukk/tiktoken-go v0.1.8
