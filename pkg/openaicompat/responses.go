@@ -461,14 +461,17 @@ func convertResponsesFormat(format *llms.ResponseFormat) *ResponsesFormat {
 func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 	result := &llms.Response{ID: resp.ID}
 
-	var content, reasoning string
+	var content, reasoning, refusal string
 	var reasoningItems []ResponsesReasoningItem
 	for _, item := range resp.Output {
 		switch item.Type {
 		case itemTypeMessage:
 			for _, c := range item.Content {
-				if c.Type == "output_text" {
+				switch c.Type {
+				case "output_text":
 					content += c.Text
+				case "refusal":
+					refusal += c.Refusal
 				}
 			}
 		case "function_call":
@@ -504,6 +507,16 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 		result.SetReasoning(rc)
 	}
 	result.FinishReason = responsesFinishReason(resp, len(result.ToolCalls) > 0)
+
+	// A safety refusal is distinct from an empty completion: surface the refusal
+	// text and a content_filter finish reason so moderation, routing, and logging
+	// can act on it instead of seeing an empty "stop".
+	if refusal != "" {
+		if result.Content == "" {
+			result.Content = refusal
+		}
+		result.FinishReason = llms.FinishReasonContentFilter
+	}
 
 	if resp.Usage != nil {
 		result.Usage = convertResponsesUsage(resp.Usage)

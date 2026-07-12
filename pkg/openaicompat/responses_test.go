@@ -101,6 +101,27 @@ func TestBuildResponsesRequest_StateFromExtraBody(t *testing.T) {
 	}
 }
 
+// TestConvertResponsesResponse_Refusal pins that a safety refusal is surfaced as
+// content plus a content_filter finish reason, not a silent empty "stop".
+func TestConvertResponsesResponse_Refusal(t *testing.T) {
+	resp := &ResponsesResponse{
+		ID:     "r",
+		Status: "completed",
+		Output: []ResponsesOutputItem{
+			{Type: itemTypeMessage, Content: []ResponsesOutputContent{
+				{Type: "refusal", Refusal: "I can't help with that."},
+			}},
+		},
+	}
+	out := ConvertResponsesResponse(resp)
+	if out.Content != "I can't help with that." {
+		t.Errorf("refusal text not surfaced: Content = %q", out.Content)
+	}
+	if out.FinishReason != llms.FinishReasonContentFilter {
+		t.Errorf("FinishReason = %q, want %q", out.FinishReason, llms.FinishReasonContentFilter)
+	}
+}
+
 func TestConvertResponsesResponse_TextReasoningUsage(t *testing.T) {
 	resp := &ResponsesResponse{
 		Status: "completed",
