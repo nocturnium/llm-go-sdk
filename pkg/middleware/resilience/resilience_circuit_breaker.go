@@ -52,6 +52,8 @@ type CircuitBreaker struct {
 	// Configuration
 	maxFailures     int           // Failures before opening
 	resetTimeout    time.Duration // Time before trying again
+	halfOpenTimeout time.Duration // Maximum time allowed in half-open
+	halfOpenSet     bool          // Whether halfOpenTimeout was explicitly configured
 	halfOpenMax     int           // Max requests in half-open state
 	onStateChange   func(from, to CircuitState)
 	onCallbackPanic func(recovered any, from, to CircuitState)
@@ -60,7 +62,7 @@ type CircuitBreaker struct {
 	state           CircuitState
 	failures        int
 	successes       int // Successes in half-open state
-	halfOpenCount   int // Requests attempted in half-open
+	halfOpenCount   int // Requests currently in flight in half-open
 	lastFailureTime time.Time
 	lastStateChange time.Time
 }
@@ -73,6 +75,7 @@ func NewCircuitBreaker(opts ...CircuitBreakerOption) *CircuitBreaker {
 	cb := &CircuitBreaker{
 		maxFailures:     5,
 		resetTimeout:    30 * time.Second,
+		halfOpenTimeout: 30 * time.Second,
 		halfOpenMax:     3,
 		state:           CircuitClosed,
 		lastStateChange: time.Now(),
@@ -99,6 +102,20 @@ func WithResetTimeout(d time.Duration) CircuitBreakerOption {
 	return func(cb *CircuitBreaker) {
 		if d > 0 {
 			cb.resetTimeout = d
+			if !cb.halfOpenSet {
+				cb.halfOpenTimeout = d
+			}
+		}
+	}
+}
+
+// WithHalfOpenTimeout sets the maximum time the circuit may remain half-open.
+// Nonpositive durations keep the default, which follows the reset timeout.
+func WithHalfOpenTimeout(d time.Duration) CircuitBreakerOption {
+	return func(cb *CircuitBreaker) {
+		if d > 0 {
+			cb.halfOpenTimeout = d
+			cb.halfOpenSet = true
 		}
 	}
 }
@@ -162,6 +179,11 @@ func (cb *CircuitBreaker) Allow() bool {
 		return false
 
 	case CircuitHalfOpen:
+		if time.Since(cb.lastStateChange) >= cb.halfOpenTimeout {
+			cb.lastFailureTime = time.Now()
+			transition = cb.transitionTo(CircuitOpen)
+			return false
+		}
 		// Allow limited requests in half-open state
 		if cb.halfOpenCount < cb.halfOpenMax {
 			cb.halfOpenCount++
@@ -191,6 +213,10 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		cb.failures = 0 // Reset failure count on success
 
 	case CircuitHalfOpen:
+		if cb.halfOpenCount == 0 {
+			return
+		}
+		cb.halfOpenCount--
 		cb.successes++
 		// If we've had enough successes, close the circuit
 		if cb.successes >= cb.halfOpenMax {
@@ -224,11 +250,26 @@ func (cb *CircuitBreaker) RecordFailure() {
 		}
 
 	case CircuitHalfOpen:
+		if cb.halfOpenCount == 0 {
+			return
+		}
+		cb.halfOpenCount--
 		// Any failure in half-open goes back to open
 		transition = cb.transitionTo(CircuitOpen)
 
 	case CircuitOpen:
 		// Circuit is already open, just update the failure time
+	}
+}
+
+// release abandons an allowed request without treating it as provider health
+// evidence. In half-open it returns the in-flight probe permit.
+func (cb *CircuitBreaker) release() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	if cb.state == CircuitHalfOpen && cb.halfOpenCount > 0 {
+		cb.halfOpenCount--
 	}
 }
 

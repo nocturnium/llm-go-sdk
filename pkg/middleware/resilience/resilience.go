@@ -125,6 +125,8 @@ func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, 
 	if err != nil {
 		if isProviderUnhealthy(err) {
 			rc.breaker.RecordFailure()
+		} else {
+			rc.breaker.release()
 		}
 		return nil, err
 	}
@@ -144,7 +146,8 @@ func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, 
 				rc.breaker.RecordSuccess()
 			case isProviderUnhealthy(termErr):
 				rc.breaker.RecordFailure()
-				// Cancellation / client-side errors leave the breaker untouched.
+			default:
+				rc.breaker.release()
 			}
 		},
 	), nil
@@ -191,6 +194,8 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) {
 			if providerUnhealthy {
 				rc.breaker.RecordFailure()
+			} else {
+				rc.breaker.release()
 			}
 			return err
 		}
@@ -199,6 +204,8 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		if attempt >= maxAttempts-1 {
 			if providerUnhealthy {
 				rc.breaker.RecordFailure()
+			} else {
+				rc.breaker.release()
 			}
 			break
 		}
@@ -211,6 +218,10 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		if rc.onRetry != nil {
 			rc.onRetry(attempt+1, err, retryDelay)
 		}
+
+		// The next retry obtains its own grant. This attempt's retryable error is
+		// not terminal provider-health evidence, so release its probe permit.
+		rc.breaker.release()
 
 		// Wait before retrying with proper timer cleanup.
 		// Using time.NewTimer instead of time.After to prevent goroutine leaks

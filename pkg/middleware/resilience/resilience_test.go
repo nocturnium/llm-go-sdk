@@ -96,28 +96,30 @@ func TestCircuitBreaker_TransitionsToHalfOpen(t *testing.T) {
 }
 
 func TestCircuitBreaker_HalfOpenToClosedOnSuccess(t *testing.T) {
+	llm := &mockResilientLLM{responses: []mockResponse{
+		{err: &llms.APIError{StatusCode: 503}},
+		{content: "probe one"},
+		{content: "probe two"},
+	}}
 	cb := NewCircuitBreaker(
 		WithMaxFailures(1),
-		WithResetTimeout(10*time.Millisecond),
+		WithResetTimeout(time.Millisecond),
 		WithHalfOpenMax(2),
+		// Large half-open timeout so the watchdog never fires between the two
+		// back-to-back probe Calls under -race slowdown; this test asserts
+		// half-open -> closed on success, not the watchdog (see
+		// TestCircuitBreaker_HalfOpenWatchdogReopens).
+		WithHalfOpenTimeout(time.Minute),
 	)
+	client := NewResilientClient(llm, WithCircuitBreaker(cb), WithMaxRetries(0))
 
-	// Open the circuit
-	cb.Allow()
-	cb.RecordFailure()
-
-	// Wait and transition to half-open
-	time.Sleep(15 * time.Millisecond)
-	cb.Allow()
-
-	if cb.State() != CircuitHalfOpen {
-		t.Fatalf("state = %v, want HalfOpen", cb.State())
+	_, _ = client.Call(context.Background(), "open")
+	waitForResetTimeout(t, time.Millisecond)
+	for _, prompt := range []string{"probe-one", "probe-two"} {
+		if _, err := client.Call(context.Background(), prompt); err != nil {
+			t.Fatalf("%s failed: %v", prompt, err)
+		}
 	}
-
-	// Record successes to close
-	cb.RecordSuccess()
-	cb.Allow()
-	cb.RecordSuccess()
 
 	if cb.State() != CircuitClosed {
 		t.Errorf("state = %v, want Closed", cb.State())
@@ -153,16 +155,18 @@ func TestCircuitBreaker_HalfOpenToOpenOnFailure(t *testing.T) {
 func TestCircuitBreaker_HalfOpenLimitsRequests(t *testing.T) {
 	cb := NewCircuitBreaker(
 		WithMaxFailures(1),
-		WithResetTimeout(10*time.Millisecond),
+		WithResetTimeout(time.Millisecond),
 		WithHalfOpenMax(2),
+		// Watchdog must not fire between the synchronous Allow() calls below.
+		WithHalfOpenTimeout(time.Minute),
 	)
 
 	// Open the circuit
 	cb.Allow()
 	cb.RecordFailure()
 
-	// Wait and transition to half-open
-	time.Sleep(15 * time.Millisecond)
+	// Wait and transition to half-open.
+	waitForResetTimeout(t, time.Millisecond)
 
 	// Should allow up to halfOpenMax requests
 	if !cb.Allow() {
@@ -173,6 +177,103 @@ func TestCircuitBreaker_HalfOpenLimitsRequests(t *testing.T) {
 	}
 	if cb.Allow() {
 		t.Error("should not allow third half-open request")
+	}
+
+	// Settling a probe releases its in-flight permit, keeping recovery reachable.
+	cb.RecordSuccess()
+	if !cb.Allow() {
+		t.Fatal("settled probe should free a half-open permit")
+	}
+	cb.RecordSuccess()
+	if cb.State() != CircuitClosed {
+		t.Fatalf("state = %v, want Closed after two successful probes", cb.State())
+	}
+}
+
+func TestCircuitBreaker_HalfOpenWatchdogReopens(t *testing.T) {
+	const timeout = time.Millisecond
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithResetTimeout(timeout),
+		WithHalfOpenTimeout(timeout),
+	)
+
+	cb.Allow()
+	cb.RecordFailure()
+	waitForResetTimeout(t, timeout)
+	if !cb.Allow() {
+		t.Fatal("expected first half-open probe")
+	}
+	waitForResetTimeout(t, timeout)
+	if cb.Allow() {
+		t.Fatal("watchdog Allow should reject while forcing half-open back to open")
+	}
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want Open", cb.State())
+	}
+}
+
+func waitForResetTimeout(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout + timeout/2 + time.Millisecond)
+	defer timer.Stop()
+	<-timer.C
+}
+
+func TestResilientClient_HalfOpenRetriesRecoverWithoutWedge(t *testing.T) {
+	responses := make([]mockResponse, 0, 25)
+	for range 15 { // Five terminal calls at the default three attempts each.
+		responses = append(responses, mockResponse{err: &llms.APIError{StatusCode: 503}})
+	}
+	for range 3 { // Three successful half-open probes, each after two retries.
+		responses = append(responses,
+			mockResponse{err: &llms.APIError{StatusCode: 429}},
+			mockResponse{err: &llms.APIError{StatusCode: 503}},
+			mockResponse{content: "recovered"},
+		)
+	}
+	responses = append(responses, mockResponse{content: "healthy"})
+
+	llm := &mockResilientLLM{responses: responses}
+	const resetTimeout = 100 * time.Millisecond
+	breaker := NewCircuitBreaker(
+		WithResetTimeout(resetTimeout),
+		// Keep the watchdog well clear of the 3-probe recovery loop on a loaded box.
+		WithHalfOpenTimeout(time.Minute),
+	)
+	client := NewResilientClient(llm,
+		WithCircuitBreaker(breaker),
+		WithRetryDelay(time.Microsecond),
+	)
+
+	for i := 0; i < 5; i++ {
+		if _, err := client.Call(context.Background(), "open"); err == nil {
+			t.Fatalf("opening call %d unexpectedly succeeded", i+1)
+		}
+	}
+	if breaker.State() != CircuitOpen {
+		t.Fatalf("state = %v, want Open", breaker.State())
+	}
+	waitForResetTimeout(t, resetTimeout)
+
+	for i := 0; i < 3; i++ {
+		result, err := client.Call(context.Background(), "probe")
+		if err != nil {
+			t.Fatalf("half-open recovery call %d failed: %v", i+1, err)
+		}
+		if result != "recovered" {
+			t.Fatalf("half-open recovery call %d = %q, want recovered", i+1, result)
+		}
+	}
+	if breaker.State() != CircuitClosed {
+		t.Fatalf("state = %v, want Closed", breaker.State())
+	}
+	result, err := client.Call(context.Background(), "healthy")
+	if err != nil {
+		t.Fatalf("healthy call failed: %v", err)
+	}
+	if result != "healthy" {
+		t.Fatalf("healthy call = %q, want healthy", result)
 	}
 }
 
