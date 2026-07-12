@@ -76,23 +76,44 @@ func (s NeverFallbackSelector) ShouldFallback(_ error) bool {
 	return false
 }
 
+// fallbackEntry pairs a client with a stable identity and its health state.
+// The id is assigned once when the client is added and never reused, so health
+// is bound to the client itself rather than to its shifting slice position —
+// adding or removing a client mid-call can no longer misattribute a failure to
+// a different client. unhealthyUntil is zero when healthy, else the instant the
+// client becomes eligible for a half-open probe.
+type fallbackEntry struct {
+	id             int64
+	client         llms.LLM
+	unhealthyUntil time.Time
+}
+
 // FallbackChain tries multiple LLM clients in order until one succeeds
 type FallbackChain struct {
 	mu       sync.RWMutex
-	clients  []llms.LLM
+	entries  []fallbackEntry
+	nextID   int64
 	selector FallbackSelector
 
 	// Callbacks
 	onFallback func(fromIdx int, toIdx int, from, to llms.LLM, err error)
 	onSuccess  func(idx int, client llms.LLM)
 
-	// Health tracking - using a slice for simpler index management.
-	// Each index corresponds directly to the client at the same index.
-	// Zero time = healthy, non-zero future time = unhealthy until that instant.
-	// Protected by mu.
-	unhealthyUntil []time.Time
-	recoveryAfter  time.Duration
-	now            func() time.Time
+	// Health tracking is stored per-entry (keyed by stable id), not by slice
+	// position, so a concurrent AddClient/RemoveClient during an in-flight call
+	// cannot mark the wrong client unhealthy. Protected by mu.
+	recoveryAfter time.Duration
+	now           func() time.Time
+}
+
+// fallbackCandidate is an entry captured in a point-in-time snapshot for a
+// single operation. pos is the client's position within that snapshot (used for
+// the positional callback contract); id is its stable identity (used to record
+// health back onto the right client regardless of later mutation).
+type fallbackCandidate struct {
+	pos    int
+	id     int64
+	client llms.LLM
 }
 
 // FallbackOption configures a FallbackChain
@@ -101,11 +122,14 @@ type FallbackOption func(*FallbackChain)
 // NewFallbackChain creates a new fallback chain with the given clients
 func NewFallbackChain(clients []llms.LLM, opts ...FallbackOption) *FallbackChain {
 	fc := &FallbackChain{
-		clients:        clients,
-		selector:       DefaultFallbackSelector{},
-		unhealthyUntil: make([]time.Time, len(clients)),
-		recoveryAfter:  defaultFallbackRecoveryAfter,
-		now:            time.Now,
+		selector:      DefaultFallbackSelector{},
+		entries:       make([]fallbackEntry, len(clients)),
+		recoveryAfter: defaultFallbackRecoveryAfter,
+		now:           time.Now,
+	}
+	for i, client := range clients {
+		fc.entries[i] = fallbackEntry{id: fc.nextID, client: client}
+		fc.nextID++
 	}
 
 	for _, opt := range opts {
@@ -158,28 +182,25 @@ func withFallbackClock(now func() time.Time) FallbackOption {
 
 // Call tries each client in order until one succeeds
 func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
-	clients := fc.clientsSnapshot()
-	if len(clients) == 0 {
+	candidates := fc.snapshot()
+	if len(candidates) == 0 {
 		return "", ErrNoClientsAvailable
 	}
 
-	candidateIndexes := fc.candidateIndexes(len(clients))
-
 	var lastErr error
-	for pos, i := range candidateIndexes {
-		client := clients[i]
-		result, err := llms.Call(ctx, client, prompt, options...)
+	for pos, cand := range candidates {
+		result, err := llms.Call(ctx, cand.client, prompt, options...)
 		if err == nil {
-			fc.markHealthy(i)
+			fc.markHealthyID(cand.id)
 			if fc.onSuccess != nil {
-				fc.onSuccess(i, client)
+				fc.onSuccess(cand.pos, cand.client)
 			}
 			return result, nil
 		}
 
 		lastErr = err
 		if isProviderUnhealthy(err) {
-			fc.markUnhealthy(i)
+			fc.markUnhealthyID(cand.id)
 		}
 
 		// Check if we should fallback
@@ -188,10 +209,7 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llm
 		}
 
 		// Callback for fallback
-		if fc.onFallback != nil && pos < len(candidateIndexes)-1 {
-			nextIdx := candidateIndexes[pos+1]
-			fc.onFallback(i, nextIdx, client, clients[nextIdx], err)
-		}
+		fc.fireFallback(pos, candidates, err)
 	}
 
 	return "", allClientsFailedError(lastErr)
@@ -201,29 +219,26 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llm
 // The operation function receives a client and returns a result and error.
 // This helper centralizes the retry/fallback logic used by GenerateContent and Stream.
 func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LLM) (T, error)) (T, error) {
-	clients := fc.clientsSnapshot()
+	candidates := fc.snapshot()
 	var zero T
-	if len(clients) == 0 {
+	if len(candidates) == 0 {
 		return zero, ErrNoClientsAvailable
 	}
 
-	candidateIndexes := fc.candidateIndexes(len(clients))
-
 	var lastErr error
-	for pos, i := range candidateIndexes {
-		client := clients[i]
-		result, err := operation(client)
+	for pos, cand := range candidates {
+		result, err := operation(cand.client)
 		if err == nil {
-			fc.markHealthy(i)
+			fc.markHealthyID(cand.id)
 			if fc.onSuccess != nil {
-				fc.onSuccess(i, client)
+				fc.onSuccess(cand.pos, cand.client)
 			}
 			return result, nil
 		}
 
 		lastErr = err
 		if isProviderUnhealthy(err) {
-			fc.markUnhealthy(i)
+			fc.markUnhealthyID(cand.id)
 		}
 
 		// Check if we should fallback
@@ -232,10 +247,7 @@ func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LL
 		}
 
 		// Callback for fallback
-		if fc.onFallback != nil && pos < len(candidateIndexes)-1 {
-			nextIdx := candidateIndexes[pos+1]
-			fc.onFallback(i, nextIdx, client, clients[nextIdx], err)
-		}
+		fc.fireFallback(pos, candidates, err)
 	}
 
 	return zero, allClientsFailedError(lastErr)
@@ -255,27 +267,26 @@ func (fc *FallbackChain) GenerateContent(ctx context.Context, messages []llms.Me
 // the next client; once content flows, that client is committed and streamed
 // through (a later mid-stream error marks it unhealthy but cannot fail over).
 func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
-	clients := fc.clientsSnapshot()
-	if len(clients) == 0 {
+	candidates := fc.snapshot()
+	if len(candidates) == 0 {
 		return nil, ErrNoClientsAvailable
 	}
 
 	opts := llms.ApplyOptions(options...)
-	candidates := fc.candidateIndexes(len(clients))
 	var lastErr error
 
-	for pos, i := range candidates {
-		client := clients[i]
+	for pos, cand := range candidates {
+		client := cand.client
 		src, err := client.Stream(ctx, messages, options...)
 		if err != nil {
 			lastErr = err
 			if isProviderUnhealthy(err) {
-				fc.markUnhealthy(i)
+				fc.markUnhealthyID(cand.id)
 			}
 			if !fc.selector.ShouldFallback(err) {
 				return nil, err
 			}
-			fc.fireFallback(pos, candidates, clients, err)
+			fc.fireFallback(pos, candidates, err)
 			continue
 		}
 
@@ -283,29 +294,29 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, op
 		switch {
 		case !ok:
 			// Stream closed without any chunk; treat as an (empty) success.
-			fc.markHealthy(i)
+			fc.markHealthyID(cand.id)
 			return forwardStream(ctx, opts, llms.StreamChunk{Done: true}, src, nil), nil
 		case first.Error != nil:
 			lastErr = first.Error
 			if isProviderUnhealthy(first.Error) {
-				fc.markUnhealthy(i)
+				fc.markUnhealthyID(cand.id)
 			}
 			if !fc.selector.ShouldFallback(first.Error) {
 				// Committed to this client by contract (chan already returned); deliver its error.
 				return forwardStream(ctx, opts, first, src, nil), nil
 			}
-			fc.fireFallback(pos, candidates, clients, first.Error)
+			fc.fireFallback(pos, candidates, first.Error)
 			go drainStream(src) // let the abandoned producer finish without blocking
 			continue
 		default:
-			fc.markHealthy(i)
+			fc.markHealthyID(cand.id)
 			if fc.onSuccess != nil {
-				fc.onSuccess(i, client)
+				fc.onSuccess(cand.pos, client)
 			}
-			idx := i
+			id := cand.id
 			return forwardStream(ctx, opts, first, src, func(err error) {
 				if isProviderUnhealthy(err) {
-					fc.markUnhealthy(idx)
+					fc.markUnhealthyID(id)
 				}
 			}), nil
 		}
@@ -322,14 +333,16 @@ func allClientsFailedError(err error) error {
 }
 
 // fireFallback invokes the onFallback callback (if set) for a transition from the
-// candidate at position pos to the next candidate.
-func (fc *FallbackChain) fireFallback(pos int, candidates []int, clients []llms.LLM, err error) {
+// candidate at position pos to the next candidate. Positions and clients come
+// from the operation's snapshot, so the reported indices are internally
+// consistent regardless of concurrent chain mutation.
+func (fc *FallbackChain) fireFallback(pos int, candidates []fallbackCandidate, err error) {
 	if fc.onFallback == nil || pos >= len(candidates)-1 {
 		return
 	}
 	from := candidates[pos]
 	to := candidates[pos+1]
-	fc.onFallback(from, to, clients[from], clients[to], err)
+	fc.onFallback(from.pos, to.pos, from.client, to.client, err)
 }
 
 // drainStream consumes a stream to completion so its producer goroutine is not
@@ -375,10 +388,10 @@ func (fc *FallbackChain) Provider() llms.Provider {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
-	if len(fc.clients) == 0 {
+	if len(fc.entries) == 0 {
 		return ""
 	}
-	return fc.clients[0].Provider()
+	return fc.entries[0].client.Provider()
 }
 
 // Model returns the first client's model
@@ -386,10 +399,10 @@ func (fc *FallbackChain) Model() string {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
-	if len(fc.clients) == 0 {
+	if len(fc.entries) == 0 {
 		return ""
 	}
-	return fc.clients[0].Model()
+	return fc.entries[0].client.Model()
 }
 
 // Clients returns all clients in the chain
@@ -401,9 +414,38 @@ func (fc *FallbackChain) clientsSnapshot() []llms.LLM {
 	fc.mu.RLock()
 	defer fc.mu.RUnlock()
 
-	result := make([]llms.LLM, len(fc.clients))
-	copy(result, fc.clients)
+	result := make([]llms.LLM, len(fc.entries))
+	for i := range fc.entries {
+		result[i] = fc.entries[i].client
+	}
 	return result
+}
+
+// snapshot captures a point-in-time view of the chain under a single lock so
+// clients, their positions, and their health can never drift apart. It returns
+// the eligible (currently-healthy) candidates in order; if none are eligible it
+// returns every candidate so the chain still attempts a call. Callers iterate
+// the returned candidates and record health via markHealthyID/markUnhealthyID,
+// which bind the result to the client's stable id regardless of any concurrent
+// AddClient/RemoveClient.
+func (fc *FallbackChain) snapshot() []fallbackCandidate {
+	fc.mu.RLock()
+	defer fc.mu.RUnlock()
+
+	now := fc.now()
+	all := make([]fallbackCandidate, len(fc.entries))
+	eligible := make([]fallbackCandidate, 0, len(fc.entries))
+	for i := range fc.entries {
+		cand := fallbackCandidate{pos: i, id: fc.entries[i].id, client: fc.entries[i].client}
+		all[i] = cand
+		if isHealthyAt(fc.entries[i].unhealthyUntil, now) {
+			eligible = append(eligible, cand)
+		}
+	}
+	if len(eligible) > 0 {
+		return eligible
+	}
+	return all
 }
 
 // AddClient adds a client to the end of the chain
@@ -411,8 +453,8 @@ func (fc *FallbackChain) AddClient(client llms.LLM) {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	fc.clients = append(fc.clients, client)
-	fc.unhealthyUntil = append(fc.unhealthyUntil, time.Time{})
+	fc.entries = append(fc.entries, fallbackEntry{id: fc.nextID, client: client})
+	fc.nextID++
 }
 
 // RemoveClient removes a client from the chain by index
@@ -420,13 +462,13 @@ func (fc *FallbackChain) RemoveClient(idx int) bool {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	if idx < 0 || idx >= len(fc.clients) {
+	if idx < 0 || idx >= len(fc.entries) {
 		return false
 	}
 
-	// Remove client and corresponding health status
-	fc.clients = append(fc.clients[:idx], fc.clients[idx+1:]...)
-	fc.unhealthyUntil = append(fc.unhealthyUntil[:idx], fc.unhealthyUntil[idx+1:]...)
+	// Removing the entry drops its health with it; remaining clients keep their
+	// stable ids, so any in-flight operation still records health correctly.
+	fc.entries = append(fc.entries[:idx], fc.entries[idx+1:]...)
 
 	return true
 }
@@ -437,12 +479,12 @@ func (fc *FallbackChain) SetClientHealthy(idx int, healthy bool) {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	if idx >= 0 && idx < len(fc.unhealthyUntil) {
+	if idx >= 0 && idx < len(fc.entries) {
 		if healthy {
-			fc.unhealthyUntil[idx] = time.Time{}
+			fc.entries[idx].unhealthyUntil = time.Time{}
 			return
 		}
-		fc.unhealthyUntil[idx] = fc.now().Add(fc.recoveryAfter)
+		fc.entries[idx].unhealthyUntil = fc.now().Add(fc.recoveryAfter)
 	}
 }
 
@@ -456,28 +498,9 @@ func (fc *FallbackChain) ResetHealth() {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	for i := range fc.unhealthyUntil {
-		fc.unhealthyUntil[i] = time.Time{}
+	for i := range fc.entries {
+		fc.entries[i].unhealthyUntil = time.Time{}
 	}
-}
-
-func (fc *FallbackChain) candidateIndexes(clientCount int) []int {
-	fc.mu.RLock()
-	now := fc.now()
-	eligible := make([]int, 0, clientCount)
-	all := make([]int, 0, clientCount)
-	for i := 0; i < clientCount; i++ {
-		all = append(all, i)
-		if i >= len(fc.unhealthyUntil) || isHealthyAt(fc.unhealthyUntil[i], now) {
-			eligible = append(eligible, i)
-		}
-	}
-	fc.mu.RUnlock()
-
-	if len(eligible) > 0 {
-		return eligible
-	}
-	return all
 }
 
 func (fc *FallbackChain) isHealthy(idx int) bool {
@@ -485,28 +508,44 @@ func (fc *FallbackChain) isHealthy(idx int) bool {
 	defer fc.mu.RUnlock()
 
 	// Out of bounds indices are considered healthy (shouldn't happen in practice)
-	if idx < 0 || idx >= len(fc.unhealthyUntil) {
+	if idx < 0 || idx >= len(fc.entries) {
 		return true
 	}
-	return isHealthyAt(fc.unhealthyUntil[idx], fc.now())
+	return isHealthyAt(fc.entries[idx].unhealthyUntil, fc.now())
 }
 
-func (fc *FallbackChain) markHealthy(idx int) {
+// markHealthyID clears the health cooldown for the client with the given stable
+// id. It is a no-op if that client has since been removed from the chain.
+func (fc *FallbackChain) markHealthyID(id int64) {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	if idx >= 0 && idx < len(fc.unhealthyUntil) {
-		fc.unhealthyUntil[idx] = time.Time{}
+	if i := fc.indexOfID(id); i >= 0 {
+		fc.entries[i].unhealthyUntil = time.Time{}
 	}
 }
 
-func (fc *FallbackChain) markUnhealthy(idx int) {
+// markUnhealthyID puts the client with the given stable id into cooldown. It is
+// a no-op if that client has since been removed from the chain, so a failure can
+// never be misattributed to whichever client now occupies the old position.
+func (fc *FallbackChain) markUnhealthyID(id int64) {
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 
-	if idx >= 0 && idx < len(fc.unhealthyUntil) {
-		fc.unhealthyUntil[idx] = fc.now().Add(fc.recoveryAfter)
+	if i := fc.indexOfID(id); i >= 0 {
+		fc.entries[i].unhealthyUntil = fc.now().Add(fc.recoveryAfter)
 	}
+}
+
+// indexOfID returns the current position of the entry with the given stable id,
+// or -1 if no such entry exists. Callers must hold fc.mu.
+func (fc *FallbackChain) indexOfID(id int64) int {
+	for i := range fc.entries {
+		if fc.entries[i].id == id {
+			return i
+		}
+	}
+	return -1
 }
 
 func isHealthyAt(unhealthyUntil time.Time, now time.Time) bool {
