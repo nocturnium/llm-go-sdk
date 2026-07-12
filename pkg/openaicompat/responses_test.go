@@ -335,3 +335,37 @@ func TestResponsesResponseError(t *testing.T) {
 		t.Error("populated error object should surface as an error")
 	}
 }
+
+// TestBuildResponsesRequest_MergesExtraBody pins that CallOptions.ExtraBody
+// escape-hatch keys (service_tier, metadata, ...) are merged into the Responses
+// request body (matching the chat path), while keys already mapped to typed
+// fields or colliding with a typed field are left to the typed value.
+func TestBuildResponsesRequest_MergesExtraBody(t *testing.T) {
+	opts := llms.ApplyOptions(llms.WithExtraBody(map[string]any{
+		"service_tier": "flex",
+		"metadata":     map[string]any{"user_id": "u1"},
+		"store":        true,                  // consumed -> typed Store field
+		"model":        "SHOULD_NOT_OVERRIDE", // collides with typed Model field
+	}))
+	req := BuildResponsesRequest("gpt-4o", nil, opts, false)
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m["service_tier"] != "flex" {
+		t.Errorf("service_tier escape-hatch key not merged: %s", data)
+	}
+	if _, ok := m["metadata"]; !ok {
+		t.Errorf("metadata not merged: %s", data)
+	}
+	if m["model"] != "gpt-4o" {
+		t.Errorf("ExtraBody must not override the typed model field: got %v", m["model"])
+	}
+	if m["store"] != true {
+		t.Errorf("store should be the typed field value, got %v", m["store"])
+	}
+}

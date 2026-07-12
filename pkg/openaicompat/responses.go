@@ -38,6 +38,49 @@ type ResponsesRequest struct {
 	Store              *bool  `json:"store,omitempty"`
 	PreviousResponseID string `json:"previous_response_id,omitempty"`
 	Stream             bool   `json:"stream,omitempty"`
+
+	// extraBody carries CallOptions.ExtraBody escape-hatch keys, merged into the
+	// wire body by MarshalJSON. Unexported so it is never serialized as a field.
+	extraBody map[string]any
+}
+
+// consumedExtraBodyKeys are ExtraBody keys already mapped to typed request
+// fields; MarshalJSON must not re-emit them from the raw ExtraBody.
+var consumedExtraBodyKeys = map[string]bool{
+	"store":                       true,
+	"previous_response_id":        true,
+	"include_encrypted_reasoning": true,
+}
+
+// MarshalJSON renders the typed fields and then merges any remaining
+// CallOptions.ExtraBody keys (the documented escape hatch) into the top-level
+// request body — e.g. service_tier, metadata, user, parallel_tool_calls — which
+// the chat path forwards but the Responses path previously dropped. Keys already
+// mapped to typed fields, and keys that would collide with a typed field, are
+// left to the typed value.
+func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
+	type alias ResponsesRequest // strips this MarshalJSON to avoid recursion
+	base, err := json.Marshal((*alias)(r))
+	if err != nil {
+		return nil, err
+	}
+	if len(r.extraBody) == 0 {
+		return base, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	for k, v := range r.extraBody {
+		if consumedExtraBodyKeys[k] {
+			continue
+		}
+		if _, exists := m[k]; exists {
+			continue // never override a typed field
+		}
+		m[k] = v
+	}
+	return json.Marshal(m)
 }
 
 // ResponsesInputItem is one item in the Responses `input` array. A single struct
@@ -280,6 +323,7 @@ func BuildResponsesRequest(model string, messages []llms.Message, opts *llms.Cal
 	if v, ok := opts.ExtraBody["include_encrypted_reasoning"].(bool); ok && v {
 		req.Include = append(req.Include, "reasoning.encrypted_content")
 	}
+	req.extraBody = opts.ExtraBody
 	return req
 }
 
