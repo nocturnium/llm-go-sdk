@@ -65,6 +65,11 @@ type CircuitBreaker struct {
 	halfOpenCount   int // Requests currently in flight in half-open
 	lastFailureTime time.Time
 	lastStateChange time.Time
+
+	// callbacks delivers onStateChange callbacks asynchronously in transition
+	// order. Its own mutex is independent of cb.mu; callbacks are enqueued under
+	// cb.mu but invoked off it. The zero value is ready to use.
+	callbacks callbackQueue
 }
 
 // CircuitBreakerOption configures a CircuitBreaker
@@ -156,14 +161,7 @@ func (cb *CircuitBreaker) State() CircuitState {
 // Allow checks if a request should be allowed through
 func (cb *CircuitBreaker) Allow() bool {
 	cb.mu.Lock()
-	var transition *stateTransition
-	defer func() {
-		cb.mu.Unlock()
-		// Explicit nil check to prevent panic if transition is nil
-		if transition != nil {
-			transition.invokeCallback()
-		}
-	}()
+	defer cb.mu.Unlock()
 
 	switch cb.state {
 	case CircuitClosed:
@@ -172,7 +170,7 @@ func (cb *CircuitBreaker) Allow() bool {
 	case CircuitOpen:
 		// Check if enough time has passed to try again
 		if time.Since(cb.lastFailureTime) >= cb.resetTimeout {
-			transition = cb.transitionTo(CircuitHalfOpen)
+			cb.transitionTo(CircuitHalfOpen)
 			cb.halfOpenCount = 1
 			return true
 		}
@@ -181,7 +179,7 @@ func (cb *CircuitBreaker) Allow() bool {
 	case CircuitHalfOpen:
 		if time.Since(cb.lastStateChange) >= cb.halfOpenTimeout {
 			cb.lastFailureTime = time.Now()
-			transition = cb.transitionTo(CircuitOpen)
+			cb.transitionTo(CircuitOpen)
 			return false
 		}
 		// Allow limited requests in half-open state
@@ -199,14 +197,7 @@ func (cb *CircuitBreaker) Allow() bool {
 // RecordSuccess records a successful request
 func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
-	var transition *stateTransition
-	defer func() {
-		cb.mu.Unlock()
-		// Explicit nil check to prevent panic if transition is nil
-		if transition != nil {
-			transition.invokeCallback()
-		}
-	}()
+	defer cb.mu.Unlock()
 
 	switch cb.state {
 	case CircuitClosed:
@@ -220,7 +211,7 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		cb.successes++
 		// If we've had enough successes, close the circuit
 		if cb.successes >= cb.halfOpenMax {
-			transition = cb.transitionTo(CircuitClosed)
+			cb.transitionTo(CircuitClosed)
 		}
 
 	case CircuitOpen:
@@ -231,14 +222,7 @@ func (cb *CircuitBreaker) RecordSuccess() {
 // RecordFailure records a failed request
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
-	var transition *stateTransition
-	defer func() {
-		cb.mu.Unlock()
-		// Explicit nil check to prevent panic if transition is nil
-		if transition != nil {
-			transition.invokeCallback()
-		}
-	}()
+	defer cb.mu.Unlock()
 
 	cb.lastFailureTime = time.Now()
 
@@ -246,7 +230,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 	case CircuitClosed:
 		cb.failures++
 		if cb.failures >= cb.maxFailures {
-			transition = cb.transitionTo(CircuitOpen)
+			cb.transitionTo(CircuitOpen)
 		}
 
 	case CircuitHalfOpen:
@@ -255,7 +239,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 		}
 		cb.halfOpenCount--
 		// Any failure in half-open goes back to open
-		transition = cb.transitionTo(CircuitOpen)
+		cb.transitionTo(CircuitOpen)
 
 	case CircuitOpen:
 		// Circuit is already open, just update the failure time
@@ -276,12 +260,11 @@ func (cb *CircuitBreaker) release() {
 // Reset resets the circuit breaker to closed state
 func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
-	transition := cb.transitionTo(CircuitClosed)
-	cb.mu.Unlock()
-	transition.invokeCallback()
+	defer cb.mu.Unlock()
+	cb.transitionTo(CircuitClosed)
 }
 
-// stateTransition holds info about a state transition for callback invocation
+// stateTransition holds a captured state-change callback and its arguments.
 type stateTransition struct {
 	callback      func(from, to CircuitState)
 	panicCallback func(recovered any, from, to CircuitState)
@@ -289,42 +272,82 @@ type stateTransition struct {
 	newState      CircuitState
 }
 
-// invokeCallback invokes the state change callback if one was captured.
-// This should be called after releasing the lock.
-//
-// Note: Callbacks are invoked asynchronously in a separate goroutine to prevent
-// deadlocks and allow the caller to continue immediately. Callbacks should be:
-//   - Non-blocking or have their own timeout handling
-//   - Safe to call concurrently (multiple transitions may occur rapidly)
-//   - Designed to handle their own error recovery (panics will not affect the circuit breaker)
-//
-// If you need to perform work that requires a context (e.g., logging with trace context),
-// capture the context in a closure when setting up the callback.
-//
-// The circuit breaker cannot cancel callbacks. A blocking callback will retain
-// the goroutine running it, so callbacks must not block indefinitely.
-func (t *stateTransition) invokeCallback() {
-	if t != nil && t.callback != nil {
-		go func() {
-			// Recover from panics in callbacks to prevent goroutine crashes.
-			defer func() {
-				if recovered := recover(); recovered != nil && t.panicCallback != nil {
-					func() {
-						defer func() { _ = recover() }()
-						t.panicCallback(recovered, t.oldState, t.newState)
-					}()
-				}
+// invoke runs the captured callback with panic recovery. It must be called off
+// the circuit-breaker lock (the callbackQueue drain goroutine does so).
+func (t stateTransition) invoke() {
+	if t.callback == nil {
+		return
+	}
+	// Recover from panics in callbacks to prevent goroutine crashes.
+	defer func() {
+		if recovered := recover(); recovered != nil && t.panicCallback != nil {
+			func() {
+				defer func() { _ = recover() }()
+				t.panicCallback(recovered, t.oldState, t.newState)
 			}()
-			t.callback(t.oldState, t.newState)
-		}()
+		}
+	}()
+	t.callback(t.oldState, t.newState)
+}
+
+// callbackQueue delivers state-change callbacks in FIFO transition order.
+//
+// Transitions are enqueued while the breaker lock is held (see transitionTo), so
+// queue order is exactly the order transitions occurred; a single drain
+// goroutine then invokes them one at a time OFF the lock. This preserves the
+// asynchronous contract (a caller never blocks on a user callback) while fixing
+// the prior per-transition-goroutine design, under which two rapid transitions
+// could be observed out of order (e.g. Open→HalfOpen before Closed→Open).
+//
+// The drain goroutine runs only while work is pending and exits when the queue
+// empties, so an idle breaker holds no goroutine and the breaker needs no
+// Close()/Stop(). A blocking user callback stalls only later callbacks, never
+// the breaker itself.
+type callbackQueue struct {
+	mu      sync.Mutex
+	pending []stateTransition
+	running bool
+}
+
+// enqueue appends a transition and starts the drain goroutine if idle. It is
+// called under the breaker lock so append order matches transition order.
+func (q *callbackQueue) enqueue(t stateTransition) {
+	q.mu.Lock()
+	q.pending = append(q.pending, t)
+	if q.running {
+		q.mu.Unlock()
+		return
+	}
+	q.running = true
+	q.mu.Unlock()
+	go q.drain()
+}
+
+// drain invokes queued callbacks in order until the queue empties, then exits.
+func (q *callbackQueue) drain() {
+	for {
+		q.mu.Lock()
+		if len(q.pending) == 0 {
+			q.pending = nil // release the backing array
+			q.running = false
+			q.mu.Unlock()
+			return
+		}
+		t := q.pending[0]
+		q.pending[0] = stateTransition{} // drop the reference for GC
+		q.pending = q.pending[1:]
+		q.mu.Unlock()
+
+		t.invoke()
 	}
 }
 
-// transitionTo changes the circuit breaker state and returns transition info.
-// The caller should invoke the returned transition's callback after releasing the lock.
-func (cb *CircuitBreaker) transitionTo(newState CircuitState) *stateTransition {
+// transitionTo changes the circuit breaker state, enqueuing the state-change
+// callback (if any) in transition order for asynchronous, ordered delivery.
+// It must be called with cb.mu held.
+func (cb *CircuitBreaker) transitionTo(newState CircuitState) {
 	if cb.state == newState {
-		return nil
+		return
 	}
 
 	oldState := cb.state
@@ -345,14 +368,13 @@ func (cb *CircuitBreaker) transitionTo(newState CircuitState) *stateTransition {
 		cb.halfOpenCount = 0
 	}
 
-	// Return transition info for caller to invoke callback after releasing lock
+	// Enqueue under the lock so callbacks are delivered in transition order.
 	if cb.onStateChange != nil {
-		return &stateTransition{
+		cb.callbacks.enqueue(stateTransition{
 			callback:      cb.onStateChange,
 			panicCallback: cb.onCallbackPanic,
 			oldState:      oldState,
 			newState:      newState,
-		}
+		})
 	}
-	return nil
 }
