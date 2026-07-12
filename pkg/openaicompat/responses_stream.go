@@ -205,6 +205,19 @@ func finalChunkFromResponse(resp *ResponsesResponse, config *StreamConfig, accum
 	final.ToolCalls = converted.ToolCalls
 	final.FinishReason = converted.FinishReason
 
+	// Carry the reasoning metadata (e.g. encrypted reasoning items for stateless
+	// multi-turn replay) and token count on the terminal chunk. The reasoning TEXT
+	// was already streamed via reasoning deltas, so leave Content empty to avoid
+	// duplicating it when the caller aggregates via CollectStream.
+	if converted.Reasoning != nil &&
+		(converted.Reasoning.Metadata != nil || converted.Reasoning.Signature != "" || converted.Reasoning.Tokens != 0) {
+		final.Reasoning = &llms.ReasoningContent{
+			Signature: converted.Reasoning.Signature,
+			Tokens:    converted.Reasoning.Tokens,
+			Metadata:  converted.Reasoning.Metadata,
+		}
+	}
+
 	usage := converted.Usage
 	if usage.TotalTokens == 0 && config != nil && config.EstimateTokens {
 		usage = llms.EstimateUsageFromMessages(config.Messages, accumulatedContent)
