@@ -30,6 +30,7 @@ type httpTransport struct {
 	sessionID string
 	notifyMu  sync.RWMutex
 	notifyFn  func(raw []byte)
+	closeOnce sync.Once
 }
 
 func newHTTPTransport(url string, client *httpclient.Client, headers map[string]string) *httpTransport {
@@ -129,16 +130,20 @@ func (t *httpTransport) captureSessionID(headers http.Header) {
 // teardown is not worth surfacing — so the result is ignored and close never
 // fails on this account. With no session there is nothing to terminate.
 func (t *httpTransport) close() error {
-	sessionID := t.getSessionID()
-	if sessionID == "" {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
-	defer cancel()
-	_, _, _ = t.client.DoRawWithHeaders(ctx, httpclient.Request{
-		Method:  http.MethodDelete,
-		URL:     t.url,
-		Headers: t.requestHeaders(),
+	// Idempotent: close may be invoked both by an explicit Client.Close and by the
+	// context-cancellation hook, so the DELETE must be sent at most once.
+	t.closeOnce.Do(func() {
+		sessionID := t.getSessionID()
+		if sessionID == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
+		defer cancel()
+		_, _, _ = t.client.DoRawWithHeaders(ctx, httpclient.Request{
+			Method:  http.MethodDelete,
+			URL:     t.url,
+			Headers: t.requestHeaders(),
+		})
 	})
 	return nil
 }

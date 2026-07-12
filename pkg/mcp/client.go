@@ -82,6 +82,13 @@ type notifier struct {
 	done      chan struct{}
 	closeOnce sync.Once
 	dropped   atomic.Uint64
+
+	// ctxStop deregisters the context-cancellation hook (see newClient). It is
+	// written once during construction, before the Client is returned to the
+	// caller, and read only by the public Close; the cancellation hook itself
+	// never touches it. Held here (behind Client's pointer to notifier) so the
+	// Client struct stays comparable.
+	ctxStop func() bool
 }
 
 type config struct {
@@ -220,10 +227,14 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 		c.notifier.stop() // don't leak the notification pump when the handshake fails
 		return nil, err
 	}
-	// TODO(WS-5): if the caller cancels ctx without ever calling Close, the
-	// notification pump still leaks. A race-free fix (context.AfterFunc wired to
-	// Close, with deregistration to avoid retaining the client under a long-lived
-	// context) is tracked as a transport-lifecycle follow-up.
+	// If the caller cancels the governing context without ever calling Close, tear
+	// the client down anyway so the notification pump (and the server session /
+	// subprocess) are released. The hook runs closeInternal — never the public
+	// Close — so it never reads ctxStop, which is why storing ctxStop below needs
+	// no lock: it is written here (before c is returned) and read only by Close.
+	// The stop function is retained so Close can deregister the hook and avoid
+	// pinning the client under a long-lived context.
+	c.notifier.ctxStop = context.AfterFunc(ctx, func() { _ = c.closeInternal() })
 	return c, nil
 }
 
@@ -409,8 +420,23 @@ func (c *Client) ServerInfo() Implementation { return c.serverInfo }
 func (c *Client) ServerCapabilities() ServerCapabilities { return c.serverCaps }
 
 // Close releases the client's transport resources (terminating the subprocess
-// for stdio clients) and stops the notification pump.
+// for stdio clients, DELETE-ing the session for HTTP clients) and stops the
+// notification pump. It is idempotent and safe to call concurrently with the
+// context-cancellation hook.
 func (c *Client) Close() error {
+	// Deregister the context hook so an explicit Close does not leave the client
+	// pinned under a long-lived context. Safe to call even if the hook already
+	// fired (it returns false) or fired concurrently.
+	if c.notifier.ctxStop != nil {
+		c.notifier.ctxStop()
+	}
+	return c.closeInternal()
+}
+
+// closeInternal performs the actual teardown. It is invoked by both Close and
+// the context-cancellation hook; the underlying transport.close and
+// notifier.stop are each idempotent, so repeated or concurrent calls are safe.
+func (c *Client) closeInternal() error {
 	err := c.transport.close()
 	c.notifier.stop()
 	return err
