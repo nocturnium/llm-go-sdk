@@ -619,3 +619,54 @@ func TestClient_MaxTokensDefault(t *testing.T) {
 		t.Error("expected max_tokens to be set")
 	}
 }
+
+// TestClient_Stream_ThinkingSignature is the end-to-end guard for the streamed
+// extended-thinking round-trip: a stream that emits thinking_delta then
+// signature_delta must deliver the signature to the caller. It is load-bearing
+// for BOTH fixes — the terminal-signature emit (anthropic.go) and CollectStream's
+// signature preservation (streaming.go).
+func TestClient_Stream_ThinkingSignature(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		events := []string{
+			`event: message_start
+data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude","usage":{"input_tokens":10,"output_tokens":0}}}`,
+			`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}`,
+			`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"SIG-XYZ"}}`,
+			`event: content_block_stop
+data: {"type":"content_block_stop","index":0}`,
+			`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}`,
+			`event: message_stop
+data: {"type":"message_stop"}`,
+		}
+		for _, e := range events {
+			_, _ = w.Write([]byte(e + "\n\n"))
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	client, _ := New(WithAPIKey("k"), WithBaseURL(server.URL+"/v1"), WithAllowPrivateIPs(), WithAllowHTTP())
+	chunks, err := client.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	res, err := llms.CollectStream(chunks)
+	if err != nil {
+		t.Fatalf("CollectStream: %v", err)
+	}
+	if res.Reasoning == nil || res.Reasoning.Signature != "SIG-XYZ" {
+		t.Errorf("streamed thinking signature not delivered: %+v", res.Reasoning)
+	}
+	if res.Reasoning != nil && res.Reasoning.Content != "Let me think" {
+		t.Errorf("reasoning content = %q, want 'Let me think'", res.Reasoning.Content)
+	}
+}
