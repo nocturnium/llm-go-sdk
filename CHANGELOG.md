@@ -2,408 +2,152 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [4.2.0] - 2026-07-12
 
-Security and correctness hardening sweep (the five HIGH-severity items from the
-post-v4.1.0 CTO deficiency review). All changes are additive and backward-compatible;
-no public contracts change.
+### CI/CD
 
-### Security
+- Auto-release on merge via conventional commits ([#37](https://github.com/nocturnium/llm-go-sdk/issues/37))
+- Run integration tests under -race ([#38](https://github.com/nocturnium/llm-go-sdk/issues/38))
 
-- **Strip provider API-key headers on cross-host redirects.** The HTTP client's
-  redirect policy now deletes `x-goog-api-key`, `api-key`, `x-api-key`, `Authorization`,
-  and `Proxy-Authorization` before following a redirect whose host differs from the
-  original request's host. Go's standard library only auto-strips a fixed set of headers
-  on cross-domain redirects and never touches these custom provider auth headers, so a
-  redirect to a foreign host previously leaked the raw API key (CWE-200).
+### Features
 
-### Fixed
+- V4.2.0 — correctness, resilience & transport-security hardening sweep ([#39](https://github.com/nocturnium/llm-go-sdk/issues/39))
 
-- **FallbackChain data race.** `Call`, `GenerateContent`, and `Stream` took only a
-  slice-header copy of the client list while `AddClient`/`RemoveClient` mutated the
-  backing array in place, racing the dispatch reads (reproducible under `-race`). They
-  now iterate an immutable contents snapshot taken under the read lock.
-- **Streaming token usage silently lost on OpenAI-compatible providers.** Streaming
-  chat requests now send `stream_options.include_usage: true`, so the terminal usage
-  chunk (and thus token/cost accounting) is actually emitted. Non-streaming requests are
-  unchanged.
-- **Stale model capabilities for current flagships.** `GetModelCapabilities` /
-  `Capabilities()` returned stale provider defaults (wrong context/output limits,
-  `SupportsReasoning=false`) for the current GPT-5, Claude (Fable 5 / Opus 4.x), and
-  Gemini 3.x flagships. Added per-model entries (limits sourced from each provider's
-  `knownModels` overlay) and extended the reasoning-model list.
-- **Non-compiling embeddings godoc.** The OpenAI and Gemini package docs called
-  `embedder.EmbedDocuments(...)` — a method that does not exist; `EmbedDocuments` is a
-  package-level `llms` function. Corrected both examples and added compile-guard example
-  tests so the snippet form cannot regress.
+## [4.1.1] - 2026-06-22
+
+### Bug Fixes
+
+- V4.1.1 hardening — close 5 HIGH deficiencies from CTO review ([#35](https://github.com/nocturnium/llm-go-sdk/issues/35))
 
 ## [4.1.0] - 2026-06-21
 
-Additive, non-breaking fast-follow on top of v4.0.0 — observability for two
-previously-silent failure paths, plus internal cleanups. Every change is API-compatible
-(the `apidiff` baseline grows, with no removals).
+### Features
 
-### Added
-
-- **`mcp.Client.DroppedNotifications() uint64`** — exposes the cumulative count of
-  notifications dropped when a slow or wedged handler overflows the bounded notification
-  queue, so consumers can observe otherwise-silent notification loss.
-- **`resilience.WithOnCallbackPanic(func(recovered any, from, to CircuitState))`** — an
-  opt-in circuit-breaker option that delivers a panicking `onStateChange` callback's
-  recovered value (and the state transition) to a hook instead of silently discarding it.
-  Default behavior is unchanged (the panic is still recovered with no output) unless the
-  option is set; the hook runs inside the existing single recovered goroutine.
-
-### Changed
-
-- **Consolidated the CR/LF log-injection sanitizer** into a single canonical
-  `internal/logsanitize` used by both the HTTP client and the observability loggers. The
-  unified implementation is a strict superset of the previous per-package copies — it
-  neutralizes CR, LF, tab, NUL, ESC, DEL, and all Unicode control runes.
-- **HTTP-client error messages** are now extracted from provider error JSON envelopes
-  (`{"error":{"message":…}}`, `{"error":"…"}`, `{"message":…}`) when present, falling back
-  to the bounded, sanitized response body. `APIError.Code` / `Type` (and therefore error
-  classification via `errors.Is`) are unchanged.
-- **`llamacpp` caches the `/props` response** after the first successful fetch, so
-  `Model()` and `Capabilities()` no longer issue a network request on every call (a failed
-  fetch stays uncached and is retried on the next call).
+- V4.1.0 — observability fast-follow (MCP drop-count, CB panic hook) + cleanups ([#33](https://github.com/nocturnium/llm-go-sdk/issues/33))
 
 ## [4.0.0] - 2026-06-21
 
-v4 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v4`
-(Go semantic import versioning); v3 and v4 are distinct module paths and can coexist, so
-consumers may migrate incrementally. See `docs/migration-guide.md` for the v3 → v4 guide.
-The release is dominated by a security / correctness / resilience hardening sweep (each
-fix gated by an independent expert review); the breaking surface is deliberately small.
+### Features
 
-### Changed (BREAKING)
-
-- **Module path → `/v4`.** `go get github.com/nocturnium/llm-go-sdk/v4@v4.0.0` (the core
-  package name stays `llms`).
-- **Removed the deprecated `Thinking` fields.** `Response.Thinking` and
-  `StreamChunk.Thinking` were exported, mutable alias *fields* that had to be hand-synced
-  with `Reasoning` — a desync foot-gun (`Response{Reasoning: x}` left `Thinking` nil). They
-  are now deprecated *methods* `Thinking() *ReasoningContent` computed from `Reasoning`. Use
-  `Reasoning` (or call `.Thinking()`).
-- **Removed the unused `ErrorMapper` registry.** `ErrorMapper`, `ErrorMapperRegistry`,
-  `MapProviderError`, `RegisterErrorMapper`, `DefaultErrorMapperRegistry`, and related
-  symbols were never wired into any production path (dead code). Error classification is
-  automatic — match the exported sentinels with `errors.Is`.
-
-### Security
-
-- **SSRF: DNS-rebinding is closed on the custom-`DialContext` path.** When a caller
-  supplied an `*http.Client` whose transport already had a `DialContext`, the resolved-IP
-  guard was silently skipped; the resolved remote IP is now re-validated on every dial path.
-- **`WithHTTPClient` no longer mutates the caller's `*http.Client`** — it shallow-copies
-  before installing the SSRF dialer / redirect policy, leaving the caller's `Transport` and
-  `CheckRedirect` untouched.
-- **The Ollama NDJSON stream reader is bounded** (4 MB cap) against unbounded-allocation /
-  OOM from a hostile endpoint, matching the SSE and JSON readers.
-- Reject NAT64-embedded private IPv6 addresses; strip userinfo / query / fragment from
-  `APIError` messages so query-string secrets are not leaked in error text.
-
-### Fixed
-
-- **Streaming requests are no longer bound by the unary `http.Client.Timeout`** (default
-  5 m), which previously tore down long streams mid-read; streams are bounded by `ctx`.
-- **MCP notification handlers are never invoked concurrently** (the documented contract):
-  the overflow path no longer spawns a goroutine per notification — overflow is counted
-  atomically and drained by the single serial pump.
-- **Error classification now maps 404 → `ErrModelNotFound` and 502/504/529 →
-  `ErrServiceUnavailable`**, with the classify and retry tables driven from one source so
-  they cannot disagree.
-- **The circuit-breaker `onStateChange` path no longer leaks a watchdog goroutine + timer**
-  per transition; the callback runs in a single recovered goroutine.
-- **`MetricsMiddleware.Stream` no longer permanently skews `ActiveRequests()`** if the
-  wrapped stream panics synchronously.
-- **The Gemini and Anthropic streaming goroutines recover panics** and deliver a terminal
-  stream error instead of crashing the host process (matching the shared streaming path).
-- **Model token pricing has a single source of truth** (`DefaultPricing`); displayed and
-  billed prices can no longer drift, enforced by reconciliation tests. Corrected
-  `gemini-2.0-flash` to $0.10 / $0.40 per 1M tokens (it was mistakenly priced at
-  Flash-Lite's rate).
-- **Reasoning options compose order-independently** — `WithReasoning` now merges into a
-  previously-set `WithReasoningEffort` / `WithReasoningBudget` / `WithThinkingMode` instead
-  of clobbering it.
-- Retryable response bodies are drained before close, restoring keep-alive connection reuse.
-
-### Changed
-
-- **The `llms-cli` demo no longer depends on `urfave/cli`.** It was rewritten on the
-  standard-library `flag` package, removing `urfave/cli/v2`, `russross/blackfriday/v2`,
-  `cpuguy83/go-md2man/v2`, and `xrash/smetrics` from the module's dependency graph entirely
-  — they no longer appear in a library consumer's `go.sum`. CLI commands and flags are
-  unchanged; only help-text formatting differs.
+- V4.0.0 — security/correctness hardening sweep + breaking API cleanups ([#31](https://github.com/nocturnium/llm-go-sdk/issues/31)) [**BREAKING**]
 
 ## [3.1.0] - 2026-06-21
 
-Additive, non-breaking changes on top of v3.0.0. The module path is unchanged and
-every change is API-compatible (the `apidiff` baseline grows, with no removals).
+### Bug Fixes
 
-### Added
+- Harden post-v3 work per dual expert review, 8 findings ([#25](https://github.com/nocturnium/llm-go-sdk/issues/25))
+- **observability:** Sanitize CR/LF in logged error strings, CWE-117 ([#28](https://github.com/nocturnium/llm-go-sdk/issues/28))
 
-- **Middleware composition — `llms.Chain`.** `Chain(base, ...Middleware)` (where
-  `Middleware = func(LLM) LLM`) composes middleware around a base client: the first
-  listed sits innermost (resilience/fallback), the last outermost (observability/
-  logging). A flat alternative to manual nesting now that the middleware live in
-  `pkg/middleware/resilience` and `pkg/observability`.
-- **OpenAI Responses API — stateless reasoning round-trip.**
-  `openai.WithReasoningRoundTrip()` requests encrypted reasoning items
-  (`include: ["reasoning.encrypted_content"]`) so a reasoning model's thinking can be
-  replayed across turns without server-side state. The new `Message.Reasoning` field
-  carries it (also usable for Anthropic extended-thinking signatures); `pkg/openaicompat`
-  gains `ResponsesReasoningItem` and `MetadataKeyResponsesReasoning`.
-- **MCP client — resources, prompts, capabilities, mounting, and notifications**
-  (`pkg/mcp`, extending the tools-only client):
-  - Resources: `Client.ListResources` (cursor-paginated) and `Client.ReadResource`
-    (`Resource`, `ResourceContents`, `ReadResourceResult`).
-  - Prompts: `Client.ListPrompts` and `Client.GetPrompt` (`Prompt`, `PromptArgument`,
-    `PromptMessage`, `GetPromptResult`), with `GetPromptResult.LLMMessages()` bridging a
-    server prompt into `[]llms.Message` for `RunTools`.
-  - Capabilities: typed `ServerCapabilities` parsed from the initialize handshake,
-    exposed via `Client.ServerCapabilities()`.
-  - One-call mounting: `MountStdio` / `MountHTTP` connect a server and register its tools.
-  - Notifications: `Client.OnProgress` / `Client.OnLog`, plus per-call `WithProgress` and
-    `Client.CallToolWithProgress` (`ProgressNotification`, `LogMessage`). stdio surfaces all
-    server notification frames; the Streamable HTTP transport surfaces those that arrive
-    interleaved on a POST response stream.
+### Documentation
 
-### Changed
+- **changelog:** Unreleased section for post-v3.0.0 additive changes ([#22](https://github.com/nocturnium/llm-go-sdk/issues/22))
+- Nocturnium theme — dark-first re-skin, hero landing, go logo ([#23](https://github.com/nocturnium/llm-go-sdk/issues/23))
 
-- **Model metadata refreshed (data only).** Re-verified the OpenAI / Anthropic / Gemini
-  pricing-and-context overlays against current published pricing (correcting stale cost
-  estimates), and refreshed the Featherless and RunPod curated model lists. Z.AI and
-  Synthetic were already current and are unchanged.
+### Features
+
+- **huggingface:** Chat/text-generation for Inference Endpoints, TGI ([#24](https://github.com/nocturnium/llm-go-sdk/issues/24))
+- **models:** Refresh model mappings to current flagships, June 2026 ([#26](https://github.com/nocturnium/llm-go-sdk/issues/26))
+
+### Testing
+
+- **ollama:** Fix integration-tag build break + gate it on PRs ([#27](https://github.com/nocturnium/llm-go-sdk/issues/27))
 
 ## [3.0.0] - 2026-06-19
 
-v3 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v3`
-(Go semantic import versioning). v2 and v3 are distinct module paths and can coexist,
-so consumers may migrate incrementally. See `docs/migration-guide.md` for the full
-v2 → v3 guide.
+### Features
 
-The single structural change: **the observability and resilience middleware moved out
-of the root `llms` package into leaf subpackages.** Importing `llms` for the core types
-(`Message`, `Response`, `Call`, …) no longer compiles the OpenTelemetry SDK — the OTel
-dependency count of the bare root package drops from ~20 packages to **0**. Exported
-symbol names are unchanged; only the package that holds them moved.
+- V3.0.0 — extract observability + resilience middleware out of root (sheds OTel) ([#19](https://github.com/nocturnium/llm-go-sdk/issues/19)) [**BREAKING**]
 
-### Changed (BREAKING)
+## [2.1.0] - 2026-06-19
 
-- **Module path → `/v3`.** Update imports to `github.com/nocturnium/llm-go-sdk/v3`
-  (the core package name stays `llms`): `go get github.com/nocturnium/llm-go-sdk/v3@v3.0.0`.
-- **Observability middleware moved to `pkg/observability`.** `llms.NewOTelMiddleware`,
-  `llms.NewMetricsMiddleware`, the Langfuse exporters, the JSON/slog loggers, the GenAI
-  semantic-convention `Attr*` constants, and the trace-context helpers now live in
-  `github.com/nocturnium/llm-go-sdk/v3/pkg/observability` (e.g. `observability.NewOTelMiddleware`).
-- **Resilience middleware moved to `pkg/middleware/resilience`.** `llms.NewResilientClient`,
-  `llms.NewFallbackChain`, the rate limiter, the circuit breaker, `RetryConfig`, and their
-  option helpers now live in `github.com/nocturnium/llm-go-sdk/v3/pkg/middleware/resilience`
-  (e.g. `resilience.NewResilientClient`).
+### Documentation
 
-There are **no other breaking changes**: every moved symbol keeps its exact name and
-signature, so migration is a mechanical import/qualifier update (see the migration guide).
+- Add Support & Versioning policy (single-version; v1.x EOL) ([#10](https://github.com/nocturnium/llm-go-sdk/issues/10))
 
-## [2.0.0] - 2026-06-15
+### Features
 
-v2 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v2`
-(Go semantic import versioning). v1 and v2 are distinct module paths and can coexist,
-so consumers may migrate incrementally. See `docs/migration-guide.md` for the full
-v1 → v2 guide.
+- **openai:** OpenAI Responses API support (non-streaming) — roadmap Track A PR1 ([#12](https://github.com/nocturnium/llm-go-sdk/issues/12))
+- **openai:** Responses API statefulness ergonomics — Track A PR2 ([#13](https://github.com/nocturnium/llm-go-sdk/issues/13))
+- **openai:** Stream the Responses API (Track A PR3) ([#14](https://github.com/nocturnium/llm-go-sdk/issues/14))
+- **mcp:** Inspectable error mapping (RPCError + ToolError) — Track B PR1 ([#15](https://github.com/nocturnium/llm-go-sdk/issues/15))
+- **huggingface:** Add embeddings provider for HF Inference Endpoints ([#16](https://github.com/nocturnium/llm-go-sdk/issues/16))
+- **zai:** Refresh model list from live API (8 GLM models incl. GLM-5 series) ([#17](https://github.com/nocturnium/llm-go-sdk/issues/17))
 
-### Changed (BREAKING)
+## [2.0.0] - 2026-06-16
 
-- **Module path → `/v2`.** Update imports to `github.com/nocturnium/llm-go-sdk/v2`
-  (the package name stays `llms`): `go get github.com/nocturnium/llm-go-sdk/v2@v2.0.0`.
-- **Tool handlers take a context.** `ToolHandler`, `RegisterFunc`'s typed handler, and
-  `ToolRegistry.Handle`/`HandleAll` now take a leading `context.Context`. `RunTools`
-  cancels in-flight tool handlers when the loop is canceled or a turn errors. Add
-  `ctx context.Context` as the first handler parameter.
-- **Sampling penalties are pointers.** `CallOptions.FrequencyPenalty` and
-  `PresencePenalty` are now `*float64`, so an explicit `0` is distinguishable from
-  unset. `WithFrequencyPenalty`/`WithPresencePenalty` callers are unaffected;
-  struct-literal callers must use a `*float64`.
-- **Removed `MustParseToolArguments`.** It panicked on model-controlled tool-call JSON
-  (a denial-of-service vector). Use the error-returning `ParseToolArguments` /
-  `ParseToolArgumentsMap`.
-- **Registry construction of `runpod`** without an `endpoint_id` now returns an error
-  wrapping `llms.ErrInvalidParameters` (previously `runpod.ErrMissingEndpointID`). The
-  direct `runpod.New` constructor is unchanged.
+### Bug Fixes
 
-### Added
+- **response:** Repopulate deprecated Thinking alias on JSON unmarshal
+- **metrics:** End stream span before decrementing active requests
+- **gemini:** Surface empty SAFETY/RECITATION stream finish as an error
 
-- `llms.CollectStream` / `llms.StreamText` (and `StreamResult`) — drain a stream to
-  completion and surface the terminal error explicitly instead of dropping the in-band
-  `StreamChunk.Error`.
-- Capability helpers completing the `As*`/`Supports*` set: `AsModelLister`,
-  `SupportsModelListing`, `AsCapableProvider`, `SupportsReasoning`,
-  `SupportsPromptCaching`, and `ModelCapabilities.ModelTypes()`.
-- `Config.RequireExtra(provider, key)` plus exported `ExtraRunPodEndpointID` /
-  `ExtraZAICoding` constants for explicit, validated provider configuration.
-- Exported message validators `ValidateToolCallIDs` and `ValidateInlineSystem` for
-  provider-author opt-in; core `ValidateMessages` is now provider-neutral.
-- Built-in pricing for groq, fireworks, perplexity (sonar), and Z.AI (glm-4.7,
-  glm-4.7-Flash), each with a sourced, dated comment. Local and BYO/subscription
-  providers, and any model whose public price could not be verified, intentionally
-  return `ok=false` rather than a fabricated $0.
+### Documentation
 
-### Fixed
+- **construction:** Clarify the three construction paths and dual WithModel
+- **release:** Add v2.0.0 CHANGELOG, bump version pointers, note runpod error change
 
-- **Gemini streaming** now surfaces a SAFETY/RECITATION finish that produced no content
-  as a terminal `StreamChunk.Error`, matching the non-streaming path (previously the
-  stream completed cleanly with empty content and no error).
-- **`Response`/`StreamChunk` JSON unmarshal** repopulates the deprecated `Thinking`
-  alias from the canonical `Reasoning` field, which was lost on a JSON round-trip.
-- **Metrics streaming span** is now ended before the active-request counter is
-  decremented, fixing a telemetry-ordering race in which an observer could see
-  `ActiveRequests() == 0` before the span had ended.
+### Features
+
+- **options:** Make FrequencyPenalty/PresencePenalty *float64 [**BREAKING**]
+- **tools:** Thread context through ToolHandler; remove MustParseToolArguments [**BREAKING**]
+- **streaming:** Add CollectStream/StreamText drain helpers; fix error-dropping docs
+- **capabilities:** Complete As*/Supports* symmetry + ToCapabilities drift guard
+- **registry:** Explicit, validated required provider config via RequireExtra
+- **cost:** Add web-verified pricing for groq/fireworks/perplexity/zai
+- Migrate module path to /v2 for the v2.0.0 release [**BREAKING**]
+
+### Refactoring
+
+- **validation:** Move provider quirks out of core ValidateMessages
+- **openaicompat:** Alias ModelPricing to llms.ModelPricing
+
+### Testing
+
+- **openaicompat:** Use context.Background() not nil in D7 validator tests
 
 ## [1.2.1] - 2026-06-15
 
-### Fixed
+### Bug Fixes
 
-- **Release tooling.** Removed an invalid `GOWORK=off` prefix from the GoReleaser
-  `before` hooks. GoReleaser execs hooks directly (not through a shell), so the
-  prefix was treated as an executable name and aborted artifact generation for the
-  `v1.2.0` tag. The `v1.2.0` source is unaffected and installable via `go get`;
-  this patch only repairs the release pipeline so binaries/SBOMs are published.
+- **release:** Remove invalid GOWORK=off prefix from GoReleaser hooks
 
 ## [1.2.0] - 2026-06-15
 
-Post-1.1.0 hardening from a full correctness/security/resilience review. No
-breaking changes to exported APIs; additions are backward-compatible.
+### Bug Fixes
 
-### Added
+- Post-v1.1 hardening — correctness, security, resilience, docs
 
-- `WithCallOptions(...CallOption)` for `RunTools`: forward model, temperature,
-  max tokens, reasoning, and response-format options to every model turn in the
-  agent loop. Registry tools still take precedence for the tools field.
-- Rate-limit pacing options `WithRequestBurst(n)` and `WithTokenBurst(n)`.
-- `WithMaxBatchSize(n)` for batch processing; exceeding the limit returns
-  `ErrBatchTooLarge`.
+### Documentation
 
-### Fixed
-
-- **Structured outputs.** `GenerateTyped[T]` now generates OpenAI strict-compatible
-  schemas (`additionalProperties: false` on every object, all non-skipped fields
-  required) and maps `time.Time`→`string` (date-time), `[]byte`→`string` (base64),
-  and `json.RawMessage`/`encoding.TextMarshaler`/`json.Marshaler` to their real JSON
-  shapes — previously these produced HTTP 400s or silently wrong output.
-- **Reasoning leak.** Chain-of-thought no longer leaks into the visible `Content`
-  stream and is no longer double-counted for OpenAI-compatible reasoning models
-  (DeepSeek / Z.AI / Qwen), on both the streaming and non-streaming paths.
-- **Anthropic.** Mid-stream `error` events (e.g. `overloaded_error`) now surface as
-  a real error instead of a bare `EOF`; `tool_choice: "none"` is preserved instead
-  of being coerced to `"auto"`.
-- **Gemini.** System messages are sent via `systemInstruction` instead of being
-  demoted to a user turn; `SAFETY`/`RECITATION` finishes with no content return a
-  clear error instead of a silent empty success; model names are sanitized before
-  URL interpolation.
-- **Resilience.** The circuit breaker and the default fallback selector now treat
-  transport-level failures (connection refused, EOF, timeouts) as provider-unhealthy,
-  so they open / fail over when a provider is fully down (previously only HTTP
-  429/5xx counted). Retries honor the `Retry-After` header; `MaxAttempts < 1` is
-  clamped to 1 so a misconfigured retry never silently returns `(nil, nil)`; the
-  underlying error is preserved when the breaker trips; a single logical call no
-  longer multiplies breaker failure counts by the retry count; client-fault (4xx)
-  errors no longer poison a provider's health.
-- **Batch.** `ConcurrentBatcher` recovers per-item panics (one bad item no longer
-  crashes the process) and rejects duplicate request IDs instead of silently
-  dropping results.
-- **Rate limiting.** Request burst defaults to 1 so requests are actually paced;
-  token over-estimates are refunded; `WithMaxRetries`/`WithRetryDelay` no longer
-  mutate a caller-shared `RetryConfig`; jitter is clamped to `[0,1]`.
-- **Observability.** Emitted span/metric cost now includes cache tokens and honors
-  custom pricing (matching `CostTracker`); models without pricing data are reported
-  as unknown rather than a silent `$0.00`; `error_type` metric labels are bounded to
-  prevent cardinality blow-up; request IDs are unique; span-text truncation is
-  UTF-8-safe; the metrics streaming wrapper no longer leaks a goroutine / the
-  active-request counter on consumer abandonment; cancelled streams record a non-OK
-  status.
-- **Other.** `ModelCapabilities.ToCapabilities()` no longer drops `Embeddings`/`Batch`;
-  `WebSearchConfig`/`SearchResult` use snake_case JSON tags; `ValidateMessages`
-  rejects a leading tool message; the Ollama native NDJSON client surfaces in-stream
-  errors and removes the 64 KB line cap.
+- Bump version pointers to v1.2.0 for release
 
 ### Security
 
-- Installing the SSRF dialer clones the HTTP transport instead of mutating a
-  shared/default `http.Transport`, so constructing a client can no longer break
-  unrelated HTTP in the host application.
-- The SSRF guard rejects obfuscated IPv4 literals (octal / hex / decimal).
-- SSE and response readers are size-bounded to prevent OOM from untrusted endpoints.
-- The MCP stdio transport launches subprocesses with a minimal environment allowlist
-  instead of inheriting the full parent environment, so provider API keys are not
-  leaked to MCP servers by default — use `WithEnv` to pass variables a server needs.
+- Add .dockerignore to keep .env out of images
 
-### MCP
+## [1.1.0] - 2026-06-09
 
-- The Streamable HTTP transport captures and echoes `Mcp-Session-Id` for stateful
-  servers; `initialize` validates the server's protocol version; JSON-RPC id
-  handling covers null / string / number ids and batch responses; tool calls use
-  the per-call context.
+### Bug Fixes
 
-### Docs
+- **security:** Resolve all open code-scanning findings
+- **mcp:** Annotate intentional subprocess launch (gosec G204)
+- V1.1.0 pre-release hardening (security, correctness, resilience)
 
-- `SECURITY.md` corrected (supported versions, latest release, no-arg
-  `WithAllowPrivateIPs()` signature). The `llms-cli` binary now supports `--version`
-  and a `version` subcommand.
+### CI/CD
 
-## [1.1.0] - 2026-06-08
+- Fix public-repo CI — integration test compile, SARIF perms, CodeQL v4, Pages deploy
+- **release:** Open a PR for CHANGELOG instead of pushing to main
+- **codeql:** Use examples/** glob so the Go extractor excludes examples
 
-### Added
+### Documentation
 
-- **Unified reasoning ("thinking") API.** `WithReasoning`, `WithReasoningEffort`,
-  and `WithReasoningBudget` request model reasoning across providers, mapping onto
-  OpenAI `reasoning_effort`, Anthropic extended thinking (with automatic
-  `max_tokens` adjustment), Gemini `thinkingConfig`, and Z.AI/Qwen toggles.
-  Reasoning output is surfaced on `Response.Reasoning` / `StreamChunk.Reasoning`
-  (with an Anthropic thinking `Signature`), reasoning tokens are reported in
-  `Usage.ReasoningTokens`, and `Capabilities.Reasoning` advertises support.
-- **Cross-provider prompt caching.** `WithCache`, `WithCacheTTL`, and
-  `WithoutCache` control automatic caching; `Message.CacheControl` marks explicit
-  breakpoints (Anthropic). Cache token usage is normalized across OpenAI,
-  Anthropic, DeepSeek, and Gemini (`Usage.PromptTokens` now excludes cached
-  tokens), `CostTracker`/`EstimateCost` price discounted cache reads/writes, and
-  `Capabilities.PromptCaching` advertises support.
-- **MCP client (`pkg/mcp`).** A minimal, dependency-free Model Context Protocol
-  client (stdio + Streamable HTTP) for the tools subset. `Client.Register` exposes
-  a server's tools to `llms.RunTools` via the existing `ToolRegistry`.
+- Update CHANGELOG.md for v1.0.0
+- Comprehensive MkDocs Material documentation site
 
-### Changed
+### Features
 
-- `Usage.PromptTokens` now excludes cache-read tokens for all providers so cost is
-  computed uniformly; cache reads/writes are billed at their discounted rates.
+- V1.1.0 — reasoning, prompt caching, and MCP client
 
-### Hardened (pre-release review)
+## [1.0.0] - 2026-06-08
 
-- Streaming tool-call accumulation rejects malformed indices (negative → no panic,
-  absurd → no unbounded allocation); stream processing and the `RunTools` loop
-  recover from panics instead of crashing the host.
-- OpenAI reasoning models (o-series, gpt-5) send `max_completion_tokens` and omit
-  unsupported sampling params instead of failing with HTTP 400.
-- Added pricing for current default/flagship models (Claude Sonnet/Opus 4,
-  Gemini 2.5, GPT-4.1, o3/o4-mini, DeepSeek) so cost tracking is no longer $0 by
-  default; Gemini token accounting reconciles reasoning tokens correctly.
-- HTTP client validates the resolved IP at dial time (blocks DNS-rebinding and
-  redirect-to-private SSRF) and caps non-streaming response bodies.
-- Resilience and fallback now observe streaming outcomes: a failed stream trips the
-  circuit breaker and fails the chain over to the next client.
-- Fixed a sliding-window metrics counter corruption; corrected DeepSeek reasoning
-  capability and context window; Gemini reports `tool_calls` finish reason.
-
-### Deprecated
-
-- `WithThinkingMode` (use `WithReasoning`), `Response.Thinking` /
-  `StreamChunk.Thinking` (use `Reasoning`), and `ThinkingContent` (use
-  `ReasoningContent`). The old names remain as aliases and will be removed in a
-  future major release.
-
-## [1.0.0] - 2026-06-07
-
-### Added
-
-- Initial public release of the unified LLM SDK, including the core `llms.LLM`
-  interface, provider implementations, streaming, tool calling, embeddings,
-  resilience middleware, observability integrations, examples, and `llms-cli`.
+<!-- generated by git-cliff -->
