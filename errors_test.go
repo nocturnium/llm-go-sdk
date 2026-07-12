@@ -199,6 +199,65 @@ func TestAPIError_IsRetryable(t *testing.T) {
 	}
 }
 
+// TestAPIError_QuotaClassification pins that an out-of-credits error (429 with an
+// insufficient_quota / quota_exceeded code) classifies as the permanent
+// ErrQuotaExceeded and is non-retryable, while a plain 429 rate limit stays a
+// retryable ErrRateLimited. The status map is consulted before the code switch,
+// so the quota codes must be given precedence or ErrQuotaExceeded is unreachable.
+func TestAPIError_QuotaClassification(t *testing.T) {
+	tests := []struct {
+		name            string
+		err             *APIError
+		wantSentinel    error
+		wantRateLimited bool
+		retryable       bool
+	}{
+		{
+			name:         "429 insufficient_quota is permanent quota, not a rate limit",
+			err:          &APIError{StatusCode: 429, Code: "insufficient_quota"},
+			wantSentinel: ErrQuotaExceeded,
+			retryable:    false,
+		},
+		{
+			name:         "429 quota_exceeded is permanent quota",
+			err:          &APIError{StatusCode: 429, Code: "quota_exceeded"},
+			wantSentinel: ErrQuotaExceeded,
+			retryable:    false,
+		},
+		{
+			name:            "plain 429 (no quota code) stays a retryable rate limit",
+			err:             &APIError{StatusCode: 429},
+			wantSentinel:    ErrRateLimited,
+			wantRateLimited: true,
+			retryable:       true,
+		},
+		{
+			name:            "429 rate_limit_exceeded stays a retryable rate limit",
+			err:             &APIError{StatusCode: 429, Code: "rate_limit_exceeded"},
+			wantSentinel:    ErrRateLimited,
+			wantRateLimited: true,
+			retryable:       true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !errors.Is(tc.err, tc.wantSentinel) {
+				t.Errorf("errors.Is(err, %v) = false, want true", tc.wantSentinel)
+			}
+			if got := errors.Is(tc.err, ErrRateLimited); got != tc.wantRateLimited {
+				t.Errorf("errors.Is(err, ErrRateLimited) = %v, want %v", got, tc.wantRateLimited)
+			}
+			if got := tc.err.IsRetryable(); got != tc.retryable {
+				t.Errorf("IsRetryable() = %v, want %v", got, tc.retryable)
+			}
+			if got := IsTemporary(tc.err); got != tc.retryable {
+				t.Errorf("IsTemporary() = %v, want %v", got, tc.retryable)
+			}
+		})
+	}
+}
+
 func TestAPIError_RetryAfter(t *testing.T) {
 	err := &APIError{
 		StatusCode: 429,
