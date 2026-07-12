@@ -339,11 +339,20 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				}
 
 				var finalReasoning *llms.ReasoningContent
-				if !reasoningDeltaEmitted && (accumulatedReasoning != "" || reasoningSignature != "") {
+				switch {
+				case !reasoningDeltaEmitted && (accumulatedReasoning != "" || reasoningSignature != ""):
+					// No thinking deltas were streamed: deliver the full reasoning
+					// text plus its signature in one terminal chunk.
 					finalReasoning = &llms.ReasoningContent{
 						Content:   accumulatedReasoning,
 						Signature: reasoningSignature,
 					}
+				case reasoningSignature != "":
+					// Thinking deltas already streamed the text, but the signature
+					// arrives at the end; deliver it on the terminal chunk (content
+					// empty to avoid duplicating the streamed text) so the
+					// extended-thinking block can be replayed on the next turn.
+					finalReasoning = &llms.ReasoningContent{Signature: reasoningSignature}
 				}
 
 				sender.SendFinal(llms.StreamChunk{

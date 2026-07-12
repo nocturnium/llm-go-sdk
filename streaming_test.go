@@ -239,3 +239,36 @@ func BenchmarkStreamSender_SendTimeout(b *testing.B) {
 		}
 	}
 }
+
+// TestCollectStream_PreservesReasoningSignature pins that CollectStream keeps the
+// reasoning signature/metadata delivered on a terminal chunk (previously it
+// rebuilt reasoning from text only, dropping the signature that authenticates
+// the thinking block for a streamed multi-turn round-trip).
+func TestCollectStream_PreservesReasoningSignature(t *testing.T) {
+	ch := make(chan StreamChunk, 5)
+	ch <- StreamChunk{Reasoning: &ReasoningContent{Content: "think"}}
+	ch <- StreamChunk{Reasoning: &ReasoningContent{Content: "ing"}}
+	ch <- StreamChunk{Reasoning: &ReasoningContent{Signature: "sig-123", Metadata: map[string]any{"k": "v"}}}
+	ch <- StreamChunk{Content: "answer", Done: true, FinishReason: FinishReasonStop}
+	close(ch)
+
+	res, err := CollectStream(ch)
+	if err != nil {
+		t.Fatalf("CollectStream: %v", err)
+	}
+	if res.Content != "answer" {
+		t.Errorf("content = %q", res.Content)
+	}
+	if res.Reasoning == nil {
+		t.Fatal("reasoning was dropped entirely")
+	}
+	if res.Reasoning.Content != "thinking" {
+		t.Errorf("reasoning content = %q, want thinking", res.Reasoning.Content)
+	}
+	if res.Reasoning.Signature != "sig-123" {
+		t.Errorf("reasoning signature dropped: got %q", res.Reasoning.Signature)
+	}
+	if res.Reasoning.Metadata["k"] != "v" {
+		t.Errorf("reasoning metadata dropped: got %v", res.Reasoning.Metadata)
+	}
+}

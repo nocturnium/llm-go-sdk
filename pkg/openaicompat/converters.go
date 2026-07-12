@@ -70,23 +70,28 @@ func ConvertMessages(messages []llms.Message) []ChatMessage {
 }
 
 // convertContentParts converts llms.ContentPart slice to openaicompat.ContentPart slice.
+//
+// Parts are appended, not index-filled: a part that produces nothing (a nil
+// image, or an unknown/unsupported part type such as audio) is SKIPPED rather
+// than left as a zero-value {"type":""} entry, which OpenAI rejects with a 400
+// on the whole request. This mirrors the Responses converter.
 func convertContentParts(parts []llms.ContentPart) []ContentPart {
-	result := make([]ContentPart, len(parts))
-	for i, part := range parts {
+	result := make([]ContentPart, 0, len(parts))
+	for _, part := range parts {
 		switch part.Type {
 		case llms.PartTypeText:
-			result[i] = ContentPart{
+			result = append(result, ContentPart{
 				Type: "text",
 				Text: part.Text,
-			}
+			})
 		case llms.PartTypeImage:
 			if part.Image != nil {
-				result[i] = ContentPart{
+				result = append(result, ContentPart{
 					Type: "image_url",
 					ImageURL: &ImageURL{
 						URL: formatImageURL(part.Image),
 					},
-				}
+				})
 			}
 		}
 	}

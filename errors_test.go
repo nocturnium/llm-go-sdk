@@ -134,6 +134,7 @@ func TestAPIError_StatusClassification(t *testing.T) {
 		{401, ErrAuthenticationFailed, false},
 		{403, ErrPermissionDenied, false},
 		{404, ErrModelNotFound, false},
+		{408, ErrTimeout, true},
 		{429, ErrRateLimited, true},
 		{500, ErrServerError, true},
 		{502, ErrServiceUnavailable, true},
@@ -183,6 +184,7 @@ func TestAPIError_IsRetryable(t *testing.T) {
 		{401, false},
 		{403, false},
 		{404, false},
+		{408, true},
 		{429, true},
 		{500, true},
 		{502, true},
@@ -196,6 +198,93 @@ func TestAPIError_IsRetryable(t *testing.T) {
 		if err.IsRetryable() != tc.expected {
 			t.Errorf("IsRetryable for %d = %v, expected %v", tc.statusCode, err.IsRetryable(), tc.expected)
 		}
+	}
+}
+
+// TestAPIError_QuotaClassification pins that an out-of-credits error (429 with an
+// insufficient_quota / quota_exceeded code) classifies as the permanent
+// ErrQuotaExceeded and is non-retryable, while a plain 429 rate limit stays a
+// retryable ErrRateLimited. The status map is consulted before the code switch,
+// so the quota codes must be given precedence or ErrQuotaExceeded is unreachable.
+func TestAPIError_QuotaClassification(t *testing.T) {
+	tests := []struct {
+		name            string
+		err             *APIError
+		wantSentinel    error
+		wantRateLimited bool
+		retryable       bool
+	}{
+		{
+			name:         "429 insufficient_quota is permanent quota, not a rate limit",
+			err:          &APIError{StatusCode: 429, Code: "insufficient_quota"},
+			wantSentinel: ErrQuotaExceeded,
+			retryable:    false,
+		},
+		{
+			name:         "429 quota_exceeded is permanent quota",
+			err:          &APIError{StatusCode: 429, Code: "quota_exceeded"},
+			wantSentinel: ErrQuotaExceeded,
+			retryable:    false,
+		},
+		{
+			name:            "plain 429 (no quota code) stays a retryable rate limit",
+			err:             &APIError{StatusCode: 429},
+			wantSentinel:    ErrRateLimited,
+			wantRateLimited: true,
+			retryable:       true,
+		},
+		{
+			name:            "429 rate_limit_exceeded stays a retryable rate limit",
+			err:             &APIError{StatusCode: 429, Code: "rate_limit_exceeded"},
+			wantSentinel:    ErrRateLimited,
+			wantRateLimited: true,
+			retryable:       true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !errors.Is(tc.err, tc.wantSentinel) {
+				t.Errorf("errors.Is(err, %v) = false, want true", tc.wantSentinel)
+			}
+			if got := errors.Is(tc.err, ErrRateLimited); got != tc.wantRateLimited {
+				t.Errorf("errors.Is(err, ErrRateLimited) = %v, want %v", got, tc.wantRateLimited)
+			}
+			if got := tc.err.IsRetryable(); got != tc.retryable {
+				t.Errorf("IsRetryable() = %v, want %v", got, tc.retryable)
+			}
+			if got := IsTemporary(tc.err); got != tc.retryable {
+				t.Errorf("IsTemporary() = %v, want %v", got, tc.retryable)
+			}
+		})
+	}
+}
+
+// TestAPIError_IsRetryable_TypeFallback pins that when StatusCode is absent
+// (e.g. a streaming error carrying only Type/Code, StatusCode 0), IsRetryable
+// falls back to the sentinel classification — so a mid-stream rate limit or
+// server error is still recognized as retryable instead of defaulting to false.
+func TestAPIError_IsRetryable_TypeFallback(t *testing.T) {
+	tests := []struct {
+		name string
+		err  *APIError
+		want bool
+	}{
+		// Anthropic streaming builds APIError{Type:"rate_limit_error"} with no status.
+		{"streaming rate_limit_error", &APIError{Type: "rate_limit_error"}, true},
+		{"streaming server_error", &APIError{Type: "server_error"}, true},
+		{"streaming invalid_request_error", &APIError{Type: "invalid_request_error"}, false},
+		{"bare error, no status/type/code", &APIError{}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.err.IsRetryable(); got != tc.want {
+				t.Errorf("IsRetryable() = %v, want %v", got, tc.want)
+			}
+			if got := IsTemporary(tc.err); got != tc.want {
+				t.Errorf("IsTemporary() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

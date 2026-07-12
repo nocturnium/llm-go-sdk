@@ -138,6 +138,10 @@ func RunTools(ctx context.Context, llm LLM, messages []Message, registry *ToolRe
 			Role:      RoleAssistant,
 			Content:   resp.Content,
 			ToolCalls: resp.ToolCalls,
+			// Preserve reasoning so providers that require the thinking block to be
+			// replayed on the next turn (Anthropic extended thinking, OpenAI
+			// Responses) can re-emit it instead of 400-ing on turn 2+.
+			Reasoning: resp.Reasoning,
 		}
 		transcript = append(transcript, assistantMessage)
 

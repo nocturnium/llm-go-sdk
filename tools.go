@@ -34,6 +34,14 @@ type ToolCall struct {
 	ID       string        `json:"id"`
 	Type     ToolType      `json:"type"`
 	Function *FunctionCall `json:"function,omitempty"`
+	// Signature is an opaque, provider-issued token that authenticates the
+	// reasoning that produced this tool call. Gemini 2.5+ returns a
+	// thoughtSignature on the functionCall part when thinking is enabled; it
+	// must be echoed back on the following turn's tool-call part or the model
+	// loses its reasoning context (and can reject the request). Empty for
+	// providers that do not issue per-call signatures. This is the tool-call
+	// analog of ReasoningContent.Signature.
+	Signature string `json:"signature,omitempty"`
 }
 
 // FunctionCall contains the function name and arguments

@@ -102,6 +102,7 @@ var apiStatusClassifications = map[int]apiStatusClassification{
 	401: {err: ErrAuthenticationFailed},
 	403: {err: ErrPermissionDenied},
 	404: {err: ErrModelNotFound},
+	408: {err: ErrTimeout, retryable: true},
 	429: {err: ErrRateLimited, retryable: true},
 	500: {err: ErrServerError, retryable: true},
 	502: {err: ErrServiceUnavailable, retryable: true},
@@ -158,6 +159,15 @@ func (e *APIError) Is(target error) bool {
 
 // underlyingError maps status codes and error types to sentinel errors
 func (e *APIError) underlyingError() error {
+	// Quota exhaustion is a permanent billing failure even though providers return
+	// it with a 429 status. Classify it by code before the status map — otherwise
+	// it masquerades as a retryable rate limit and the exported ErrQuotaExceeded
+	// sentinel is unreachable.
+	switch e.Code {
+	case apiErrorCodeQuotaExceeded, apiErrorCodeInsufficientQuota:
+		return ErrQuotaExceeded
+	}
+
 	// Check by status code first
 	if classification, ok := apiStatusClassifications[e.StatusCode]; ok {
 		return classification.err
@@ -173,8 +183,8 @@ func (e *APIError) underlyingError() error {
 		return ErrContentFiltered
 	case apiErrorCodeRateLimitExceeded:
 		return ErrRateLimited
-	case apiErrorCodeQuotaExceeded, apiErrorCodeInsufficientQuota:
-		return ErrQuotaExceeded
+		// Quota codes are handled by the precedence switch at the top of this
+		// method (they must win over the 429 status classification).
 	}
 
 	// Check by error type
@@ -196,7 +206,23 @@ func (e *APIError) underlyingError() error {
 
 // IsRetryable returns true if the error is likely transient and the request can be retried
 func (e *APIError) IsRetryable() bool {
-	return apiStatusClassifications[e.StatusCode].retryable
+	// Quota exhaustion is a permanent billing failure regardless of the (often
+	// 429) status code; never report it as retryable.
+	switch e.Code {
+	case apiErrorCodeQuotaExceeded, apiErrorCodeInsufficientQuota:
+		return false
+	}
+	if classification, ok := apiStatusClassifications[e.StatusCode]; ok {
+		return classification.retryable
+	}
+	// StatusCode is absent or unrecognized (e.g. a streaming error carrying only
+	// Type/Code with StatusCode 0). Fall back to the sentinel classification so a
+	// mid-stream rate limit, server error, or timeout is still retryable.
+	underlying := e.underlyingError()
+	return errors.Is(underlying, ErrRateLimited) ||
+		errors.Is(underlying, ErrServerError) ||
+		errors.Is(underlying, ErrServiceUnavailable) ||
+		errors.Is(underlying, ErrTimeout)
 }
 
 // ValidationError represents a parameter validation error

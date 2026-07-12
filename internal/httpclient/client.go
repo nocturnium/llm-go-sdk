@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -500,6 +501,7 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Resp
 	}
 
 	var lastErr error
+	var retryAfter time.Duration
 	for attempt := 0; attempt <= c.retryPolicy.MaxRetries; attempt++ {
 		// Check context before each attempt to fail fast
 		select {
@@ -512,7 +514,17 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Resp
 		}
 
 		if attempt > 0 {
-			delay := c.retryPolicy.GetDelay(attempt)
+			// Jitter the exponential backoff to avoid a synchronized thundering
+			// herd, and honor a server Retry-After when it exceeds our backoff
+			// (bounded by MaxDelay).
+			delay := jitterDelay(c.retryPolicy.GetDelay(attempt))
+			if retryAfter > delay {
+				delay = retryAfter
+			}
+			if c.retryPolicy.MaxDelay > 0 && delay > c.retryPolicy.MaxDelay {
+				delay = c.retryPolicy.MaxDelay
+			}
+			retryAfter = 0
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -553,9 +565,17 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Resp
 
 		// Check if we should retry based on status code
 		if IsRetryable(resp.StatusCode, nil) && c.retryPolicy.ShouldRetry(resp.StatusCode) {
+			// On the final attempt, return the response so the caller can parse the
+			// provider's *APIError (status, Retry-After, request id) instead of
+			// receiving a generic "retries exhausted" error.
+			if attempt >= c.retryPolicy.MaxRetries {
+				return resp, nil
+			}
+			// A request body that cannot be re-read cannot be retried.
 			if req.Body != nil && req.GetBody == nil {
 				return resp, nil
 			}
+			retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
 			drainAndClose(resp.Body)
 			lastErr = fmt.Errorf("received retryable status code: %d", resp.StatusCode)
 			continue
@@ -575,6 +595,40 @@ func drainAndClose(body io.ReadCloser) {
 	_ = body.Close()
 }
 
+// parseRetryAfter parses a Retry-After header value, which per RFC 9110 may be a
+// non-negative integer number of seconds or an HTTP-date. Returns 0 for an empty,
+// malformed, zero, or already-past value.
+func parseRetryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil {
+		if secs <= 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
+
+// jitterDelay applies equal jitter to a backoff delay: half is fixed and half is
+// randomized, spreading retries across concurrent clients to avoid a synchronized
+// thundering herd on a recovering upstream. Uses math/rand/v2 — this is
+// scheduling jitter, not a security-sensitive value.
+func jitterDelay(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	half := int64(d) / 2
+	return time.Duration(half + rand.Int64N(half+1)) // #nosec G404 -- non-cryptographic backoff jitter
+}
+
 // IsRetryable returns true when a status code or error represents a transient
 // HTTP failure. Context cancellation and deadline errors are never retryable.
 func IsRetryable(statusCode int, err error) bool {
@@ -587,7 +641,8 @@ func IsRetryable(statusCode int, err error) bool {
 
 	switch statusCode {
 	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError,
-		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout,
+		529: // Site Overloaded (Anthropic; no net/http constant). Must match retry.go's policy list.
 		return true
 	}
 	return false
@@ -646,13 +701,8 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 		requestID = resp.Header.Get("Request-Id")
 	}
 
-	// Extract retry-after header for rate limiting
-	var retryAfter time.Duration
-	if ra := resp.Header.Get("Retry-After"); ra != "" {
-		if seconds, err := strconv.Atoi(ra); err == nil {
-			retryAfter = time.Duration(seconds) * time.Second
-		}
-	}
+	// Extract retry-after header (seconds or HTTP-date) for rate limiting.
+	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 
 	if parsed, ok := parseAPIErrorBody(body); ok {
 		return &APIError{

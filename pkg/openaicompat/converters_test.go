@@ -139,12 +139,10 @@ func TestConvertContentPartsWithNilImage(t *testing.T) {
 
 	result := convertContentParts(parts)
 
-	if len(result) != 1 {
-		t.Fatalf("expected 1 part, got %d", len(result))
-	}
-	// When Image is nil, the result should have empty ImageURL
-	if result[0].ImageURL != nil {
-		t.Error("expected ImageURL to be nil for nil image")
+	// A nil image produces NO content part — previously it left a zero-value
+	// {"type":""} entry that OpenAI rejects with a 400 on the whole request.
+	if len(result) != 0 {
+		t.Fatalf("expected 0 parts for a nil image, got %d: %+v", len(result), result)
 	}
 }
 
@@ -1105,5 +1103,25 @@ func TestProcessStream_ReasoningContentDelta(t *testing.T) {
 	// Verify we can check ReasoningContent directly
 	if delta.ReasoningContent != "thinking step..." {
 		t.Errorf("expected ReasoningContent to be accessible, got %s", delta.ReasoningContent)
+	}
+}
+
+// TestConvertContentParts_SkipsNilImageAndUnknown pins that a nil image or an
+// unknown part type is skipped, not emitted as a malformed {"type":""} entry
+// that OpenAI 400s on the whole request.
+func TestConvertContentParts_SkipsNilImageAndUnknown(t *testing.T) {
+	parts := []llms.ContentPart{
+		{Type: llms.PartTypeText, Text: "hello"},
+		{Type: llms.PartTypeImage, Image: nil}, // nil image → skip, not {"type":""}
+		{Type: llms.PartType("audio")},         // unknown part type → skip
+	}
+	out := convertContentParts(parts)
+	for _, c := range out {
+		if c.Type == "" {
+			t.Errorf("emitted a malformed empty-type content part: %+v", out)
+		}
+	}
+	if len(out) != 1 || out[0].Type != "text" || out[0].Text != "hello" {
+		t.Errorf("expected only the text part, got %+v", out)
 	}
 }

@@ -73,6 +73,12 @@ func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 // default is required because a single request may legitimately consume many
 // tokens; callers who want tighter client-side pacing can lower it via
 // WithTokenBurst.
+//
+// NOTE: a per-request token count larger than this burst would make
+// golang.org/x/time/rate's WaitN/AllowN reject every call (n > burst is never
+// satisfiable). Rather than override an explicit WithTokenBurst here, the Wait
+// paths cap the requested token count to the burst — see WaitN/tryAcquire — which
+// preserves the caller's chosen burst while avoiding a self-inflicted outage.
 func (rl *RateLimiter) tokenBucketBurst() int {
 	if rl.tokenBurst > 0 {
 		return rl.tokenBurst
@@ -204,6 +210,10 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 
 	// Wait for token limit if configured
 	if tokenLimiter != nil && tokens > 0 {
+		// Never request more than the bucket can hold, or WaitN rejects it forever.
+		if b := tokenLimiter.Burst(); tokens > b {
+			tokens = b
+		}
 		if err := tokenLimiter.WaitN(waitCtx, tokens); err != nil {
 			if errors.Is(err, context.DeadlineExceeded) ||
 				errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
@@ -229,6 +239,9 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 	}
 
 	if tokenLimiter != nil && tokens > 0 {
+		if b := tokenLimiter.Burst(); tokens > b {
+			tokens = b
+		}
 		if !tokenLimiter.AllowN(time.Now(), tokens) {
 			return ErrRateLimitExceeded
 		}

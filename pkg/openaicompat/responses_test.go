@@ -3,6 +3,7 @@ package openaicompat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -97,6 +98,27 @@ func TestBuildResponsesRequest_StateFromExtraBody(t *testing.T) {
 	}
 	if req.Store == nil || !*req.Store {
 		t.Errorf("store = %v", req.Store)
+	}
+}
+
+// TestConvertResponsesResponse_Refusal pins that a safety refusal is surfaced as
+// content plus a content_filter finish reason, not a silent empty "stop".
+func TestConvertResponsesResponse_Refusal(t *testing.T) {
+	resp := &ResponsesResponse{
+		ID:     "r",
+		Status: "completed",
+		Output: []ResponsesOutputItem{
+			{Type: itemTypeMessage, Content: []ResponsesOutputContent{
+				{Type: "refusal", Refusal: "I can't help with that."},
+			}},
+		},
+	}
+	out := ConvertResponsesResponse(resp)
+	if out.Content != "I can't help with that." {
+		t.Errorf("refusal text not surfaced: Content = %q", out.Content)
+	}
+	if out.FinishReason != llms.FinishReasonContentFilter {
+		t.Errorf("FinishReason = %q, want %q", out.FinishReason, llms.FinishReasonContentFilter)
 	}
 }
 
@@ -244,5 +266,106 @@ func TestBaseProvider_RoutesToResponsesAPI(t *testing.T) {
 	}
 	if resp.Content != "routed" {
 		t.Errorf("content = %q", resp.Content)
+	}
+}
+
+// TestBaseProvider_ResponsesFailedStatusReturnsError is the golden test for the
+// non-streaming Responses failure path: a 200 body with status:"failed" must
+// surface as an error, not a silent empty completion.
+func TestBaseProvider_ResponsesFailedStatusReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"r","status":"failed","error":{"message":"safety system triggered","code":"content_policy"},"output":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
+	p := NewBaseProvider(client, ProviderConfig{
+		Provider:        llms.ProviderOpenAI,
+		ProviderName:    "openai",
+		DefaultModel:    "gpt-4o",
+		UseResponsesAPI: true,
+	})
+
+	resp, err := p.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
+	if err == nil {
+		t.Fatalf("expected error for status:failed, got resp=%+v", resp)
+	}
+	if !strings.Contains(err.Error(), "safety system triggered") {
+		t.Errorf("error does not surface the API message: %v", err)
+	}
+	var apiErr *llms.APIError
+	if !errors.As(err, &apiErr) {
+		t.Errorf("expected *llms.APIError, got %T (%v)", err, err)
+	} else if apiErr.Code != "content_policy" {
+		t.Errorf("APIError.Code = %q, want content_policy", apiErr.Code)
+	}
+}
+
+func TestResponsesResponseError(t *testing.T) {
+	mustUnmarshal := func(body string) *ResponsesResponse {
+		var r ResponsesResponse
+		if err := json.Unmarshal([]byte(body), &r); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return &r
+	}
+
+	if err := responsesResponseError(mustUnmarshal(`{"status":"completed"}`)); err != nil {
+		t.Errorf("completed: unexpected error %v", err)
+	}
+	if err := responsesResponseError(mustUnmarshal(`{"status":"incomplete"}`)); err != nil {
+		t.Errorf("incomplete: unexpected error %v", err)
+	}
+	if responsesResponseError(nil) != nil {
+		t.Error("nil response should not error")
+	}
+
+	err := responsesResponseError(mustUnmarshal(`{"status":"failed","error":{"message":"boom","code":"server_error"}}`))
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("failed status: got %v", err)
+	}
+	var apiErr *llms.APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != "server_error" {
+		t.Errorf("want *llms.APIError code=server_error, got %v", err)
+	}
+
+	// A populated error object surfaces even when status is not "failed".
+	if responsesResponseError(mustUnmarshal(`{"status":"completed","error":{"message":"partial"}}`)) == nil {
+		t.Error("populated error object should surface as an error")
+	}
+}
+
+// TestBuildResponsesRequest_MergesExtraBody pins that CallOptions.ExtraBody
+// escape-hatch keys (service_tier, metadata, ...) are merged into the Responses
+// request body (matching the chat path), while keys already mapped to typed
+// fields or colliding with a typed field are left to the typed value.
+func TestBuildResponsesRequest_MergesExtraBody(t *testing.T) {
+	opts := llms.ApplyOptions(llms.WithExtraBody(map[string]any{
+		"service_tier": "flex",
+		"metadata":     map[string]any{"user_id": "u1"},
+		"store":        true,                  // consumed -> typed Store field
+		"model":        "SHOULD_NOT_OVERRIDE", // collides with typed Model field
+	}))
+	req := BuildResponsesRequest("gpt-4o", nil, opts, false)
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m["service_tier"] != "flex" {
+		t.Errorf("service_tier escape-hatch key not merged: %s", data)
+	}
+	if _, ok := m["metadata"]; !ok {
+		t.Errorf("metadata not merged: %s", data)
+	}
+	if m["model"] != "gpt-4o" {
+		t.Errorf("ExtraBody must not override the typed model field: got %v", m["model"])
+	}
+	if m["store"] != true {
+		t.Errorf("store should be the typed field value, got %v", m["store"])
 	}
 }

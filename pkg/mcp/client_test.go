@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -170,6 +171,44 @@ func TestClient_InitializeError(t *testing.T) {
 	}
 	if !m.closed {
 		t.Error("expected transport closed after failed initialize")
+	}
+}
+
+// TestNewClient_FailedHandshakeDoesNotLeakNotifier asserts that a failed
+// handshake stops the notification pump goroutine. newClient starts the pump
+// unconditionally; before the fix the initialize-failure path returned without
+// stopping it, leaking one goroutine (and its channel) per failed attempt.
+func TestNewClient_FailedHandshakeDoesNotLeakNotifier(t *testing.T) {
+	settle := func() int {
+		prev := -1
+		for i := 0; i < 200; i++ {
+			runtime.GC()
+			time.Sleep(time.Millisecond)
+			n := runtime.NumGoroutine()
+			if n == prev {
+				return n
+			}
+			prev = n
+		}
+		return prev
+	}
+
+	before := settle()
+	const attempts = 100
+	for i := 0; i < attempts; i++ {
+		m := newMockTransport()
+		m.errs[methodInitialize] = &RPCError{Code: -32000, Message: "boom"}
+		if _, err := newClient(context.Background(), m, buildConfig(nil)); err == nil {
+			t.Fatal("expected initialize error")
+		}
+	}
+	after := settle()
+
+	// Pre-fix this leaks ~one pump goroutine per attempt (~100); allow generous
+	// slack for unrelated runtime goroutines.
+	if after-before > attempts/5 {
+		t.Errorf("notifier pump leaked: goroutines before=%d after=%d (delta=%d) after %d failed handshakes",
+			before, after, after-before, attempts)
 	}
 }
 

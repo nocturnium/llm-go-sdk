@@ -218,11 +218,12 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 		}
 		return map[string]any{"type": "array", "items": itemSchema}, nil
 	case reflect.Map:
-		valueSchema, err := schemaForType(typ.Elem(), seen)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"type": "object", "additionalProperties": valueSchema}, nil
+		// A map has arbitrary string keys, which OpenAI strict mode cannot express
+		// (it requires additionalProperties:false on every object). Emit an
+		// unconstrained schema — matching json.RawMessage/interface{} and the
+		// documented GenerateTyped behavior — rather than an additionalProperties
+		// subschema that strict validators reject with a 400.
+		return map[string]any{}, nil
 	case reflect.Struct:
 		return schemaForStruct(typ, seen)
 	case reflect.Interface:
@@ -245,6 +246,22 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			continue
 		}
 
+		// Flatten embedded (anonymous) structs without an explicit json name,
+		// mirroring encoding/json field promotion: the model must return the
+		// promoted fields at the parent level or json.Unmarshal silently drops
+		// them. An embedded field WITH a json name falls through to be treated as
+		// a normal named field.
+		if field.Anonymous {
+			promoted, ok, err := mergeEmbeddedSchema(field, properties, seen)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				required = appendUnique(required, promoted...)
+				continue
+			}
+		}
+
 		name, skip := jsonFieldName(field)
 		if skip {
 			continue
@@ -255,7 +272,7 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			return nil, err
 		}
 		properties[name] = fieldSchema
-		required = append(required, name)
+		required = appendUnique(required, name)
 	}
 
 	schema := map[string]any{
@@ -267,6 +284,77 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 		schema["required"] = required
 	}
 	return schema, nil
+}
+
+// mergeEmbeddedSchema flattens an anonymous embedded struct field into the
+// parent's properties, mirroring encoding/json promotion, and returns the
+// promoted field names for the required list. ok is false when the field is not a
+// promotable embedded struct — it has an explicit json name (then it is a normal
+// named field) or its underlying type is not a struct — in which case the caller
+// handles it as a normal field. Outer fields already present shadow promoted ones
+// (shallower wins), matching encoding/json.
+func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, seen map[reflect.Type]bool) (promoted []string, ok bool, err error) {
+	tag := field.Tag.Get("json")
+	if tag == "-" {
+		return nil, true, nil // embedded but explicitly skipped
+	}
+	if tag != "" && strings.Split(tag, ",")[0] != "" {
+		return nil, false, nil // has an explicit json name → normal named field
+	}
+
+	ft := field.Type
+	for ft.Kind() == reflect.Pointer {
+		ft = ft.Elem()
+	}
+	if ft.Kind() != reflect.Struct {
+		return nil, false, nil // embedded interface or named non-struct → normal field
+	}
+	// An embedded type with a special (non-object) schema — time.Time,
+	// json.Marshaler/TextMarshaler, json.RawMessage — marshals as a scalar and
+	// must NOT be flattened into its internal fields; treat it as a normal named
+	// field so schemaForType applies the special schema.
+	if _, special := specialSchemaForType(ft); special {
+		return nil, false, nil
+	}
+	// Recursion guard: schemaForStruct does not itself check seen (that guard
+	// lives in schemaForType), so a self- or mutually-recursive embedded struct
+	// would recurse forever and fatally overflow the stack. Fall back to the
+	// normal field path, which routes through schemaForType's seen guard and
+	// terminates with an unconstrained {}.
+	if seen[ft] {
+		return nil, false, nil
+	}
+
+	embedded, err := schemaForStruct(ft, seen)
+	if err != nil {
+		return nil, true, err
+	}
+	if props, hasProps := embedded["properties"].(map[string]any); hasProps {
+		for k, v := range props {
+			if _, exists := properties[k]; !exists {
+				properties[k] = v
+				promoted = append(promoted, k)
+			}
+		}
+	}
+	return promoted, true, nil
+}
+
+// appendUnique appends each name to dst only if not already present.
+func appendUnique(dst []string, names ...string) []string {
+	for _, n := range names {
+		found := false
+		for _, existing := range dst {
+			if existing == n {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dst = append(dst, n)
+		}
+	}
+	return dst
 }
 
 func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {

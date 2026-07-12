@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
 )
 
 const mcpSessionIDHeader = "Mcp-Session-Id"
+
+// sessionDeleteTimeout bounds the best-effort session-termination DELETE issued
+// on close so a slow or unresponsive server cannot stall Close indefinitely.
+const sessionDeleteTimeout = 5 * time.Second
 
 // httpTransport speaks JSON-RPC over MCP's Streamable HTTP transport: each
 // message is POSTed and the response is read as either application/json or a
@@ -25,6 +30,7 @@ type httpTransport struct {
 	sessionID string
 	notifyMu  sync.RWMutex
 	notifyFn  func(raw []byte)
+	closeOnce sync.Once
 }
 
 func newHTTPTransport(url string, client *httpclient.Client, headers map[string]string) *httpTransport {
@@ -116,4 +122,28 @@ func (t *httpTransport) captureSessionID(headers http.Header) {
 	t.sessionMu.Unlock()
 }
 
-func (t *httpTransport) close() error { return nil }
+// close terminates the server-side session, if one was established. Per the MCP
+// Streamable HTTP spec, a client that holds an Mcp-Session-Id SHOULD send an
+// HTTP DELETE to the endpoint to let the server release the session's
+// resources. It is best-effort: a server that does not support explicit
+// termination may respond 405 Method Not Allowed, and any transport error on
+// teardown is not worth surfacing — so the result is ignored and close never
+// fails on this account. With no session there is nothing to terminate.
+func (t *httpTransport) close() error {
+	// Idempotent: close may be invoked both by an explicit Client.Close and by the
+	// context-cancellation hook, so the DELETE must be sent at most once.
+	t.closeOnce.Do(func() {
+		sessionID := t.getSessionID()
+		if sessionID == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
+		defer cancel()
+		_, _, _ = t.client.DoRawWithHeaders(ctx, httpclient.Request{
+			Method:  http.MethodDelete,
+			URL:     t.url,
+			Headers: t.requestHeaders(),
+		})
+	})
+	return nil
+}

@@ -164,6 +164,20 @@ func ExtractThoughtContent(parts []Part) string {
 	return text
 }
 
+// ExtractThoughtSignature returns the first non-empty thoughtSignature found on
+// a thought (reasoning) part, or "" if none carry one. The signature
+// authenticates the model's reasoning for multi-turn replay; note that Gemini
+// attaches the round-trip-critical signature to the functionCall part when tool
+// calling, which callers read from that part directly.
+func ExtractThoughtSignature(parts []Part) string {
+	for _, part := range parts {
+		if part.Thought && part.ThoughtSignature != "" {
+			return part.ThoughtSignature
+		}
+	}
+	return ""
+}
+
 // FunctionCallToJSON converts a FunctionCall's Args to JSON string
 func FunctionCallToJSON(fc *FunctionCall) string {
 	if fc == nil || fc.Args == nil {

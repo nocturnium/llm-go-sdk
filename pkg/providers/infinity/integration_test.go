@@ -3,6 +3,7 @@ package infinity
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -393,8 +394,13 @@ func TestEmbedWithModel(t *testing.T) {
 // TestContextCancellation tests that operations respect context cancellation.
 func TestContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate slow response
-		time.Sleep(5 * time.Second)
+		// Block until the client cancels (or a safety cap) rather than sleeping a
+		// fixed 5s, so this test adds no multi-second delay to the suite and
+		// server.Close() does not wait on an in-flight sleep.
+		select {
+		case <-r.Context().Done():
+		case <-time.After(500 * time.Millisecond): // safety cap >> the 100ms client timeout
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -407,9 +413,18 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
+	start := time.Now()
 	_, err = client.Embed(ctx, []string{"test"})
+	elapsed := time.Since(start)
 	if err == nil {
-		t.Error("expected error due to context cancellation")
+		t.Fatal("expected error due to context cancellation")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected context.DeadlineExceeded, got %v", err)
+	}
+	// Cancellation must be prompt (~the 100ms timeout), not the handler delay.
+	if elapsed > time.Second {
+		t.Errorf("cancellation was not prompt: took %v", elapsed)
 	}
 }
 

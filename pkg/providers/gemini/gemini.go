@@ -301,7 +301,9 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 						}
 					}
 
-					// Extract function calls
+					// Extract function calls, carrying the thoughtSignature so the
+					// tool-calling round-trip preserves Gemini 2.5+ reasoning
+					// context (mirrors the non-streaming convertResponse path).
 					for _, part := range candidate.Content.Parts {
 						if part.FunctionCall != nil {
 							tc := llms.ToolCall{
@@ -311,6 +313,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 									Name:      part.FunctionCall.Name,
 									Arguments: geminiapi.FunctionCallToJSON(part.FunctionCall),
 								},
+								Signature: part.ThoughtSignature,
 							}
 							accumulatedToolCalls = append(accumulatedToolCalls, tc)
 						}

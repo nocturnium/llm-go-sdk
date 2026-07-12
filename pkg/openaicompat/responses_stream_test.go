@@ -123,3 +123,33 @@ func TestProcessResponsesStream_EOFWithoutCompleted(t *testing.T) {
 		t.Errorf("finish = %q, want stop on clean EOF", final.FinishReason)
 	}
 }
+
+// TestFinalChunkFromResponse_CarriesReasoningMetadata pins that the streamed
+// Responses terminal chunk carries the reasoning metadata (encrypted reasoning
+// items for stateless replay) — previously dropped — without duplicating the
+// already-streamed reasoning text.
+func TestFinalChunkFromResponse_CarriesReasoningMetadata(t *testing.T) {
+	resp := &ResponsesResponse{
+		Status: "completed",
+		Output: []ResponsesOutputItem{
+			{
+				Type:             itemTypeReasoning,
+				ID:               "rs_1",
+				EncryptedContent: "ENC123",
+				Summary:          []ResponsesSummaryPart{{Type: "summary_text", Text: "thinking"}},
+			},
+		},
+	}
+	chunk := finalChunkFromResponse(resp, nil, "")
+	if chunk.Reasoning == nil {
+		t.Fatal("terminal chunk dropped reasoning entirely")
+	}
+	if chunk.Reasoning.Metadata == nil {
+		t.Errorf("encrypted reasoning metadata not carried on terminal chunk: %+v", chunk.Reasoning)
+	}
+	// Content must be empty (already streamed via reasoning deltas) to avoid
+	// duplication when CollectStream aggregates.
+	if chunk.Reasoning.Content != "" {
+		t.Errorf("terminal reasoning content should be empty (streamed via deltas), got %q", chunk.Reasoning.Content)
+	}
+}

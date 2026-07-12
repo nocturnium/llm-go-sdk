@@ -38,6 +38,49 @@ type ResponsesRequest struct {
 	Store              *bool  `json:"store,omitempty"`
 	PreviousResponseID string `json:"previous_response_id,omitempty"`
 	Stream             bool   `json:"stream,omitempty"`
+
+	// extraBody carries CallOptions.ExtraBody escape-hatch keys, merged into the
+	// wire body by MarshalJSON. Unexported so it is never serialized as a field.
+	extraBody map[string]any
+}
+
+// consumedExtraBodyKeys are ExtraBody keys already mapped to typed request
+// fields; MarshalJSON must not re-emit them from the raw ExtraBody.
+var consumedExtraBodyKeys = map[string]bool{
+	"store":                       true,
+	"previous_response_id":        true,
+	"include_encrypted_reasoning": true,
+}
+
+// MarshalJSON renders the typed fields and then merges any remaining
+// CallOptions.ExtraBody keys (the documented escape hatch) into the top-level
+// request body — e.g. service_tier, metadata, user, parallel_tool_calls — which
+// the chat path forwards but the Responses path previously dropped. Keys already
+// mapped to typed fields, and keys that would collide with a typed field, are
+// left to the typed value.
+func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
+	type alias ResponsesRequest // strips this MarshalJSON to avoid recursion
+	base, err := json.Marshal((*alias)(r))
+	if err != nil {
+		return nil, err
+	}
+	if len(r.extraBody) == 0 {
+		return base, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	for k, v := range r.extraBody {
+		if consumedExtraBodyKeys[k] {
+			continue
+		}
+		if _, exists := m[k]; exists {
+			continue // never override a typed field
+		}
+		m[k] = v
+	}
+	return json.Marshal(m)
 }
 
 // ResponsesInputItem is one item in the Responses `input` array. A single struct
@@ -280,6 +323,7 @@ func BuildResponsesRequest(model string, messages []llms.Message, opts *llms.Cal
 	if v, ok := opts.ExtraBody["include_encrypted_reasoning"].(bool); ok && v {
 		req.Include = append(req.Include, "reasoning.encrypted_content")
 	}
+	req.extraBody = opts.ExtraBody
 	return req
 }
 
@@ -461,14 +505,17 @@ func convertResponsesFormat(format *llms.ResponseFormat) *ResponsesFormat {
 func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 	result := &llms.Response{ID: resp.ID}
 
-	var content, reasoning string
+	var content, reasoning, refusal string
 	var reasoningItems []ResponsesReasoningItem
 	for _, item := range resp.Output {
 		switch item.Type {
 		case itemTypeMessage:
 			for _, c := range item.Content {
-				if c.Type == "output_text" {
+				switch c.Type {
+				case "output_text":
 					content += c.Text
+				case "refusal":
+					refusal += c.Refusal
 				}
 			}
 		case "function_call":
@@ -505,6 +552,16 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 	}
 	result.FinishReason = responsesFinishReason(resp, len(result.ToolCalls) > 0)
 
+	// A safety refusal is distinct from an empty completion: surface the refusal
+	// text and a content_filter finish reason so moderation, routing, and logging
+	// can act on it instead of seeing an empty "stop".
+	if refusal != "" {
+		if result.Content == "" {
+			result.Content = refusal
+		}
+		result.FinishReason = llms.FinishReasonContentFilter
+	}
+
 	if resp.Usage != nil {
 		result.Usage = convertResponsesUsage(resp.Usage)
 		if result.Reasoning != nil && result.Usage.ReasoningTokens > 0 {
@@ -512,6 +569,29 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 		}
 	}
 	return result
+}
+
+// responsesResponseError returns a non-nil error when a Responses API response
+// reports failure — status "failed" or a populated top-level error object — so a
+// 200 body carrying {"status":"failed","error":{...},"output":[]} surfaces to the
+// caller as an error instead of a silent empty completion (which would suppress
+// retry and fallback). The failure DETECTION mirrors the streaming path's
+// "response.failed" handling (responses_stream.go); unlike that path's plain
+// error, this returns a typed *llms.APIError so callers can classify it. Returns
+// nil for a completed or incomplete response.
+func responsesResponseError(resp *ResponsesResponse) error {
+	if resp == nil || (resp.Status != "failed" && resp.Error == nil) {
+		return nil
+	}
+	msg := "responses request failed"
+	code := ""
+	if resp.Error != nil {
+		if resp.Error.Message != "" {
+			msg = resp.Error.Message
+		}
+		code = resp.Error.Code
+	}
+	return &llms.APIError{Message: msg, Code: code}
 }
 
 // responsesFinishReason derives a neutral finish reason from the response status

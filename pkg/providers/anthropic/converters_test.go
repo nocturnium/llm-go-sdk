@@ -87,3 +87,59 @@ func collectToolResults(messages []anthropicapi.Message, toolUseID string) []ant
 	}
 	return results
 }
+
+// TestConvertMessages_ReEmitsThinkingBlock pins that an assistant turn carrying a
+// signed Reasoning block is re-emitted with the thinking block FIRST, so an
+// agentic extended-thinking + tools loop does not 400 on turn 2 ("must start
+// with a thinking block").
+func TestConvertMessages_ReEmitsThinkingBlock(t *testing.T) {
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "weather?"},
+		{
+			Role:      llms.RoleAssistant,
+			Content:   "let me check",
+			Reasoning: &llms.ReasoningContent{Content: "thinking...", Signature: "sig123"},
+			ToolCalls: []llms.ToolCall{{ID: "t1", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "get_weather", Arguments: "{}"}}},
+		},
+	}
+	out, err := convertMessages(msgs)
+	if err != nil {
+		t.Fatalf("convertMessages: %v", err)
+	}
+	var asst *anthropicapi.Message
+	for i := range out {
+		if out[i].Role == "assistant" {
+			asst = &out[i]
+			break
+		}
+	}
+	if asst == nil || len(asst.Content) == 0 {
+		t.Fatalf("no assistant message: %+v", out)
+	}
+	first := asst.Content[0]
+	if first.Type != "thinking" || first.Signature != "sig123" || first.Thinking != "thinking..." {
+		t.Errorf("assistant turn must START with the signed thinking block, got %+v", asst.Content)
+	}
+}
+
+// TestConvertMessages_NoThinkingWithoutSignature pins that an unsigned reasoning
+// block (e.g. a summary) is NOT replayed as a thinking block, which Anthropic
+// would reject.
+func TestConvertMessages_NoThinkingWithoutSignature(t *testing.T) {
+	msgs := []llms.Message{{
+		Role:      llms.RoleAssistant,
+		Content:   "hi",
+		Reasoning: &llms.ReasoningContent{Content: "summary only", Signature: ""},
+	}}
+	out, err := convertMessages(msgs)
+	if err != nil {
+		t.Fatalf("convertMessages: %v", err)
+	}
+	for _, m := range out {
+		for _, c := range m.Content {
+			if c.Type == "thinking" {
+				t.Errorf("must not emit an unsigned thinking block: %+v", c)
+			}
+		}
+	}
+}

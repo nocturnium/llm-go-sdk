@@ -255,19 +255,45 @@ func CollectStream(stream <-chan StreamChunk) (StreamResult, error) {
 	var result StreamResult
 	var content strings.Builder
 	var reasoning strings.Builder
+	// Reasoning signature/metadata/tokens are typically delivered on a terminal
+	// reasoning chunk separate from the streamed text deltas; capture them (last
+	// non-empty wins) rather than discarding them, so the provider signature that
+	// authenticates the thinking block survives a streamed round-trip.
+	var reasoningSignature string
+	var reasoningMetadata map[string]any
+	var reasoningTokens int
+
+	buildReasoning := func() *ReasoningContent {
+		if reasoning.Len() == 0 && reasoningSignature == "" && reasoningMetadata == nil && reasoningTokens == 0 {
+			return nil
+		}
+		return &ReasoningContent{
+			Content:   reasoning.String(),
+			Signature: reasoningSignature,
+			Tokens:    reasoningTokens,
+			Metadata:  reasoningMetadata,
+		}
+	}
 
 	for chunk := range stream {
 		if chunk.Error != nil {
 			result.Content = content.String()
-			if reasoning.Len() > 0 {
-				result.Reasoning = &ReasoningContent{Content: reasoning.String()}
-			}
+			result.Reasoning = buildReasoning()
 			return result, chunk.Error
 		}
 
 		content.WriteString(chunk.Content)
 		if chunk.Reasoning != nil {
 			reasoning.WriteString(chunk.Reasoning.Content)
+			if chunk.Reasoning.Signature != "" {
+				reasoningSignature = chunk.Reasoning.Signature
+			}
+			if chunk.Reasoning.Metadata != nil {
+				reasoningMetadata = chunk.Reasoning.Metadata
+			}
+			if chunk.Reasoning.Tokens != 0 {
+				reasoningTokens = chunk.Reasoning.Tokens
+			}
 		}
 		if chunk.Done {
 			result.FinishReason = chunk.FinishReason
@@ -277,9 +303,7 @@ func CollectStream(stream <-chan StreamChunk) (StreamResult, error) {
 	}
 
 	result.Content = content.String()
-	if reasoning.Len() > 0 {
-		result.Reasoning = &ReasoningContent{Content: reasoning.String()}
-	}
+	result.Reasoning = buildReasoning()
 	return result, nil
 }
 
