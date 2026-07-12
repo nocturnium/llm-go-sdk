@@ -46,8 +46,9 @@ func WithResponseCache(cache ResponseCache) CacheClientOption {
 }
 
 // WithCacheKeyFunc overrides how a request is reduced to a cache key. The default
-// hashes the provider, effective model, messages, and output-affecting options
-// (sampling parameters, tools, tool choice, response format, reasoning).
+// hashes the provider, effective model, messages, and all output-affecting
+// options (sampling parameters, tools, tool choice, response format, reasoning,
+// message-merging, ExtraBody, and WebSearch) — see cacheKeyShape.
 func WithCacheKeyFunc(fn func(provider Provider, model string, messages []Message, opts *CallOptions) string) CacheClientOption {
 	return func(c *CachedClient) {
 		if fn != nil {
@@ -83,14 +84,12 @@ func (c *CachedClient) GenerateContent(ctx context.Context, messages []Message, 
 	key := c.keyFn(c.llm.Provider(), model, messages, applied)
 
 	if resp, ok := c.cache.Get(ctx, key); ok {
-		cp := *resp
-		return &cp, nil
+		return cloneResponse(resp), nil
 	}
 
 	resp, err := c.llm.GenerateContent(ctx, messages, options...)
 	if err == nil && resp != nil {
-		stored := *resp
-		c.cache.Set(ctx, key, &stored)
+		c.cache.Set(ctx, key, cloneResponse(resp))
 	}
 	return resp, err
 }
@@ -112,26 +111,40 @@ func (c *CachedClient) Unwrap() LLM { return c.llm }
 var _ LLM = (*CachedClient)(nil)
 var _ Wrapper = (*CachedClient)(nil)
 
-// defaultCacheKey hashes the output-affecting parts of a request. Fields that do
-// not change the model output (streaming buffer sizes, trace context, token
-// estimation, prompt-cache directives) are intentionally excluded.
+// cacheKeyShape enumerates every request field that the default cache key
+// hashes. Each field here MUST change the model's output; fields that only
+// affect cost, latency, transport, or observability are intentionally excluded
+// (see defaultCacheKey). TestDefaultCacheKey_CoversAllOutputAffectingOptions
+// reflects over this type and CallOptions to fail if a new output-affecting
+// option is added without being hashed here.
+type cacheKeyShape struct {
+	Provider              Provider
+	Model                 string
+	Messages              []Message
+	Temperature           *float64
+	MaxTokens             *int
+	TopP                  *float64
+	FrequencyPenalty      *float64
+	PresencePenalty       *float64
+	StopWords             []string
+	Tools                 []Tool
+	ToolChoice            *ToolChoice
+	ResponseFormat        *ResponseFormat
+	Reasoning             *ReasoningConfig
+	DisableMessageMerging bool
+	ExtraBody             map[string]any
+	WebSearch             *WebSearchConfig
+}
+
+// defaultCacheKey hashes the output-affecting parts of a request, including
+// provider-specific ExtraBody (e.g. a LoRAX adapter_id) and WebSearch grounding,
+// both of which change the model output. Fields that do NOT change the output —
+// prompt-cache directives (cost/latency), token estimation, stream buffer sizing,
+// and trace context — are intentionally excluded. A request that fails to marshal
+// (e.g. an ExtraBody holding an unmarshalable value) falls back to a sentinel and
+// simply never caches, which is the correct fail-safe.
 func defaultCacheKey(provider Provider, model string, messages []Message, opts *CallOptions) string {
-	type keyShape struct {
-		Provider         Provider
-		Model            string
-		Messages         []Message
-		Temperature      *float64
-		MaxTokens        *int
-		TopP             *float64
-		FrequencyPenalty *float64
-		PresencePenalty  *float64
-		StopWords        []string
-		Tools            []Tool
-		ToolChoice       *ToolChoice
-		ResponseFormat   *ResponseFormat
-		Reasoning        *ReasoningConfig
-	}
-	k := keyShape{
+	k := cacheKeyShape{
 		Provider: provider,
 		Model:    model,
 		Messages: messages,
@@ -147,6 +160,9 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 		k.ToolChoice = opts.ToolChoice
 		k.ResponseFormat = opts.ResponseFormat
 		k.Reasoning = opts.Reasoning
+		k.DisableMessageMerging = opts.DisableMessageMerging
+		k.ExtraBody = opts.ExtraBody
+		k.WebSearch = opts.WebSearch
 	}
 	data, err := json.Marshal(k)
 	if err != nil {
@@ -156,6 +172,57 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// cloneResponse deep-copies resp so the returned value shares no mutable
+// reference state (slices, pointers, maps) with the original. The cache stores a
+// clone on Set and returns a clone on Get, so mutating a returned Response's
+// ToolCalls, SearchResults, or Reasoning can neither poison the cached entry nor
+// race another concurrent cache hit. Returns nil for a nil input.
+//
+// Reasoning.Metadata is copied one level deep — sufficient because providers
+// populate it with scalar values; nested reference values inside Metadata are
+// not independently cloned.
+func cloneResponse(resp *Response) *Response {
+	if resp == nil {
+		return nil
+	}
+	cp := *resp // value fields (ID, Content, FinishReason, Usage) copy directly
+
+	if resp.ToolCalls != nil {
+		cp.ToolCalls = make([]ToolCall, len(resp.ToolCalls))
+		copy(cp.ToolCalls, resp.ToolCalls)
+		for i := range cp.ToolCalls {
+			if fn := cp.ToolCalls[i].Function; fn != nil {
+				fnCopy := *fn
+				cp.ToolCalls[i].Function = &fnCopy
+			}
+		}
+	}
+
+	if resp.SearchResults != nil {
+		cp.SearchResults = make([]SearchResult, len(resp.SearchResults))
+		copy(cp.SearchResults, resp.SearchResults)
+		for i := range cp.SearchResults {
+			if d := cp.SearchResults[i].Date; d != nil {
+				dCopy := *d
+				cp.SearchResults[i].Date = &dCopy
+			}
+		}
+	}
+
+	if resp.Reasoning != nil {
+		rc := *resp.Reasoning
+		if resp.Reasoning.Metadata != nil {
+			rc.Metadata = make(map[string]any, len(resp.Reasoning.Metadata))
+			for mk, mv := range resp.Reasoning.Metadata {
+				rc.Metadata[mk] = mv
+			}
+		}
+		cp.Reasoning = &rc
+	}
+
+	return &cp
 }
 
 // memoryCacheEntry is a cached response with its expiry.
