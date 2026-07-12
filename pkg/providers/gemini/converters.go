@@ -23,12 +23,18 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 	if candidate.Content != nil {
 		response.Content = geminiapi.ExtractTextContent(candidate.Content.Parts)
 
-		// Extract reasoning ("thought") content.
+		// Extract reasoning ("thought") content, preserving the thought
+		// signature so callers can inspect it for multi-turn replay.
 		if thought := geminiapi.ExtractThoughtContent(candidate.Content.Parts); thought != "" {
-			response.SetReasoning(&llms.ReasoningContent{Content: thought})
+			response.SetReasoning(&llms.ReasoningContent{
+				Content:   thought,
+				Signature: geminiapi.ExtractThoughtSignature(candidate.Content.Parts),
+			})
 		}
 
-		// Extract function calls
+		// Extract function calls. Gemini attaches a thoughtSignature to the
+		// functionCall part when thinking is enabled; carry it on the tool call
+		// so it can be echoed back on the next turn (see convertMessages).
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil {
 				tc := llms.ToolCall{
@@ -38,6 +44,7 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 						Name:      part.FunctionCall.Name,
 						Arguments: geminiapi.FunctionCallToJSON(part.FunctionCall),
 					},
+					Signature: part.ThoughtSignature,
 				}
 				response.ToolCalls = append(response.ToolCalls, tc)
 			}
@@ -123,7 +130,9 @@ func convertMessages(messages []llms.Message) []geminiapi.Content {
 			})
 		}
 
-		// Handle function calls in assistant messages
+		// Handle function calls in assistant messages. Echo back the Gemini
+		// thoughtSignature captured on the tool call so 2.5+ thinking models
+		// keep their reasoning context across the tool-calling round-trip.
 		for _, tc := range msg.ToolCalls {
 			if tc.Function != nil {
 				var args map[string]any
@@ -134,6 +143,7 @@ func convertMessages(messages []llms.Message) []geminiapi.Content {
 						Name: tc.Function.Name,
 						Args: args,
 					},
+					ThoughtSignature: tc.Signature,
 				})
 			}
 		}
