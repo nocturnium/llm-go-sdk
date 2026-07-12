@@ -255,6 +255,19 @@ func (t *stdioTransport) request(ctx context.Context, id int64, payload []byte) 
 		t.removePending(id)
 		return nil, ctx.Err()
 	case <-t.done:
+		// The transport closed, but a response may already have been delivered to
+		// ch before EOF (a one-shot server answers, then closes stdout). Both cases
+		// can be ready at once and select picks pseudo-randomly, so prefer a
+		// delivered response: returning "transport closed" for a call the server
+		// actually completed would make a non-idempotent tool (e.g. send email,
+		// create ticket) look failed and be retried, duplicating the side effect.
+		select {
+		case line, ok := <-ch:
+			if ok {
+				return line, nil
+			}
+		default:
+		}
 		return nil, orClosed(t.closeErr)
 	case line, ok := <-ch:
 		if !ok {
