@@ -134,6 +134,7 @@ func TestAPIError_StatusClassification(t *testing.T) {
 		{401, ErrAuthenticationFailed, false},
 		{403, ErrPermissionDenied, false},
 		{404, ErrModelNotFound, false},
+		{408, ErrTimeout, true},
 		{429, ErrRateLimited, true},
 		{500, ErrServerError, true},
 		{502, ErrServiceUnavailable, true},
@@ -183,6 +184,7 @@ func TestAPIError_IsRetryable(t *testing.T) {
 		{401, false},
 		{403, false},
 		{404, false},
+		{408, true},
 		{429, true},
 		{500, true},
 		{502, true},
@@ -253,6 +255,34 @@ func TestAPIError_QuotaClassification(t *testing.T) {
 			}
 			if got := IsTemporary(tc.err); got != tc.retryable {
 				t.Errorf("IsTemporary() = %v, want %v", got, tc.retryable)
+			}
+		})
+	}
+}
+
+// TestAPIError_IsRetryable_TypeFallback pins that when StatusCode is absent
+// (e.g. a streaming error carrying only Type/Code, StatusCode 0), IsRetryable
+// falls back to the sentinel classification — so a mid-stream rate limit or
+// server error is still recognized as retryable instead of defaulting to false.
+func TestAPIError_IsRetryable_TypeFallback(t *testing.T) {
+	tests := []struct {
+		name string
+		err  *APIError
+		want bool
+	}{
+		// Anthropic streaming builds APIError{Type:"rate_limit_error"} with no status.
+		{"streaming rate_limit_error", &APIError{Type: "rate_limit_error"}, true},
+		{"streaming server_error", &APIError{Type: "server_error"}, true},
+		{"streaming invalid_request_error", &APIError{Type: "invalid_request_error"}, false},
+		{"bare error, no status/type/code", &APIError{}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.err.IsRetryable(); got != tc.want {
+				t.Errorf("IsRetryable() = %v, want %v", got, tc.want)
+			}
+			if got := IsTemporary(tc.err); got != tc.want {
+				t.Errorf("IsTemporary() = %v, want %v", got, tc.want)
 			}
 		})
 	}

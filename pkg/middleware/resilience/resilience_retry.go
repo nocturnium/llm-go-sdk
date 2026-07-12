@@ -36,41 +36,32 @@ func DefaultRetryConfig() *RetryConfig {
 	}
 }
 
-// DefaultShouldRetry returns true for errors that are typically retryable
+// DefaultShouldRetry returns true for errors that are typically transient and
+// worth retrying. It shares a single classification with isProviderUnhealthy (see
+// isTransientProviderError), so the retry decision and the circuit-breaker health
+// decision can never disagree — a transient error is always both retried and
+// counted, and a terminal/client-side error is neither.
 func DefaultShouldRetry(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for specific error types
-	var apiErr *llms.APIError
-	if errors.As(err, &apiErr) {
-		switch apiErr.StatusCode {
-		case 429: // Rate limited
-			return true
-		case 500, 502, 503, 504: // Server errors
-			return true
-		}
-	}
-
-	// Check for context errors (not retryable)
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-
-	// Check for circuit breaker (not retryable - breaker handles its own timing)
-	if errors.Is(err, ErrCircuitOpen) {
-		return false
-	}
-
-	return false
+	return isTransientProviderError(err)
 }
 
-// isProviderUnhealthy reports whether an error indicates the upstream provider
-// is unhealthy, i.e. the kind of transient failure the circuit breaker exists to
-// protect against. It deliberately returns false for context cancellation,
-// context deadlines, 4xx client errors other than 429, and circuit-open errors.
+// isProviderUnhealthy reports whether an error indicates the upstream provider is
+// unhealthy — the kind of transient failure the circuit breaker exists to protect
+// against. It shares one classification with DefaultShouldRetry.
 func isProviderUnhealthy(err error) bool {
+	return isTransientProviderError(err)
+}
+
+// isTransientProviderError is the single source of truth for "is this a transient
+// upstream failure worth retrying and counting against the breaker". It is true
+// for retryable HTTP statuses (408, 429, and 5xx including 529, plus streaming
+// Type/Code equivalents) and transient transport errors (EOF, connection
+// reset/refused, socket timeouts). It is deliberately false for caller-side
+// signals — context cancellation/deadline, circuit-open, terminal 4xx (including
+// quota), and client-side configuration errors such as DNS failures — so a burst
+// of bad requests or a mistyped host neither retries pointlessly nor trips the
+// breaker on an otherwise healthy provider.
+func isTransientProviderError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -81,14 +72,15 @@ func isProviderUnhealthy(err error) bool {
 		return false
 	}
 
+	// Upstream HTTP errors: defer to the errors-package classifier (the same one
+	// behind APIError.IsRetryable / IsTemporary) so 408/429/5xx/529 and streaming
+	// Type/Code equivalents are transient while quota and terminal 4xx are not.
 	var apiErr *llms.APIError
 	if errors.As(err, &apiErr) {
-		switch apiErr.StatusCode {
-		case 429, 500, 502, 503, 504:
-			return true
-		}
+		return apiErr.IsRetryable()
 	}
 
+	// Transient transport failures from the provider connection.
 	if errors.Is(err, io.EOF) ||
 		errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, syscall.ECONNREFUSED) ||
@@ -96,8 +88,19 @@ func isProviderUnhealthy(err error) bool {
 		return true
 	}
 
+	// A DNS resolution failure is a client-side/config error, not a provider
+	// health signal; retrying it will not help and it must not trip the breaker.
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return false
+	}
+	// A genuine socket timeout to the provider is transient; other non-timeout
+	// net errors are treated as client-side and excluded.
 	var netErr net.Error
-	return errors.As(err, &netErr)
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
 }
 
 // calculateDelay calculates the retry delay with jitter

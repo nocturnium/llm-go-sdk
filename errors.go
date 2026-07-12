@@ -102,6 +102,7 @@ var apiStatusClassifications = map[int]apiStatusClassification{
 	401: {err: ErrAuthenticationFailed},
 	403: {err: ErrPermissionDenied},
 	404: {err: ErrModelNotFound},
+	408: {err: ErrTimeout, retryable: true},
 	429: {err: ErrRateLimited, retryable: true},
 	500: {err: ErrServerError, retryable: true},
 	502: {err: ErrServiceUnavailable, retryable: true},
@@ -211,7 +212,17 @@ func (e *APIError) IsRetryable() bool {
 	case apiErrorCodeQuotaExceeded, apiErrorCodeInsufficientQuota:
 		return false
 	}
-	return apiStatusClassifications[e.StatusCode].retryable
+	if classification, ok := apiStatusClassifications[e.StatusCode]; ok {
+		return classification.retryable
+	}
+	// StatusCode is absent or unrecognized (e.g. a streaming error carrying only
+	// Type/Code with StatusCode 0). Fall back to the sentinel classification so a
+	// mid-stream rate limit, server error, or timeout is still retryable.
+	underlying := e.underlyingError()
+	return errors.Is(underlying, ErrRateLimited) ||
+		errors.Is(underlying, ErrServerError) ||
+		errors.Is(underlying, ErrServiceUnavailable) ||
+		errors.Is(underlying, ErrTimeout)
 }
 
 // ValidationError represents a parameter validation error
