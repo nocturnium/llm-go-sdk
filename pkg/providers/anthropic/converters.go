@@ -129,6 +129,20 @@ func convertMessages(messages []llms.Message) ([]anthropicapi.Message, error) {
 			}
 		}
 
+		// Anthropic requires an assistant turn that used extended thinking to BEGIN
+		// with its thinking block; re-emit it from Message.Reasoning so the second
+		// and later turns of an agentic thinking+tools loop do not fail with
+		// "messages.N: must start with a thinking block". Only a signed block can
+		// be replayed (an unsigned summary would itself be rejected).
+		if msg.Role == llms.RoleAssistant && msg.Reasoning != nil && msg.Reasoning.Signature != "" {
+			thinking := anthropicapi.ContentPart{
+				Type:      "thinking",
+				Thinking:  msg.Reasoning.Content,
+				Signature: msg.Reasoning.Signature,
+			}
+			content = append([]anthropicapi.ContentPart{thinking}, content...)
+		}
+
 		// Apply a per-message cache breakpoint to the last content block so the
 		// prompt prefix up to this message is cached.
 		if msg.CacheControl != nil && len(content) > 0 {
