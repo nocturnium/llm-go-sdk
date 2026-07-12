@@ -237,3 +237,81 @@ func TestMemoryResponseCache_NoExpiryWhenTTLZero(t *testing.T) {
 		t.Error("entry expired despite TTL=0 (never expire)")
 	}
 }
+
+func TestMemoryResponseCache_BoundedEviction(t *testing.T) {
+	cache := NewBoundedMemoryResponseCache(time.Minute, 3)
+	ctx := context.Background()
+	for i := 0; i < 20; i++ {
+		cache.Set(ctx, fmt.Sprintf("k%d", i), &Response{Content: "v"})
+	}
+	if cache.Len() > 3 {
+		t.Errorf("bounded cache exceeded cap: Len=%d, want <=3", cache.Len())
+	}
+}
+
+func TestMemoryResponseCache_UnboundedByDefault(t *testing.T) {
+	cache := NewMemoryResponseCache(time.Minute) // unbounded
+	ctx := context.Background()
+	for i := 0; i < 200; i++ {
+		cache.Set(ctx, fmt.Sprintf("k%d", i), &Response{Content: "v"})
+	}
+	if cache.Len() != 200 {
+		t.Errorf("NewMemoryResponseCache should stay unbounded: Len=%d, want 200", cache.Len())
+	}
+}
+
+func TestNewCachedClient_DefaultCacheIsBounded(t *testing.T) {
+	c := NewCachedClient(NewMockLLM(WithMockGenerateResponse(&Response{Content: "x"})))
+	mrc, ok := c.cache.(*MemoryResponseCache)
+	if !ok {
+		t.Fatalf("default cache type = %T, want *MemoryResponseCache", c.cache)
+	}
+	if mrc.maxEntries <= 0 {
+		t.Errorf("default cache must be bounded to prevent OOM, maxEntries=%d", mrc.maxEntries)
+	}
+}
+
+// TestMemoryResponseCache_EvictsEarliestExpiringFirst makes the eviction-ORDER
+// policy load-bearing: at capacity the earliest-expiring entry is the victim and
+// a never-expire entry survives.
+func TestMemoryResponseCache_EvictsEarliestExpiringFirst(t *testing.T) {
+	cache := NewBoundedMemoryResponseCache(time.Hour, 3)
+	base := time.Unix(1000, 0)
+	cache.now = func() time.Time { return base }
+
+	cache.mu.Lock()
+	cache.entries["old"] = memoryCacheEntry{resp: &Response{}, expires: base.Add(time.Minute)}
+	cache.entries["mid"] = memoryCacheEntry{resp: &Response{}, expires: base.Add(time.Hour)}
+	cache.entries["never"] = memoryCacheEntry{resp: &Response{}, expires: time.Time{}} // never expires
+	cache.mu.Unlock()
+
+	// At cap (3); a 4th distinct key evicts the earliest-expiring ("old").
+	cache.Set(context.Background(), "new", &Response{})
+
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if _, ok := cache.entries["old"]; ok {
+		t.Error("earliest-expiring 'old' should have been evicted")
+	}
+	if _, ok := cache.entries["never"]; !ok {
+		t.Error("never-expire 'never' should have survived")
+	}
+	if _, ok := cache.entries["new"]; !ok {
+		t.Error("'new' should have been inserted")
+	}
+}
+
+// TestMemoryResponseCache_EmptyStringKeyDoesNotDefeatEviction guards the bug
+// where "" (a valid map key) collided with the eviction sentinel and leaked the
+// cap.
+func TestMemoryResponseCache_EmptyStringKeyDoesNotDefeatEviction(t *testing.T) {
+	cache := NewBoundedMemoryResponseCache(time.Hour, 1)
+	ctx := context.Background()
+	cache.Set(ctx, "", &Response{}) // empty-string key is legitimate
+	for i := 0; i < 50; i++ {
+		cache.Set(ctx, fmt.Sprintf("k%d", i), &Response{})
+	}
+	if cache.Len() > 1 {
+		t.Errorf("cap=1 exceeded — empty-string key defeated eviction: Len=%d", cache.Len())
+	}
+}

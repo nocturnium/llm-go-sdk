@@ -65,7 +65,7 @@ func NewCachedClient(llm LLM, opts ...CacheClientOption) *CachedClient {
 		opt(c)
 	}
 	if c.cache == nil {
-		c.cache = NewMemoryResponseCache(5 * time.Minute)
+		c.cache = NewBoundedMemoryResponseCache(5*time.Minute, defaultCacheMaxEntries)
 	}
 	if c.keyFn == nil {
 		c.keyFn = defaultCacheKey
@@ -231,22 +231,39 @@ type memoryCacheEntry struct {
 	expires time.Time
 }
 
-// MemoryResponseCache is an in-memory ResponseCache with per-entry TTL expiry.
-// The zero value is not usable; construct with NewMemoryResponseCache.
+// defaultCacheMaxEntries bounds the default in-memory cache so a high-cardinality,
+// low-repeat workload cannot grow it without limit (OOM). Generous enough that
+// realistic repeat-heavy workloads never evict.
+const defaultCacheMaxEntries = 10000
+
+// MemoryResponseCache is an in-memory ResponseCache with per-entry TTL expiry and
+// an optional maximum size. The zero value is not usable; construct with
+// NewMemoryResponseCache or NewBoundedMemoryResponseCache.
 type MemoryResponseCache struct {
-	ttl     time.Duration
-	mu      sync.Mutex
-	entries map[string]memoryCacheEntry
-	now     func() time.Time // injectable clock for tests
+	ttl        time.Duration
+	maxEntries int // 0 = unbounded
+	mu         sync.Mutex
+	entries    map[string]memoryCacheEntry
+	now        func() time.Time // injectable clock for tests
 }
 
 // NewMemoryResponseCache returns an in-memory cache whose entries expire after
-// ttl. A ttl of 0 means entries never expire.
+// ttl. A ttl of 0 means entries never expire. The cache is UNBOUNDED; for
+// high-cardinality workloads use NewBoundedMemoryResponseCache to cap memory.
 func NewMemoryResponseCache(ttl time.Duration) *MemoryResponseCache {
+	return NewBoundedMemoryResponseCache(ttl, 0)
+}
+
+// NewBoundedMemoryResponseCache returns an in-memory cache that, in addition to
+// ttl expiry, evicts entries once it would exceed maxEntries — first dropping
+// expired entries, then the earliest-expiring one — so memory stays bounded
+// under high-cardinality traffic. maxEntries <= 0 means unbounded.
+func NewBoundedMemoryResponseCache(ttl time.Duration, maxEntries int) *MemoryResponseCache {
 	return &MemoryResponseCache{
-		ttl:     ttl,
-		entries: make(map[string]memoryCacheEntry),
-		now:     time.Now,
+		ttl:        ttl,
+		maxEntries: maxEntries,
+		entries:    make(map[string]memoryCacheEntry),
+		now:        time.Now,
 	}
 }
 
@@ -273,7 +290,48 @@ func (m *MemoryResponseCache) Set(_ context.Context, key string, resp *Response)
 	if m.ttl > 0 {
 		expires = m.now().Add(m.ttl)
 	}
+	if m.maxEntries > 0 {
+		if _, replacing := m.entries[key]; !replacing && len(m.entries) >= m.maxEntries {
+			m.evictLocked()
+		}
+	}
 	m.entries[key] = memoryCacheEntry{resp: resp, expires: expires}
+}
+
+// evictLocked frees room in a bounded cache that is at capacity: it first drops
+// all expired entries, then, if still at capacity, evicts the earliest-expiring
+// entry (never-expire entries are evicted last). Caller must hold m.mu.
+//
+// Selecting the victim is an O(maxEntries) scan, so at capacity every
+// non-replacing Set pays one linear pass. This is an accepted tradeoff for a
+// simple map-based cache (bounded, microsecond-scale at the default 10k cap); a
+// heap or LRU list would be the follow-up if a much larger cap is ever needed.
+func (m *MemoryResponseCache) evictLocked() {
+	now := m.now()
+	for k, e := range m.entries {
+		if !e.expires.IsZero() && now.After(e.expires) {
+			delete(m.entries, k)
+		}
+	}
+	for len(m.entries) >= m.maxEntries {
+		var evictKey string
+		var evictExp time.Time
+		found := false // NOT `evictKey == ""` — "" is a legitimate map key
+		for k, e := range m.entries {
+			switch {
+			case !found:
+				evictKey, evictExp, found = k, e.expires, true
+			case e.expires.IsZero():
+				// never-expire: don't prefer over an expiring candidate
+			case evictExp.IsZero() || e.expires.Before(evictExp):
+				evictKey, evictExp = k, e.expires
+			}
+		}
+		if !found {
+			break
+		}
+		delete(m.entries, evictKey)
+	}
 }
 
 // Len returns the number of entries currently held (including any not yet
