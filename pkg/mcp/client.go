@@ -217,8 +217,13 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 	t.onNotification(c.dispatchNotification)
 	if err := c.initialize(ctx); err != nil {
 		_ = t.close()
+		c.notifier.stop() // don't leak the notification pump when the handshake fails
 		return nil, err
 	}
+	// TODO(WS-5): if the caller cancels ctx without ever calling Close, the
+	// notification pump still leaks. A race-free fix (context.AfterFunc wired to
+	// Close, with deregistration to avoid retaining the client under a long-lived
+	// context) is tracked as a transport-lifecycle follow-up.
 	return c, nil
 }
 
