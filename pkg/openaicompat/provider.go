@@ -111,6 +111,9 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 		if err != nil {
 			return nil, WrapError(p.config.Provider, "generate content", err)
 		}
+		if ferr := responsesResponseError(resp); ferr != nil {
+			return nil, WrapError(p.config.Provider, "generate content", ferr)
+		}
 		result = ConvertResponsesResponse(resp)
 	} else {
 		req := BuildChatRequest(model, prepared, opts, false)

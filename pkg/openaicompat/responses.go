@@ -514,6 +514,29 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 	return result
 }
 
+// responsesResponseError returns a non-nil error when a Responses API response
+// reports failure — status "failed" or a populated top-level error object — so a
+// 200 body carrying {"status":"failed","error":{...},"output":[]} surfaces to the
+// caller as an error instead of a silent empty completion (which would suppress
+// retry and fallback). The failure DETECTION mirrors the streaming path's
+// "response.failed" handling (responses_stream.go); unlike that path's plain
+// error, this returns a typed *llms.APIError so callers can classify it. Returns
+// nil for a completed or incomplete response.
+func responsesResponseError(resp *ResponsesResponse) error {
+	if resp == nil || (resp.Status != "failed" && resp.Error == nil) {
+		return nil
+	}
+	msg := "responses request failed"
+	code := ""
+	if resp.Error != nil {
+		if resp.Error.Message != "" {
+			msg = resp.Error.Message
+		}
+		code = resp.Error.Code
+	}
+	return &llms.APIError{Message: msg, Code: code}
+}
+
 // responsesFinishReason derives a neutral finish reason from the response status
 // and whether tool calls were produced.
 func responsesFinishReason(resp *ResponsesResponse, hasToolCalls bool) llms.FinishReason {
