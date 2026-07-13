@@ -143,7 +143,7 @@ func main() {
 		CompletionTokens: 500,
 	}
 
-	estimatedCost := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", usage)
+	estimatedCost, _ := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", usage)
 	fmt.Printf("Estimated cost for 1000 prompt + 500 completion tokens on GPT-4o:\n")
 	fmt.Printf("  %s\n\n", llms.FormatCost(estimatedCost))
 

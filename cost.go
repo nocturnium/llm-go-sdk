@@ -523,28 +523,18 @@ func (m *CostMiddleware) Tracker() *CostTracker {
 // Ensure CostMiddleware implements LLM.
 var _ LLM = (*CostMiddleware)(nil)
 
-// EstimateCostKnown calculates the estimated cost for a given usage using
-// default pricing. The boolean return value is false when no pricing is known
-// for the provider/model, which distinguishes unknown pricing from a real
-// zero-cost model. Register custom pricing on a CostTracker when defaults do not
-// include a provider/model.
-func EstimateCostKnown(provider Provider, model string, usage Usage) (float64, bool) {
+// EstimateCost calculates the estimated cost for a given usage using the
+// built-in DefaultPricing table. The boolean is false when no built-in pricing
+// exists for the provider/model — callers must not treat that as a real
+// zero-cost model. Register custom pricing on a CostTracker when the defaults do
+// not include a provider/model.
+func EstimateCost(provider Provider, model string, usage Usage) (float64, bool) {
 	key := fmt.Sprintf("%s:%s", provider, model)
 	pricing, ok := DefaultPricing[key]
 	if !ok {
 		return 0, false
 	}
 	return pricing.cost(usage), true
-}
-
-// EstimateCost calculates the estimated cost for a given usage using default
-// pricing. It returns 0 when pricing is unknown for backward compatibility; use
-// EstimateCostKnown when callers must distinguish unknown pricing from a real
-// zero-cost model. Register custom pricing on a CostTracker when defaults do not
-// include a provider/model.
-func EstimateCost(provider Provider, model string, usage Usage) float64 {
-	cost, _ := EstimateCostKnown(provider, model, usage)
-	return cost
 }
 
 // FormatCost formats a cost value as a USD string.

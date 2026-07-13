@@ -448,14 +448,16 @@ tracker.SetPricing(llms.ProviderOpenAI, "my-finetune", llms.Pricing{
 For a one-off estimate without a tracker, use the package helpers:
 
 ```go
-cost := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", resp.Usage)
-fmt.Println(llms.FormatCost(cost)) // e.g. "$0.0123" (4 decimals under 1 cent)
+cost, known := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", resp.Usage)
+if known {
+	fmt.Println(llms.FormatCost(cost)) // e.g. "$0.0123" (4 decimals under 1 cent)
+}
 ```
 
-`EstimateCost` returns `$0` for an unknown model. To tell unknown pricing apart
-from a real zero-cost model, use
-`cost, known := llms.EstimateCostKnown(provider, model, usage)` (or check the
-`bool` from `tracker.Record` / `tracker.GetPricing`).
+`EstimateCost` returns `(cost, known)`; `known` is `false` when no built-in
+pricing exists for the model, which distinguishes unknown pricing from a real
+zero-cost model — do not treat the returned `0` as free. (The `bool` from
+`tracker.Record` / `tracker.GetPricing` carries the same signal.)
 
 `llms.FormatCost` renders 4 decimal places for sub-cent values and 2 decimals
 otherwise.

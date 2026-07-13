@@ -35,7 +35,7 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 	}
 	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
 	for _, c := range cases {
-		got, known := EstimateCostKnown(c.provider, c.model, u)
+		got, known := EstimateCost(c.provider, c.model, u)
 		if !known {
 			t.Errorf("%s:%s pricing is unknown", c.provider, c.model)
 		}
@@ -620,7 +620,7 @@ func TestEstimateCost(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(string(tc.provider)+":"+tc.model, func(t *testing.T) {
-			cost := EstimateCost(tc.provider, tc.model, tc.usage)
+			cost, _ := EstimateCost(tc.provider, tc.model, tc.usage)
 			if cost != tc.expected {
 				t.Errorf("cost = %f, want %f", cost, tc.expected)
 			}
@@ -629,7 +629,7 @@ func TestEstimateCost(t *testing.T) {
 }
 
 func TestEstimateCost_UnknownPricing(t *testing.T) {
-	cost, known := EstimateCostKnown(Provider("unpriced"), "missing-model", Usage{PromptTokens: 1000})
+	cost, known := EstimateCost(Provider("unpriced"), "missing-model", Usage{PromptTokens: 1000})
 	if known {
 		t.Fatal("expected pricing to be unknown")
 	}
@@ -638,7 +638,7 @@ func TestEstimateCost_UnknownPricing(t *testing.T) {
 	}
 }
 
-func TestEstimateCostKnown_LocalProvidersIntentionallyUnpriced(t *testing.T) {
+func TestEstimateCost_LocalProvidersIntentionallyUnpriced(t *testing.T) {
 	tests := []struct {
 		provider Provider
 		model    string
@@ -649,7 +649,7 @@ func TestEstimateCostKnown_LocalProvidersIntentionallyUnpriced(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(string(tc.provider), func(t *testing.T) {
-			cost, known := EstimateCostKnown(tc.provider, tc.model, Usage{PromptTokens: 1000})
+			cost, known := EstimateCost(tc.provider, tc.model, Usage{PromptTokens: 1000})
 			if known {
 				t.Fatal("expected pricing to be unknown")
 			}

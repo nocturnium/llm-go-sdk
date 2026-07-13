@@ -73,8 +73,8 @@ func TestEstimateCost_DiscountsCacheReads(t *testing.T) {
 	cached := Usage{PromptTokens: 100, CompletionTokens: 100, CacheReadTokens: 9000}
 	uncached := Usage{PromptTokens: 9100, CompletionTokens: 100}
 
-	cachedCost := EstimateCost(ProviderAnthropic, model, cached)
-	uncachedCost := EstimateCost(ProviderAnthropic, model, uncached)
+	cachedCost, _ := EstimateCost(ProviderAnthropic, model, cached)
+	uncachedCost, _ := EstimateCost(ProviderAnthropic, model, uncached)
 	if cachedCost >= uncachedCost {
 		t.Errorf("expected cached cost (%v) < uncached cost (%v)", cachedCost, uncachedCost)
 	}
