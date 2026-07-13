@@ -81,15 +81,6 @@ func TestWithReasoningComposesOrthogonalFieldsRegardlessOfOrder(t *testing.T) {
 				WithReasoningEffort(ReasoningEffortHigh),
 			},
 		},
-		{
-			name: "thinking mode before config",
-			opts: []CallOption{
-				WithThinkingMode(true),
-				WithReasoning(ReasoningConfig{}),
-				WithReasoningEffort(ReasoningEffortHigh),
-				WithReasoningBudget(8192),
-			},
-		},
 	}
 
 	for _, tc := range cases {
@@ -109,7 +100,7 @@ func TestWithReasoningIncomingConfigOverridesSetFields(t *testing.T) {
 	opts := ApplyOptions(
 		WithReasoningEffort(ReasoningEffortLow),
 		WithReasoningBudget(1024),
-		WithThinkingMode(true),
+		WithReasoning(ReasoningConfig{Enabled: boolPtr(true)}),
 		WithReasoning(ReasoningConfig{
 			Effort:       ReasoningEffortHigh,
 			BudgetTokens: 4096,
@@ -124,9 +115,9 @@ func TestWithReasoningIncomingConfigOverridesSetFields(t *testing.T) {
 	})
 }
 
-func TestWithReasoningPreservesExplicitThinkingModeFalse(t *testing.T) {
+func TestWithReasoningPreservesExplicitEnabledFalse(t *testing.T) {
 	opts := ApplyOptions(
-		WithThinkingMode(false),
+		WithReasoning(ReasoningConfig{Enabled: boolPtr(false)}),
 		WithReasoning(ReasoningConfig{
 			Effort:       ReasoningEffortHigh,
 			BudgetTokens: 8192,
@@ -139,7 +130,7 @@ func TestWithReasoningPreservesExplicitThinkingModeFalse(t *testing.T) {
 		Enabled:      boolPtr(false),
 	})
 	if opts.Reasoning.IsEnabled() {
-		t.Error("expected explicit thinking mode false to keep reasoning disabled")
+		t.Error("expected explicit Enabled=false to keep reasoning disabled")
 	}
 }
 
@@ -155,19 +146,6 @@ func TestResponseReasoningText(t *testing.T) {
 	resp.SetReasoning(&ReasoningContent{Content: "because"})
 	if got := resp.ReasoningText(); got != "because" {
 		t.Errorf("expected %q, got %q", "because", got)
-	}
-	if resp.Reasoning != resp.Thinking() {
-		t.Error("expected Thinking method to return Reasoning")
-	}
-}
-
-func TestThinkingContentAliasIdentity(t *testing.T) {
-	// ThinkingContent must remain a true alias of ReasoningContent: a
-	// *ThinkingContent must be assignable wherever *ReasoningContent is expected.
-	tc := &ThinkingContent{Content: "ok"}
-	resp := &Response{Reasoning: tc} // compiles only if the types are identical
-	if resp.ReasoningText() != "ok" {
-		t.Error("ThinkingContent is not an alias of ReasoningContent")
 	}
 }
 

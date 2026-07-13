@@ -80,7 +80,7 @@ output shape (`WithJSONMode` for a JSON object, `WithJSONSchema` for schema-cons
 JSON), streaming tuning (`WithStreamBufferSize`, `WithStreamSendTimeout`), message
 handling (`WithDisableMessageMerging`), token accounting (`WithEstimateTokens`),
 per-call trace context (`WithTrace(TraceOptions{...})`), and provider-specific escape
-hatches (`WithExtraBody`, `WithAdapterID`, `WithThinkingMode`, `WithWebSearch`).
+hatches (`WithExtraBody`, `WithAdapterID`, `WithWebSearch`).
 
 `WithMaxTokens(int)` is unchanged for callers, but internally `CallOptions.MaxTokens`
 is now a `*int`: unset means "use the provider/model default" (Anthropic still sends an
@@ -238,7 +238,7 @@ llm-go-sdk/
 ├── *.go                      # ROOT package `llms`: the real core types & logic
 │   ├── llms.go               #   LLM interface, Provider consts, Capabilities, Wrapper/UnwrapAll
 │   ├── message.go            #   Message, Role, message prep/merge/validate
-│   ├── response.go           #   Response, Usage, ThinkingContent, StreamChunk
+│   ├── response.go           #   Response, Usage, ReasoningContent, StreamChunk
 │   ├── options.go            #   CallOption / CallOptions / With* builders
 │   ├── tools.go              #   Tool, ToolCall, ToolChoice, ToolRegistry, handlers
 │   ├── vision.go             #   ContentPart, ImageContent, image helpers

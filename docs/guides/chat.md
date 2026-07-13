@@ -179,9 +179,6 @@ type Response struct {
 }
 ```
 
-`Thinking`/`ThinkingContent` is a deprecated alias retained for backward
-compatibility; use `Reasoning`/`ReasoningContent` in new code.
-
 ### Content
 
 The primary text output. For a plain chat call this is all you usually need:
@@ -253,7 +250,7 @@ fmt.Println(resp.ReasoningText()) // safe empty string when no reasoning is pres
 
 `ReasoningContent` has `Content string`, `Tokens int`, `Signature string` (used
 by Anthropic extended thinking), and a `Metadata map[string]any` for
-provider-specific detail. `ThinkingContent` is a deprecated alias.
+provider-specific detail.
 
 ---
 

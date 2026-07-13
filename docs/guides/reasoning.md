@@ -89,6 +89,7 @@ if caps.Reasoning {
 
 ## Migration
 
-`WithThinkingMode(bool)` is deprecated in favor of `WithReasoning`. The
-`Response.Thinking` field and `ThinkingContent` type remain as deprecated aliases
-of `Response.Reasoning` and `ReasoningContent`; prefer the canonical names.
+The old `WithThinkingMode(bool)` option, the `Response.Thinking()` /
+`StreamChunk.Thinking()` methods, and the `ThinkingContent` type alias were
+**removed in v5**. Use `WithReasoning` (or `WithReasoningEffort` /
+`WithReasoningBudget`), the `Reasoning` field, and `ReasoningContent`.

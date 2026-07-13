@@ -35,16 +35,6 @@ type Response struct {
 	SearchResults []SearchResult    `json:"search_results,omitempty"` // Web search results when WebSearch.IncludeResults is true
 }
 
-// Thinking returns the model's reasoning content.
-//
-// Deprecated: use Reasoning.
-func (r *Response) Thinking() *ReasoningContent {
-	if r == nil {
-		return nil
-	}
-	return r.Reasoning
-}
-
 // SetReasoning sets the canonical Reasoning field. Providers use this to
 // surface reasoning output without duplicating assignments.
 func (r *Response) SetReasoning(rc *ReasoningContent) {
@@ -103,14 +93,4 @@ type StreamChunk struct {
 
 	// Done indicates this is the final chunk
 	Done bool `json:"done,omitempty"`
-}
-
-// Thinking returns the model's reasoning content for this chunk.
-//
-// Deprecated: use Reasoning.
-func (c *StreamChunk) Thinking() *ReasoningContent {
-	if c == nil {
-		return nil
-	}
-	return c.Reasoning
 }
