@@ -197,10 +197,10 @@ all shared types live in the root package.
 
 | Package | Import path | What's in it |
 |---------|-------------|--------------|
-| Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v2` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
-| Providers | `github.com/nocturnium/llm-go-sdk/v2/pkg/providers/<name>` | The 18 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
-| All-providers registry | `github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all` | Blank-import only. Registers all 17 chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
-| OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
+| Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v4` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
+| Providers | `github.com/nocturnium/llm-go-sdk/v4/pkg/providers/<name>` | The 18 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
+| All-providers registry | `github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all` | Blank-import only. Registers all 17 chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
+| OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
 
 Everything else lives under `internal/` and is not importable by external code.
 
@@ -217,8 +217,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
 )
 
 func main() {
@@ -251,8 +251,8 @@ factory, then call `llms.New` or `llms.NewFromEnv`:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all" // registers all 17 chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v4"
+	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // registers all 17 chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o-mini"})
@@ -262,7 +262,7 @@ client, err = llms.NewFromEnv()
 ```
 
 `llms.Config` holds the common construction settings (`APIKey`, `Model`, `BaseURL`,
-`Timeout`, `AllowPrivateIPs`, `HTTPClient`) plus `Extra map[string]string` for
+`Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 
 ## Adding middleware

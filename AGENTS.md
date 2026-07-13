@@ -732,7 +732,6 @@ const defaultBaseURL = "https://api.<provider>.com/v1"
 // defaultProviderConfig declares the provider's identity and capability defaults.
 var defaultProviderConfig = openaicompat.ProviderConfig{
     Provider:     llms.Provider<Name>,
-    ProviderName: "<name>",
     Capabilities: llms.Capabilities{ /* Streaming, Tools, JSONMode, ... */ },
 }
 

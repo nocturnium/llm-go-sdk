@@ -17,7 +17,7 @@ type options struct {
 	HTTPClient     *http.Client
 	Timeout        time.Duration
 	RunPodMode     bool // Use RunPod serverless API format
-	// AllowPrivateIPs allows requests to private/loopback IPs and plain HTTP.
+	// AllowPrivateIPs allows requests to private/loopback IPs.
 	// Defaults to true for Infinity since it targets http://localhost.
 	AllowPrivateIPs bool
 	// AllowHTTP allows plain-HTTP (non-HTTPS) requests.

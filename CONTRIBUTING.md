@@ -145,19 +145,15 @@ package**, imported as `llms`:
 import llms "github.com/nocturnium/llm-go-sdk/v4"
 ```
 
-The `pkg/types`, `pkg/options`, `pkg/errors`, and `pkg/streaming` packages are
-thin **alias packages** that re-export the root — they exist for ergonomics and
-clarity, not as separate sources of truth.
+The root package is the single source of truth for the core types (`Message`,
+`Response`, `CallOption`, the error sentinels, and the streaming helpers). There
+are no separate re-export "alias" packages — import the root directly.
 
 **Providers** live under their canonical path:
 
 ```go
 import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
 ```
-
-> The top-level `providers/<name>` packages are **deprecated backwards-compat
-> shims**. New code (and any new provider you add) must use
-> `pkg/providers/<name>`.
 
 ---
 

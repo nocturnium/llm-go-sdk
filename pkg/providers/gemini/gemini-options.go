@@ -16,7 +16,7 @@ type options struct {
 	BaseURL        string
 	HTTPClient     *http.Client
 	Timeout        time.Duration
-	// AllowPrivateIPs allows requests to private/loopback IPs and plain HTTP.
+	// AllowPrivateIPs allows requests to private/loopback IPs.
 	// Off by default for SSRF safety; see WithAllowPrivateIPs.
 	AllowPrivateIPs bool
 	// AllowHTTP allows plain-HTTP (non-HTTPS) requests.

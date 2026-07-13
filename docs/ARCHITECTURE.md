@@ -101,7 +101,7 @@ and the apply helper are unexported implementation details.
 Providers can also be constructed by name through the package-level registry:
 `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` (reading `LLM_PROVIDER` /
 `LLM_MODEL`). `llms.Config` carries the common settings (`APIKey`, `Model`, `BaseURL`,
-`Timeout`, `AllowPrivateIPs`, `HTTPClient`) plus an `Extra map[string]string` for
+`Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus an `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 Each provider package registers its factory in `init()`; blank-importing
 `pkg/providers/all` wires up all 17 chat providers at once.

@@ -15,11 +15,12 @@ There is no long-term support for previous majors.
 
 | Version | Module path | Status |
 |---------|-------------|--------|
-| **v3.x** | `github.com/nocturnium/llm-go-sdk/v4` | **Supported** — current; all fixes and new work land here |
+| **v4.x** | `github.com/nocturnium/llm-go-sdk/v4` | **Supported** — current; all fixes and new work land here |
+| v3.x | `github.com/nocturnium/llm-go-sdk/v3` | **End of life** as of 2026-06-21 — no further releases, bug fixes, or security backports |
 | v2.x | `github.com/nocturnium/llm-go-sdk/v2` | **End of life** as of 2026-06-19 — no further releases, bug fixes, or security backports |
 | v1.x | `github.com/nocturnium/llm-go-sdk` | **End of life** as of 2026-06-15 — no further releases, bug fixes, or security backports |
 
-All bug fixes and security patches land on the current major (**v3.x**) only. If you
+All bug fixes and security patches land on the current major (**v4.x**) only. If you
 need a fix on an older major, upgrade to the current major — we do not backport.
 
 > **Rationale:** the library and all of its consumers are developed in lockstep by
@@ -29,16 +30,16 @@ need a fix on an older major, upgrade to the current major — we do not backpor
 
 ## Upgrading
 
-The current major is **v3**. Install it with:
+The current major is **v4**. Install it with:
 
 ```bash
 go get github.com/nocturnium/llm-go-sdk/v4@latest
 ```
 
 See **[docs/migration-guide.md](docs/migration-guide.md)** for the full migration
-guides. v2 → v3 is a mechanical import/qualifier update: bump the module path to `/v3`
-and, if you used the observability or resilience middleware, repoint it to the new
-`pkg/observability` and `pkg/middleware/resilience` packages (exported names unchanged).
+guides. v3 → v4 is a mostly-mechanical import/qualifier update: bump the module path to
+`/v4`, and migrate the reasoning API from `Thinking` to `Reasoning` (`WithReasoning` /
+`Response.Reasoning()`).
 
 ## Reporting problems
 
