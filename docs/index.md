@@ -9,7 +9,7 @@ hide:
 # One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
 
 <p class="noct-hero__tagline" markdown>
-Streaming, tool calling, vision, embeddings, and built-in resilience — across **18 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
+Streaming, tool calling, vision, embeddings, and built-in resilience — across **19 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
 </p>
 
 <div class="noct-hero__cta" markdown>
@@ -102,16 +102,17 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
 ## Supported providers
 
-**18 providers** out of the box — 17 chat-capable, plus Infinity for embeddings and reranking.
+**19 providers** — 17 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct) and Infinity (embeddings and reranking).
 
-| Native | OpenAI-compatible | Local / self-hosted | Embeddings only |
+| Native | OpenAI-compatible | Local / self-hosted | Direct-construct |
 | --- | --- | --- | --- |
-| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | infinity |
+| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity |
 
 !!! tip "Construct by name"
-    Blank-import `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` to register every chat
-    provider, then build one with `llms.New(name, llms.Config{...})`. Call
-    `llms.RegisteredProviders()` for the live list.
+    Blank-import `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` to register the 17
+    auto-registered chat providers, then build one with `llms.New(name, llms.Config{...})`. Call
+    `llms.RegisteredProviders()` for the live list. HuggingFace and Infinity are built directly
+    (`huggingface.New(...)` / `infinity.New(...)`).
 
 ## 60-second quickstart
 
@@ -193,7 +194,7 @@ fmt.Println(client.Provider(), client.Model())
 
     ---
 
-    Per-provider setup, models, and configuration for all 18.
+    Per-provider setup, models, and configuration for all 19.
 
 -   :material-tools:{ .lg .middle } __[Tool calling & agents](guides/tools.md)__
 

@@ -104,7 +104,8 @@ Providers can also be constructed by name through the package-level registry:
 `Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus an `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 Each provider package registers its factory in `init()`; blank-importing
-`pkg/providers/all` wires up all 17 chat providers at once.
+`pkg/providers/all` wires up the 17 auto-registered chat providers at once
+(HuggingFace and Infinity are constructed directly).
 
 ### Provider model
 
@@ -195,8 +196,9 @@ The public surface is exactly:
 - **`pkg/observability`** — OpenTelemetry, Langfuse, and structured-logging
   middleware (`observability.NewOTelMiddleware`, `observability.NewLoggingMiddleware`, …).
 - **`pkg/providers/<name>`** — the 19 provider implementations (17 chat-registered;
-  HuggingFace and Infinity are embeddings-only). Import the one you
-  need, e.g. `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai`.
+  HuggingFace and Infinity are direct-construct — HuggingFace does chat or
+  embeddings per its deployed model, Infinity is embeddings-only). Import the one
+  you need, e.g. `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai`.
 - **`pkg/openaicompat`** — the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
 

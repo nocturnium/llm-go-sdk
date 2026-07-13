@@ -100,7 +100,7 @@ factory:
 ```go
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v5"
-	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers all 17 chat providers
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers the 17 auto-registered chat providers
 )
 
 // By name. llms.Config carries the common construction settings.
@@ -132,7 +132,8 @@ Requires **Go 1.25+**.
 ## Supported Providers
 
 The SDK ships **19 providers** (17 chat-registered; HuggingFace and Infinity are
-embeddings-only). Import each from its canonical path
+direct-construct — HuggingFace serves chat or embeddings per its deployed model,
+Infinity is embeddings-only). Import each from its canonical path
 `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/<name>`. Every chat provider also
 falls back to `LLM_API_KEY` if its own key var is unset. "OpenAI-compatible"
 providers share the `pkg/openaicompat` base (they speak OpenAI's `/chat/completions`
@@ -936,10 +937,10 @@ client, err = zai.New(zai.WithAPIKey("..."), zai.WithUseCodingAPI())
 
 ## CLI
 
-A CLI tool (`llms-cli`) is included for testing providers. It supports all **17 chat
-providers** (every provider except Infinity, which is embeddings/reranking only); run
-`./llms-cli providers` for the full list of providers, their default models, and the env
-vars they read.
+A CLI tool (`llms-cli`) is included for testing providers. It supports the **17
+auto-registered chat providers** (every provider except HuggingFace and Infinity, which
+are constructed directly); run `./llms-cli providers` for the full list of providers,
+their default models, and the env vars they read.
 
 ```bash
 # Build the CLI

@@ -344,8 +344,8 @@ all shared types live in the root package.
 | Package | Import path | What's in it |
 |---------|-------------|--------------|
 | Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v5` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
-| Providers | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/<name>` | The 18 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
-| All-providers registry | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` | Blank-import only. Registers all 17 chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
+| Providers | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/<name>` | The 19 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
+| All-providers registry | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` | Blank-import only. Registers the 17 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
 | OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
 
 Everything else lives under `internal/` and is not importable by external code.
@@ -398,7 +398,7 @@ factory, then call `llms.New` or `llms.NewFromEnv`:
 ```go
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v5"
-	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers all 17 chat providers
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers the 17 auto-registered chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o-mini"})

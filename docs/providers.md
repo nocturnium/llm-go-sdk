@@ -1,6 +1,6 @@
 # Providers
 
-llm-go-sdk ships first-class clients for **18 providers** behind a single
+llm-go-sdk ships first-class clients for **19 providers** behind a single
 [`llms.LLM`](index.md) interface. Each provider lives in its own subpackage
 under `pkg/providers/<name>` and is constructed with functional options, for
 example:
@@ -52,6 +52,7 @@ code works regardless of which provider you picked.
 | runpod | `pkg/providers/runpod` | `RUNPOD_API_KEY` + endpoint ID | OpenAI-compatible | endpoint-dependent | Serverless vLLM endpoints |
 | ollama | `pkg/providers/ollama` | `OLLAMA_HOST` (default `http://localhost:11434`) | OpenAI-compatible | `llama3.2` | Local models; embeddings (`nomic-embed-text`) |
 | llamacpp | `pkg/providers/llamacpp` | `LLAMA_CPP_HOST` (default `http://localhost:8080`) | OpenAI-compatible | discovered from server | Local `llama.cpp` server |
+| huggingface | `pkg/providers/huggingface` | `HF_TOKEN` or `HUGGINGFACE_API_KEY` | OpenAI-compatible (TGI/TEI) | endpoint-dependent | Chat (TGI) or embeddings (TEI) per deployed model; needs `WithEndpoint(...)`; direct-construct |
 | infinity | `pkg/providers/infinity` | `INFINITY_API_KEY` (default host `http://localhost:7997/v1`) | OpenAI-compatible | n/a (no chat) | Embeddings + reranking only |
 
 !!! tip "API key resolution"
@@ -85,7 +86,7 @@ Azure differs: it uses `WithEndpoint(...)` and `WithDeployment(...)` instead of
 ## Construct by name
 
 You can also build any chat provider from a string name. Blank-import the `all`
-package to register all 17 chat providers, then call `llms.New`:
+package to register the 17 auto-registered chat providers, then call `llms.New`:
 
 ```go
 import (
@@ -108,6 +109,7 @@ type Config struct {
 	BaseURL         string
 	Timeout         time.Duration
 	AllowPrivateIPs bool
+	AllowHTTP       bool
 	HTTPClient      *http.Client
 	Extra           map[string]string
 }
@@ -124,12 +126,16 @@ Other helpers:
 - `llms.NewFromEnv()` reads `LLM_PROVIDER` / `LLM_MODEL`.
 - `llms.RegisteredProviders() []string` lists the registered chat providers.
 
-!!! warning "infinity is not registered as a chat provider"
-    The `all` package registers the 17 chat providers but **not** infinity,
-    because infinity does not implement chat generation. Construct it directly
-    with `infinity.New(...)`. The registered set is: anthropic, azure, cerebras,
-    deepseek, featherless, fireworks, gemini, groq, llamacpp, mistral, ollama,
-    openai, perplexity, runpod, synthetic, togetherai, zai.
+!!! warning "Two providers are not auto-registered: infinity and huggingface"
+    The `all` package registers 17 chat providers but **not** infinity or
+    huggingface. Infinity does not implement chat generation (embeddings and
+    reranking only). HuggingFace *does* serve chat (and embeddings), but it needs
+    an explicit Inference-Endpoint URL and a chat-vs-embeddings mode, so it cannot
+    be built from a name alone. Construct either one directly —
+    `infinity.New(...)` / `huggingface.New(...)`. The auto-registered set is:
+    anthropic, azure, cerebras, deepseek, featherless, fireworks, gemini, groq,
+    llamacpp, mistral, ollama, openai, perplexity, runpod, synthetic, togetherai,
+    zai.
 
 ---
 

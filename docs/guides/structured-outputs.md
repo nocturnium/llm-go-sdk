@@ -249,7 +249,7 @@ _ = resp // resp is non-nil whenever the provider returned a response
 
 ## Provider support
 
-The SDK targets one structured-output contract across 18 providers, but the
+The SDK targets one structured-output contract across all 18 chat providers, but the
 mechanism differs by provider:
 
 | Provider family | Mechanism |

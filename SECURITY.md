@@ -12,11 +12,11 @@ most recent patch release before reporting an issue, as it may already be fixed.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 4.0.x   | :white_check_mark: |
-| 3.x     | :x:                |
-| < 3.0   | :x:                |
+| 5.x     | :white_check_mark: |
+| 4.x     | :x:                |
+| < 4.0   | :x:                |
 
-The current latest release is `v4.0.0`. We recommend pinning to a released tag
+The current latest release is `v5.0.0`. We recommend pinning to a released tag
 and keeping your dependency current with `go get -u` so you receive fixes
 promptly.
 
@@ -78,9 +78,11 @@ LLM providers using the standard library `net/http`. A few notes on scope:
 - **SSRF protection is on by default.** Outbound requests are validated and the SDK
   refuses connections to private, loopback, link-local, and cloud-metadata
   (`169.254.169.254`) addresses, requires HTTPS, and re-validates every redirect
-  hop. Self-hosted/local endpoints (and the `ollama`, `llamacpp`, and `infinity`
-  providers, which default to `http://localhost`) are reached by passing
-  `WithAllowPrivateIPs()` — used by default only for those local providers.
+  hop. Private-IP access and plain-HTTP access are **independent** flags: reaching a
+  self-hosted/local endpoint over `http://localhost` requires passing both
+  `WithAllowPrivateIPs()` and `WithAllowHTTP()`. The `ollama`, `llamacpp`, and
+  `infinity` providers set both by default (they default to `http://localhost`);
+  no other provider relaxes either check.
 - **Provider-side issues are out of scope** here. Vulnerabilities in a third-party
   provider's API or in upstream Go dependencies should be reported to the
   respective maintainers, though we welcome a heads-up so we can update or pin

@@ -268,7 +268,7 @@ for chunk := range stream {
 
 - **[Configuration](configuration.md)** — call options, timeouts, custom HTTP
   clients, environment variables, and network-security settings.
-- **[Providers](providers.md)** — all 18 providers, their environment
+- **[Providers](providers.md)** — all 19 providers, their environment
   variables, provider-specific options, and the construct-by-name registry.
 
 From here you can also explore structured outputs (`llms.GenerateTyped`), tool
