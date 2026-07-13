@@ -442,7 +442,7 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 	explicitCache := opts.Cache != nil && !opts.Cache.Disabled
 	var cacheTTL string
 	if opts.Cache != nil {
-		cacheTTL = llms.AnthropicTTL(opts.Cache.TTL)
+		cacheTTL = cacheControlTTL(opts.Cache.TTL)
 	}
 
 	// Extract system message if present. Use Text so a system message

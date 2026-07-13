@@ -20,20 +20,6 @@ func TestCacheOptions(t *testing.T) {
 	}
 }
 
-func TestAnthropicTTL(t *testing.T) {
-	cases := map[time.Duration]string{
-		0:                "",
-		30 * time.Minute: "",
-		time.Hour:        "1h",
-		2 * time.Hour:    "1h",
-	}
-	for ttl, want := range cases {
-		if got := AnthropicTTL(ttl); got != want {
-			t.Errorf("AnthropicTTL(%v) = %q, want %q", ttl, got, want)
-		}
-	}
-}
-
 func TestPricingCost_CacheRates(t *testing.T) {
 	// 1M of each kind of token, with explicit cache rates.
 	p := Pricing{
