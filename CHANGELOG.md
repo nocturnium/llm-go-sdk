@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-07-12
+
+### Changed
+
+- **`pkg/mcp`: `WithAllowHTTP` is now independent of `WithAllowPrivateIPs`**,
+  matching the root `llms.Config` decoupling shipped in v5.0.0. Plain (non-TLS)
+  HTTP is off by default and no longer rides along with private-IP access:
+  reaching an `http://` MCP server now requires **both** `WithAllowPrivateIPs(true)`
+  **and** `WithAllowHTTP(true)`. This closes the same silent-cleartext /
+  credential-leak vector for the MCP subsystem that v5.0.0 closed for provider
+  clients. No exported API changes (`apidiff` stays compatible) — if you connect
+  to a local `http://` MCP server, add `WithAllowHTTP(true)`.
+
 ## [5.0.0] - 2026-07-12
 
 v5 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v5`

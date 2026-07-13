@@ -16,7 +16,7 @@ func TestClient_ContextCancelStopsPump(t *testing.T) {
 	defer srv.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true))
+	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestClient_CloseIdempotent(t *testing.T) {
 	srv := httptest.NewServer(mcpInitHandler(t, "sess-1", nil))
 	defer srv.Close()
 
-	c, err := NewHTTPClient(context.Background(), srv.URL, WithAllowPrivateIPs(true))
+	c, err := NewHTTPClient(context.Background(), srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestClient_ExplicitCloseThenCancelIsSafe(t *testing.T) {
 	defer srv.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true))
+	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}

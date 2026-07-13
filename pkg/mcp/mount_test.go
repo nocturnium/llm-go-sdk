@@ -46,7 +46,7 @@ func TestMountHTTP(t *testing.T) {
 	defer srv.Close()
 
 	reg := llms.NewToolRegistry()
-	closer, err := MountHTTP(context.Background(), reg, srv.URL, WithAllowPrivateIPs(true), WithNamePrefix("m_"))
+	closer, err := MountHTTP(context.Background(), reg, srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true), WithNamePrefix("m_"))
 	if err != nil {
 		t.Fatalf("MountHTTP: %v", err)
 	}

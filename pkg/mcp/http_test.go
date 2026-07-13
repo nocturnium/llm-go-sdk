@@ -61,8 +61,8 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	// httptest binds 127.0.0.1, so allow private IPs (which also permits HTTP).
-	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true))
+	// httptest binds 127.0.0.1 and serves plain HTTP, so allow both private IPs and plain HTTP.
+	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestHTTPTransport_InterleavedNotification(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true))
+	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestHTTPTransport_StatefulSession(t *testing.T) {
 	defer srv.Close()
 
 	ctx := context.Background()
-	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true))
+	c, err := NewHTTPClient(ctx, srv.URL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}
