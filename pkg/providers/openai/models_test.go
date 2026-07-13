@@ -84,7 +84,7 @@ var mockModelsResponse = `{
 	]
 }`
 
-var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+var expectedKnownModelTokenPricing = map[string]llms.Pricing{
 	"gpt-5.5":                {Input: 5.00, Output: 30.00},
 	"gpt-5.5-pro":            {Input: 30.00, Output: 180.00},
 	"gpt-5.4":                {Input: 2.50, Output: 15.00},
@@ -128,8 +128,8 @@ func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
 	)
 }
 
-func knownModelTokenPricing() map[string]*llms.ModelPricing {
-	pricing := make(map[string]*llms.ModelPricing, len(knownModels))
+func knownModelTokenPricing() map[string]*llms.Pricing {
+	pricing := make(map[string]*llms.Pricing, len(knownModels))
 	for modelID, metadata := range knownModels {
 		pricing[modelID] = metadata.pricing
 	}

@@ -348,21 +348,21 @@ type EmbeddingUsage struct {
 
 // ModelResponse represents a single model in the API response
 type ModelResponse struct {
-	ID            string        `json:"id"`
-	Object        string        `json:"object"`
-	Created       int64         `json:"created"`
-	OwnedBy       string        `json:"owned_by,omitempty"`
-	Type          string        `json:"type,omitempty"`           // TogetherAI: chat, language, code, image, embedding, moderation, rerank
-	DisplayName   string        `json:"display_name,omitempty"`   // TogetherAI
-	Organization  string        `json:"organization,omitempty"`   // TogetherAI
-	Link          string        `json:"link,omitempty"`           // TogetherAI
-	License       string        `json:"license,omitempty"`        // TogetherAI
-	ContextLength int           `json:"context_length,omitempty"` // TogetherAI
-	Pricing       *ModelPricing `json:"pricing,omitempty"`        // TogetherAI
+	ID            string   `json:"id"`
+	Object        string   `json:"object"`
+	Created       int64    `json:"created"`
+	OwnedBy       string   `json:"owned_by,omitempty"`
+	Type          string   `json:"type,omitempty"`           // TogetherAI: chat, language, code, image, embedding, moderation, rerank
+	DisplayName   string   `json:"display_name,omitempty"`   // TogetherAI
+	Organization  string   `json:"organization,omitempty"`   // TogetherAI
+	Link          string   `json:"link,omitempty"`           // TogetherAI
+	License       string   `json:"license,omitempty"`        // TogetherAI
+	ContextLength int      `json:"context_length,omitempty"` // TogetherAI
+	Pricing       *Pricing `json:"pricing,omitempty"`        // TogetherAI
 }
 
-// ModelPricing contains cost information for a model (TogetherAI specific).
-type ModelPricing = llms.ModelPricing
+// Pricing contains cost information for a model (TogetherAI specific).
+type Pricing = llms.Pricing
 
 // ModelsListResponse represents the response from the models list API
 type ModelsListResponse struct {

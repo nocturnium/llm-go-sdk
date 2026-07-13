@@ -37,10 +37,10 @@ func TestAnthropicTTL(t *testing.T) {
 func TestPricingCost_CacheRates(t *testing.T) {
 	// 1M of each kind of token, with explicit cache rates.
 	p := Pricing{
-		PromptPerMillion:     3.00,
-		CompletionPerMillion: 15.00,
-		CacheReadPerMillion:  0.30,
-		CacheWritePerMillion: 3.75,
+		Input:      3.00,
+		Output:     15.00,
+		CacheRead:  0.30,
+		CacheWrite: 3.75,
 	}
 	usage := Usage{
 		PromptTokens:        1_000_000,
@@ -57,7 +57,7 @@ func TestPricingCost_CacheRates(t *testing.T) {
 
 func TestPricingCost_CacheRateFallback(t *testing.T) {
 	// With no cache-specific rates, cache tokens fall back to the prompt rate.
-	p := Pricing{PromptPerMillion: 2.00, CompletionPerMillion: 8.00}
+	p := Pricing{Input: 2.00, Output: 8.00}
 	usage := Usage{CacheReadTokens: 1_000_000, CacheCreationTokens: 1_000_000}
 	got := p.cost(usage)
 	want := 2.00 + 2.00 // both fall back to prompt rate

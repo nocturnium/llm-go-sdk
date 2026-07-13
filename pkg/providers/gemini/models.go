@@ -196,10 +196,10 @@ var knownModels = map[string]modelMetadata{
 type modelMetadata struct {
 	displayName string
 	types       []llms.ModelType
-	pricing     *llms.ModelPricing
+	pricing     *llms.Pricing
 }
 
-func tokenPricing(model string) *llms.ModelPricing {
+func tokenPricing(model string) *llms.Pricing {
 	pricing, ok := llms.ModelTokenPricing(llms.ProviderGemini, model)
 	if !ok {
 		return nil

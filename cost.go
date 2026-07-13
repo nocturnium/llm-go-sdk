@@ -7,34 +7,47 @@ import (
 	"time"
 )
 
-// Pricing represents the cost per million tokens for a model.
+// Pricing describes a model's pricing. Token rates are in USD per 1M tokens.
+// It is the single canonical pricing type, used by the cost tracker,
+// DefaultPricing, and ModelInfo.Pricing. Input/Output/CacheRead/CacheWrite drive
+// cost computation; Hourly/Finetune/Base are advertised-pricing metadata not used
+// in per-token cost.
 type Pricing struct {
-	PromptPerMillion     float64 // Cost per 1M prompt tokens in USD
-	CompletionPerMillion float64 // Cost per 1M completion tokens in USD
-	// CacheReadPerMillion is the cost per 1M cache-read (cache-hit) tokens. Zero
-	// falls back to the standard prompt rate (a conservative estimate).
-	CacheReadPerMillion float64
-	// CacheWritePerMillion is the cost per 1M cache-write (cache-creation) tokens.
-	// Zero falls back to the standard prompt rate.
-	CacheWritePerMillion float64
+	// Input is the cost per 1M input (prompt) tokens in USD.
+	Input float64 `json:"input,omitempty"`
+	// Output is the cost per 1M output (completion) tokens in USD.
+	Output float64 `json:"output,omitempty"`
+	// CacheRead is the cost per 1M cache-read (cache-hit) tokens in USD. Zero
+	// falls back to the Input rate (a conservative estimate).
+	CacheRead float64 `json:"cache_read,omitempty"`
+	// CacheWrite is the cost per 1M cache-write (cache-creation) tokens in USD.
+	// Zero falls back to the Input rate.
+	CacheWrite float64 `json:"cache_write,omitempty"`
+	// Hourly is the hourly rate for dedicated instances in USD (metadata; not
+	// used in per-token cost computation).
+	Hourly float64 `json:"hourly,omitempty"`
+	// Finetune is the fine-tuning cost per 1M tokens in USD (metadata).
+	Finetune float64 `json:"finetune,omitempty"`
+	// Base is a provider-specific base cost in USD (metadata).
+	Base float64 `json:"base,omitempty"`
 }
 
-// cacheReadRate returns the effective cache-read rate, defaulting to the prompt
+// cacheReadRate returns the effective cache-read rate, defaulting to the Input
 // rate when no cache-specific rate is configured.
 func (p Pricing) cacheReadRate() float64 {
-	if p.CacheReadPerMillion > 0 {
-		return p.CacheReadPerMillion
+	if p.CacheRead > 0 {
+		return p.CacheRead
 	}
-	return p.PromptPerMillion
+	return p.Input
 }
 
-// cacheWriteRate returns the effective cache-write rate, defaulting to the prompt
+// cacheWriteRate returns the effective cache-write rate, defaulting to the Input
 // rate when no cache-specific rate is configured.
 func (p Pricing) cacheWriteRate() float64 {
-	if p.CacheWritePerMillion > 0 {
-		return p.CacheWritePerMillion
+	if p.CacheWrite > 0 {
+		return p.CacheWrite
 	}
-	return p.PromptPerMillion
+	return p.Input
 }
 
 // cost computes the total USD cost for the given usage under this pricing,
@@ -42,8 +55,8 @@ func (p Pricing) cacheWriteRate() float64 {
 // assumed to exclude cache tokens (see the Usage contract).
 func (p Pricing) cost(usage Usage) float64 {
 	const perMillion = 1_000_000.0
-	return float64(usage.PromptTokens)/perMillion*p.PromptPerMillion +
-		float64(usage.CompletionTokens)/perMillion*p.CompletionPerMillion +
+	return float64(usage.PromptTokens)/perMillion*p.Input +
+		float64(usage.CompletionTokens)/perMillion*p.Output +
 		float64(usage.CacheReadTokens)/perMillion*p.cacheReadRate() +
 		float64(usage.CacheCreationTokens)/perMillion*p.cacheWriteRate()
 }
@@ -72,151 +85,151 @@ func (p Pricing) cost(usage Usage) float64 {
 // ID surfaces without stable per-token list pricing.
 var DefaultPricing = map[string]Pricing{
 	// OpenAI (cached input billed at ~0.5×; automatic caching has no write cost).
-	"openai:gpt-4o":                 {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
-	"openai:gpt-4o-2024-11-20":      {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
-	"openai:gpt-4o-2024-08-06":      {PromptPerMillion: 2.50, CompletionPerMillion: 10.00, CacheReadPerMillion: 1.25},
-	"openai:gpt-4o-mini":            {PromptPerMillion: 0.15, CompletionPerMillion: 0.60, CacheReadPerMillion: 0.075},
-	"openai:gpt-4o-mini-2024-07-18": {PromptPerMillion: 0.15, CompletionPerMillion: 0.60, CacheReadPerMillion: 0.075},
-	"openai:gpt-4-turbo":            {PromptPerMillion: 10.00, CompletionPerMillion: 30.00},
-	"openai:gpt-4-turbo-preview":    {PromptPerMillion: 10.00, CompletionPerMillion: 30.00},
-	"openai:gpt-4":                  {PromptPerMillion: 30.00, CompletionPerMillion: 60.00},
-	"openai:gpt-4-32k":              {PromptPerMillion: 60.00, CompletionPerMillion: 120.00},
-	"openai:gpt-3.5-turbo":          {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"openai:gpt-3.5-turbo-16k":      {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"openai:o1":                     {PromptPerMillion: 15.00, CompletionPerMillion: 60.00, CacheReadPerMillion: 7.50},
-	"openai:o1-preview":             {PromptPerMillion: 15.00, CompletionPerMillion: 60.00, CacheReadPerMillion: 7.50},
-	"openai:o1-mini":                {PromptPerMillion: 3.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 1.50},
-	"openai:o3":                     {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
-	"openai:o3-mini":                {PromptPerMillion: 1.10, CompletionPerMillion: 4.40, CacheReadPerMillion: 0.275},
-	"openai:o4-mini":                {PromptPerMillion: 1.10, CompletionPerMillion: 4.40, CacheReadPerMillion: 0.275},
-	"openai:gpt-4.1":                {PromptPerMillion: 2.00, CompletionPerMillion: 8.00, CacheReadPerMillion: 0.50},
-	"openai:gpt-4.1-mini":           {PromptPerMillion: 0.40, CompletionPerMillion: 1.60, CacheReadPerMillion: 0.10},
-	"openai:gpt-4.1-nano":           {PromptPerMillion: 0.10, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.025},
+	"openai:gpt-4o":                 {Input: 2.50, Output: 10.00, CacheRead: 1.25},
+	"openai:gpt-4o-2024-11-20":      {Input: 2.50, Output: 10.00, CacheRead: 1.25},
+	"openai:gpt-4o-2024-08-06":      {Input: 2.50, Output: 10.00, CacheRead: 1.25},
+	"openai:gpt-4o-mini":            {Input: 0.15, Output: 0.60, CacheRead: 0.075},
+	"openai:gpt-4o-mini-2024-07-18": {Input: 0.15, Output: 0.60, CacheRead: 0.075},
+	"openai:gpt-4-turbo":            {Input: 10.00, Output: 30.00},
+	"openai:gpt-4-turbo-preview":    {Input: 10.00, Output: 30.00},
+	"openai:gpt-4":                  {Input: 30.00, Output: 60.00},
+	"openai:gpt-4-32k":              {Input: 60.00, Output: 120.00},
+	"openai:gpt-3.5-turbo":          {Input: 0.50, Output: 1.50},
+	"openai:gpt-3.5-turbo-16k":      {Input: 0.50, Output: 1.50},
+	"openai:o1":                     {Input: 15.00, Output: 60.00, CacheRead: 7.50},
+	"openai:o1-preview":             {Input: 15.00, Output: 60.00, CacheRead: 7.50},
+	"openai:o1-mini":                {Input: 3.00, Output: 12.00, CacheRead: 1.50},
+	"openai:o3":                     {Input: 2.00, Output: 8.00, CacheRead: 0.50},
+	"openai:o3-mini":                {Input: 1.10, Output: 4.40, CacheRead: 0.275},
+	"openai:o4-mini":                {Input: 1.10, Output: 4.40, CacheRead: 0.275},
+	"openai:gpt-4.1":                {Input: 2.00, Output: 8.00, CacheRead: 0.50},
+	"openai:gpt-4.1-mini":           {Input: 0.40, Output: 1.60, CacheRead: 0.10},
+	"openai:gpt-4.1-nano":           {Input: 0.10, Output: 0.40, CacheRead: 0.025},
 	// GPT-5 family (cached input ≈0.1× prompt). 5.4/5.5 are the current flagships
 	// (developers.openai.com pricing, June 2026); pro variants priced per the page.
-	"openai:gpt-5":        {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.125},
-	"openai:gpt-5-mini":   {PromptPerMillion: 0.25, CompletionPerMillion: 2.00, CacheReadPerMillion: 0.025},
-	"openai:gpt-5-nano":   {PromptPerMillion: 0.05, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.005},
-	"openai:gpt-5.4":      {PromptPerMillion: 2.50, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.25},
-	"openai:gpt-5.4-mini": {PromptPerMillion: 0.75, CompletionPerMillion: 4.50, CacheReadPerMillion: 0.075},
-	"openai:gpt-5.4-nano": {PromptPerMillion: 0.20, CompletionPerMillion: 1.25, CacheReadPerMillion: 0.02},
-	"openai:gpt-5.4-pro":  {PromptPerMillion: 30.00, CompletionPerMillion: 180.00},
-	"openai:gpt-5.5":      {PromptPerMillion: 5.00, CompletionPerMillion: 30.00, CacheReadPerMillion: 0.50},
-	"openai:gpt-5.5-pro":  {PromptPerMillion: 30.00, CompletionPerMillion: 180.00},
+	"openai:gpt-5":        {Input: 1.25, Output: 10.00, CacheRead: 0.125},
+	"openai:gpt-5-mini":   {Input: 0.25, Output: 2.00, CacheRead: 0.025},
+	"openai:gpt-5-nano":   {Input: 0.05, Output: 0.40, CacheRead: 0.005},
+	"openai:gpt-5.4":      {Input: 2.50, Output: 15.00, CacheRead: 0.25},
+	"openai:gpt-5.4-mini": {Input: 0.75, Output: 4.50, CacheRead: 0.075},
+	"openai:gpt-5.4-nano": {Input: 0.20, Output: 1.25, CacheRead: 0.02},
+	"openai:gpt-5.4-pro":  {Input: 30.00, Output: 180.00},
+	"openai:gpt-5.5":      {Input: 5.00, Output: 30.00, CacheRead: 0.50},
+	"openai:gpt-5.5-pro":  {Input: 30.00, Output: 180.00},
 
 	// OpenAI Embeddings
-	"openai:text-embedding-3-small": {PromptPerMillion: 0.02},
-	"openai:text-embedding-3-large": {PromptPerMillion: 0.13},
-	"openai:text-embedding-ada-002": {PromptPerMillion: 0.10},
+	"openai:text-embedding-3-small": {Input: 0.02},
+	"openai:text-embedding-3-large": {Input: 0.13},
+	"openai:text-embedding-ada-002": {Input: 0.10},
 
 	// Anthropic (cache read ≈0.1× prompt, cache write ≈1.25× prompt). The Sonnet
 	// tier has held at $3/$15 across generations; Opus 4/4.1 at $15/$75.
-	"anthropic:claude-sonnet-4-20250514":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-sonnet-4":            {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-3-7-sonnet-20250219": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-opus-4-20250514":     {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
-	"anthropic:claude-opus-4":              {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
-	"anthropic:claude-3-5-sonnet-20241022": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-3-5-sonnet-20240620": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-3-5-haiku-20241022":  {PromptPerMillion: 0.80, CompletionPerMillion: 4.00, CacheReadPerMillion: 0.08, CacheWritePerMillion: 1.00},
-	"anthropic:claude-3-opus-20240229":     {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
-	"anthropic:claude-3-sonnet-20240229":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-3-haiku-20240307":    {PromptPerMillion: 0.25, CompletionPerMillion: 1.25, CacheReadPerMillion: 0.03, CacheWritePerMillion: 0.30},
+	"anthropic:claude-sonnet-4-20250514":   {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-sonnet-4":            {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-3-7-sonnet-20250219": {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-opus-4-20250514":     {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
+	"anthropic:claude-opus-4":              {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
+	"anthropic:claude-3-5-sonnet-20241022": {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-3-5-sonnet-20240620": {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-3-5-haiku-20241022":  {Input: 0.80, Output: 4.00, CacheRead: 0.08, CacheWrite: 1.00},
+	"anthropic:claude-3-opus-20240229":     {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
+	"anthropic:claude-3-sonnet-20240229":   {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-3-haiku-20240307":    {Input: 0.25, Output: 1.25, CacheRead: 0.03, CacheWrite: 0.30},
 	// Current Claude lineup (claude.com pricing, June 2026): Opus 4.5+ at $5/$25,
 	// Sonnet 4.x at $3/$15, Haiku 4.5 at $1/$5, Fable 5 at $10/$50; cache read ≈0.1×,
 	// 5m cache write ≈1.25×. Opus 4.1 retains the older $15/$75. Both alias and dated
 	// model ids are covered.
-	"anthropic:claude-fable-5":             {PromptPerMillion: 10.00, CompletionPerMillion: 50.00, CacheReadPerMillion: 1.00, CacheWritePerMillion: 12.50},
-	"anthropic:claude-opus-4-8":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
-	"anthropic:claude-opus-4-7":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
-	"anthropic:claude-opus-4-6":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
-	"anthropic:claude-opus-4-5":            {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
-	"anthropic:claude-opus-4-5-20251101":   {PromptPerMillion: 5.00, CompletionPerMillion: 25.00, CacheReadPerMillion: 0.50, CacheWritePerMillion: 6.25},
-	"anthropic:claude-opus-4-1":            {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
-	"anthropic:claude-opus-4-1-20250805":   {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
-	"anthropic:claude-sonnet-4-6":          {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-sonnet-4-5":          {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-sonnet-4-5-20250929": {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-haiku-4-5":           {PromptPerMillion: 1.00, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.10, CacheWritePerMillion: 1.25},
-	"anthropic:claude-haiku-4-5-20251001":  {PromptPerMillion: 1.00, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.10, CacheWritePerMillion: 1.25},
-	"anthropic:claude-3-5-sonnet-latest":   {PromptPerMillion: 3.00, CompletionPerMillion: 15.00, CacheReadPerMillion: 0.30, CacheWritePerMillion: 3.75},
-	"anthropic:claude-3-5-haiku-latest":    {PromptPerMillion: 0.80, CompletionPerMillion: 4.00, CacheReadPerMillion: 0.08, CacheWritePerMillion: 1.00},
-	"anthropic:claude-3-opus-latest":       {PromptPerMillion: 15.00, CompletionPerMillion: 75.00, CacheReadPerMillion: 1.50, CacheWritePerMillion: 18.75},
-	"anthropic:claude-2.1":                 {PromptPerMillion: 8.00, CompletionPerMillion: 24.00},
-	"anthropic:claude-2.0":                 {PromptPerMillion: 8.00, CompletionPerMillion: 24.00},
-	"anthropic:claude-instant-1.2":         {PromptPerMillion: 0.80, CompletionPerMillion: 2.40},
+	"anthropic:claude-fable-5":             {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-opus-4-8":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-opus-4-7":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-opus-4-6":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-opus-4-5":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-opus-4-5-20251101":   {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-opus-4-1":            {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
+	"anthropic:claude-opus-4-1-20250805":   {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
+	"anthropic:claude-sonnet-4-6":          {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-sonnet-4-5":          {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-sonnet-4-5-20250929": {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-haiku-4-5":           {Input: 1.00, Output: 5.00, CacheRead: 0.10, CacheWrite: 1.25},
+	"anthropic:claude-haiku-4-5-20251001":  {Input: 1.00, Output: 5.00, CacheRead: 0.10, CacheWrite: 1.25},
+	"anthropic:claude-3-5-sonnet-latest":   {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-3-5-haiku-latest":    {Input: 0.80, Output: 4.00, CacheRead: 0.08, CacheWrite: 1.00},
+	"anthropic:claude-3-opus-latest":       {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
+	"anthropic:claude-2.1":                 {Input: 8.00, Output: 24.00},
+	"anthropic:claude-2.0":                 {Input: 8.00, Output: 24.00},
+	"anthropic:claude-instant-1.2":         {Input: 0.80, Output: 2.40},
 
 	// Google Gemini (cached content billed at ~0.25× prompt). 2.5 Pro uses tiered
 	// pricing (≤200K context shown here).
 	// Gemini 3.x — current family (ai.google.dev pricing, June 2026; cache ≈0.25×).
 	// 3.1 Pro is tiered (≤200K shown). 2.0 models were shut down June 2026.
-	"gemini:gemini-3.5-flash":        {PromptPerMillion: 1.50, CompletionPerMillion: 9.00, CacheReadPerMillion: 0.375},
-	"gemini:gemini-3.1-pro-preview":  {PromptPerMillion: 2.00, CompletionPerMillion: 12.00, CacheReadPerMillion: 0.50},
-	"gemini:gemini-3.1-flash-lite":   {PromptPerMillion: 0.25, CompletionPerMillion: 1.50},
-	"gemini:gemini-3-flash-preview":  {PromptPerMillion: 0.50, CompletionPerMillion: 3.00},
-	"gemini:gemini-2.5-pro":          {PromptPerMillion: 1.25, CompletionPerMillion: 10.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-2.5-flash":        {PromptPerMillion: 0.30, CompletionPerMillion: 2.50, CacheReadPerMillion: 0.075},
-	"gemini:gemini-2.5-flash-lite":   {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
-	"gemini:gemini-2.0-flash-exp":    {PromptPerMillion: 0.10, CompletionPerMillion: 0.40},
-	"gemini:gemini-2.0-flash":        {PromptPerMillion: 0.10, CompletionPerMillion: 0.40, CacheReadPerMillion: 0.025},
-	"gemini:gemini-2.0-flash-lite":   {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash":        {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash-8b":     {PromptPerMillion: 0.0375, CompletionPerMillion: 0.15},
-	"gemini:gemini-1.5-pro":          {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.5-pro-latest":   {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.5-pro-001":      {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.5-pro-002":      {PromptPerMillion: 1.25, CompletionPerMillion: 5.00, CacheReadPerMillion: 0.3125},
-	"gemini:gemini-1.5-flash-latest": {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash-001":    {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.5-flash-002":    {PromptPerMillion: 0.075, CompletionPerMillion: 0.30, CacheReadPerMillion: 0.01875},
-	"gemini:gemini-1.0-pro":          {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:gemini-1.0-pro-latest":   {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:gemini-pro":              {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:gemini-1.0-pro-vision":   {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:gemini-pro-vision":       {PromptPerMillion: 0.50, CompletionPerMillion: 1.50},
-	"gemini:gemini-embedding-001":    {PromptPerMillion: 0.15},
+	"gemini:gemini-3.5-flash":        {Input: 1.50, Output: 9.00, CacheRead: 0.375},
+	"gemini:gemini-3.1-pro-preview":  {Input: 2.00, Output: 12.00, CacheRead: 0.50},
+	"gemini:gemini-3.1-flash-lite":   {Input: 0.25, Output: 1.50},
+	"gemini:gemini-3-flash-preview":  {Input: 0.50, Output: 3.00},
+	"gemini:gemini-2.5-pro":          {Input: 1.25, Output: 10.00, CacheRead: 0.3125},
+	"gemini:gemini-2.5-flash":        {Input: 0.30, Output: 2.50, CacheRead: 0.075},
+	"gemini:gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40},
+	"gemini:gemini-2.0-flash-exp":    {Input: 0.10, Output: 0.40},
+	"gemini:gemini-2.0-flash":        {Input: 0.10, Output: 0.40, CacheRead: 0.025},
+	"gemini:gemini-2.0-flash-lite":   {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
+	"gemini:gemini-1.5-flash":        {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
+	"gemini:gemini-1.5-flash-8b":     {Input: 0.0375, Output: 0.15},
+	"gemini:gemini-1.5-pro":          {Input: 1.25, Output: 5.00, CacheRead: 0.3125},
+	"gemini:gemini-1.5-pro-latest":   {Input: 1.25, Output: 5.00, CacheRead: 0.3125},
+	"gemini:gemini-1.5-pro-001":      {Input: 1.25, Output: 5.00, CacheRead: 0.3125},
+	"gemini:gemini-1.5-pro-002":      {Input: 1.25, Output: 5.00, CacheRead: 0.3125},
+	"gemini:gemini-1.5-flash-latest": {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
+	"gemini:gemini-1.5-flash-001":    {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
+	"gemini:gemini-1.5-flash-002":    {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
+	"gemini:gemini-1.0-pro":          {Input: 0.50, Output: 1.50},
+	"gemini:gemini-1.0-pro-latest":   {Input: 0.50, Output: 1.50},
+	"gemini:gemini-pro":              {Input: 0.50, Output: 1.50},
+	"gemini:gemini-1.0-pro-vision":   {Input: 0.50, Output: 1.50},
+	"gemini:gemini-pro-vision":       {Input: 0.50, Output: 1.50},
+	"gemini:gemini-embedding-001":    {Input: 0.15},
 	"gemini:text-embedding-004":      {}, // Free
 	"gemini:embedding-001":           {}, // Free
 
 	// DeepSeek (cache hits billed at a steep discount).
-	"deepseek:deepseek-chat":     {PromptPerMillion: 0.27, CompletionPerMillion: 1.10, CacheReadPerMillion: 0.07},
-	"deepseek:deepseek-reasoner": {PromptPerMillion: 0.55, CompletionPerMillion: 2.19, CacheReadPerMillion: 0.14},
+	"deepseek:deepseek-chat":     {Input: 0.27, Output: 1.10, CacheRead: 0.07},
+	"deepseek:deepseek-reasoner": {Input: 0.55, Output: 2.19, CacheRead: 0.14},
 
 	// Cloud provider serverless/list pricing.
-	"groq:llama-3.3-70b-versatile":                                {PromptPerMillion: 0.59, CompletionPerMillion: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
-	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {PromptPerMillion: 0.90, CompletionPerMillion: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
-	"perplexity:sonar":                                            {PromptPerMillion: 1.00, CompletionPerMillion: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar) — excludes per-request search fee; verified 2026-06
-	"zai:glm-5.2":                                                 {PromptPerMillion: 1.40, CompletionPerMillion: 4.40}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-06
-	"zai:glm-5.1":                                                 {PromptPerMillion: 1.40, CompletionPerMillion: 4.40}, // docs.z.ai, verified 2026-06
-	"zai:glm-5":                                                   {PromptPerMillion: 1.00, CompletionPerMillion: 3.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-5-turbo":                                             {PromptPerMillion: 1.20, CompletionPerMillion: 4.00}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7":                                                 {PromptPerMillion: 0.60, CompletionPerMillion: 2.20}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-06
-	"zai:glm-4.6":                                                 {PromptPerMillion: 0.60, CompletionPerMillion: 2.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.5":                                                 {PromptPerMillion: 0.60, CompletionPerMillion: 2.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.5-air":                                             {PromptPerMillion: 0.20, CompletionPerMillion: 1.10}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7-Flash":                                           {PromptPerMillion: 0.06, CompletionPerMillion: 0.40}, // Z.AI GLM-4.7-Flash (pricepertoken.com/z-ai/glm-4.7-flash), verified 2026-06
+	"groq:llama-3.3-70b-versatile":                                {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
+	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {Input: 0.90, Output: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
+	"perplexity:sonar":                                            {Input: 1.00, Output: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar) — excludes per-request search fee; verified 2026-06
+	"zai:glm-5.2":                                                 {Input: 1.40, Output: 4.40}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-06
+	"zai:glm-5.1":                                                 {Input: 1.40, Output: 4.40}, // docs.z.ai, verified 2026-06
+	"zai:glm-5":                                                   {Input: 1.00, Output: 3.20}, // docs.z.ai, verified 2026-06
+	"zai:glm-5-turbo":                                             {Input: 1.20, Output: 4.00}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.7":                                                 {Input: 0.60, Output: 2.20}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-06
+	"zai:glm-4.6":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.5":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.5-air":                                             {Input: 0.20, Output: 1.10}, // docs.z.ai, verified 2026-06
+	"zai:glm-4.7-Flash":                                           {Input: 0.06, Output: 0.40}, // Z.AI GLM-4.7-Flash (pricepertoken.com/z-ai/glm-4.7-flash), verified 2026-06
 
 	// TogetherAI (varies by model, these are examples)
-	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},
-	"togetherai:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {PromptPerMillion: 3.50, CompletionPerMillion: 3.50},
-	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {PromptPerMillion: 0.88, CompletionPerMillion: 0.88},
-	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {PromptPerMillion: 0.18, CompletionPerMillion: 0.18},
-	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {PromptPerMillion: 0.60, CompletionPerMillion: 0.60},
+	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 0.88, Output: 0.88},
+	"togetherai:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {Input: 3.50, Output: 3.50},
+	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {Input: 0.88, Output: 0.88},
+	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {Input: 0.18, Output: 0.18},
+	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {Input: 0.60, Output: 0.60},
 }
 
-// ModelTokenPricing returns display token pricing for a provider/model from
-// DefaultPricing. PromptPerMillion maps to ModelPricing.Input and
-// CompletionPerMillion maps to ModelPricing.Output. The returned boolean is
-// false when DefaultPricing has no entry for the model; callers must not treat
-// that as a fabricated zero price.
-func ModelTokenPricing(provider Provider, model string) (*ModelPricing, bool) {
+// ModelTokenPricing returns the built-in per-token pricing (Input and Output, in
+// USD per 1M tokens) for a provider/model from DefaultPricing as a *Pricing
+// suitable for ModelInfo.Pricing. The returned boolean is false when
+// DefaultPricing has no entry for the model; callers must not treat that as a
+// fabricated zero price.
+func ModelTokenPricing(provider Provider, model string) (*Pricing, bool) {
 	pricing, ok := DefaultPricing[fmt.Sprintf("%s:%s", provider, model)]
 	if !ok {
 		return nil, false
 	}
-	return &ModelPricing{
-		Input:  pricing.PromptPerMillion,
-		Output: pricing.CompletionPerMillion,
+	return &Pricing{
+		Input:  pricing.Input,
+		Output: pricing.Output,
 	}, true
 }
 

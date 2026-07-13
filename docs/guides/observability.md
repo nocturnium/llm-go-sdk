@@ -431,8 +431,8 @@ Anthropic, Gemini, and TogetherAI models. Models not in the table estimate to
 
 ```go
 custom := map[string]llms.Pricing{
-	// key format is "provider:model"
-	"openai:gpt-4o": {PromptPerMillion: 2.50, CompletionPerMillion: 10.00},
+	// key format is "provider:model"; rates are USD per 1M tokens
+	"openai:gpt-4o": {Input: 2.50, Output: 10.00},
 }
 
 // Merge custom rates over the defaults at construction time...
@@ -440,8 +440,8 @@ tracker := llms.NewCostTracker(custom)
 
 // ...or set/override a single model later.
 tracker.SetPricing(llms.ProviderOpenAI, "my-finetune", llms.Pricing{
-	PromptPerMillion:     5.00,
-	CompletionPerMillion: 15.00,
+	Input:  5.00,
+	Output: 15.00,
 })
 ```
 

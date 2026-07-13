@@ -115,8 +115,8 @@ func main() {
 	fmt.Println("=== Custom Pricing ===")
 	customPricing := map[string]llms.Pricing{
 		"custom:my-model": {
-			PromptPerMillion:     1.00,
-			CompletionPerMillion: 2.00,
+			Input:  1.00,
+			Output: 2.00,
 		},
 	}
 
@@ -124,16 +124,16 @@ func main() {
 
 	// You can also update pricing dynamically
 	customTracker.SetPricing(llms.ProviderOpenAI, "gpt-4o-mini", llms.Pricing{
-		PromptPerMillion:     0.20, // Custom rate
-		CompletionPerMillion: 0.80,
+		Input:  0.20, // Custom rate
+		Output: 0.80,
 	})
 
 	// Check if pricing exists
 	pricing, exists := customTracker.GetPricing(llms.ProviderOpenAI, "gpt-4o-mini")
 	if exists {
 		fmt.Printf("Custom pricing for gpt-4o-mini:\n")
-		fmt.Printf("  Prompt: $%.2f per 1M tokens\n", pricing.PromptPerMillion)
-		fmt.Printf("  Completion: $%.2f per 1M tokens\n\n", pricing.CompletionPerMillion)
+		fmt.Printf("  Prompt: $%.2f per 1M tokens\n", pricing.Input)
+		fmt.Printf("  Completion: $%.2f per 1M tokens\n\n", pricing.Output)
 	}
 
 	// Example 6: Cost estimation without tracking

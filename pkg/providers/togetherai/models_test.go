@@ -290,7 +290,7 @@ func TestConvertModelResponse(t *testing.T) {
 			Organization:  "Meta",
 			ContextLength: 131072,
 			License:       "llama3.3",
-			Pricing: &openaicompat.ModelPricing{
+			Pricing: &openaicompat.Pricing{
 				Input:    0.88,
 				Output:   0.89,
 				Hourly:   1.23,

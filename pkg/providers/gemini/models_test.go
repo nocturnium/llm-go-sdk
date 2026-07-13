@@ -13,7 +13,7 @@ import (
 	"github.com/nocturnium/llm-go-sdk/v4/internal/testutil"
 )
 
-var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+var expectedKnownModelTokenPricing = map[string]llms.Pricing{
 	"gemini-3.5-flash":        {Input: 1.50, Output: 9.00},
 	"gemini-3.1-pro-preview":  {Input: 2.00, Output: 12.00},
 	"gemini-3.1-flash-lite":   {Input: 0.25, Output: 1.50},
@@ -52,8 +52,8 @@ func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
 	)
 }
 
-func knownModelTokenPricing() map[string]*llms.ModelPricing {
-	pricing := make(map[string]*llms.ModelPricing, len(knownModels))
+func knownModelTokenPricing() map[string]*llms.Pricing {
+	pricing := make(map[string]*llms.Pricing, len(knownModels))
 	for modelID, metadata := range knownModels {
 		pricing[modelID] = metadata.pricing
 	}
@@ -83,7 +83,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 1000000,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 1.25, Output: 5.00},
+				Pricing:       &llms.Pricing{Input: 1.25, Output: 5.00},
 			},
 		},
 		{
@@ -103,7 +103,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 1000000,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 0.075, Output: 0.30},
+				Pricing:       &llms.Pricing{Input: 0.075, Output: 0.30},
 			},
 		},
 		{
@@ -122,7 +122,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 2048,
 				MaxOutput:     0,
 				Types:         []llms.ModelType{llms.ModelTypeEmbedding},
-				Pricing:       &llms.ModelPricing{Input: 0.00},
+				Pricing:       &llms.Pricing{Input: 0.00},
 			},
 		},
 		{
@@ -142,7 +142,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 32760,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat},
-				Pricing:       &llms.ModelPricing{Input: 0.50, Output: 1.50},
+				Pricing:       &llms.Pricing{Input: 0.50, Output: 1.50},
 			},
 		},
 		{

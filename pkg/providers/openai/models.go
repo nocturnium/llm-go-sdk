@@ -286,10 +286,10 @@ type modelMetadata struct {
 	contextLength int
 	maxOutput     int
 	types         []llms.ModelType
-	pricing       *llms.ModelPricing
+	pricing       *llms.Pricing
 }
 
-func tokenPricing(model string) *llms.ModelPricing {
+func tokenPricing(model string) *llms.Pricing {
 	pricing, ok := llms.ModelTokenPricing(llms.ProviderOpenAI, model)
 	if !ok {
 		return nil

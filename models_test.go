@@ -26,7 +26,7 @@ var testModels = []ModelInfo{
 		ContextLength: 128000,
 		MaxOutput:     16384,
 		Organization:  "OpenAI",
-		Pricing:       &ModelPricing{Input: 2.50, Output: 10.00},
+		Pricing:       &Pricing{Input: 2.50, Output: 10.00},
 		CreatedAt:     time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -37,7 +37,7 @@ var testModels = []ModelInfo{
 		ContextLength: 128000,
 		MaxOutput:     16384,
 		Organization:  "OpenAI",
-		Pricing:       &ModelPricing{Input: 0.15, Output: 0.60},
+		Pricing:       &Pricing{Input: 0.15, Output: 0.60},
 		CreatedAt:     time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -48,7 +48,7 @@ var testModels = []ModelInfo{
 		ContextLength: 200000,
 		MaxOutput:     4096,
 		Organization:  "Anthropic",
-		Pricing:       &ModelPricing{Input: 15.00, Output: 75.00},
+		Pricing:       &Pricing{Input: 15.00, Output: 75.00},
 		CreatedAt:     time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -59,7 +59,7 @@ var testModels = []ModelInfo{
 		ContextLength: 200000,
 		MaxOutput:     4096,
 		Organization:  "Anthropic",
-		Pricing:       &ModelPricing{Input: 0.25, Output: 1.25},
+		Pricing:       &Pricing{Input: 0.25, Output: 1.25},
 		CreatedAt:     time.Date(2024, 3, 7, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -69,7 +69,7 @@ var testModels = []ModelInfo{
 		Types:         []ModelType{ModelTypeEmbedding},
 		ContextLength: 8191,
 		Organization:  "OpenAI",
-		Pricing:       &ModelPricing{Input: 0.13},
+		Pricing:       &Pricing{Input: 0.13},
 		CreatedAt:     time.Date(2024, 1, 25, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -79,7 +79,7 @@ var testModels = []ModelInfo{
 		Types:         []ModelType{ModelTypeChat, ModelTypeCode},
 		ContextLength: 131072,
 		Organization:  "Meta",
-		Pricing:       &ModelPricing{Input: 0.88, Output: 0.88},
+		Pricing:       &Pricing{Input: 0.88, Output: 0.88},
 		CreatedAt:     time.Date(2024, 12, 1, 0, 0, 0, 0, time.UTC),
 	},
 	{

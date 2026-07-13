@@ -110,15 +110,15 @@ func TestNewCostTracker_Defaults(t *testing.T) {
 	if !ok {
 		t.Error("expected default pricing for openai:gpt-4o")
 	}
-	if pricing.PromptPerMillion != 2.50 {
-		t.Errorf("PromptPerMillion = %f, want 2.50", pricing.PromptPerMillion)
+	if pricing.Input != 2.50 {
+		t.Errorf("Input = %f, want 2.50", pricing.Input)
 	}
 }
 
 func TestNewCostTracker_CustomPricing(t *testing.T) {
 	customPricing := map[string]Pricing{
-		"openai:custom-model": {PromptPerMillion: 1.00, CompletionPerMillion: 2.00},
-		"openai:gpt-4o":       {PromptPerMillion: 5.00, CompletionPerMillion: 20.00}, // Override default
+		"openai:custom-model": {Input: 1.00, Output: 2.00},
+		"openai:gpt-4o":       {Input: 5.00, Output: 20.00}, // Override default
 	}
 
 	tracker := NewCostTracker(customPricing)
@@ -128,14 +128,14 @@ func TestNewCostTracker_CustomPricing(t *testing.T) {
 	if !ok {
 		t.Error("expected custom pricing for openai:custom-model")
 	}
-	if pricing.PromptPerMillion != 1.00 {
-		t.Errorf("PromptPerMillion = %f, want 1.00", pricing.PromptPerMillion)
+	if pricing.Input != 1.00 {
+		t.Errorf("Input = %f, want 1.00", pricing.Input)
 	}
 
 	// Override should work
 	pricing, _ = tracker.GetPricing(ProviderOpenAI, "gpt-4o")
-	if pricing.PromptPerMillion != 5.00 {
-		t.Errorf("PromptPerMillion = %f, want 5.00 (overridden)", pricing.PromptPerMillion)
+	if pricing.Input != 5.00 {
+		t.Errorf("Input = %f, want 5.00 (overridden)", pricing.Input)
 	}
 }
 
@@ -324,14 +324,14 @@ func TestCostTracker_Reset(t *testing.T) {
 func TestCostTracker_SetPricing(t *testing.T) {
 	tracker := NewCostTracker()
 
-	tracker.SetPricing(ProviderOpenAI, "custom-model", Pricing{PromptPerMillion: 1.00, CompletionPerMillion: 2.00})
+	tracker.SetPricing(ProviderOpenAI, "custom-model", Pricing{Input: 1.00, Output: 2.00})
 
 	pricing, ok := tracker.GetPricing(ProviderOpenAI, "custom-model")
 	if !ok {
 		t.Error("expected pricing to be set")
 	}
-	if pricing.PromptPerMillion != 1.00 {
-		t.Errorf("PromptPerMillion = %f, want 1.00", pricing.PromptPerMillion)
+	if pricing.Input != 1.00 {
+		t.Errorf("Input = %f, want 1.00", pricing.Input)
 	}
 }
 
