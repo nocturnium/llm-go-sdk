@@ -261,7 +261,7 @@ func providersAction() error {
 		{"deepseek", "deepseek-chat", "DEEPSEEK_API_KEY"},
 		{"featherless", "Qwen/Qwen3-32B", "FEATHERLESS_API_KEY"},
 		{"fireworks", "llama-v3p1-70b-instruct", "FIREWORKS_API_KEY"},
-		{"gemini", "gemini-2.0-flash", "GEMINI_API_KEY / GOOGLE_API_KEY"},
+		{"gemini", "gemini-2.5-flash", "GEMINI_API_KEY / GOOGLE_API_KEY"},
 		{"groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"},
 		{"llamacpp", "(from server /props)", "LLAMA_CPP_HOST"},
 		{"mistral", "mistral-large-latest", "MISTRAL_API_KEY"},

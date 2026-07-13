@@ -21,8 +21,6 @@ var expectedKnownModelTokenPricing = map[string]llms.Pricing{
 	"gemini-2.5-pro":          {Input: 1.25, Output: 10.00},
 	"gemini-2.5-flash":        {Input: 0.30, Output: 2.50},
 	"gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40},
-	"gemini-2.0-flash":        {Input: 0.10, Output: 0.40},
-	"gemini-2.0-flash-lite":   {Input: 0.075, Output: 0.30},
 	"gemini-2.0-flash-exp":    {Input: 0.10, Output: 0.40},
 	"gemini-1.5-pro":          {Input: 1.25, Output: 5.00},
 	"gemini-1.5-pro-latest":   {Input: 1.25, Output: 5.00},
@@ -238,7 +236,6 @@ func TestFormatGeminiModelName(t *testing.T) {
 		{"gemini-1.5-pro", "Gemini 1.5 Pro"},
 		{"gemini-1.5-flash", "Gemini 1.5 Flash"},
 		{"gemini-1.0-pro", "Gemini 1.0 Pro"},
-		{"gemini-2.0-flash", "Gemini 2.0 Flash"},
 		{"text-embedding-004", "text embedding 004"},
 		{"unknown-model", "unknown model"},
 	}
@@ -269,12 +266,6 @@ func TestInferGeminiModelTypes(t *testing.T) {
 		{
 			name:     "gemini-1.5-flash has vision",
 			id:       "gemini-1.5-flash",
-			methods:  []string{"generateContent", "countTokens"},
-			expected: []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		},
-		{
-			name:     "gemini-2.0-flash has vision",
-			id:       "gemini-2.0-flash",
 			methods:  []string{"generateContent", "countTokens"},
 			expected: []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		},
@@ -341,7 +332,6 @@ func TestKnownModelsMetadata(t *testing.T) {
 func TestKnownModelsCategories(t *testing.T) {
 	// Test that Gemini 1.5+ models have vision capability
 	visionModels := []string{
-		"gemini-2.0-flash",
 		"gemini-2.0-flash-exp",
 		"gemini-1.5-pro",
 		"gemini-1.5-pro-latest",

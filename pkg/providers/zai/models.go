@@ -27,17 +27,6 @@ const (
 	ModelGLM45 = "glm-4.5"
 	// ModelGLM45Air is the lighter GLM-4.5-Air model (128K context, 96K max output).
 	ModelGLM45Air = "glm-4.5-air"
-
-	// ModelGLM47FlashX was the GLM-4.7-FlashX variant.
-	//
-	// Deprecated: no longer offered by the Z.AI API (absent from the live model
-	// listing). Use ModelGLM5Turbo or another current model.
-	ModelGLM47FlashX = "glm-4.7-FlashX"
-	// ModelGLM47Flash was the free-tier GLM-4.7-Flash model.
-	//
-	// Deprecated: no longer offered by the Z.AI API (absent from the live model
-	// listing). Use a current model such as ModelGLM45Air.
-	ModelGLM47Flash = "glm-4.7-Flash"
 )
 
 // cachedModels provides metadata for Z.AI GLM models, newest first. IDs are from

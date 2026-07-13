@@ -26,7 +26,7 @@ type options struct {
 // defaultOptions returns the default options for Gemini.
 func defaultOptions() *options {
 	return &options{
-		Model: "gemini-2.0-flash",
+		Model: "gemini-2.5-flash",
 	}
 }
 

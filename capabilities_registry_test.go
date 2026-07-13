@@ -359,12 +359,13 @@ func TestCapabilityRegistry_CurrentGenerationModelDifferences(t *testing.T) {
 		}
 	})
 
-	t.Run("gemini 2.5 model has larger output window than 2.0 flash", func(t *testing.T) {
+	t.Run("gemini 2.5 flash has a large output window and full capabilities", func(t *testing.T) {
 		flash25 := r.Get(ProviderGemini, "gemini-2.5-flash")
-		flash20 := r.Get(ProviderGemini, "gemini-2.0-flash")
 
-		if flash25.MaxOutputTokens <= flash20.MaxOutputTokens {
-			t.Errorf("gemini-2.5-flash MaxOutputTokens=%d, want greater than gemini-2.0-flash MaxOutputTokens=%d", flash25.MaxOutputTokens, flash20.MaxOutputTokens)
+		// Assert a window larger than the provider-default fallback so this also
+		// catches an accidentally-deleted explicit gemini-2.5-flash registry entry.
+		if flash25.MaxOutputTokens < 32768 {
+			t.Errorf("gemini-2.5-flash MaxOutputTokens=%d, want a large output window (>= 32768)", flash25.MaxOutputTokens)
 		}
 		if !flash25.SupportsVision || !flash25.SupportsTools || !flash25.SupportsJSON {
 			t.Error("expected gemini-2.5-flash to support vision, tools, and JSON")
@@ -461,7 +462,7 @@ func TestGeminiModels(t *testing.T) {
 	})
 
 	t.Run("gemini supports JSON mode", func(t *testing.T) {
-		caps := r.Get(ProviderGemini, "gemini-2.0-flash")
+		caps := r.Get(ProviderGemini, "gemini-2.5-flash")
 		if !caps.SupportsJSON {
 			t.Error("expected SupportsJSON=true")
 		}

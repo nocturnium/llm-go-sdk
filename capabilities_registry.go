@@ -342,14 +342,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-	r.capabilities["gemini:gemini-2.0-flash"] = ModelCapabilities{
-		MaxContextTokens:  1048576,
-		MaxOutputTokens:   8192,
-		SupportsVision:    true,
-		SupportsTools:     true,
-		SupportsStreaming: true,
-		SupportsJSON:      true,
-	}
 	r.capabilities["gemini:gemini-2.5-pro"] = ModelCapabilities{
 		MaxContextTokens:  1048576,
 		MaxOutputTokens:   65536,

@@ -171,8 +171,6 @@ var DefaultPricing = map[string]Pricing{
 	"gemini:gemini-2.5-flash":        {Input: 0.30, Output: 2.50, CacheRead: 0.075},
 	"gemini:gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40},
 	"gemini:gemini-2.0-flash-exp":    {Input: 0.10, Output: 0.40},
-	"gemini:gemini-2.0-flash":        {Input: 0.10, Output: 0.40, CacheRead: 0.025},
-	"gemini:gemini-2.0-flash-lite":   {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
 	"gemini:gemini-1.5-flash":        {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
 	"gemini:gemini-1.5-flash-8b":     {Input: 0.0375, Output: 0.15},
 	"gemini:gemini-1.5-pro":          {Input: 1.25, Output: 5.00, CacheRead: 0.3125},
