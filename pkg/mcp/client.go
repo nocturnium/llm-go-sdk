@@ -100,7 +100,7 @@ type config struct {
 	headers         map[string]string
 	timeout         time.Duration
 	allowPrivateIPs bool
-	allowHTTP       *bool // nil = follow allowPrivateIPs
+	allowHTTP       bool
 }
 
 // Option configures a Client.
@@ -149,18 +149,19 @@ func WithTimeout(d time.Duration) Option {
 
 // WithAllowPrivateIPs permits an HTTP client to reach private/loopback addresses.
 // It is off by default (SSRF protection); enable it for local HTTP MCP servers
-// such as http://localhost. Unless WithAllowHTTP is also set, enabling this also
-// permits plain HTTP (local servers are typically not TLS).
+// such as http://localhost. This does NOT relax the TLS requirement on its own —
+// plain (non-TLS) HTTP is a separate, independent allowance (see WithAllowHTTP).
 func WithAllowPrivateIPs(allow bool) Option {
 	return func(c *config) { c.allowPrivateIPs = allow }
 }
 
-// WithAllowHTTP independently controls whether plain (non-TLS) HTTP is permitted.
-// When unset, it follows WithAllowPrivateIPs. Set WithAllowHTTP(false) to keep TLS
-// enforced even while reaching a private HTTPS server, so credentials in
-// WithHTTPHeaders are never sent in cleartext to a downgraded endpoint.
+// WithAllowHTTP permits plain (non-TLS) HTTP requests. It is off by default and
+// is independent of WithAllowPrivateIPs: reaching an http://localhost MCP server
+// requires BOTH WithAllowPrivateIPs(true) and WithAllowHTTP(true). Leaving it off
+// keeps TLS enforced, so credentials in WithHTTPHeaders are never sent in
+// cleartext to a downgraded endpoint.
 func WithAllowHTTP(allow bool) Option {
-	return func(c *config) { c.allowHTTP = &allow }
+	return func(c *config) { c.allowHTTP = allow }
 }
 
 func buildConfig(opts []Option) config {
@@ -195,13 +196,9 @@ func NewStdioClient(ctx context.Context, command string, args []string, opts ...
 // for local servers. Remember to Close the returned client.
 func NewHTTPClient(ctx context.Context, url string, opts ...Option) (*Client, error) {
 	cfg := buildConfig(opts)
-	allowHTTP := cfg.allowPrivateIPs
-	if cfg.allowHTTP != nil {
-		allowHTTP = *cfg.allowHTTP
-	}
 	hcOpts := []httpclient.ClientOption{
 		httpclient.WithAllowPrivateIPs(cfg.allowPrivateIPs),
-		httpclient.WithAllowHTTP(allowHTTP),
+		httpclient.WithAllowHTTP(cfg.allowHTTP),
 	}
 	if cfg.httpClient != nil {
 		hcOpts = append(hcOpts, httpclient.WithHTTPClient(cfg.httpClient))

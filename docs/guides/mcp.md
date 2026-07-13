@@ -45,8 +45,10 @@ server, err := mcp.NewHTTPClient(ctx, "https://mcp.example.com/rpc",
 )
 ```
 
-HTTP requests are SSRF-protected by default. For a local HTTP server
-(`http://localhost:…`), pass `mcp.WithAllowPrivateIPs(true)`.
+HTTP requests are SSRF-protected by default, and plain (non-TLS) HTTP is rejected.
+Private-IP access and plain-HTTP access are **independent** allowances, so a local
+HTTP server (`http://localhost:…`) needs **both** `mcp.WithAllowPrivateIPs(true)` and
+`mcp.WithAllowHTTP(true)`.
 
 ## Using the tools
 
