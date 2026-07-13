@@ -11,7 +11,7 @@ It is written for SDK consumers and contributors. For the step-by-step recipe to
 add a provider (including coding standards and required tests), see
 [`AGENTS.md`](https://github.com/nocturnium/llm-go-sdk/blob/main/AGENTS.md).
 
-- Module path: `github.com/nocturnium/llm-go-sdk/v4`
+- Module path: `github.com/nocturnium/llm-go-sdk/v5`
 - License: Apache-2.0 (see `LICENSE` and `NOTICE`)
 - No external LLM SDK dependencies; the only notable third-party packages are
   `urfave/cli/v2` (for the CLI), `go.opentelemetry.io/otel` (for tracing and
@@ -80,7 +80,7 @@ output shape (`WithJSONMode` for a JSON object, `WithJSONSchema` for schema-cons
 JSON), streaming tuning (`WithStreamBufferSize`, `WithStreamSendTimeout`), message
 handling (`WithDisableMessageMerging`), token accounting (`WithEstimateTokens`),
 per-call trace context (`WithTrace(TraceOptions{...})`), and provider-specific escape
-hatches (`WithExtraBody`, `WithAdapterID`, `WithThinkingMode`, `WithWebSearch`).
+hatches (`WithExtraBody`, `WithAdapterID`, `WithWebSearch`).
 
 `WithMaxTokens(int)` is unchanged for callers, but internally `CallOptions.MaxTokens`
 is now a `*int`: unset means "use the provider/model default" (Anthropic still sends an
@@ -101,10 +101,11 @@ and the apply helper are unexported implementation details.
 Providers can also be constructed by name through the package-level registry:
 `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` (reading `LLM_PROVIDER` /
 `LLM_MODEL`). `llms.Config` carries the common settings (`APIKey`, `Model`, `BaseURL`,
-`Timeout`, `AllowPrivateIPs`, `HTTPClient`) plus an `Extra map[string]string` for
+`Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus an `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 Each provider package registers its factory in `init()`; blank-importing
-`pkg/providers/all` wires up all 17 chat providers at once.
+`pkg/providers/all` wires up the 17 auto-registered chat providers at once
+(HuggingFace and Infinity are constructed directly).
 
 ### Provider model
 
@@ -184,7 +185,7 @@ The SDK has a small, flat public surface. The guiding rule:
 
 The public surface is exactly:
 
-- **Root (`llms "github.com/nocturnium/llm-go-sdk/v4"`)** — every shared type and
+- **Root (`llms "github.com/nocturnium/llm-go-sdk/v5"`)** — every shared type and
   function: the `LLM` interface, `Message`/`Response`/`Tool` and friends, the
   `CallOption` builders, errors and sentinels, streaming, the capability registry,
   and cost tracking. A single import reaches the core (`llms.Message`,
@@ -195,8 +196,9 @@ The public surface is exactly:
 - **`pkg/observability`** — OpenTelemetry, Langfuse, and structured-logging
   middleware (`observability.NewOTelMiddleware`, `observability.NewLoggingMiddleware`, …).
 - **`pkg/providers/<name>`** — the 19 provider implementations (17 chat-registered;
-  HuggingFace and Infinity are embeddings-only). Import the one you
-  need, e.g. `github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai`.
+  HuggingFace and Infinity are direct-construct — HuggingFace does chat or
+  embeddings per its deployed model, Infinity is embeddings-only). Import the one
+  you need, e.g. `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai`.
 - **`pkg/openaicompat`** — the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
 
@@ -238,7 +240,7 @@ llm-go-sdk/
 ├── *.go                      # ROOT package `llms`: the real core types & logic
 │   ├── llms.go               #   LLM interface, Provider consts, Capabilities, Wrapper/UnwrapAll
 │   ├── message.go            #   Message, Role, message prep/merge/validate
-│   ├── response.go           #   Response, Usage, ThinkingContent, StreamChunk
+│   ├── response.go           #   Response, Usage, ReasoningContent, StreamChunk
 │   ├── options.go            #   CallOption / CallOptions / With* builders
 │   ├── tools.go              #   Tool, ToolCall, ToolChoice, ToolRegistry, handlers
 │   ├── vision.go             #   ContentPart, ImageContent, image helpers

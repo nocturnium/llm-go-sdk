@@ -18,7 +18,7 @@ one-liner, and `Stream`.
 Add the SDK to your module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v4@v3.0.0
+go get github.com/nocturnium/llm-go-sdk/v5@v5.0.0
 ```
 
 The SDK's root package is named `llms`. Because the import path
@@ -26,13 +26,13 @@ The SDK's root package is named `llms`. Because the import path
 your code reads clearly:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 ```
 
 Each provider lives under `pkg/providers/<name>`. For OpenAI:
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 ```
 
 ## Choosing how to construct a client
@@ -84,8 +84,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -166,8 +166,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -201,7 +201,7 @@ of your code is identical. Each provider reads its own environment variable
 (here, `ANTHROPIC_API_KEY`).
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/anthropic"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
 
 // Was:
 client, err := openai.New(openai.WithModel("gpt-4o"))
@@ -268,7 +268,7 @@ for chunk := range stream {
 
 - **[Configuration](configuration.md)** — call options, timeouts, custom HTTP
   clients, environment variables, and network-security settings.
-- **[Providers](providers.md)** — all 18 providers, their environment
+- **[Providers](providers.md)** — all 19 providers, their environment
   variables, provider-specific options, and the construct-by-name registry.
 
 From here you can also explore structured outputs (`llms.GenerateTyped`), tool

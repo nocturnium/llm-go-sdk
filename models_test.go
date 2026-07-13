@@ -26,7 +26,7 @@ var testModels = []ModelInfo{
 		ContextLength: 128000,
 		MaxOutput:     16384,
 		Organization:  "OpenAI",
-		Pricing:       &ModelPricing{Input: 2.50, Output: 10.00},
+		Pricing:       &Pricing{Input: 2.50, Output: 10.00},
 		CreatedAt:     time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -37,7 +37,7 @@ var testModels = []ModelInfo{
 		ContextLength: 128000,
 		MaxOutput:     16384,
 		Organization:  "OpenAI",
-		Pricing:       &ModelPricing{Input: 0.15, Output: 0.60},
+		Pricing:       &Pricing{Input: 0.15, Output: 0.60},
 		CreatedAt:     time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -48,7 +48,7 @@ var testModels = []ModelInfo{
 		ContextLength: 200000,
 		MaxOutput:     4096,
 		Organization:  "Anthropic",
-		Pricing:       &ModelPricing{Input: 15.00, Output: 75.00},
+		Pricing:       &Pricing{Input: 15.00, Output: 75.00},
 		CreatedAt:     time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -59,7 +59,7 @@ var testModels = []ModelInfo{
 		ContextLength: 200000,
 		MaxOutput:     4096,
 		Organization:  "Anthropic",
-		Pricing:       &ModelPricing{Input: 0.25, Output: 1.25},
+		Pricing:       &Pricing{Input: 0.25, Output: 1.25},
 		CreatedAt:     time.Date(2024, 3, 7, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -69,7 +69,7 @@ var testModels = []ModelInfo{
 		Types:         []ModelType{ModelTypeEmbedding},
 		ContextLength: 8191,
 		Organization:  "OpenAI",
-		Pricing:       &ModelPricing{Input: 0.13},
+		Pricing:       &Pricing{Input: 0.13},
 		CreatedAt:     time.Date(2024, 1, 25, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -79,7 +79,7 @@ var testModels = []ModelInfo{
 		Types:         []ModelType{ModelTypeChat, ModelTypeCode},
 		ContextLength: 131072,
 		Organization:  "Meta",
-		Pricing:       &ModelPricing{Input: 0.88, Output: 0.88},
+		Pricing:       &Pricing{Input: 0.88, Output: 0.88},
 		CreatedAt:     time.Date(2024, 12, 1, 0, 0, 0, 0, time.UTC),
 	},
 	{
@@ -198,15 +198,15 @@ func TestListModelsOptions(t *testing.T) {
 		}
 	})
 
-	t.Run("WithModelsLimit", func(t *testing.T) {
-		opts := ApplyListModelsOptions(WithModelsLimit(50))
+	t.Run("WithModelLimit", func(t *testing.T) {
+		opts := ApplyListModelsOptions(WithModelLimit(50))
 		if opts.Limit != 50 {
 			t.Errorf("expected limit 50, got %d", opts.Limit)
 		}
 	})
 
-	t.Run("WithModelsCursor", func(t *testing.T) {
-		opts := ApplyListModelsOptions(WithModelsCursor("next-page-token"))
+	t.Run("WithModelCursor", func(t *testing.T) {
+		opts := ApplyListModelsOptions(WithModelCursor("next-page-token"))
 		if opts.Cursor != "next-page-token" {
 			t.Errorf("expected cursor 'next-page-token', got %s", opts.Cursor)
 		}
@@ -216,8 +216,8 @@ func TestListModelsOptions(t *testing.T) {
 		opts := ApplyListModelsOptions(
 			WithModelTypes(ModelTypeChat),
 			WithDedicatedModels(),
-			WithModelsLimit(100),
-			WithModelsCursor("abc123"),
+			WithModelLimit(100),
+			WithModelCursor("abc123"),
 		)
 		if len(opts.Types) != 1 || opts.Types[0] != ModelTypeChat {
 			t.Error("types not set correctly")

@@ -10,8 +10,8 @@ All of the building blocks live in the root `llms` package:
 
 ```go
 import (
-    llms "github.com/nocturnium/llm-go-sdk/v4"
-    "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+    llms "github.com/nocturnium/llm-go-sdk/v5"
+    "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 ```
 
@@ -165,8 +165,8 @@ import (
     "fmt"
     "log"
 
-    llms "github.com/nocturnium/llm-go-sdk/v4"
-    "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+    llms "github.com/nocturnium/llm-go-sdk/v5"
+    "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 // Recipe is both the target type and the source of the JSON Schema.
@@ -249,7 +249,7 @@ _ = resp // resp is non-nil whenever the provider returned a response
 
 ## Provider support
 
-The SDK targets one structured-output contract across 18 providers, but the
+The SDK targets one structured-output contract across all 18 chat providers, but the
 mechanism differs by provider:
 
 | Provider family | Mechanism |

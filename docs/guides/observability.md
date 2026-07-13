@@ -40,9 +40,9 @@ import (
 	"context"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/observability"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/observability"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -82,7 +82,7 @@ so it exposes `GenerateContent`, `Stream`, `Provider()`, `Model()`, and
 | `observability.WithOTelMeter(metric.Meter)` | Use a specific `metric.Meter` instead of the global one. |
 
 The instrumentation scope name is exported as `observability.InstrumentationName`
-(`"github.com/nocturnium/llm-go-sdk/v4"`).
+(`"github.com/nocturnium/llm-go-sdk/v5"`).
 
 !!! warning "Content recording exposes data in traces"
     `WithContentRecording(true)` writes (truncated) prompt and completion text to
@@ -283,7 +283,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/observability"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/observability"
 )
 
 handler := slog.NewJSONHandler(os.Stdout, nil)
@@ -361,8 +361,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -431,8 +431,8 @@ Anthropic, Gemini, and TogetherAI models. Models not in the table estimate to
 
 ```go
 custom := map[string]llms.Pricing{
-	// key format is "provider:model"
-	"openai:gpt-4o": {PromptPerMillion: 2.50, CompletionPerMillion: 10.00},
+	// key format is "provider:model"; rates are USD per 1M tokens
+	"openai:gpt-4o": {Input: 2.50, Output: 10.00},
 }
 
 // Merge custom rates over the defaults at construction time...
@@ -440,22 +440,24 @@ tracker := llms.NewCostTracker(custom)
 
 // ...or set/override a single model later.
 tracker.SetPricing(llms.ProviderOpenAI, "my-finetune", llms.Pricing{
-	PromptPerMillion:     5.00,
-	CompletionPerMillion: 15.00,
+	Input:  5.00,
+	Output: 15.00,
 })
 ```
 
 For a one-off estimate without a tracker, use the package helpers:
 
 ```go
-cost := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", resp.Usage)
-fmt.Println(llms.FormatCost(cost)) // e.g. "$0.0123" (4 decimals under 1 cent)
+cost, known := llms.EstimateCost(llms.ProviderOpenAI, "gpt-4o", resp.Usage)
+if known {
+	fmt.Println(llms.FormatCost(cost)) // e.g. "$0.0123" (4 decimals under 1 cent)
+}
 ```
 
-`EstimateCost` returns `$0` for an unknown model. To tell unknown pricing apart
-from a real zero-cost model, use
-`cost, known := llms.EstimateCostKnown(provider, model, usage)` (or check the
-`bool` from `tracker.Record` / `tracker.GetPricing`).
+`EstimateCost` returns `(cost, known)`; `known` is `false` when no built-in
+pricing exists for the model, which distinguishes unknown pricing from a real
+zero-cost model — do not treat the returned `0` as free. (The `bool` from
+`tracker.Record` / `tracker.GetPricing` carries the same signal.)
 
 `llms.FormatCost` renders 4 decimal places for sub-cent values and 2 decimals
 otherwise.

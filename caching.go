@@ -33,16 +33,6 @@ type CacheConfig struct {
 	TTL time.Duration
 }
 
-// AnthropicTTL renders a cache TTL as the Anthropic cache_control "ttl" value
-// ("1h" for one hour or longer), or "" to use the default 5-minute ephemeral
-// cache. Exposed for provider adapters; most callers do not need it.
-func AnthropicTTL(ttl time.Duration) string {
-	if ttl >= time.Hour {
-		return "1h"
-	}
-	return ""
-}
-
 // WithCache enables the SDK's automatic prompt caching for a call. For providers
 // with explicit breakpoints (Anthropic) it caches the stable prefix — the system
 // prompt and tool definitions. For providers that cache automatically (OpenAI,

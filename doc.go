@@ -28,7 +28,7 @@
 //   - Construction & registry: [Config], [New], [NewFromEnv], [RegisterProvider],
 //     [RegisteredProviders]. Prefer a provider's own constructor (e.g. openai.New)
 //     when the provider is known at compile time.
-//   - Cost & tokens: [CostTracker], [ModelPricing], [EstimateTokens], [TokenEstimator].
+//   - Cost & tokens: [CostTracker], [Pricing], [EstimateTokens], [TokenEstimator].
 //   - Middleware composition: [Chain] applies [Middleware] wrappers around a base
 //     client (resilience innermost, observability outermost).
 //   - Resilience middleware: see the pkg/middleware/resilience package for
@@ -110,11 +110,11 @@
 //
 // Import the provider you need from its canonical pkg/providers path:
 //
-//	import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
-//	import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/anthropic"
-//	import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/gemini"
-//	import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/togetherai"
-//	import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/featherless"
+//	import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+//	import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
+//	import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/gemini"
+//	import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/togetherai"
+//	import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/featherless"
 //
 // Each provider reads its API key from environment variables by default.
 // See provider documentation for configuration options.

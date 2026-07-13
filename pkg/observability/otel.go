@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -19,7 +19,7 @@ import (
 
 const (
 	// InstrumentationName is the name used for OTel instrumentation
-	InstrumentationName = "github.com/nocturnium/llm-go-sdk/v4"
+	InstrumentationName = "github.com/nocturnium/llm-go-sdk/v5"
 
 	// Metric names.
 	metricRequests         = "llm.requests"

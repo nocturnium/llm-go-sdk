@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 const (
@@ -15,8 +15,8 @@ const (
 func TestDefaultOptions(t *testing.T) {
 	opts := defaultOptions()
 
-	if opts.Model != "gemini-2.0-flash" {
-		t.Errorf("expected default model to be gemini-2.0-flash, got %s", opts.Model)
+	if opts.Model != "gemini-2.5-flash" {
+		t.Errorf("expected default model to be gemini-2.5-flash, got %s", opts.Model)
 	}
 	if opts.APIKey != "" {
 		t.Error("expected default API key to be empty")
@@ -85,7 +85,7 @@ func TestNewClientWithGeminiEnvAPIKey(t *testing.T) {
 	if client.Provider() != llms.ProviderGemini {
 		t.Errorf("expected provider to be gemini, got %s", client.Provider())
 	}
-	if client.Model() != "gemini-2.0-flash" {
+	if client.Model() != "gemini-2.5-flash" {
 		t.Errorf("expected default model, got %s", client.Model())
 	}
 }

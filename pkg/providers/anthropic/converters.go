@@ -4,10 +4,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
 )
+
+// cacheControlTTL renders a cache TTL as the Anthropic cache_control "ttl" value
+// ("1h" for one hour or longer), or "" to use the default 5-minute ephemeral
+// cache.
+func cacheControlTTL(ttl time.Duration) string {
+	if ttl >= time.Hour {
+		return "1h"
+	}
+	return ""
+}
 
 const (
 	contentTypeToolUse = "tool_use"
@@ -148,7 +159,7 @@ func convertMessages(messages []llms.Message) ([]anthropicapi.Message, error) {
 		if msg.CacheControl != nil && len(content) > 0 {
 			content[len(content)-1].CacheControl = &anthropicapi.CacheControl{
 				Type: "ephemeral",
-				TTL:  llms.AnthropicTTL(msg.CacheControl.TTL),
+				TTL:  cacheControlTTL(msg.CacheControl.TTL),
 			}
 		}
 
@@ -216,13 +227,13 @@ func convertToolChoice(choice *llms.ToolChoice) any {
 	if choice == nil {
 		return nil
 	}
-	if choice.Function != nil {
+	if choice.Mode == llms.ToolChoiceTool {
 		return anthropicapi.ToolChoiceTool{
 			Type: "tool",
-			Name: choice.Function.Name,
+			Name: choice.Tool,
 		}
 	}
-	switch choice.Type {
+	switch choice.Mode {
 	case llms.ToolChoiceAuto:
 		return anthropicapi.ToolChoiceAuto{Type: "auto"}
 	case llms.ToolChoiceRequired:

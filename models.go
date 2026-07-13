@@ -37,25 +37,6 @@ const (
 	ModelTypeVision ModelType = "vision"
 )
 
-// ModelPricing contains cost information for a model.
-// Costs are typically per million tokens unless otherwise noted.
-type ModelPricing struct {
-	// Input is the cost per million input tokens
-	Input float64 `json:"input,omitempty"`
-
-	// Output is the cost per million output tokens
-	Output float64 `json:"output,omitempty"`
-
-	// Hourly is the hourly rate for dedicated instances
-	Hourly float64 `json:"hourly,omitempty"`
-
-	// Finetune is the cost for fine-tuning per million tokens
-	Finetune float64 `json:"finetune,omitempty"`
-
-	// Base is the base cost (provider-specific)
-	Base float64 `json:"base,omitempty"`
-}
-
 // ModelInfo represents metadata about an available model.
 type ModelInfo struct {
 	// ID is the model identifier used in API calls (e.g., "gpt-4o", "claude-3-opus-20240229")
@@ -86,7 +67,7 @@ type ModelInfo struct {
 	License string `json:"license,omitempty"`
 
 	// Pricing contains cost information for using this model
-	Pricing *ModelPricing `json:"pricing,omitempty"`
+	Pricing *Pricing `json:"pricing,omitempty"`
 
 	// CreatedAt is when the model was released or added
 	CreatedAt time.Time `json:"created_at,omitempty"`
@@ -169,17 +150,17 @@ func WithDedicatedModels() ListModelsOption {
 	}
 }
 
-// WithModelsLimit sets the maximum number of models to return.
-func WithModelsLimit(limit int) ListModelsOption {
+// WithModelLimit sets the maximum number of models to return.
+func WithModelLimit(limit int) ListModelsOption {
 	return func(o *ListModelsOptions) {
 		o.Limit = limit
 	}
 }
 
-// WithModelsCursor sets the pagination cursor for fetching the next page.
+// WithModelCursor sets the pagination cursor for fetching the next page.
 // Use the NextCursor value from a previous ListModelsResult.
 // An empty string starts pagination from the beginning.
-func WithModelsCursor(cursor string) ListModelsOption {
+func WithModelCursor(cursor string) ListModelsOption {
 	return func(o *ListModelsOptions) {
 		o.Cursor = cursor
 	}
@@ -200,7 +181,7 @@ type ListModelsResult struct {
 	Models []ModelInfo `json:"models"`
 
 	// NextCursor is the cursor for fetching the next page.
-	// Pass this to WithModelsCursor for subsequent requests.
+	// Pass this to WithModelCursor for subsequent requests.
 	// Empty when HasMore is false or pagination is not supported.
 	NextCursor string `json:"next_cursor,omitempty"`
 

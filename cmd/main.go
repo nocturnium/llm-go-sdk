@@ -12,24 +12,24 @@ import (
 	"strconv"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/azure"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/cerebras"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/deepseek"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/featherless"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/fireworks"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/gemini"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/groq"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/llamacpp"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/mistral"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/ollama"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/perplexity"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/runpod"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/synthetic"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/togetherai"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/zai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/azure"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/cerebras"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/deepseek"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/featherless"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/fireworks"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/gemini"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/groq"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/llamacpp"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/mistral"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/ollama"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/perplexity"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/runpod"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/synthetic"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/togetherai"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/zai"
 )
 
 func main() {
@@ -261,7 +261,7 @@ func providersAction() error {
 		{"deepseek", "deepseek-chat", "DEEPSEEK_API_KEY"},
 		{"featherless", "Qwen/Qwen3-32B", "FEATHERLESS_API_KEY"},
 		{"fireworks", "llama-v3p1-70b-instruct", "FIREWORKS_API_KEY"},
-		{"gemini", "gemini-2.0-flash", "GEMINI_API_KEY / GOOGLE_API_KEY"},
+		{"gemini", "gemini-2.5-flash", "GEMINI_API_KEY / GOOGLE_API_KEY"},
 		{"groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"},
 		{"llamacpp", "(from server /props)", "LLAMA_CPP_HOST"},
 		{"mistral", "mistral-large-latest", "MISTRAL_API_KEY"},

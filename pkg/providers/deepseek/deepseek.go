@@ -3,14 +3,13 @@
 package deepseek
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // providerConfig defines DeepSeek-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderDeepSeek,
-	ProviderName:          "deepseek",
 	DefaultEmbeddingModel: "", // DeepSeek doesn't have a public embedding API
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

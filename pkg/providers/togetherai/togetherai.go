@@ -3,14 +3,13 @@
 package togetherai
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // providerConfig defines TogetherAI-specific configuration
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderTogetherAI,
-	ProviderName:          "togetherai",
 	DefaultEmbeddingModel: "togethercomputer/m2-bert-80M-8k-retrieval",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

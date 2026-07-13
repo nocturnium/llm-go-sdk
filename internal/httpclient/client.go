@@ -31,7 +31,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nocturnium/llm-go-sdk/v4/internal/logsanitize"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/logsanitize"
 )
 
 // maxErrorResponseSize is the maximum size of error response body to read.

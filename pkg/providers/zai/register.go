@@ -3,7 +3,7 @@ package zai
 import (
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 func init() {
@@ -28,7 +28,10 @@ func init() {
 			opts = append(opts, WithHTTPClient(cfg.HTTPClient))
 		}
 		if cfg.AllowPrivateIPs {
-			opts = append(opts, WithAllowPrivateIPs(), WithAllowHTTP())
+			opts = append(opts, WithAllowPrivateIPs())
+		}
+		if cfg.AllowHTTP {
+			opts = append(opts, WithAllowHTTP())
 		}
 		return New(opts...)
 	})

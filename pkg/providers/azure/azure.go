@@ -9,8 +9,8 @@ import (
 	"path"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // Environment variable names for Azure OpenAI.
@@ -28,7 +28,6 @@ var ErrMissingDeployment = errors.New("azure: deployment name is required (set A
 // providerConfig defines Azure OpenAI-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderAzure,
-	ProviderName:          "azure",
 	DefaultEmbeddingModel: "", // Deployment dependent
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

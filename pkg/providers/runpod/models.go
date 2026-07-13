@@ -1,6 +1,6 @@
 package runpod
 
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 
 // Common model IDs for RunPod vLLM deployments.
 // Note: These are example models; the actual available models depend on
@@ -10,23 +10,16 @@ const (
 	// Llama models
 	ModelLlama31_8B  = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 	ModelLlama31_70B = "meta-llama/Meta-Llama-3.1-70B-Instruct"
-	// Deprecated: Meta-Llama-3.1-405B-Instruct is rarely deployed on serverless
-	// vLLM due to its size; prefer Llama 3.3 70B or a Llama 4 MoE. Kept for
-	// backward compatibility.
-	ModelLlama31_405B = "meta-llama/Meta-Llama-3.1-405B-Instruct"
-	ModelLlama32_1B   = "meta-llama/Llama-3.2-1B-Instruct"
-	ModelLlama32_3B   = "meta-llama/Llama-3.2-3B-Instruct"
-	ModelLlama33_70B  = "meta-llama/Llama-3.3-70B-Instruct"
+	ModelLlama32_1B  = "meta-llama/Llama-3.2-1B-Instruct"
+	ModelLlama32_3B  = "meta-llama/Llama-3.2-3B-Instruct"
+	ModelLlama33_70B = "meta-llama/Llama-3.3-70B-Instruct"
 
 	// Llama 4 (mixture-of-experts, natively multimodal)
 	ModelLlama4Scout    = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 	ModelLlama4Maverick = "meta-llama/Llama-4-Maverick-17B-128E-Instruct"
 
 	// Mistral models
-	ModelMistral7B = "mistralai/Mistral-7B-Instruct-v0.3"
-	// Deprecated: Mixtral-8x7B-Instruct-v0.1 is superseded by Mistral Small 3.x
-	// for most deployments. Kept for backward compatibility.
-	ModelMixtral8x7B   = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+	ModelMistral7B     = "mistralai/Mistral-7B-Instruct-v0.3"
 	ModelMistralSmall3 = "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
 
 	// Qwen models

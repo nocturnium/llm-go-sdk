@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 func TestFormatInput_Raw(t *testing.T) {

@@ -3,14 +3,13 @@
 package cerebras
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // providerConfig defines Cerebras-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderCerebras,
-	ProviderName:          "cerebras",
 	DefaultEmbeddingModel: "", // Cerebras doesn't have a public embedding API
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

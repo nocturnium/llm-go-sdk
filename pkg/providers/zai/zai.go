@@ -5,14 +5,13 @@ package zai
 import (
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // providerConfig defines Z.AI-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderZAI,
-	ProviderName:          "zai",
 	DefaultEmbeddingModel: "", // Z.AI does not provide embeddings in the documented API
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

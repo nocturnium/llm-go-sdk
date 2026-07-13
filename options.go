@@ -173,33 +173,28 @@ func WithTools(tools []Tool) CallOption {
 // WithToolChoiceAuto lets the model decide whether to call tools.
 func WithToolChoiceAuto() CallOption {
 	return func(o *CallOptions) {
-		o.ToolChoice = &ToolChoice{Type: ToolChoiceAuto}
+		o.ToolChoice = &ToolChoice{Mode: ToolChoiceAuto}
 	}
 }
 
 // WithToolChoiceNone prevents the model from calling tools.
 func WithToolChoiceNone() CallOption {
 	return func(o *CallOptions) {
-		o.ToolChoice = &ToolChoice{Type: ToolChoiceNone}
+		o.ToolChoice = &ToolChoice{Mode: ToolChoiceNone}
 	}
 }
 
 // WithToolChoiceRequired forces the model to call a tool.
 func WithToolChoiceRequired() CallOption {
 	return func(o *CallOptions) {
-		o.ToolChoice = &ToolChoice{Type: ToolChoiceRequired}
+		o.ToolChoice = &ToolChoice{Mode: ToolChoiceRequired}
 	}
 }
 
-// WithToolChoiceTool forces the model to call the named function tool.
+// WithToolChoiceTool forces the model to call the named tool.
 func WithToolChoiceTool(name string) CallOption {
 	return func(o *CallOptions) {
-		o.ToolChoice = &ToolChoice{
-			Type: ToolChoiceType(toolTypeFunction),
-			Function: &FunctionReference{
-				Name: name,
-			},
-		}
+		o.ToolChoice = &ToolChoice{Mode: ToolChoiceTool, Tool: name}
 	}
 }
 

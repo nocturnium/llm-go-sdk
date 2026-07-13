@@ -116,9 +116,6 @@ func TestResponse_UnmarshalJSON_PreservesReasoning(t *testing.T) {
 	if resp.Reasoning == nil {
 		t.Fatal("expected reasoning content")
 	}
-	if resp.Thinking() != resp.Reasoning {
-		t.Fatal("expected Thinking method to return reasoning")
-	}
 	if resp.Reasoning.Content != "I need to calculate." {
 		t.Errorf("unexpected reasoning content: %s", resp.Reasoning.Content)
 	}
@@ -189,9 +186,6 @@ func TestResponse_JSONRoundTrip_PreservesReasoningAndOmitsThinking(t *testing.T)
 	if !reflect.DeepEqual(out.Reasoning, resp.Reasoning) {
 		t.Errorf("reasoning mismatch: got %#v want %#v", out.Reasoning, resp.Reasoning)
 	}
-	if out.Thinking() != out.Reasoning {
-		t.Fatal("expected Thinking method to return reasoning")
-	}
 	if out.FinishReason != resp.FinishReason {
 		t.Errorf("finish reason mismatch: got %q want %q", out.FinishReason, resp.FinishReason)
 	}
@@ -203,7 +197,7 @@ func TestResponse_JSONRoundTrip_PreservesReasoningAndOmitsThinking(t *testing.T)
 	}
 }
 
-func TestResponse_UnmarshalJSON_NoReasoningLeavesThinkingNil(t *testing.T) {
+func TestResponse_UnmarshalJSON_NoReasoningLeavesReasoningNil(t *testing.T) {
 	var resp Response
 	if err := json.Unmarshal([]byte(`{"content":"Simple answer","finish_reason":"stop"}`), &resp); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
@@ -211,25 +205,6 @@ func TestResponse_UnmarshalJSON_NoReasoningLeavesThinkingNil(t *testing.T) {
 
 	if resp.Reasoning != nil {
 		t.Fatal("expected nil reasoning")
-	}
-	if resp.Thinking() != nil {
-		t.Fatal("expected nil thinking")
-	}
-}
-
-func TestResponse_ThinkingMethodReturnsReasoningFromStructLiteral(t *testing.T) {
-	reasoning := &ReasoningContent{Content: "direct literal"}
-	resp := &Response{Reasoning: reasoning}
-
-	if resp.Thinking() != reasoning {
-		t.Fatal("expected Thinking method to return struct literal reasoning")
-	}
-}
-
-func TestResponse_ThinkingMethodNilSafe(t *testing.T) {
-	var resp *Response
-	if resp.Thinking() != nil {
-		t.Fatal("expected nil thinking for nil response")
 	}
 }
 
@@ -264,9 +239,6 @@ func TestStreamChunk_UnmarshalJSON_PreservesReasoning(t *testing.T) {
 
 	if chunk.Reasoning == nil {
 		t.Fatal("expected reasoning content")
-	}
-	if chunk.Thinking() != chunk.Reasoning {
-		t.Fatal("expected Thinking method to return reasoning")
 	}
 	if chunk.Reasoning.Content != "reasoning step 1" {
 		t.Errorf("unexpected reasoning content: %s", chunk.Reasoning.Content)
@@ -330,9 +302,6 @@ func TestStreamChunk_JSONRoundTrip_PreservesReasoningAndOmitsThinking(t *testing
 	if !reflect.DeepEqual(out.Reasoning, chunk.Reasoning) {
 		t.Errorf("reasoning mismatch: got %#v want %#v", out.Reasoning, chunk.Reasoning)
 	}
-	if out.Thinking() != out.Reasoning {
-		t.Fatal("expected Thinking method to return reasoning")
-	}
 	if !reflect.DeepEqual(out.ToolCalls, chunk.ToolCalls) {
 		t.Errorf("tool calls mismatch: got %#v want %#v", out.ToolCalls, chunk.ToolCalls)
 	}
@@ -347,7 +316,7 @@ func TestStreamChunk_JSONRoundTrip_PreservesReasoningAndOmitsThinking(t *testing
 	}
 }
 
-func TestStreamChunk_UnmarshalJSON_NoReasoningLeavesThinkingNil(t *testing.T) {
+func TestStreamChunk_UnmarshalJSON_NoReasoningLeavesReasoningNil(t *testing.T) {
 	var chunk StreamChunk
 	if err := json.Unmarshal([]byte(`{"content":"partial answer","done":true}`), &chunk); err != nil {
 		t.Fatalf("unmarshal stream chunk: %v", err)
@@ -355,24 +324,5 @@ func TestStreamChunk_UnmarshalJSON_NoReasoningLeavesThinkingNil(t *testing.T) {
 
 	if chunk.Reasoning != nil {
 		t.Fatal("expected nil reasoning")
-	}
-	if chunk.Thinking() != nil {
-		t.Fatal("expected nil thinking")
-	}
-}
-
-func TestStreamChunk_ThinkingMethodReturnsReasoningFromStructLiteral(t *testing.T) {
-	reasoning := &ReasoningContent{Content: "direct chunk literal"}
-	chunk := &StreamChunk{Reasoning: reasoning}
-
-	if chunk.Thinking() != reasoning {
-		t.Fatal("expected Thinking method to return struct literal reasoning")
-	}
-}
-
-func TestStreamChunk_ThinkingMethodNilSafe(t *testing.T) {
-	var chunk *StreamChunk
-	if chunk.Thinking() != nil {
-		t.Fatal("expected nil thinking for nil stream chunk")
 	}
 }

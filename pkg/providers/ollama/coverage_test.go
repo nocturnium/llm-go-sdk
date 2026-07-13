@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/ollamaapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/ollamaapi"
 )
 
 // TestOptionSetters exercises every WithX option setter through apply() and
@@ -261,7 +261,7 @@ func TestListModels(t *testing.T) {
 	})
 
 	t.Run("limit", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsLimit(1))
+		result, err := client.ListModels(ctx, llms.WithModelLimit(1))
 		if err != nil {
 			t.Fatalf("ListModels limit: %v", err)
 		}

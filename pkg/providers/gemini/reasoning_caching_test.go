@@ -3,8 +3,8 @@ package gemini
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/geminiapi"
 )
 
 // TestConvertUsageMetadata_TokenConsistency verifies reasoning tokens are counted

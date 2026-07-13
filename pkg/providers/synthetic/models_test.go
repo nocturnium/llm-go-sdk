@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 const (
@@ -116,7 +116,7 @@ func TestListModels(t *testing.T) {
 	})
 
 	t.Run("with limit", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsLimit(5))
+		result, err := client.ListModels(ctx, llms.WithModelLimit(5))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -157,7 +157,7 @@ func TestListModels(t *testing.T) {
 
 	t.Run("pagination with cursor", func(t *testing.T) {
 		// Get first page
-		result1, err := client.ListModels(ctx, llms.WithModelsLimit(3))
+		result1, err := client.ListModels(ctx, llms.WithModelLimit(3))
 		if err != nil {
 			t.Fatalf("ListModels() first page error = %v", err)
 		}
@@ -166,7 +166,7 @@ func TestListModels(t *testing.T) {
 		}
 
 		// Get second page
-		result2, err := client.ListModels(ctx, llms.WithModelsLimit(3), llms.WithModelsCursor(result1.NextCursor))
+		result2, err := client.ListModels(ctx, llms.WithModelLimit(3), llms.WithModelCursor(result1.NextCursor))
 		if err != nil {
 			t.Fatalf("ListModels() second page error = %v", err)
 		}
@@ -185,7 +185,7 @@ func TestListModels(t *testing.T) {
 		// Get last model ID
 		lastModelID := cachedModels[len(cachedModels)-1].ID
 
-		result, err := client.ListModels(ctx, llms.WithModelsCursor(lastModelID))
+		result, err := client.ListModels(ctx, llms.WithModelCursor(lastModelID))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -330,7 +330,7 @@ func TestConcurrentListModels(t *testing.T) {
 			case 0:
 				result, err = client.ListModels(ctx)
 			case 1:
-				result, err = client.ListModels(ctx, llms.WithModelsLimit(5))
+				result, err = client.ListModels(ctx, llms.WithModelLimit(5))
 			case 2:
 				result, err = client.ListModels(ctx, llms.WithModelTypes(llms.ModelTypeCode))
 			}

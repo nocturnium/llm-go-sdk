@@ -16,8 +16,8 @@ for config-driven applications that need to switch providers without recompiling
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // register all chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // register all chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o"})
@@ -26,7 +26,7 @@ client, err := llms.New("openai", llms.Config{Model: "gpt-4o"})
 !!! important "You must register providers before `llms.New` can find them"
     `llms.New` only knows about providers that have registered themselves. The
     simplest way is the blank import `_ ".../pkg/providers/all"`, which registers
-    all 17 chat providers. See [Registering providers](#registering-providers).
+    the 17 auto-registered chat providers. See [Registering providers](#registering-providers).
 
 ## When to use the registry
 
@@ -51,14 +51,18 @@ can construct it. Each provider package does this in its `init()` function, so a
 ### Register everything
 
 ```go
-import _ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all"
+import _ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all"
 ```
 
-This registers all **17 chat providers**:
+This registers the **17 auto-registered chat providers**:
 
 `anthropic`, `azure`, `cerebras`, `deepseek`, `featherless`, `fireworks`,
 `gemini`, `groq`, `llamacpp`, `mistral`, `ollama`, `openai`, `perplexity`,
 `runpod`, `synthetic`, `togetherai`, `zai`.
+
+HuggingFace (chat or embeddings) and Infinity (embeddings only) are **not**
+auto-registered — they need explicit construction — so build them directly with
+`huggingface.New(...)` / `infinity.New(...)`.
 
 !!! note "Infinity is not in the chat registry"
     `infinity` is an embeddings/reranking-only provider and is **not** a chat
@@ -73,8 +77,8 @@ import only the specific provider packages:
 
 ```go
 import (
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/anthropic"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
 )
 ```
 
@@ -164,19 +168,22 @@ type Config struct {
 	Model           string            // model ID, e.g. "gpt-4o"
 	BaseURL         string            // override the API base URL
 	Timeout         time.Duration     // per-request timeout
-	AllowPrivateIPs bool              // permit private/loopback hosts + HTTP (self-hosted)
+	AllowPrivateIPs bool              // permit private/loopback hosts (self-hosted)
+	AllowHTTP       bool              // permit plain-HTTP (non-TLS) URLs
 	HTTPClient      *http.Client      // custom HTTP client
 	Extra           map[string]string // provider-specific keys (see below)
 }
 ```
 
-!!! warning "`AllowPrivateIPs` also relaxes the HTTPS requirement"
+!!! warning "`AllowPrivateIPs` and `AllowHTTP` are independent"
     SSRF protection is on by default: the SDK blocks private/loopback/link-local
-    and cloud-metadata addresses and requires HTTPS. Setting
-    `Config.AllowPrivateIPs: true` enables **both** private-IP access and plain
-    HTTP, which is what you want for self-hosted endpoints (Ollama, llama.cpp, a
-    local gateway) reached through the registry. Use it only for endpoints you
-    trust.
+    and cloud-metadata addresses and requires HTTPS. `AllowPrivateIPs: true`
+    relaxes only the host check (reach a private/loopback address); `AllowHTTP:
+    true` relaxes only the scheme check (allow plain HTTP). They are independent,
+    so an API key cannot leak over cleartext merely because you enabled
+    private-IP access. A self-hosted endpoint reached over **plain HTTP** (Ollama,
+    llama.cpp, a local gateway) needs **both** flags set. Use them only for
+    endpoints you trust.
 
 ### Provider-specific `Extra` keys
 
@@ -272,7 +279,7 @@ functional options. For a provider built on
 ```go
 package myprovider
 
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 
 func init() {
 	llms.RegisterProvider("myprovider", func(cfg llms.Config) (llms.LLM, error) {
@@ -293,7 +300,10 @@ func init() {
 			opts = append(opts, WithHTTPClient(cfg.HTTPClient))
 		}
 		if cfg.AllowPrivateIPs {
-			opts = append(opts, WithAllowPrivateIPs(), WithAllowHTTP())
+			opts = append(opts, WithAllowPrivateIPs())
+		}
+		if cfg.AllowHTTP {
+			opts = append(opts, WithAllowHTTP())
 		}
 		return New(opts...) // your provider's constructor
 	})
@@ -323,8 +333,8 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // register all chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // register all chat providers
 )
 
 func main() {

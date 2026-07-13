@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // Known OpenAI model metadata that isn't available from the API.
@@ -286,10 +286,10 @@ type modelMetadata struct {
 	contextLength int
 	maxOutput     int
 	types         []llms.ModelType
-	pricing       *llms.ModelPricing
+	pricing       *llms.Pricing
 }
 
-func tokenPricing(model string) *llms.ModelPricing {
+func tokenPricing(model string) *llms.Pricing {
 	pricing, ok := llms.ModelTokenPricing(llms.ProviderOpenAI, model)
 	if !ok {
 		return nil

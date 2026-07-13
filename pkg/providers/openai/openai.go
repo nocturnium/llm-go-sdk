@@ -2,8 +2,8 @@
 package openai
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 const defaultBaseURL = "https://api.openai.com/v1"
@@ -11,7 +11,6 @@ const defaultBaseURL = "https://api.openai.com/v1"
 // defaultProviderConfig defines OpenAI-specific configuration.
 var defaultProviderConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderOpenAI,
-	ProviderName:          "openai",
 	DefaultEmbeddingModel: "text-embedding-3-small",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

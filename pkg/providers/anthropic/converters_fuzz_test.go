@@ -3,8 +3,8 @@ package anthropic
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
 )
 
 // FuzzConvertMessages tests that convertMessages handles arbitrary string content
@@ -106,7 +106,7 @@ func FuzzConvertToolChoice(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, choice string) {
 		// Should not panic with any string input
-		_ = convertToolChoice(&llms.ToolChoice{Type: llms.ToolChoiceType(choice)})
+		_ = convertToolChoice(&llms.ToolChoice{Mode: llms.ToolChoiceMode(choice)})
 	})
 }
 

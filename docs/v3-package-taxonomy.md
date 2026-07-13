@@ -62,7 +62,7 @@ internal/*                        # unchanged
 - The provider-authoring toolkit consumed by providers/openaicompat in their signatures:
   `WrapProviderError`, `RequireAPIKey`, `ApplyOptions`, `PrepareMessages`, `NewStreamSender`,
   `WrapStreamWithFinalizer`, `ValidateMessages`, the `Env*`/`ModelType*` constants, `ModelInfo`,
-  `ModelPricing`, errors + sentinels.
+  `Pricing`, errors + sentinels.
 - Features that are part of the core vocabulary: structured output, vision, embeddings, tokens,
   cost types, capability registry. (Cost *middleware* may move; the `Pricing`/`Usage` types stay.)
 

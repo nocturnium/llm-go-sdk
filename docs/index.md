@@ -4,12 +4,12 @@ hide:
 ---
 
 <div class="noct-hero" markdown>
-<span class="noct-hero__eyebrow">github.com/nocturnium/llm-go-sdk/v4</span>
+<span class="noct-hero__eyebrow">github.com/nocturnium/llm-go-sdk/v5</span>
 
 # One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
 
 <p class="noct-hero__tagline" markdown>
-Streaming, tool calling, vision, embeddings, and built-in resilience — across **18 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
+Streaming, tool calling, vision, embeddings, and built-in resilience — across **19 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
 </p>
 
 <div class="noct-hero__cta" markdown>
@@ -20,7 +20,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 </div>
 
 !!! info "At a glance"
-    **Module** `github.com/nocturnium/llm-go-sdk/v4` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v4"` · **Version** v3.0.0 · **License** Apache-2.0 · **Go** 1.25+
+    **Module** `github.com/nocturnium/llm-go-sdk/v5` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v5"` · **Version** v5.0.0 · **License** Apache-2.0 · **Go** 1.25+
 
 ## Why this SDK
 
@@ -102,23 +102,24 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
 ## Supported providers
 
-**18 providers** out of the box — 17 chat-capable, plus Infinity for embeddings and reranking.
+**19 providers** — 17 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct) and Infinity (embeddings and reranking).
 
-| Native | OpenAI-compatible | Local / self-hosted | Embeddings only |
+| Native | OpenAI-compatible | Local / self-hosted | Direct-construct |
 | --- | --- | --- | --- |
-| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | infinity |
+| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity |
 
 !!! tip "Construct by name"
-    Blank-import `github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all` to register every chat
-    provider, then build one with `llms.New(name, llms.Config{...})`. Call
-    `llms.RegisteredProviders()` for the live list.
+    Blank-import `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` to register the 17
+    auto-registered chat providers, then build one with `llms.New(name, llms.Config{...})`. Call
+    `llms.RegisteredProviders()` for the live list. HuggingFace and Infinity are built directly
+    (`huggingface.New(...)` / `infinity.New(...)`).
 
 ## 60-second quickstart
 
 Install the module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v4
+go get github.com/nocturnium/llm-go-sdk/v5
 ```
 
 Make your first call. The package-level helper `llms.Call` sends a single prompt and
@@ -132,8 +133,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -193,7 +194,7 @@ fmt.Println(client.Provider(), client.Model())
 
     ---
 
-    Per-provider setup, models, and configuration for all 18.
+    Per-provider setup, models, and configuration for all 19.
 
 -   :material-tools:{ .lg .middle } __[Tool calling & agents](guides/tools.md)__
 

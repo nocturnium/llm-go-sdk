@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 const (
@@ -116,7 +116,7 @@ func TestListModels(t *testing.T) {
 	})
 
 	t.Run("with limit", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsLimit(5))
+		result, err := client.ListModels(ctx, llms.WithModelLimit(5))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -153,7 +153,7 @@ func TestListModels(t *testing.T) {
 
 	t.Run("pagination with cursor", func(t *testing.T) {
 		// Get first page
-		result1, err := client.ListModels(ctx, llms.WithModelsLimit(3))
+		result1, err := client.ListModels(ctx, llms.WithModelLimit(3))
 		if err != nil {
 			t.Fatalf("ListModels() first page error = %v", err)
 		}
@@ -162,7 +162,7 @@ func TestListModels(t *testing.T) {
 		}
 
 		// Get second page
-		result2, err := client.ListModels(ctx, llms.WithModelsLimit(3), llms.WithModelsCursor(result1.NextCursor))
+		result2, err := client.ListModels(ctx, llms.WithModelLimit(3), llms.WithModelCursor(result1.NextCursor))
 		if err != nil {
 			t.Fatalf("ListModels() second page error = %v", err)
 		}
@@ -287,7 +287,7 @@ func TestConcurrentListModels(t *testing.T) {
 			case 0:
 				result, err = client.ListModels(ctx)
 			case 1:
-				result, err = client.ListModels(ctx, llms.WithModelsLimit(5))
+				result, err = client.ListModels(ctx, llms.WithModelLimit(5))
 			case 2:
 				result, err = client.ListModels(ctx, llms.WithModelTypes(llms.ModelTypeCode))
 			}
@@ -395,7 +395,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty cursor returns from start", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsCursor(""), llms.WithModelsLimit(3))
+		result, err := client.ListModels(ctx, llms.WithModelCursor(""), llms.WithModelLimit(3))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -410,7 +410,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 
 	t.Run("unknown cursor returns from start", func(t *testing.T) {
 		// If cursor not found, pagination starts from beginning
-		result, err := client.ListModels(ctx, llms.WithModelsCursor("unknown/cursor"))
+		result, err := client.ListModels(ctx, llms.WithModelCursor("unknown/cursor"))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -421,7 +421,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 	})
 
 	t.Run("limit larger than total returns all", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsLimit(1000))
+		result, err := client.ListModels(ctx, llms.WithModelLimit(1000))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -434,7 +434,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 	})
 
 	t.Run("limit of 0 returns all", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsLimit(0))
+		result, err := client.ListModels(ctx, llms.WithModelLimit(0))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -448,7 +448,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 
 	t.Run("cursor after last model returns empty", func(t *testing.T) {
 		lastModelID := cachedModels[len(cachedModels)-1].ID
-		result, err := client.ListModels(ctx, llms.WithModelsCursor(lastModelID))
+		result, err := client.ListModels(ctx, llms.WithModelCursor(lastModelID))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
 		}
@@ -477,7 +477,7 @@ func TestPaginationEdgeCases(t *testing.T) {
 		firstCodeModel := allCode.Models[0].ID
 		result, err := client.ListModels(ctx,
 			llms.WithModelTypes(llms.ModelTypeCode),
-			llms.WithModelsCursor(firstCodeModel),
+			llms.WithModelCursor(firstCodeModel),
 		)
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)
@@ -512,9 +512,9 @@ func TestPaginationEdgeCases(t *testing.T) {
 
 		for {
 			var opts []llms.ListModelsOption
-			opts = append(opts, llms.WithModelsLimit(5))
+			opts = append(opts, llms.WithModelLimit(5))
 			if cursor != "" {
-				opts = append(opts, llms.WithModelsCursor(cursor))
+				opts = append(opts, llms.WithModelCursor(cursor))
 			}
 
 			result, err := client.ListModels(ctx, opts...)

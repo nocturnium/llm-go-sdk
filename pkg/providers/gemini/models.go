@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/geminiapi"
 )
 
 // titleCase capitalizes the first letter of a string.
@@ -74,22 +74,6 @@ var knownModels = map[string]modelMetadata{
 		displayName: "Gemini 2.5 Flash-Lite",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-2.5-flash-lite"),
-	},
-	// Gemini 2.0 Flash
-	// Deprecated: shut down June 1, 2026 per the official pricing page; retained
-	// for back-compat. Migrate to gemini-2.5-flash.
-	"gemini-2.0-flash": {
-		displayName: "Gemini 2.0 Flash",
-		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     tokenPricing("gemini-2.0-flash"),
-	},
-	// Gemini 2.0 Flash-Lite
-	// Deprecated: shut down June 1, 2026 per the official pricing page; retained
-	// for back-compat. Migrate to gemini-2.5-flash-lite.
-	"gemini-2.0-flash-lite": {
-		displayName: "Gemini 2.0 Flash-Lite",
-		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		pricing:     tokenPricing("gemini-2.0-flash-lite"),
 	},
 	"gemini-2.0-flash-exp": {
 		displayName: "Gemini 2.0 Flash (Experimental)",
@@ -196,10 +180,10 @@ var knownModels = map[string]modelMetadata{
 type modelMetadata struct {
 	displayName string
 	types       []llms.ModelType
-	pricing     *llms.ModelPricing
+	pricing     *llms.Pricing
 }
 
-func tokenPricing(model string) *llms.ModelPricing {
+func tokenPricing(model string) *llms.Pricing {
 	pricing, ok := llms.ModelTokenPricing(llms.ProviderGemini, model)
 	if !ok {
 		return nil

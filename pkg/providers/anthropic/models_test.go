@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/testutil"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/testutil"
 )
 
-var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+var expectedKnownModelTokenPricing = map[string]llms.Pricing{
 	"claude-fable-5":             {Input: 10.00, Output: 50.00},
 	"claude-opus-4-8":            {Input: 5.00, Output: 25.00},
 	"claude-opus-4-7":            {Input: 5.00, Output: 25.00},
@@ -49,8 +49,8 @@ func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
 	)
 }
 
-func knownModelTokenPricing() map[string]*llms.ModelPricing {
-	pricing := make(map[string]*llms.ModelPricing, len(knownModels))
+func knownModelTokenPricing() map[string]*llms.Pricing {
+	pricing := make(map[string]*llms.Pricing, len(knownModels))
 	for modelID, metadata := range knownModels {
 		pricing[modelID] = metadata.pricing
 	}
@@ -78,7 +78,7 @@ func TestConvertAnthropicModel(t *testing.T) {
 				ContextLength: 200000,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 3.00, Output: 15.00},
+				Pricing:       &llms.Pricing{Input: 3.00, Output: 15.00},
 			},
 		},
 		{
@@ -96,7 +96,7 @@ func TestConvertAnthropicModel(t *testing.T) {
 				ContextLength: 200000,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 0.80, Output: 4.00},
+				Pricing:       &llms.Pricing{Input: 0.80, Output: 4.00},
 			},
 		},
 		{
@@ -114,7 +114,7 @@ func TestConvertAnthropicModel(t *testing.T) {
 				ContextLength: 200000,
 				MaxOutput:     4096,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 15.00, Output: 75.00},
+				Pricing:       &llms.Pricing{Input: 15.00, Output: 75.00},
 			},
 		},
 		{
@@ -132,7 +132,7 @@ func TestConvertAnthropicModel(t *testing.T) {
 				ContextLength: 200000,
 				MaxOutput:     4096,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 0.25, Output: 1.25},
+				Pricing:       &llms.Pricing{Input: 0.25, Output: 1.25},
 			},
 		},
 		{
@@ -150,7 +150,7 @@ func TestConvertAnthropicModel(t *testing.T) {
 				ContextLength: 200000,
 				MaxOutput:     4096,
 				Types:         []llms.ModelType{llms.ModelTypeChat},
-				Pricing:       &llms.ModelPricing{Input: 8.00, Output: 24.00},
+				Pricing:       &llms.Pricing{Input: 8.00, Output: 24.00},
 			},
 		},
 		{

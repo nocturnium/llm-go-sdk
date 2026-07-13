@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/geminiapi"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/testutil"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/geminiapi"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/testutil"
 )
 
-var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
+var expectedKnownModelTokenPricing = map[string]llms.Pricing{
 	"gemini-3.5-flash":        {Input: 1.50, Output: 9.00},
 	"gemini-3.1-pro-preview":  {Input: 2.00, Output: 12.00},
 	"gemini-3.1-flash-lite":   {Input: 0.25, Output: 1.50},
@@ -21,8 +21,6 @@ var expectedKnownModelTokenPricing = map[string]llms.ModelPricing{
 	"gemini-2.5-pro":          {Input: 1.25, Output: 10.00},
 	"gemini-2.5-flash":        {Input: 0.30, Output: 2.50},
 	"gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40},
-	"gemini-2.0-flash":        {Input: 0.10, Output: 0.40},
-	"gemini-2.0-flash-lite":   {Input: 0.075, Output: 0.30},
 	"gemini-2.0-flash-exp":    {Input: 0.10, Output: 0.40},
 	"gemini-1.5-pro":          {Input: 1.25, Output: 5.00},
 	"gemini-1.5-pro-latest":   {Input: 1.25, Output: 5.00},
@@ -52,8 +50,8 @@ func TestKnownModelTokenPricingReconcilesWithDefaultPricing(t *testing.T) {
 	)
 }
 
-func knownModelTokenPricing() map[string]*llms.ModelPricing {
-	pricing := make(map[string]*llms.ModelPricing, len(knownModels))
+func knownModelTokenPricing() map[string]*llms.Pricing {
+	pricing := make(map[string]*llms.Pricing, len(knownModels))
 	for modelID, metadata := range knownModels {
 		pricing[modelID] = metadata.pricing
 	}
@@ -83,7 +81,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 1000000,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 1.25, Output: 5.00},
+				Pricing:       &llms.Pricing{Input: 1.25, Output: 5.00},
 			},
 		},
 		{
@@ -103,7 +101,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 1000000,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-				Pricing:       &llms.ModelPricing{Input: 0.075, Output: 0.30},
+				Pricing:       &llms.Pricing{Input: 0.075, Output: 0.30},
 			},
 		},
 		{
@@ -122,7 +120,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 2048,
 				MaxOutput:     0,
 				Types:         []llms.ModelType{llms.ModelTypeEmbedding},
-				Pricing:       &llms.ModelPricing{Input: 0.00},
+				Pricing:       &llms.Pricing{Input: 0.00},
 			},
 		},
 		{
@@ -142,7 +140,7 @@ func TestConvertGeminiModel(t *testing.T) {
 				ContextLength: 32760,
 				MaxOutput:     8192,
 				Types:         []llms.ModelType{llms.ModelTypeChat},
-				Pricing:       &llms.ModelPricing{Input: 0.50, Output: 1.50},
+				Pricing:       &llms.Pricing{Input: 0.50, Output: 1.50},
 			},
 		},
 		{
@@ -238,7 +236,6 @@ func TestFormatGeminiModelName(t *testing.T) {
 		{"gemini-1.5-pro", "Gemini 1.5 Pro"},
 		{"gemini-1.5-flash", "Gemini 1.5 Flash"},
 		{"gemini-1.0-pro", "Gemini 1.0 Pro"},
-		{"gemini-2.0-flash", "Gemini 2.0 Flash"},
 		{"text-embedding-004", "text embedding 004"},
 		{"unknown-model", "unknown model"},
 	}
@@ -269,12 +266,6 @@ func TestInferGeminiModelTypes(t *testing.T) {
 		{
 			name:     "gemini-1.5-flash has vision",
 			id:       "gemini-1.5-flash",
-			methods:  []string{"generateContent", "countTokens"},
-			expected: []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
-		},
-		{
-			name:     "gemini-2.0-flash has vision",
-			id:       "gemini-2.0-flash",
 			methods:  []string{"generateContent", "countTokens"},
 			expected: []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		},
@@ -341,7 +332,6 @@ func TestKnownModelsMetadata(t *testing.T) {
 func TestKnownModelsCategories(t *testing.T) {
 	// Test that Gemini 1.5+ models have vision capability
 	visionModels := []string{
-		"gemini-2.0-flash",
 		"gemini-2.0-flash-exp",
 		"gemini-1.5-pro",
 		"gemini-1.5-pro-latest",

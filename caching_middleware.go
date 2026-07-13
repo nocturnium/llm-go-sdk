@@ -65,7 +65,7 @@ func NewCachedClient(llm LLM, opts ...CacheClientOption) *CachedClient {
 		opt(c)
 	}
 	if c.cache == nil {
-		c.cache = NewBoundedMemoryResponseCache(5*time.Minute, defaultCacheMaxEntries)
+		c.cache = NewMemoryResponseCache(5*time.Minute, defaultCacheMaxEntries)
 	}
 	if c.keyFn == nil {
 		c.keyFn = defaultCacheKey
@@ -238,7 +238,7 @@ const defaultCacheMaxEntries = 10000
 
 // MemoryResponseCache is an in-memory ResponseCache with per-entry TTL expiry and
 // an optional maximum size. The zero value is not usable; construct with
-// NewMemoryResponseCache or NewBoundedMemoryResponseCache.
+// NewMemoryResponseCache.
 type MemoryResponseCache struct {
 	ttl        time.Duration
 	maxEntries int // 0 = unbounded
@@ -247,18 +247,13 @@ type MemoryResponseCache struct {
 	now        func() time.Time // injectable clock for tests
 }
 
-// NewMemoryResponseCache returns an in-memory cache whose entries expire after
-// ttl. A ttl of 0 means entries never expire. The cache is UNBOUNDED; for
-// high-cardinality workloads use NewBoundedMemoryResponseCache to cap memory.
-func NewMemoryResponseCache(ttl time.Duration) *MemoryResponseCache {
-	return NewBoundedMemoryResponseCache(ttl, 0)
-}
-
-// NewBoundedMemoryResponseCache returns an in-memory cache that, in addition to
-// ttl expiry, evicts entries once it would exceed maxEntries — first dropping
-// expired entries, then the earliest-expiring one — so memory stays bounded
-// under high-cardinality traffic. maxEntries <= 0 means unbounded.
-func NewBoundedMemoryResponseCache(ttl time.Duration, maxEntries int) *MemoryResponseCache {
+// NewMemoryResponseCache returns an in-memory cache that expires entries after
+// ttl (a ttl of 0 means entries never expire) and, once it would exceed
+// maxEntries, evicts entries to stay bounded — first dropping expired entries,
+// then the earliest-expiring one — so memory stays bounded under
+// high-cardinality traffic. Pass maxEntries <= 0 for an UNBOUNDED cache (use
+// with care: it can grow without limit).
+func NewMemoryResponseCache(ttl time.Duration, maxEntries int) *MemoryResponseCache {
 	return &MemoryResponseCache{
 		ttl:        ttl,
 		maxEntries: maxEntries,

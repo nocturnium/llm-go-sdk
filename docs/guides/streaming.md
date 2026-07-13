@@ -66,8 +66,8 @@ import (
 	"fmt"
 	"os"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -259,8 +259,6 @@ Beyond plain text, chunks can carry reasoning content and tool calls.
 **Reasoning** (`Reasoning`) arrives on providers that expose chain-of-thought
 (OpenAI o1, DeepSeek, Z.AI GLM). It is delivered as
 `*llms.ReasoningContent`; nil on providers that do not support it.
-`Thinking`/`ThinkingContent` is a deprecated alias retained for backward
-compatibility.
 
 ```go
 for chunk := range stream {

@@ -7,15 +7,14 @@ import (
 	"strings"
 	"sync"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/llamacppapi"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/llamacppapi"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // providerConfig defines llama.cpp-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderLlamaCpp,
-	ProviderName:          "llamacpp",
 	DefaultEmbeddingModel: "", // Model-dependent
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

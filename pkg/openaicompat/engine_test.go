@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/testutil"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/testutil"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 const (
@@ -376,7 +376,6 @@ func newTestBaseProvider(server *testutil.MockOpenAICompatibleServer) *openaicom
 	})
 	provider := openaicompat.NewBaseProvider(client, openaicompat.ProviderConfig{
 		Provider:              engineProvider,
-		ProviderName:          string(engineProvider),
 		DefaultModel:          engineModel,
 		DefaultEmbeddingModel: embeddingModel,
 		Capabilities: llms.Capabilities{

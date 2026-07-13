@@ -3,17 +3,15 @@ package openaicompat
 import (
 	"context"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // ProviderConfig defines the configuration for an OpenAI-compatible provider.
 // This is used to customize the base provider behavior.
 type ProviderConfig struct {
-	// Provider is the provider type (e.g., llms.ProviderOpenAI)
+	// Provider is the provider type (e.g., llms.ProviderOpenAI). Its string form
+	// is also used as the label in error messages.
 	Provider llms.Provider
-
-	// ProviderName is used in error messages (e.g., "openai", "synthetic")
-	ProviderName string
 
 	// DefaultModel is the default model for chat/completion requests.
 	DefaultModel string
@@ -173,7 +171,7 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 		if err != nil {
 			return nil, WrapError(p.config.Provider, "stream", err)
 		}
-		go ProcessResponsesStream(ctx, stream, chunks, sender, p.config.ProviderName, config)
+		go ProcessResponsesStream(ctx, stream, chunks, sender, string(p.config.Provider), config)
 		return chunks, nil
 	}
 
@@ -183,7 +181,7 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 		return nil, WrapError(p.config.Provider, "stream", err)
 	}
 
-	go ProcessStream(ctx, stream, chunks, sender, p.config.ProviderName, config)
+	go ProcessStream(ctx, stream, chunks, sender, string(p.config.Provider), config)
 
 	return chunks, nil
 }

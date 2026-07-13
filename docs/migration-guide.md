@@ -1,3 +1,149 @@
+# Migrating from v4 to v5
+
+v5 is a major release that removes the last of the long-deprecated shims and
+cleans up several overloaded or inconsistent APIs. The core surface (`Call`,
+`GenerateContent`, `Stream`, tools, structured output, embeddings, providers,
+middleware) is unchanged in shape — most migrations are a mechanical import-path
+bump plus a handful of renames the compiler will point you straight at.
+
+## 1. Update the import path
+
+```bash
+go get github.com/nocturnium/llm-go-sdk/v5@v5.0.0
+```
+
+Rewrite every import of the module from the `/v4` path to `/v5` (the core package
+name stays `llms`):
+
+```bash
+# from the root of your module
+grep -rl 'nocturnium/llm-go-sdk/v4' --include='*.go' . \
+  | xargs sed -i 's#nocturnium/llm-go-sdk/v4#nocturnium/llm-go-sdk/v5#g'
+go mod tidy
+```
+
+If you only use the core API and none of the symbols below, that plus the
+compiler is the entire migration.
+
+## 2. Security: `AllowHTTP` is now independent of `AllowPrivateIPs`
+
+In v4, setting `Config.AllowPrivateIPs` also implicitly permitted plain-HTTP
+(non-TLS) URLs. In v5 the two are **independent** — `AllowPrivateIPs` governs
+private/loopback destinations only, and a new `Config.AllowHTTP bool` governs the
+`http://` scheme. Both default to `false` (secure).
+
+```go
+// v4: one flag relaxed both checks
+cfg := llms.Config{AllowPrivateIPs: true} // also allowed http://
+
+// v5: opt into each relaxation explicitly
+cfg := llms.Config{AllowPrivateIPs: true, AllowHTTP: true}
+```
+
+If you talk to a local `http://` endpoint (Ollama, llama.cpp, a private gateway),
+add `AllowHTTP: true`. The provider-level options gained a matching
+`WithAllowHTTP()` alongside `WithAllowPrivateIPs()`.
+
+## 3. The deprecated `Thinking` API is removed
+
+`Response.Thinking()`, `StreamChunk.Thinking()`, the `ThinkingContent` type alias,
+and the `WithThinkingMode` option (all deprecated throughout v4) are **gone**. Use
+the canonical `Reasoning` surface:
+
+```go
+rc := resp.Reasoning                 // was resp.Thinking()
+// build requests with WithReasoning(...) instead of WithThinkingMode(...)
+```
+
+## 4. Pricing types unified into one `llms.Pricing`
+
+v4 had two pricing structs — the cost-layer `Pricing` (`PromptPerMillion` /
+`CompletionPerMillion`) and the model-layer `ModelPricing` (`Input` / `Output` /
+`Hourly`). v5 merges them into a single canonical type:
+
+```go
+type Pricing struct {
+    Input      float64 // per 1M input tokens, USD
+    Output     float64 // per 1M output tokens, USD
+    CacheRead  float64 // per 1M cache-read tokens, USD
+    CacheWrite float64 // per 1M cache-write tokens, USD
+    Hourly     float64 // dedicated-instance rate, USD (metadata)
+    Finetune   float64 // fine-tune cost per 1M tokens, USD (metadata)
+    Base       float64 // provider-specific base cost, USD (metadata)
+}
+```
+
+`ModelPricing` is removed; `ModelInfo.Pricing` is now `*Pricing`. If you read
+prices off the old `Pricing.PromptPerMillion` / `.CompletionPerMillion`, switch to
+`.Input` / `.Output`.
+
+## 5. `EstimateCost` returns `(cost, known)`
+
+`EstimateCost` now reports whether pricing was known via a second return value,
+and the separate `EstimateCostKnown` function is removed:
+
+```go
+// v4
+cost := llms.EstimateCost(provider, model, usage)
+known := llms.EstimateCostKnown(provider, model, usage)
+
+// v5 — comma-ok
+cost, known := llms.EstimateCost(provider, model, usage)
+```
+
+## 6. `ToolChoice` is no longer overloaded
+
+The overloaded `ToolChoice{Type ToolChoiceType; Function *FunctionReference}` is
+replaced by `ToolChoice{Mode ToolChoiceMode; Tool string}`. `ToolChoiceType` is
+renamed `ToolChoiceMode`, a `ToolChoiceTool` mode is added, and the
+`FunctionReference` type is removed.
+
+```go
+// v4: force a specific tool
+tc := llms.ToolChoice{Type: llms.ToolChoiceFunction,
+    Function: &llms.FunctionReference{Name: "get_weather"}}
+
+// v5
+tc := llms.ToolChoice{Mode: llms.ToolChoiceTool, Tool: "get_weather"}
+// or the option helper:
+llms.WithToolChoiceTool("get_weather")
+```
+
+`auto` / `none` / `required` are now `ToolChoiceAuto` / `ToolChoiceNone` /
+`ToolChoiceRequired` values of `Mode` (the wire encoding is unchanged).
+
+## 7. `AnthropicTTL` moved into the anthropic provider
+
+The root-package `AnthropicTTL` helper (an Anthropic-specific prompt-cache detail)
+is removed from `llms`. Prompt-cache TTL handling now lives inside the anthropic
+provider and needs no caller action — drop any direct reference to
+`llms.AnthropicTTL`.
+
+## 8. Renames and constructor changes
+
+| v4 | v5 |
+|----|----|
+| `WithModelsLimit(n)` | `WithModelLimit(n)` |
+| `WithModelsCursor(c)` | `WithModelCursor(c)` |
+| `openaicompat.ProviderConfig.ProviderName` | removed — `Provider` is the single identity |
+| `NewBoundedMemoryResponseCache(ttl, max)` | `NewMemoryResponseCache(ttl, max)` (now bounded by default) |
+
+`NewMemoryResponseCache` now takes a `maxEntries` argument and is bounded by
+default; the separate `NewBoundedMemoryResponseCache` is removed. And
+`resilience.ErrRateLimitExceeded` now wraps `llms.ErrRateLimited`, so
+`errors.Is(err, llms.ErrRateLimited)` matches a resilience rate-limit error.
+
+## 9. Model-ID cleanup and new Gemini default
+
+- The default Gemini model is now **`gemini-2.5-flash`** (was `gemini-2.0-flash`).
+- Removed retired model IDs: `gemini-2.0-flash`, `gemini-2.0-flash-lite`
+  (`gemini-2.0-flash-exp` is retained), and the RunPod `ModelLlama31_405B` /
+  `ModelMixtral8x7B` and Z.AI `ModelGLM47FlashX` / `ModelGLM47Flash` constants.
+- If you pinned any of those IDs, pick a current model from `ListModels` or the
+  provider's `models.go`.
+
+---
+
 # Migrating from v3 to v4
 
 v4 is a major release whose changes are dominated by a security / correctness / resilience
@@ -23,22 +169,18 @@ go mod tidy
 
 If you only use the core API, that is the entire migration — you are done.
 
-## 2. Replace the deprecated `Thinking` fields with `Reasoning`
+## 2. Replace `Thinking` with `Reasoning`
 
-`Response.Thinking` and `StreamChunk.Thinking` were removed as *fields* and are now
-deprecated *methods*. Read chain-of-thought from the canonical `Reasoning` field (or call
-the `Thinking()` method):
+The `Response.Thinking()` / `StreamChunk.Thinking()` methods, the `ThinkingContent` type
+alias, and the `WithThinkingMode` option have been **removed in v5** (they were deprecated
+throughout v4). Read chain-of-thought from the canonical `Reasoning` field:
 
 ```go
-// v3
-rc := resp.Thinking          // exported field
-// v4
-rc := resp.Reasoning         // canonical field (preferred)
-rc := resp.Thinking()        // deprecated method, returns resp.Reasoning
+rc := resp.Reasoning         // canonical field
 ```
 
 If you built a `Response` / `StreamChunk` struct literal with `Thinking:`, set `Reasoning:`
-instead.
+instead, and replace `WithThinkingMode(true/false)` with `WithReasoning`.
 
 ## 3. Drop any use of the `ErrorMapper` registry (it was dead code)
 
@@ -201,10 +343,10 @@ all shared types live in the root package.
 
 | Package | Import path | What's in it |
 |---------|-------------|--------------|
-| Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v2` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
-| Providers | `github.com/nocturnium/llm-go-sdk/v2/pkg/providers/<name>` | The 18 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
-| All-providers registry | `github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all` | Blank-import only. Registers all 17 chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
-| OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v2/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
+| Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v5` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
+| Providers | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/<name>` | The 19 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
+| All-providers registry | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` | Blank-import only. Registers the 17 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
+| OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
 
 Everything else lives under `internal/` and is not importable by external code.
 
@@ -221,8 +363,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	"github.com/nocturnium/llm-go-sdk/v2/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -255,8 +397,8 @@ factory, then call `llms.New` or `llms.NewFromEnv`:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v2"
-	_ "github.com/nocturnium/llm-go-sdk/v2/pkg/providers/all" // registers all 17 chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers the 17 auto-registered chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o-mini"})
@@ -266,7 +408,7 @@ client, err = llms.NewFromEnv()
 ```
 
 `llms.Config` holds the common construction settings (`APIKey`, `Model`, `BaseURL`,
-`Timeout`, `AllowPrivateIPs`, `HTTPClient`) plus `Extra map[string]string` for
+`Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 
 ## Adding middleware

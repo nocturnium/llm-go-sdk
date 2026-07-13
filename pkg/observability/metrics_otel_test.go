@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -22,7 +22,7 @@ func TestMetricsMiddleware_RecordUsageUsesCustomCostTrackerPricing(t *testing.T)
 	tracer := tracerProvider.Tracer(InstrumentationName)
 
 	tracker := llms.NewCostTracker(map[string]llms.Pricing{
-		"openai:custom-model": {PromptPerMillion: 42.00, CompletionPerMillion: 84.00},
+		"openai:custom-model": {Input: 42.00, Output: 84.00},
 	})
 	llm := &mockMetricsLLM{
 		provider: llms.ProviderOpenAI,

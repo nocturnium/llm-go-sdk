@@ -35,7 +35,7 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 	}
 	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
 	for _, c := range cases {
-		got, known := EstimateCostKnown(c.provider, c.model, u)
+		got, known := EstimateCost(c.provider, c.model, u)
 		if !known {
 			t.Errorf("%s:%s pricing is unknown", c.provider, c.model)
 		}
@@ -110,15 +110,15 @@ func TestNewCostTracker_Defaults(t *testing.T) {
 	if !ok {
 		t.Error("expected default pricing for openai:gpt-4o")
 	}
-	if pricing.PromptPerMillion != 2.50 {
-		t.Errorf("PromptPerMillion = %f, want 2.50", pricing.PromptPerMillion)
+	if pricing.Input != 2.50 {
+		t.Errorf("Input = %f, want 2.50", pricing.Input)
 	}
 }
 
 func TestNewCostTracker_CustomPricing(t *testing.T) {
 	customPricing := map[string]Pricing{
-		"openai:custom-model": {PromptPerMillion: 1.00, CompletionPerMillion: 2.00},
-		"openai:gpt-4o":       {PromptPerMillion: 5.00, CompletionPerMillion: 20.00}, // Override default
+		"openai:custom-model": {Input: 1.00, Output: 2.00},
+		"openai:gpt-4o":       {Input: 5.00, Output: 20.00}, // Override default
 	}
 
 	tracker := NewCostTracker(customPricing)
@@ -128,14 +128,14 @@ func TestNewCostTracker_CustomPricing(t *testing.T) {
 	if !ok {
 		t.Error("expected custom pricing for openai:custom-model")
 	}
-	if pricing.PromptPerMillion != 1.00 {
-		t.Errorf("PromptPerMillion = %f, want 1.00", pricing.PromptPerMillion)
+	if pricing.Input != 1.00 {
+		t.Errorf("Input = %f, want 1.00", pricing.Input)
 	}
 
 	// Override should work
 	pricing, _ = tracker.GetPricing(ProviderOpenAI, "gpt-4o")
-	if pricing.PromptPerMillion != 5.00 {
-		t.Errorf("PromptPerMillion = %f, want 5.00 (overridden)", pricing.PromptPerMillion)
+	if pricing.Input != 5.00 {
+		t.Errorf("Input = %f, want 5.00 (overridden)", pricing.Input)
 	}
 }
 
@@ -324,14 +324,14 @@ func TestCostTracker_Reset(t *testing.T) {
 func TestCostTracker_SetPricing(t *testing.T) {
 	tracker := NewCostTracker()
 
-	tracker.SetPricing(ProviderOpenAI, "custom-model", Pricing{PromptPerMillion: 1.00, CompletionPerMillion: 2.00})
+	tracker.SetPricing(ProviderOpenAI, "custom-model", Pricing{Input: 1.00, Output: 2.00})
 
 	pricing, ok := tracker.GetPricing(ProviderOpenAI, "custom-model")
 	if !ok {
 		t.Error("expected pricing to be set")
 	}
-	if pricing.PromptPerMillion != 1.00 {
-		t.Errorf("PromptPerMillion = %f, want 1.00", pricing.PromptPerMillion)
+	if pricing.Input != 1.00 {
+		t.Errorf("Input = %f, want 1.00", pricing.Input)
 	}
 }
 
@@ -620,7 +620,7 @@ func TestEstimateCost(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(string(tc.provider)+":"+tc.model, func(t *testing.T) {
-			cost := EstimateCost(tc.provider, tc.model, tc.usage)
+			cost, _ := EstimateCost(tc.provider, tc.model, tc.usage)
 			if cost != tc.expected {
 				t.Errorf("cost = %f, want %f", cost, tc.expected)
 			}
@@ -629,7 +629,7 @@ func TestEstimateCost(t *testing.T) {
 }
 
 func TestEstimateCost_UnknownPricing(t *testing.T) {
-	cost, known := EstimateCostKnown(Provider("unpriced"), "missing-model", Usage{PromptTokens: 1000})
+	cost, known := EstimateCost(Provider("unpriced"), "missing-model", Usage{PromptTokens: 1000})
 	if known {
 		t.Fatal("expected pricing to be unknown")
 	}
@@ -638,7 +638,7 @@ func TestEstimateCost_UnknownPricing(t *testing.T) {
 	}
 }
 
-func TestEstimateCostKnown_LocalProvidersIntentionallyUnpriced(t *testing.T) {
+func TestEstimateCost_LocalProvidersIntentionallyUnpriced(t *testing.T) {
 	tests := []struct {
 		provider Provider
 		model    string
@@ -649,7 +649,7 @@ func TestEstimateCostKnown_LocalProvidersIntentionallyUnpriced(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(string(tc.provider), func(t *testing.T) {
-			cost, known := EstimateCostKnown(tc.provider, tc.model, Usage{PromptTokens: 1000})
+			cost, known := EstimateCost(tc.provider, tc.model, Usage{PromptTokens: 1000})
 			if known {
 				t.Fatal("expected pricing to be unknown")
 			}

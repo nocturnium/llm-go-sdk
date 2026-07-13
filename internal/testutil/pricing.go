@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 const tokenPricingEpsilon = 1e-12
@@ -14,8 +14,8 @@ const tokenPricingEpsilon = 1e-12
 func AssertKnownModelTokenPricingReconcilesWithDefaultPricing(
 	t *testing.T,
 	provider llms.Provider,
-	knownPricing map[string]*llms.ModelPricing,
-	expectedPricing map[string]llms.ModelPricing,
+	knownPricing map[string]*llms.Pricing,
+	expectedPricing map[string]llms.Pricing,
 ) {
 	t.Helper()
 
@@ -39,11 +39,11 @@ func AssertKnownModelTokenPricingReconcilesWithDefaultPricing(
 		if !ok {
 			t.Fatalf("DefaultPricing missing %s:%s", providerPrefix, modelID)
 		}
-		if math.Abs(pricing.Input-central.PromptPerMillion) > tokenPricingEpsilon {
-			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, pricing.Input, central.PromptPerMillion)
+		if math.Abs(pricing.Input-central.Input) > tokenPricingEpsilon {
+			t.Errorf("%s Input = %f, DefaultPricing Input = %f", modelID, pricing.Input, central.Input)
 		}
-		if math.Abs(pricing.Output-central.CompletionPerMillion) > tokenPricingEpsilon {
-			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, pricing.Output, central.CompletionPerMillion)
+		if math.Abs(pricing.Output-central.Output) > tokenPricingEpsilon {
+			t.Errorf("%s Output = %f, DefaultPricing Output = %f", modelID, pricing.Output, central.Output)
 		}
 	}
 
@@ -55,11 +55,11 @@ func AssertKnownModelTokenPricingReconcilesWithDefaultPricing(
 		if pricing == nil {
 			t.Fatalf("knownModels[%s].pricing is nil but DefaultPricing has token pricing", modelID)
 		}
-		if math.Abs(pricing.Input-central.PromptPerMillion) > tokenPricingEpsilon {
-			t.Errorf("%s Input = %f, DefaultPricing PromptPerMillion = %f", modelID, pricing.Input, central.PromptPerMillion)
+		if math.Abs(pricing.Input-central.Input) > tokenPricingEpsilon {
+			t.Errorf("%s Input = %f, DefaultPricing Input = %f", modelID, pricing.Input, central.Input)
 		}
-		if math.Abs(pricing.Output-central.CompletionPerMillion) > tokenPricingEpsilon {
-			t.Errorf("%s Output = %f, DefaultPricing CompletionPerMillion = %f", modelID, pricing.Output, central.CompletionPerMillion)
+		if math.Abs(pricing.Output-central.Output) > tokenPricingEpsilon {
+			t.Errorf("%s Output = %f, DefaultPricing Output = %f", modelID, pricing.Output, central.Output)
 		}
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 func TestWithTimeout(t *testing.T) {
@@ -53,6 +53,7 @@ func TestRegisteredFactory(t *testing.T) {
 		Timeout:         30 * time.Second,
 		HTTPClient:      &http.Client{},
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,7 +207,7 @@ func TestListModelsFilterByType(t *testing.T) {
 func TestListModelsLimit(t *testing.T) {
 	client := newModelsTestClient(t)
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels returned error: %v", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -16,7 +16,7 @@ import (
 
 const (
 	// LangfuseInstrumentationName is the instrumentation scope name for Langfuse-compatible spans
-	LangfuseInstrumentationName = "github.com/nocturnium/llm-go-sdk/v4/langfuse"
+	LangfuseInstrumentationName = "github.com/nocturnium/llm-go-sdk/v5/langfuse"
 
 	// Default content capture limits
 	defaultMaxInputCapture  = 100_000

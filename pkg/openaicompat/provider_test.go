@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // TestBaseProvider_Capabilities_StaticWinsOverRegistry verifies the capability
@@ -32,7 +32,6 @@ func TestBaseProvider_Capabilities_StaticWinsOverRegistry(t *testing.T) {
 
 	cfg := openaicompat.ProviderConfig{
 		Provider:     provider,
-		ProviderName: "capmerge-test",
 		DefaultModel: model,
 		Capabilities: llms.Capabilities{
 			Vision:          true, // explicit declaration must win
@@ -65,7 +64,6 @@ func TestBaseProvider_Capabilities_StaticWinsOverRegistry(t *testing.T) {
 func TestBaseProvider_Capabilities_StaticOnly(t *testing.T) {
 	cfg := openaicompat.ProviderConfig{
 		Provider:     llms.Provider("capmerge-unregistered-provider"),
-		ProviderName: "capmerge-unregistered",
 		DefaultModel: "totally-unknown-model",
 		Capabilities: llms.Capabilities{
 			Streaming:        true,
@@ -96,7 +94,6 @@ func TestBaseProvider_Capabilities_StaticOnly(t *testing.T) {
 func TestBaseProvider_ValidatesToolCallIDs(t *testing.T) {
 	bp := openaicompat.NewBaseProvider(nil, openaicompat.ProviderConfig{
 		Provider:     llms.ProviderOpenAI,
-		ProviderName: "openai",
 		DefaultModel: "gpt-4o",
 	})
 	messages := []llms.Message{
@@ -115,7 +112,6 @@ func TestBaseProvider_ValidatesToolCallIDs(t *testing.T) {
 func TestBaseProvider_ValidatesInlineSystem(t *testing.T) {
 	bp := openaicompat.NewBaseProvider(nil, openaicompat.ProviderConfig{
 		Provider:     llms.ProviderOpenAI,
-		ProviderName: "openai",
 		DefaultModel: "gpt-4o",
 	})
 	messages := []llms.Message{

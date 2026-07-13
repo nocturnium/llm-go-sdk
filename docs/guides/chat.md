@@ -8,8 +8,8 @@ own guides — here we focus on plain text generation and multi-turn conversatio
 !!! info "Imports used on this page"
     ```go
     import (
-        llms "github.com/nocturnium/llm-go-sdk/v4"
-        "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+        llms "github.com/nocturnium/llm-go-sdk/v5"
+        "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
     )
     ```
     Every provider follows the same pattern; swap the `openai` import and
@@ -179,9 +179,6 @@ type Response struct {
 }
 ```
 
-`Thinking`/`ThinkingContent` is a deprecated alias retained for backward
-compatibility; use `Reasoning`/`ReasoningContent` in new code.
-
 ### Content
 
 The primary text output. For a plain chat call this is all you usually need:
@@ -253,7 +250,7 @@ fmt.Println(resp.ReasoningText()) // safe empty string when no reasoning is pres
 
 `ReasoningContent` has `Content string`, `Tokens int`, `Signature string` (used
 by Anthropic extended thinking), and a `Metadata map[string]any` for
-provider-specific detail. `ThinkingContent` is a deprecated alias.
+provider-specific detail.
 
 ---
 

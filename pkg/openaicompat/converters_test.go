@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/httpclient"
 )
 
 func mustMarshalRawMessage(t *testing.T, v any) json.RawMessage {
@@ -232,21 +232,19 @@ func TestConvertToolChoice(t *testing.T) {
 	}{
 		{
 			name:     "string auto",
-			input:    &llms.ToolChoice{Type: llms.ToolChoiceAuto},
+			input:    &llms.ToolChoice{Mode: llms.ToolChoiceAuto},
 			expected: "auto",
 		},
 		{
 			name:     "string none",
-			input:    &llms.ToolChoice{Type: llms.ToolChoiceNone},
+			input:    &llms.ToolChoice{Mode: llms.ToolChoiceNone},
 			expected: "none",
 		},
 		{
 			name: "ToolChoice struct",
 			input: &llms.ToolChoice{
-				Type: llms.ToolChoiceType("function"),
-				Function: &llms.FunctionReference{
-					Name: testGetWeather,
-				},
+				Mode: llms.ToolChoiceTool,
+				Tool: testGetWeather,
 			},
 			expected: ToolChoiceFunction{
 				Type: "function",
@@ -988,7 +986,7 @@ func TestBuildChatRequestWithTools(t *testing.T) {
 				},
 			},
 		},
-		ToolChoice: &llms.ToolChoice{Type: llms.ToolChoiceAuto},
+		ToolChoice: &llms.ToolChoice{Mode: llms.ToolChoiceAuto},
 	}
 
 	req := BuildChatRequest("gpt-4", messages, opts, true)

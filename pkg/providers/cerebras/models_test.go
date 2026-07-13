@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // mockModelsResponse mirrors the OpenAI-compatible /models payload Cerebras returns.
@@ -205,7 +205,7 @@ func TestListModels_WithLimit(t *testing.T) {
 		_, _ = w.Write([]byte(mockModelsResponse))
 	})
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
 	}

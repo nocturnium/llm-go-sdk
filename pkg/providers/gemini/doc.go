@@ -35,7 +35,7 @@
 //
 //	client, err := gemini.New(
 //	    gemini.WithAPIKey("..."),
-//	    gemini.WithModel("gemini-2.0-flash"),
+//	    gemini.WithModel("gemini-2.5-flash"),
 //	    gemini.WithEmbeddingModel("text-embedding-004"),
 //	    gemini.WithHTTPClient(customHTTPClient),
 //	)
@@ -52,7 +52,7 @@
 //
 // # Default Model
 //
-// The default model is gemini-2.0-flash. Override with WithModel.
+// The default model is gemini-2.5-flash. Override with WithModel.
 //
 // # Thread Safety
 //

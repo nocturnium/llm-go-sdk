@@ -6,8 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // ErrMissingEndpointID is returned when no endpoint ID is provided.
@@ -16,7 +16,6 @@ var ErrMissingEndpointID = errors.New("runpod: endpoint_id is required (use With
 // providerConfig defines RunPod-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderRunPod,
-	ProviderName:          "runpod",
 	DefaultEmbeddingModel: "", // Depends on deployed model
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

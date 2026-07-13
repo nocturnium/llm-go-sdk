@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
 )
 
 // titleCase capitalizes the first letter of a string.
@@ -225,10 +225,10 @@ type modelMetadata struct {
 	contextLength int
 	maxOutput     int
 	types         []llms.ModelType
-	pricing       *llms.ModelPricing
+	pricing       *llms.Pricing
 }
 
-func tokenPricing(model string) *llms.ModelPricing {
+func tokenPricing(model string) *llms.Pricing {
 	pricing, ok := llms.ModelTokenPricing(llms.ProviderAnthropic, model)
 	if !ok {
 		return nil

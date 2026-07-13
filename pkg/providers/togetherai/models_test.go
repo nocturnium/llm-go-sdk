@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // Mock response data matching TogetherAI API format
@@ -186,7 +186,7 @@ func TestListModels_WithLimit(t *testing.T) {
 		_, _ = w.Write([]byte(mockModelsResponse))
 	})
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestConvertModelResponse(t *testing.T) {
 			Organization:  "Meta",
 			ContextLength: 131072,
 			License:       "llama3.3",
-			Pricing: &openaicompat.ModelPricing{
+			Pricing: &openaicompat.Pricing{
 				Input:    0.88,
 				Output:   0.89,
 				Hourly:   1.23,

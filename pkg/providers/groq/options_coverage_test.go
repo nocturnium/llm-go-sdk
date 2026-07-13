@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // TestWithEmbeddingModel verifies WithEmbeddingModel sets the embedding model field.
@@ -221,7 +221,7 @@ func TestListModelsWithLimit(t *testing.T) {
 
 	client := newGroqTestClient(t, server.URL)
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
 	}
@@ -294,6 +294,7 @@ func TestRegistryFactory(t *testing.T) {
 		Timeout:         9 * time.Second,
 		HTTPClient:      &http.Client{},
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("llms.New(groq) failed: %v", err)

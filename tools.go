@@ -50,27 +50,31 @@ type FunctionCall struct {
 	Arguments string `json:"arguments"`
 }
 
-// ToolChoiceType specifies the model's tool selection behavior.
-type ToolChoiceType string
+// ToolChoiceMode specifies the model's tool-selection behavior.
+type ToolChoiceMode string
 
 const (
 	// ToolChoiceAuto lets the model decide whether to call tools.
-	ToolChoiceAuto ToolChoiceType = "auto"
+	ToolChoiceAuto ToolChoiceMode = "auto"
 	// ToolChoiceNone prevents the model from calling tools.
-	ToolChoiceNone ToolChoiceType = "none"
-	// ToolChoiceRequired forces the model to call a tool.
-	ToolChoiceRequired ToolChoiceType = "required"
+	ToolChoiceNone ToolChoiceMode = "none"
+	// ToolChoiceRequired forces the model to call some tool.
+	ToolChoiceRequired ToolChoiceMode = "required"
+	// ToolChoiceTool forces the model to call the specific tool named in
+	// ToolChoice.Tool.
+	ToolChoiceTool ToolChoiceMode = "tool"
 )
 
-// ToolChoice specifies which tool the model should use.
+// ToolChoice specifies how the model selects a tool. Mode is the selection mode;
+// Tool names the forced tool and is used only when Mode is ToolChoiceTool. This
+// keeps the choice mode and the forced-tool name in distinct fields rather than
+// overloading one field with both.
 type ToolChoice struct {
-	Type     ToolChoiceType     `json:"type"`
-	Function *FunctionReference `json:"function,omitempty"`
-}
-
-// FunctionReference references a specific function by name
-type FunctionReference struct {
-	Name string `json:"name"`
+	// Mode is the tool-selection mode: auto, none, required, or tool.
+	Mode ToolChoiceMode `json:"mode"`
+	// Tool is the name of the specific tool to force. Used only when Mode is
+	// ToolChoiceTool.
+	Tool string `json:"tool,omitempty"`
 }
 
 // NewFunctionTool creates a new function tool with the given definition

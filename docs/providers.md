@@ -1,14 +1,14 @@
 # Providers
 
-llm-go-sdk ships first-class clients for **18 providers** behind a single
+llm-go-sdk ships first-class clients for **19 providers** behind a single
 [`llms.LLM`](index.md) interface. Each provider lives in its own subpackage
 under `pkg/providers/<name>` and is constructed with functional options, for
 example:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 client, err := openai.New(
@@ -37,7 +37,7 @@ code works regardless of which provider you picked.
 |----------|-------------|------------------------|-----------|--------------------|-------|
 | openai | `pkg/providers/openai` | `OPENAI_API_KEY` | OpenAI native | `gpt-4o` | Chat, vision, tools, embeddings (`text-embedding-3-small`) |
 | anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | Native (Messages) | `claude-sonnet-4-20250514` | Vision, tools, thinking, prompt caching |
-| gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-2.0-flash` | Vision, tools, embeddings (`text-embedding-004`) |
+| gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-2.5-flash` | Vision, tools, embeddings (`text-embedding-004`) |
 | azure | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` (or `AZURE_OPENAI_KEY`) + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | deployment-dependent | Uses deployment + endpoint, not a model name |
 | groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` | Fast inference; no embeddings |
 | cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `llama3.1-70b` | Fast inference; no embeddings |
@@ -52,6 +52,7 @@ code works regardless of which provider you picked.
 | runpod | `pkg/providers/runpod` | `RUNPOD_API_KEY` + endpoint ID | OpenAI-compatible | endpoint-dependent | Serverless vLLM endpoints |
 | ollama | `pkg/providers/ollama` | `OLLAMA_HOST` (default `http://localhost:11434`) | OpenAI-compatible | `llama3.2` | Local models; embeddings (`nomic-embed-text`) |
 | llamacpp | `pkg/providers/llamacpp` | `LLAMA_CPP_HOST` (default `http://localhost:8080`) | OpenAI-compatible | discovered from server | Local `llama.cpp` server |
+| huggingface | `pkg/providers/huggingface` | `HF_TOKEN` or `HUGGINGFACE_API_KEY` | OpenAI-compatible (TGI/TEI) | endpoint-dependent | Chat (TGI) or embeddings (TEI) per deployed model; needs `WithEndpoint(...)`; direct-construct |
 | infinity | `pkg/providers/infinity` | `INFINITY_API_KEY` (default host `http://localhost:7997/v1`) | OpenAI-compatible | n/a (no chat) | Embeddings + reranking only |
 
 !!! tip "API key resolution"
@@ -85,12 +86,12 @@ Azure differs: it uses `WithEndpoint(...)` and `WithDeployment(...)` instead of
 ## Construct by name
 
 You can also build any chat provider from a string name. Blank-import the `all`
-package to register all 17 chat providers, then call `llms.New`:
+package to register the 17 auto-registered chat providers, then call `llms.New`:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all"
 )
 
 llm, err := llms.New("openai", llms.Config{
@@ -108,6 +109,7 @@ type Config struct {
 	BaseURL         string
 	Timeout         time.Duration
 	AllowPrivateIPs bool
+	AllowHTTP       bool
 	HTTPClient      *http.Client
 	Extra           map[string]string
 }
@@ -124,12 +126,16 @@ Other helpers:
 - `llms.NewFromEnv()` reads `LLM_PROVIDER` / `LLM_MODEL`.
 - `llms.RegisteredProviders() []string` lists the registered chat providers.
 
-!!! warning "infinity is not registered as a chat provider"
-    The `all` package registers the 17 chat providers but **not** infinity,
-    because infinity does not implement chat generation. Construct it directly
-    with `infinity.New(...)`. The registered set is: anthropic, azure, cerebras,
-    deepseek, featherless, fireworks, gemini, groq, llamacpp, mistral, ollama,
-    openai, perplexity, runpod, synthetic, togetherai, zai.
+!!! warning "Two providers are not auto-registered: infinity and huggingface"
+    The `all` package registers 17 chat providers but **not** infinity or
+    huggingface. Infinity does not implement chat generation (embeddings and
+    reranking only). HuggingFace *does* serve chat (and embeddings), but it needs
+    an explicit Inference-Endpoint URL and a chat-vs-embeddings mode, so it cannot
+    be built from a name alone. Construct either one directly —
+    `infinity.New(...)` / `huggingface.New(...)`. The auto-registered set is:
+    anthropic, azure, cerebras, deepseek, featherless, fireworks, gemini, groq,
+    llamacpp, mistral, ollama, openai, perplexity, runpod, synthetic, togetherai,
+    zai.
 
 ---
 
@@ -144,7 +150,7 @@ a model id. The API key is read from `AZURE_OPENAI_API_KEY` or
 default API version is `2024-02-15-preview`.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/azure"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/azure"
 
 client, err := azure.New(
 	azure.WithEndpoint("https://my-resource.openai.azure.com"),
@@ -171,7 +177,7 @@ relaxed automatically (no need for `WithAllowPrivateIPs`/`WithAllowHTTP`).
   Optional `LLAMA_CPP_API_KEY` is supported.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/ollama"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/ollama"
 
 client, err := ollama.New(
 	ollama.WithModel("llama3.2"),
@@ -190,8 +196,8 @@ infinity is an embeddings/reranking server, not a chat provider. It implements
 ```go
 import (
 	"context"
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/infinity"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/infinity"
 )
 
 client, err := infinity.New(
@@ -218,7 +224,7 @@ construction returns `runpod.ErrMissingEndpointID` without it. The client builds
 the URL as `https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1`.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/runpod"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/runpod"
 
 client, err := runpod.New(
 	runpod.WithEndpointID("ep-123"),
@@ -243,7 +249,7 @@ flagship `glm-4.7` model. Opt into the coding-specific endpoint
 exposes native web search.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/zai"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/zai"
 
 client, err := zai.New(
 	zai.WithModel("glm-4.7"),
@@ -268,7 +274,7 @@ default model is `sonar`. The key is read from `PERPLEXITY_API_KEY` or
 `Response.SearchResults`.
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/perplexity"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/perplexity"
 
 client, err := perplexity.New(
 	perplexity.WithModel("sonar"),

@@ -311,35 +311,6 @@ func TestCallOptions_Validate_ValidTool(t *testing.T) {
 	}
 }
 
-func TestWithThinkingMode_Enabled(t *testing.T) {
-	// WithThinkingMode is deprecated; it now forwards to ReasoningConfig.Enabled.
-	opts := ApplyOptions(WithThinkingMode(true))
-
-	if opts.Reasoning == nil || opts.Reasoning.Enabled == nil {
-		t.Fatal("expected Reasoning.Enabled to be set")
-	}
-	if !*opts.Reasoning.Enabled {
-		t.Error("expected Reasoning.Enabled == true")
-	}
-	if !opts.Reasoning.IsEnabled() {
-		t.Error("expected IsEnabled() == true")
-	}
-}
-
-func TestWithThinkingMode_Disabled(t *testing.T) {
-	opts := ApplyOptions(WithThinkingMode(false))
-
-	if opts.Reasoning == nil || opts.Reasoning.Enabled == nil {
-		t.Fatal("expected Reasoning.Enabled to be set")
-	}
-	if *opts.Reasoning.Enabled {
-		t.Error("expected Reasoning.Enabled == false")
-	}
-	if opts.Reasoning.IsEnabled() {
-		t.Error("expected IsEnabled() == false")
-	}
-}
-
 func TestWithReasoningEffort(t *testing.T) {
 	opts := ApplyOptions(WithReasoningEffort(ReasoningEffortHigh))
 	if opts.Reasoning == nil {

@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
 )
 
 func TestDefaultOptions(t *testing.T) {
@@ -299,7 +299,7 @@ func TestBuildRequest_EffortDerivesBudget(t *testing.T) {
 // TestConvertToolChoice_NonePreserved covers #16: tool_choice "none" must not be
 // silently coerced to "auto".
 func TestConvertToolChoice_NonePreserved(t *testing.T) {
-	got := convertToolChoice(&llms.ToolChoice{Type: llms.ToolChoiceNone})
+	got := convertToolChoice(&llms.ToolChoice{Mode: llms.ToolChoiceNone})
 	if got == nil {
 		t.Fatal("tool_choice none produced nil")
 	}

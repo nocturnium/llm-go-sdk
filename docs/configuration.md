@@ -8,14 +8,14 @@ settings, the built-in SSRF / network-security policy, and where retries fit
 The root package is imported as:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 ```
 
 Providers live under `pkg/providers/<name>` and each exposes a typed
 `New(...Option)` constructor, for example:
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 
 client, err := openai.New(
     openai.WithModel("gpt-4o"),
@@ -135,7 +135,7 @@ parameters that have no common SDK field are passed through `Config.Extra`:
 | Z.AI | `coding` = `"true"`/`"1"`/`"yes"` | Switches to the Z.AI Coding API endpoint |
 
 ```go
-import _ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // register all providers
+import _ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // register all providers
 
 client, err := llms.New("runpod", llms.Config{
     Model: "meta-llama/Llama-3.1-8B-Instruct",
@@ -256,14 +256,17 @@ client, err := openai.New(
     needed to reach `http://localhost`. The options are still available if you
     ever need to override behavior.
 
-When constructing by name, the same relaxation is available through
-`Config.AllowPrivateIPs`:
+When constructing by name, the same relaxations are available through the
+independent `Config.AllowPrivateIPs` and `Config.AllowHTTP` flags. A private,
+plain-HTTP endpoint needs **both** — enabling private-IP access alone no longer
+permits cleartext HTTP:
 
 ```go
 client, err := llms.New("openai", llms.Config{
     Model:           "my-model",
     BaseURL:         "http://10.0.0.5:8000/v1",
-    AllowPrivateIPs: true,
+    AllowPrivateIPs: true, // reach the private address
+    AllowHTTP:       true, // allow the plain-HTTP scheme
 })
 ```
 
@@ -282,7 +285,7 @@ Custom providers built on `pkg/openaicompat` expose the same toggles on
 
 To add retries (and optionally circuit breaking), wrap any client with
 `resilience.NewResilientClient` (from
-`github.com/nocturnium/llm-go-sdk/v4/pkg/middleware/resilience`):
+`github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience`):
 
 ```go
 base, _ := openai.New(openai.WithModel("gpt-4o"))

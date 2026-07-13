@@ -3,7 +3,7 @@ package openaicompat
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // The openaicompat converter is the widest-blast-radius converter in the SDK

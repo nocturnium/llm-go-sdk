@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 func TestRegisterNewMissingEndpointID(t *testing.T) {

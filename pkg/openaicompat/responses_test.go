@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 func TestBuildResponsesRequest_MessagesAndInstructions(t *testing.T) {
@@ -252,7 +252,6 @@ func TestBaseProvider_RoutesToResponsesAPI(t *testing.T) {
 	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
 	p := NewBaseProvider(client, ProviderConfig{
 		Provider:        llms.ProviderOpenAI,
-		ProviderName:    "openai",
 		DefaultModel:    "gpt-4o",
 		UseResponsesAPI: true,
 	})
@@ -282,7 +281,6 @@ func TestBaseProvider_ResponsesFailedStatusReturnsError(t *testing.T) {
 	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
 	p := NewBaseProvider(client, ProviderConfig{
 		Provider:        llms.ProviderOpenAI,
-		ProviderName:    "openai",
 		DefaultModel:    "gpt-4o",
 		UseResponsesAPI: true,
 	})

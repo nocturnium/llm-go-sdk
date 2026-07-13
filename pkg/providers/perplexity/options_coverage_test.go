@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // TestOptionSetters exercises each WithX option setter against the options
@@ -201,7 +201,7 @@ func TestClient_ListModels_TypeFilterAndLimit(t *testing.T) {
 	})
 
 	t.Run("limit truncates", func(t *testing.T) {
-		result, err := client.ListModels(context.Background(), llms.WithModelsLimit(1))
+		result, err := client.ListModels(context.Background(), llms.WithModelLimit(1))
 		if err != nil {
 			t.Fatalf("ListModels failed: %v", err)
 		}
@@ -272,6 +272,7 @@ func TestRegisterFactory(t *testing.T) {
 		Timeout:         3 * time.Second,
 		HTTPClient:      custom,
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("llms.New(perplexity) failed: %v", err)
