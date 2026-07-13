@@ -126,6 +126,7 @@ provider and needs no caller action — drop any direct reference to
 | `WithModelsLimit(n)` | `WithModelLimit(n)` |
 | `WithModelsCursor(c)` | `WithModelCursor(c)` |
 | `openaicompat.ProviderConfig.ProviderName` | removed — `Provider` is the single identity |
+| `openaicompat.ModelPricing` | `openaicompat.Pricing` (both alias the unified `llms.Pricing`; see §4) |
 | `NewBoundedMemoryResponseCache(ttl, max)` | `NewMemoryResponseCache(ttl, max)` (now bounded by default) |
 
 `NewMemoryResponseCache` now takes a `maxEntries` argument and is bounded by

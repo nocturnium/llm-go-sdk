@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-12
+
+v5 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v5`
+(Go semantic import versioning); v4 and v5 are distinct module paths and can coexist, so
+consumers may migrate incrementally. See `docs/migration-guide.md` for the full v4 → v5
+guide. v5 removes the last long-deprecated shims and cleans up several overloaded or
+inconsistent APIs; the core surface (`Call`, `GenerateContent`, `Stream`, tools, structured
+output, embeddings, providers, middleware) is unchanged in shape. Every change was built as
+an independently expert-gated packet, and the release passed a unanimous tri-reviewer
+(CTO + Go-expert + 10x) ship gate.
+
+### Changed (BREAKING)
+
+- **Module path → `/v5`.** `go get github.com/nocturnium/llm-go-sdk/v5@v5.0.0` (the core
+  package name stays `llms`).
+- **`Config.AllowHTTP` is now independent of `AllowPrivateIPs`** (secure default `false`).
+  Enabling private-IP access previously also permitted plain HTTP; reaching a private
+  `http://` endpoint via `Config` now requires `AllowHTTP: true`. Local providers
+  (`ollama`/`llamacpp`/`infinity`) still default both on. Closes a cleartext / API-key-leak
+  foot-gun.
+- **Removed the deprecated `Thinking` API.** `Response.Thinking()`, `StreamChunk.Thinking()`,
+  the `ThinkingContent` alias, and `WithThinkingMode` are gone — use `Reasoning`.
+- **Unified the two pricing types into one `llms.Pricing`**
+  (`{Input, Output, CacheRead, CacheWrite, Hourly, Finetune, Base}`). `ModelPricing` is
+  removed and `ModelInfo.Pricing` is now `*Pricing`; the `openaicompat.ModelPricing` alias
+  becomes `openaicompat.Pricing`. All pricing values are preserved.
+- **`EstimateCost` now returns `(float64, bool)`** (comma-ok); `EstimateCostKnown` is removed.
+- **`ToolChoice` de-overloaded** to `{Mode ToolChoiceMode; Tool string}` (was
+  `{Type ToolChoiceType; Function *FunctionReference}`); `ToolChoiceTool` added and
+  `FunctionReference` removed. The provider wire encoding is unchanged.
+- **`AnthropicTTL` removed from the root package** — prompt-cache TTL handling now lives
+  inside the anthropic provider.
+- **Renames & constructor changes:** `WithModelsLimit`/`WithModelsCursor` →
+  `WithModelLimit`/`WithModelCursor`; `openaicompat.ProviderConfig.ProviderName` removed
+  (`Provider` is the single identity); `NewMemoryResponseCache(ttl, maxEntries)` is now
+  bounded by default (`NewBoundedMemoryResponseCache` removed); `resilience.ErrRateLimitExceeded`
+  now wraps `llms.ErrRateLimited` (so `errors.Is(err, llms.ErrRateLimited)` matches).
+- **Default Gemini model is now `gemini-2.5-flash`** (was the retired `gemini-2.0-flash`);
+  removed the retired `gemini-2.0-flash`/`-lite`, RunPod `ModelLlama31_405B`/`ModelMixtral8x7B`,
+  and Z.AI `ModelGLM47FlashX`/`ModelGLM47Flash` model IDs.
+
+### Notes
+
+- Relocating the stream-authoring toolkit to a dedicated package was evaluated and
+  **deferred** (a genuine root-package import cycle via `CostMiddleware.Stream`); it has no
+  effect on the v5 public API and is earmarked for a future architectural pass.
+
+## [4.2.0] - 2026-07-12
+
+A correctness, resilience, and transport-security hardening sweep. Additive — no breaking
+changes. See the
+[v4.2.0 release notes](https://github.com/nocturnium/llm-go-sdk/releases/tag/v4.2.0) for the
+full list.
+
+## [4.1.1] - 2026-06-21
+
+Security and correctness hardening — the HIGH-severity items from a post-v4.1.0 review.
+Additive — no breaking changes.
+
+### Security
+
+- **Strip provider API-key headers on cross-host redirects** (`x-goog-api-key`, `api-key`,
+  `x-api-key`, `Authorization`, `Proxy-Authorization`) so a redirect to a foreign host cannot
+  leak the raw key (CWE-200).
+
+### Fixed
+
+- **`FallbackChain` data race** between dispatch reads and `AddClient`/`RemoveClient` (an
+  immutable snapshot is now taken under the read lock).
+- **Streaming token usage** silently lost on OpenAI-compatible providers — streaming requests
+  now send `stream_options.include_usage` so the terminal usage chunk is emitted.
+- **Stale model capabilities** for the current GPT-5 / Claude / Gemini flagships.
+- **Non-compiling embeddings godoc** examples for the OpenAI and Gemini packages.
+
 ## [4.1.0] - 2026-06-21
 
 Additive, non-breaking fast-follow on top of v4.0.0 — observability for two
