@@ -3,7 +3,7 @@ package observability
 import (
 	"go.opentelemetry.io/otel/attribute"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // GenAI Semantic Conventions for OpenTelemetry

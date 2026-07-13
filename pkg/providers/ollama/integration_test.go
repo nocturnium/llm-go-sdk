@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/ollamaapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/ollamaapi"
 )
 
 // TestGenerateContent tests basic content generation.

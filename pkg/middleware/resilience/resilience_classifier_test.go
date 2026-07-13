@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // mockNetError is a net.Error with a configurable timeout flag, for classifier tests.

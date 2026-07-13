@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
 )
 
 const (

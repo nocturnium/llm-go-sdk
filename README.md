@@ -1,10 +1,10 @@
 # llm-go-sdk
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/nocturnium/llm-go-sdk/v4.svg)](https://pkg.go.dev/github.com/nocturnium/llm-go-sdk/v4)
+[![Go Reference](https://pkg.go.dev/badge/github.com/nocturnium/llm-go-sdk/v5.svg)](https://pkg.go.dev/github.com/nocturnium/llm-go-sdk/v5)
 [![CI](https://github.com/nocturnium/llm-go-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/nocturnium/llm-go-sdk/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/nocturnium/llm-go-sdk/actions/workflows/codeql.yml/badge.svg)](https://github.com/nocturnium/llm-go-sdk/actions/workflows/codeql.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go Report Card](https://goreportcard.com/badge/github.com/nocturnium/llm-go-sdk/v4)](https://goreportcard.com/report/github.com/nocturnium/llm-go-sdk/v4)
+[![Go Report Card](https://goreportcard.com/badge/github.com/nocturnium/llm-go-sdk/v5)](https://goreportcard.com/report/github.com/nocturnium/llm-go-sdk/v5)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nocturnium/llm-go-sdk)](https://github.com/nocturnium/llm-go-sdk/blob/main/go.mod)
 
 > A unified, dependency-light Go SDK for **19 LLM providers** — streaming, tool calling,
@@ -36,7 +36,7 @@ Ollama server by changing a single import and constructor — everything else
 ## 60-Second Quickstart
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v4
+go get github.com/nocturnium/llm-go-sdk/v5
 export OPENAI_API_KEY="sk-..."   # or set the env var for any other provider
 ```
 
@@ -48,8 +48,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {
@@ -99,8 +99,8 @@ factory:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // registers all 17 chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers all 17 chat providers
 )
 
 // By name. llms.Config carries the common construction settings.
@@ -124,7 +124,7 @@ needs both), `HTTPClient`, and `Extra map[string]string` for provider-specific k
 ## Installation
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v4
+go get github.com/nocturnium/llm-go-sdk/v5
 ```
 
 Requires **Go 1.25+**.
@@ -133,7 +133,7 @@ Requires **Go 1.25+**.
 
 The SDK ships **19 providers** (17 chat-registered; HuggingFace and Infinity are
 embeddings-only). Import each from its canonical path
-`github.com/nocturnium/llm-go-sdk/v4/pkg/providers/<name>`. Every chat provider also
+`github.com/nocturnium/llm-go-sdk/v5/pkg/providers/<name>`. Every chat provider also
 falls back to `LLM_API_KEY` if its own key var is unset. "OpenAI-compatible"
 providers share the `pkg/openaicompat` base (they speak OpenAI's `/chat/completions`
 schema); "Native" providers implement a provider-specific wire format.
@@ -199,7 +199,7 @@ via the provider's `WithAPIKey(...)` option. Copy [`.env.example`](./.env.exampl
 
 ## Package Layout
 
-The SDK is a single Go module (`github.com/nocturnium/llm-go-sdk/v4`, Go 1.25+) with a
+The SDK is a single Go module (`github.com/nocturnium/llm-go-sdk/v5`, Go 1.25+) with a
 small, deliberately flat public surface. The **core lives in the root package**
 (`package llms`): the `LLM` interface, all shared types and options, errors,
 streaming, and the cost + response-caching middleware. The other public packages
@@ -211,7 +211,7 @@ Everything else lives under `internal/` and is not importable by external code.
 
 | Location | Role |
 |----------|------|
-| Root (`llms "github.com/nocturnium/llm-go-sdk/v4"`) | The core: `LLM` interface, `Message`/`Response`/`Tool` types, options, errors, streaming, cost-tracking and response-caching middleware, capability registry |
+| Root (`llms "github.com/nocturnium/llm-go-sdk/v5"`) | The core: `LLM` interface, `Message`/`Response`/`Tool` types, options, errors, streaming, cost-tracking and response-caching middleware, capability registry |
 | `pkg/providers/<name>` | **Provider implementations** (19 providers; 17 chat-registered) |
 | `pkg/openaicompat` | Shared OpenAI-compatible base client; the base for building custom providers |
 | `pkg/mcp` | Model Context Protocol client (`tools/list`, `tools/call`) |
@@ -255,8 +255,8 @@ There is one import style: import the root package for the shared types and opti
 and import the provider you need from `pkg/providers/<name>`.
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v4"
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 
 // Use types directly
 messages := []llms.Message{ /* ... */ }
@@ -638,7 +638,7 @@ Built-in pricing for 25+ models including GPT-4o, Claude, Gemini, and Llama mode
 > base client's behavior predictable and puts you in control of when calls are retried.
 
 The resilience wrappers live in
-`github.com/nocturnium/llm-go-sdk/v4/pkg/middleware/resilience`.
+`github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience`.
 `NewResilientClient` returns an `llms.LLM`; hold the client as `llms.LLM` and reassign
 it as you add layers.
 
@@ -743,7 +743,7 @@ chain, _ := resilience.NewWeightedFallbackChain(
 ## Observability
 
 The observability middleware lives in
-`github.com/nocturnium/llm-go-sdk/v4/pkg/observability`.
+`github.com/nocturnium/llm-go-sdk/v5/pkg/observability`.
 
 ### OpenTelemetry
 
@@ -829,7 +829,7 @@ import (
     "net/http"
     "time"
 
-    "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+    "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 // Simple: just a request timeout.
@@ -866,7 +866,7 @@ flag is needed for the usual local setup.
 ### OpenAI
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 
 client, err := openai.New(
     openai.WithAPIKey("sk-..."),       // Or use OPENAI_API_KEY env
@@ -878,7 +878,7 @@ client, err := openai.New(
 ### Anthropic
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/anthropic"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
 
 client, err := anthropic.New(
     anthropic.WithAPIKey("sk-ant-..."), // Or use ANTHROPIC_API_KEY env
@@ -889,7 +889,7 @@ client, err := anthropic.New(
 ### Gemini
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/gemini"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/gemini"
 
 client, err := gemini.New(
     gemini.WithAPIKey("..."), // Or use GEMINI_API_KEY / GOOGLE_API_KEY env
@@ -900,7 +900,7 @@ client, err := gemini.New(
 ### Azure OpenAI
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/azure"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/azure"
 
 client, err := azure.New(
     azure.WithAPIKey("..."),                                  // AZURE_OPENAI_API_KEY
@@ -912,7 +912,7 @@ client, err := azure.New(
 ### Ollama (local)
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/ollama"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/ollama"
 
 client, err := ollama.New(
     ollama.WithBaseURL("http://localhost:11434"), // Or OLLAMA_HOST env
@@ -923,7 +923,7 @@ client, err := ollama.New(
 ### Z.AI
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/zai"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/zai"
 
 client, err := zai.New(
     zai.WithAPIKey("..."),         // Or use ZAI_API_KEY env
@@ -975,8 +975,8 @@ go build -o llms-cli ./cmd
 import (
     "errors"
 
-    llms "github.com/nocturnium/llm-go-sdk/v4"
-    "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+    llms "github.com/nocturnium/llm-go-sdk/v5"
+    "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 client, err := openai.New()

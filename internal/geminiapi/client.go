@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/httpclient"
 )
 
 const defaultBaseURL = "https://generativelanguage.googleapis.com/v1beta"

@@ -8,14 +8,14 @@ settings, the built-in SSRF / network-security policy, and where retries fit
 The root package is imported as:
 
 ```go
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 ```
 
 Providers live under `pkg/providers/<name>` and each exposes a typed
 `New(...Option)` constructor, for example:
 
 ```go
-import "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+import "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 
 client, err := openai.New(
     openai.WithModel("gpt-4o"),
@@ -135,7 +135,7 @@ parameters that have no common SDK field are passed through `Config.Extra`:
 | Z.AI | `coding` = `"true"`/`"1"`/`"yes"` | Switches to the Z.AI Coding API endpoint |
 
 ```go
-import _ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // register all providers
+import _ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // register all providers
 
 client, err := llms.New("runpod", llms.Config{
     Model: "meta-llama/Llama-3.1-8B-Instruct",
@@ -285,7 +285,7 @@ Custom providers built on `pkg/openaicompat` expose the same toggles on
 
 To add retries (and optionally circuit breaking), wrap any client with
 `resilience.NewResilientClient` (from
-`github.com/nocturnium/llm-go-sdk/v4/pkg/middleware/resilience`):
+`github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience`):
 
 ```go
 base, _ := openai.New(openai.WithModel("gpt-4o"))

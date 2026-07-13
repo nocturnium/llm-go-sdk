@@ -33,9 +33,9 @@ builds:
         goarch: arm64
     ldflags:
       - -s -w
-      - -X github.com/nocturnium/llm-go-sdk/v4.Version={{.Version}}
-      - -X github.com/nocturnium/llm-go-sdk/v4.Commit={{.Commit}}
-      - -X github.com/nocturnium/llm-go-sdk/v4.Date={{.Date}}
+      - -X github.com/nocturnium/llm-go-sdk/v5.Version={{.Version}}
+      - -X github.com/nocturnium/llm-go-sdk/v5.Commit={{.Commit}}
+      - -X github.com/nocturnium/llm-go-sdk/v5.Date={{.Date}}
     mod_timestamp: '{{ .CommitTimestamp }}'
     flags:
       - -trimpath
@@ -107,7 +107,7 @@ release:
     ### Installation
 
     ```bash
-    go get github.com/nocturnium/llm-go-sdk/v4@{{ .Tag }}
+    go get github.com/nocturnium/llm-go-sdk/v5@{{ .Tag }}
     ```
 
 announce:

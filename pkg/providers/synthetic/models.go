@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // cachedModels contains metadata for models available on Synthetic.new.

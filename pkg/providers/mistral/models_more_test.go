@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // mockModelsResponse mirrors the Mistral /models response (OpenAI-compatible).

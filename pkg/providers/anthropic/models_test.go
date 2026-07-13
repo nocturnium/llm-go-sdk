@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/internal/testutil"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/internal/testutil"
 )
 
 var expectedKnownModelTokenPricing = map[string]llms.Pricing{

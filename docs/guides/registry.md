@@ -16,8 +16,8 @@ for config-driven applications that need to switch providers without recompiling
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // register all chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // register all chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o"})
@@ -51,7 +51,7 @@ can construct it. Each provider package does this in its `init()` function, so a
 ### Register everything
 
 ```go
-import _ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all"
+import _ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all"
 ```
 
 This registers all **17 chat providers**:
@@ -73,8 +73,8 @@ import only the specific provider packages:
 
 ```go
 import (
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/anthropic"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
 )
 ```
 
@@ -275,7 +275,7 @@ functional options. For a provider built on
 ```go
 package myprovider
 
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 
 func init() {
 	llms.RegisterProvider("myprovider", func(cfg llms.Config) (llms.LLM, error) {
@@ -329,8 +329,8 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	_ "github.com/nocturnium/llm-go-sdk/v4/pkg/providers/all" // register all chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // register all chat providers
 )
 
 func main() {

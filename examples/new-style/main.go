@@ -6,8 +6,8 @@
 //
 // Both old and new provider import paths work identically:
 //
-//	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"     // old
-//	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"  // new
+//	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"     // old
+//	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"  // new
 package main
 
 import (
@@ -17,8 +17,8 @@ import (
 	"os"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
 )
 
 func main() {

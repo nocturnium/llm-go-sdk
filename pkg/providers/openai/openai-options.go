@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // Option is a function that configures an OpenAI client.

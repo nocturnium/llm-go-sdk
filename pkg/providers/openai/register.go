@@ -1,6 +1,6 @@
 package openai
 
-import llms "github.com/nocturnium/llm-go-sdk/v4"
+import llms "github.com/nocturnium/llm-go-sdk/v5"
 
 func init() {
 	llms.RegisterProvider("openai", func(cfg llms.Config) (llms.LLM, error) {

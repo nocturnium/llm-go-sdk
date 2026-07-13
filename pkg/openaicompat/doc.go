@@ -24,8 +24,8 @@
 //	package myprovider
 //
 //	import (
-//		llms "github.com/nocturnium/llm-go-sdk/v4"
-//		"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+//		llms "github.com/nocturnium/llm-go-sdk/v5"
+//		"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 //	)
 //
 //	// Client embeds BaseProvider to inherit the llms.LLM implementation.

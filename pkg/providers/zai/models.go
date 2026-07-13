@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // GLM model IDs for Z.AI. Model identifiers are verified against the live

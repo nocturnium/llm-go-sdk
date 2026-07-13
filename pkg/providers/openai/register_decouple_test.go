@@ -7,7 +7,7 @@ import (
 
 	"net/http"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
 )
 
 // TestRegister_AllowHTTPDecoupledFromPrivateIPs proves the v5 decoupling through

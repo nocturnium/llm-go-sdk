@@ -6,8 +6,8 @@ import (
 	"errors"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v4"
-	"github.com/nocturnium/llm-go-sdk/v4/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v5"
+	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
 )
 
 // ErrMissingEndpointID is returned when no endpoint ID is provided.
