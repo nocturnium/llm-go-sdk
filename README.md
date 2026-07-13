@@ -118,7 +118,8 @@ client, err = llms.New("zai", llms.Config{Extra: map[string]string{"coding": "tr
 ```
 
 `llms.Config` fields: `APIKey`, `Model`, `BaseURL`, `Timeout`, `AllowPrivateIPs`,
-`HTTPClient`, and `Extra map[string]string` for provider-specific keys.
+`AllowHTTP` (independent of `AllowPrivateIPs` — a private plain-HTTP endpoint
+needs both), `HTTPClient`, and `Extra map[string]string` for provider-specific keys.
 
 ## Installation
 

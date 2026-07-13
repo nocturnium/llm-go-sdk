@@ -294,6 +294,7 @@ func TestRegistryFactory(t *testing.T) {
 		Timeout:         9 * time.Second,
 		HTTPClient:      &http.Client{},
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("llms.New(groq) failed: %v", err)

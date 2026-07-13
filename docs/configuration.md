@@ -256,14 +256,17 @@ client, err := openai.New(
     needed to reach `http://localhost`. The options are still available if you
     ever need to override behavior.
 
-When constructing by name, the same relaxation is available through
-`Config.AllowPrivateIPs`:
+When constructing by name, the same relaxations are available through the
+independent `Config.AllowPrivateIPs` and `Config.AllowHTTP` flags. A private,
+plain-HTTP endpoint needs **both** — enabling private-IP access alone no longer
+permits cleartext HTTP:
 
 ```go
 client, err := llms.New("openai", llms.Config{
     Model:           "my-model",
     BaseURL:         "http://10.0.0.5:8000/v1",
-    AllowPrivateIPs: true,
+    AllowPrivateIPs: true, // reach the private address
+    AllowHTTP:       true, // allow the plain-HTTP scheme
 })
 ```
 

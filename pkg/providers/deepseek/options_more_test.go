@@ -293,6 +293,7 @@ func TestRegisteredFactory(t *testing.T) {
 		Timeout:         15 * time.Second,
 		HTTPClient:      &http.Client{},
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("llms.New(deepseek) error = %v", err)

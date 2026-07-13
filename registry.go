@@ -17,13 +17,23 @@ import (
 //   - runpod: ExtraRunPodEndpointID sets the required serverless endpoint ID.
 //   - zai: ExtraZAICoding set to "true", "1", or "yes" enables the Coding API.
 type Config struct {
-	APIKey          string
-	Model           string
-	BaseURL         string
-	Timeout         time.Duration
+	APIKey  string
+	Model   string
+	BaseURL string
+	Timeout time.Duration
+	// AllowPrivateIPs permits requests to private, loopback, and link-local
+	// addresses (e.g. a self-hosted model on a private network). It relaxes only
+	// the destination-host SSRF check and does NOT permit plain HTTP — set
+	// AllowHTTP for that. Default false (secure).
 	AllowPrivateIPs bool
-	HTTPClient      *http.Client
-	Extra           map[string]string
+	// AllowHTTP permits plain-HTTP (non-TLS) request URLs. It is independent of
+	// AllowPrivateIPs: enabling private-IP access no longer implies cleartext
+	// HTTP, so an API key cannot leak over an http:// URL (a BaseURL typo or a
+	// downgrade redirect) unless AllowHTTP is set explicitly. Default false
+	// (HTTPS enforced).
+	AllowHTTP  bool
+	HTTPClient *http.Client
+	Extra      map[string]string
 }
 
 // Recognized Config.Extra keys for provider-specific construction settings.

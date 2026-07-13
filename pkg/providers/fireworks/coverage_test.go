@@ -53,6 +53,7 @@ func TestRegisteredFactory(t *testing.T) {
 		Timeout:         30 * time.Second,
 		HTTPClient:      &http.Client{},
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

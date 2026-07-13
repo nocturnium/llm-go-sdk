@@ -272,6 +272,7 @@ func TestRegisterFactory(t *testing.T) {
 		Timeout:         3 * time.Second,
 		HTTPClient:      custom,
 		AllowPrivateIPs: true,
+		AllowHTTP:       true,
 	})
 	if err != nil {
 		t.Fatalf("llms.New(perplexity) failed: %v", err)

@@ -164,19 +164,22 @@ type Config struct {
 	Model           string            // model ID, e.g. "gpt-4o"
 	BaseURL         string            // override the API base URL
 	Timeout         time.Duration     // per-request timeout
-	AllowPrivateIPs bool              // permit private/loopback hosts + HTTP (self-hosted)
+	AllowPrivateIPs bool              // permit private/loopback hosts (self-hosted)
+	AllowHTTP       bool              // permit plain-HTTP (non-TLS) URLs
 	HTTPClient      *http.Client      // custom HTTP client
 	Extra           map[string]string // provider-specific keys (see below)
 }
 ```
 
-!!! warning "`AllowPrivateIPs` also relaxes the HTTPS requirement"
+!!! warning "`AllowPrivateIPs` and `AllowHTTP` are independent"
     SSRF protection is on by default: the SDK blocks private/loopback/link-local
-    and cloud-metadata addresses and requires HTTPS. Setting
-    `Config.AllowPrivateIPs: true` enables **both** private-IP access and plain
-    HTTP, which is what you want for self-hosted endpoints (Ollama, llama.cpp, a
-    local gateway) reached through the registry. Use it only for endpoints you
-    trust.
+    and cloud-metadata addresses and requires HTTPS. `AllowPrivateIPs: true`
+    relaxes only the host check (reach a private/loopback address); `AllowHTTP:
+    true` relaxes only the scheme check (allow plain HTTP). They are independent,
+    so an API key cannot leak over cleartext merely because you enabled
+    private-IP access. A self-hosted endpoint reached over **plain HTTP** (Ollama,
+    llama.cpp, a local gateway) needs **both** flags set. Use them only for
+    endpoints you trust.
 
 ### Provider-specific `Extra` keys
 
@@ -293,7 +296,10 @@ func init() {
 			opts = append(opts, WithHTTPClient(cfg.HTTPClient))
 		}
 		if cfg.AllowPrivateIPs {
-			opts = append(opts, WithAllowPrivateIPs(), WithAllowHTTP())
+			opts = append(opts, WithAllowPrivateIPs())
+		}
+		if cfg.AllowHTTP {
+			opts = append(opts, WithAllowHTTP())
 		}
 		return New(opts...) // your provider's constructor
 	})
