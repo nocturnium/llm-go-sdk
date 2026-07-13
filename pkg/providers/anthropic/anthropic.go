@@ -489,7 +489,7 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 	// allowed — so soften a forcing choice to "auto" when thinking is enabled,
 	// keeping the request valid rather than failing with HTTP 400.
 	if opts.ToolChoice != nil {
-		if req.Thinking != nil && (opts.ToolChoice.Type == llms.ToolChoiceRequired || opts.ToolChoice.Function != nil) {
+		if req.Thinking != nil && (opts.ToolChoice.Mode == llms.ToolChoiceRequired || opts.ToolChoice.Mode == llms.ToolChoiceTool) {
 			req.ToolChoice = anthropicapi.ToolChoiceAuto{Type: "auto"}
 		} else {
 			req.ToolChoice = convertToolChoice(opts.ToolChoice)

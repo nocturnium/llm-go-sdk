@@ -469,29 +469,26 @@ func TestWithTools(t *testing.T) {
 
 func TestWithToolChoiceConstructors(t *testing.T) {
 	opts := ApplyOptions(WithToolChoiceAuto())
-	if opts.ToolChoice == nil || opts.ToolChoice.Type != ToolChoiceAuto {
+	if opts.ToolChoice == nil || opts.ToolChoice.Mode != ToolChoiceAuto {
 		t.Errorf("expected tool choice 'auto', got %v", opts.ToolChoice)
 	}
 
 	opts = ApplyOptions(WithToolChoiceNone())
-	if opts.ToolChoice == nil || opts.ToolChoice.Type != ToolChoiceNone {
+	if opts.ToolChoice == nil || opts.ToolChoice.Mode != ToolChoiceNone {
 		t.Errorf("expected tool choice 'none', got %v", opts.ToolChoice)
 	}
 
 	opts = ApplyOptions(WithToolChoiceRequired())
-	if opts.ToolChoice == nil || opts.ToolChoice.Type != ToolChoiceRequired {
+	if opts.ToolChoice == nil || opts.ToolChoice.Mode != ToolChoiceRequired {
 		t.Errorf("expected tool choice 'required', got %v", opts.ToolChoice)
 	}
 
 	opts = ApplyOptions(WithToolChoiceTool("specific_function"))
-	if opts.ToolChoice == nil || opts.ToolChoice.Function == nil {
-		t.Fatal("expected tool choice function reference")
+	if opts.ToolChoice == nil || opts.ToolChoice.Mode != ToolChoiceTool {
+		t.Fatalf("expected tool choice mode %q, got %+v", ToolChoiceTool, opts.ToolChoice)
 	}
-	if opts.ToolChoice.Type != ToolChoiceType(toolTypeFunction) {
-		t.Errorf("expected tool choice type %q, got %q", toolTypeFunction, opts.ToolChoice.Type)
-	}
-	if opts.ToolChoice.Function.Name != "specific_function" {
-		t.Errorf("unexpected function name: %s", opts.ToolChoice.Function.Name)
+	if opts.ToolChoice.Tool != "specific_function" {
+		t.Errorf("unexpected forced tool: %s", opts.ToolChoice.Tool)
 	}
 }
 
@@ -735,32 +732,17 @@ func TestToolStruct(t *testing.T) {
 	}
 }
 
-func TestFunctionReferenceStruct(t *testing.T) {
-	ref := FunctionReference{
-		Name: "my_function",
-	}
-
-	if ref.Name != "my_function" {
-		t.Errorf("unexpected name: %s", ref.Name)
-	}
-}
-
 func TestToolChoiceStruct(t *testing.T) {
 	choice := ToolChoice{
-		Type: "function",
-		Function: &FunctionReference{
-			Name: "specific_func",
-		},
+		Mode: ToolChoiceTool,
+		Tool: "specific_func",
 	}
 
-	if choice.Type != "function" {
-		t.Errorf("unexpected type: %s", choice.Type)
+	if choice.Mode != ToolChoiceTool {
+		t.Errorf("unexpected mode: %s", choice.Mode)
 	}
-	if choice.Function == nil {
-		t.Error("expected function reference to be set")
-	}
-	if choice.Function.Name != "specific_func" {
-		t.Errorf("unexpected function name: %s", choice.Function.Name)
+	if choice.Tool != "specific_func" {
+		t.Errorf("unexpected forced tool: %s", choice.Tool)
 	}
 }
 
@@ -798,7 +780,7 @@ func TestCallOptionsStruct(t *testing.T) {
 		PresencePenalty:  float64Ptr(0.3),
 		StopWords:        []string{testStop},
 		Tools:            tools,
-		ToolChoice:       &ToolChoice{Type: ToolChoiceAuto},
+		ToolChoice:       &ToolChoice{Mode: ToolChoiceAuto},
 		ResponseFormat:   &ResponseFormat{Type: ResponseFormatJSONObject},
 	}
 
@@ -826,7 +808,7 @@ func TestCallOptionsStruct(t *testing.T) {
 	if len(opts.Tools) != 1 {
 		t.Errorf("expected 1 tool, got %d", len(opts.Tools))
 	}
-	if opts.ToolChoice == nil || opts.ToolChoice.Type != ToolChoiceAuto {
+	if opts.ToolChoice == nil || opts.ToolChoice.Mode != ToolChoiceAuto {
 		t.Errorf("unexpected tool choice: %v", opts.ToolChoice)
 	}
 	if opts.ResponseFormat == nil || opts.ResponseFormat.Type != ResponseFormatJSONObject {

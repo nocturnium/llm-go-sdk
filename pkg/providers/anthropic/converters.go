@@ -216,13 +216,13 @@ func convertToolChoice(choice *llms.ToolChoice) any {
 	if choice == nil {
 		return nil
 	}
-	if choice.Function != nil {
+	if choice.Mode == llms.ToolChoiceTool {
 		return anthropicapi.ToolChoiceTool{
 			Type: "tool",
-			Name: choice.Function.Name,
+			Name: choice.Tool,
 		}
 	}
-	switch choice.Type {
+	switch choice.Mode {
 	case llms.ToolChoiceAuto:
 		return anthropicapi.ToolChoiceAuto{Type: "auto"}
 	case llms.ToolChoiceRequired:

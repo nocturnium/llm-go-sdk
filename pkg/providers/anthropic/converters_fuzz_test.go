@@ -106,7 +106,7 @@ func FuzzConvertToolChoice(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, choice string) {
 		// Should not panic with any string input
-		_ = convertToolChoice(&llms.ToolChoice{Type: llms.ToolChoiceType(choice)})
+		_ = convertToolChoice(&llms.ToolChoice{Mode: llms.ToolChoiceMode(choice)})
 	})
 }
 

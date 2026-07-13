@@ -131,15 +131,15 @@ func convertToolChoice(choice *llms.ToolChoice) any {
 	if choice == nil {
 		return nil
 	}
-	if choice.Function != nil {
+	if choice.Mode == llms.ToolChoiceTool {
 		return ToolChoiceFunction{
 			Type: "function",
 			Function: &FunctionSelector{
-				Name: choice.Function.Name,
+				Name: choice.Tool,
 			},
 		}
 	}
-	return string(choice.Type)
+	return string(choice.Mode)
 }
 
 // convertToolCallsToLLMs converts openaicompat.ToolCall slice to llms.ToolCall slice.
