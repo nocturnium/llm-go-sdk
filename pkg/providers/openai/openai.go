@@ -11,7 +11,6 @@ const defaultBaseURL = "https://api.openai.com/v1"
 // defaultProviderConfig defines OpenAI-specific configuration.
 var defaultProviderConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderOpenAI,
-	ProviderName:          "openai",
 	DefaultEmbeddingModel: "text-embedding-3-small",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

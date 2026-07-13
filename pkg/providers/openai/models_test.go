@@ -281,7 +281,7 @@ func TestListModels_WithLimit(t *testing.T) {
 		_, _ = w.Write([]byte(mockModelsResponse))
 	})
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(3))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(3))
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
 	}

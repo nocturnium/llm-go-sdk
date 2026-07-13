@@ -16,7 +16,6 @@ var ErrMissingEndpointID = errors.New("runpod: endpoint_id is required (use With
 // providerConfig defines RunPod-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderRunPod,
-	ProviderName:          "runpod",
 	DefaultEmbeddingModel: "", // Depends on deployed model
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

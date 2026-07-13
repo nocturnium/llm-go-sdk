@@ -10,7 +10,6 @@ import (
 // providerConfig defines TogetherAI-specific configuration
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderTogetherAI,
-	ProviderName:          "togetherai",
 	DefaultEmbeddingModel: "togethercomputer/m2-bert-80M-8k-retrieval",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

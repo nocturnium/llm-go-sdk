@@ -198,15 +198,15 @@ func TestListModelsOptions(t *testing.T) {
 		}
 	})
 
-	t.Run("WithModelsLimit", func(t *testing.T) {
-		opts := ApplyListModelsOptions(WithModelsLimit(50))
+	t.Run("WithModelLimit", func(t *testing.T) {
+		opts := ApplyListModelsOptions(WithModelLimit(50))
 		if opts.Limit != 50 {
 			t.Errorf("expected limit 50, got %d", opts.Limit)
 		}
 	})
 
-	t.Run("WithModelsCursor", func(t *testing.T) {
-		opts := ApplyListModelsOptions(WithModelsCursor("next-page-token"))
+	t.Run("WithModelCursor", func(t *testing.T) {
+		opts := ApplyListModelsOptions(WithModelCursor("next-page-token"))
 		if opts.Cursor != "next-page-token" {
 			t.Errorf("expected cursor 'next-page-token', got %s", opts.Cursor)
 		}
@@ -216,8 +216,8 @@ func TestListModelsOptions(t *testing.T) {
 		opts := ApplyListModelsOptions(
 			WithModelTypes(ModelTypeChat),
 			WithDedicatedModels(),
-			WithModelsLimit(100),
-			WithModelsCursor("abc123"),
+			WithModelLimit(100),
+			WithModelCursor("abc123"),
 		)
 		if len(opts.Types) != 1 || opts.Types[0] != ModelTypeChat {
 			t.Error("types not set correctly")

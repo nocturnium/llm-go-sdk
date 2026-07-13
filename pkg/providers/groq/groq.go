@@ -10,7 +10,6 @@ import (
 // providerConfig defines Groq-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderGroq,
-	ProviderName:          "groq",
 	DefaultEmbeddingModel: "", // Groq doesn't support embeddings yet
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

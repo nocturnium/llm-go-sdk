@@ -31,8 +31,7 @@ import (
 // chat or embeddings depends on the model it has deployed, so (*Client).Capabilities
 // narrows this superset to the endpoint's deployment mode at runtime.
 var providerConfig = openaicompat.ProviderConfig{
-	Provider:     llms.ProviderHuggingFace,
-	ProviderName: "huggingface",
+	Provider: llms.ProviderHuggingFace,
 	Capabilities: llms.Capabilities{
 		Streaming:  true,
 		Tools:      true,

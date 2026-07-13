@@ -10,7 +10,6 @@ import (
 // providerConfig defines Cerebras-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderCerebras,
-	ProviderName:          "cerebras",
 	DefaultEmbeddingModel: "", // Cerebras doesn't have a public embedding API
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

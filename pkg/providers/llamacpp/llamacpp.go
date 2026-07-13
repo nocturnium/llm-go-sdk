@@ -15,7 +15,6 @@ import (
 // providerConfig defines llama.cpp-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderLlamaCpp,
-	ProviderName:          "llamacpp",
 	DefaultEmbeddingModel: "", // Model-dependent
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

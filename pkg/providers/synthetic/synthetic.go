@@ -11,7 +11,6 @@ import (
 // providerConfig defines Synthetic-specific configuration
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderSynthetic,
-	ProviderName:          "synthetic",
 	DefaultEmbeddingModel: "", // Set if embeddings are supported
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

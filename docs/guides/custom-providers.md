@@ -70,8 +70,7 @@ client.
 
 ```go
 type ProviderConfig struct {
-	Provider              llms.Provider // a Provider value used in errors/metadata
-	ProviderName          string        // shown in error messages, e.g. "acmeai"
+	Provider              llms.Provider // provider identity; its string form is the error-message label
 	DefaultModel          string        // default chat model
 	DefaultEmbeddingModel string        // default embedding model (optional)
 	Capabilities          llms.Capabilities
@@ -118,7 +117,6 @@ const (
 // providerConfig declares the static identity and capabilities of the provider.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.Provider("acmeai"),
-	ProviderName:          "acmeai",
 	DefaultModel:          defaultModel,
 	DefaultEmbeddingModel: "acme-embed",
 	Capabilities: llms.Capabilities{
@@ -186,7 +184,7 @@ func New(opts ...Option) (*Client, error) {
 
 	// Resolve the key from the explicit option, then ACME_API_KEY, then
 	// LLM_API_KEY. Returns an error wrapping llms.ErrMissingAPIKey if absent.
-	apiKey, err := llms.RequireAPIKey(providerConfig.ProviderName, o.apiKey, envAPIKey)
+	apiKey, err := llms.RequireAPIKey(string(providerConfig.Provider), o.apiKey, envAPIKey)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package resilience
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -11,9 +12,12 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Rate limiting errors
+// Rate limiting errors. ErrRateLimitExceeded wraps the canonical
+// llms.ErrRateLimited so a local rate-limiter rejection satisfies
+// errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429 —
+// callers can match on the one sentinel regardless of which layer rate-limited.
 var (
-	ErrRateLimitExceeded = errors.New("rate limit exceeded")
+	ErrRateLimitExceeded = fmt.Errorf("rate limit exceeded: %w", llms.ErrRateLimited)
 	ErrRateLimitTimeout  = errors.New("rate limit wait timeout")
 )
 

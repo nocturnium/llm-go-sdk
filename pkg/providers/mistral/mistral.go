@@ -10,7 +10,6 @@ import (
 // providerConfig defines Mistral-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderMistral,
-	ProviderName:          "mistral",
 	DefaultEmbeddingModel: "mistral-embed",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

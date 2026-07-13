@@ -12,7 +12,6 @@ import (
 // providerConfig defines Z.AI-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderZAI,
-	ProviderName:          "zai",
 	DefaultEmbeddingModel: "", // Z.AI does not provide embeddings in the documented API
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

@@ -261,7 +261,7 @@ func TestListModels(t *testing.T) {
 	})
 
 	t.Run("limit", func(t *testing.T) {
-		result, err := client.ListModels(ctx, llms.WithModelsLimit(1))
+		result, err := client.ListModels(ctx, llms.WithModelLimit(1))
 		if err != nil {
 			t.Fatalf("ListModels limit: %v", err)
 		}

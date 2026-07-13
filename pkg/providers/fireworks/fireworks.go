@@ -10,7 +10,6 @@ import (
 // providerConfig defines Fireworks-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderFireworks,
-	ProviderName:          "fireworks",
 	DefaultEmbeddingModel: "nomic-ai/nomic-embed-text-v1.5",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

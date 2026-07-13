@@ -29,7 +29,6 @@ func newCustomClient(apiKey string) (*customClient, error) {
 
 	cfg := openaicompat.ProviderConfig{
 		Provider:     llms.ProviderOpenAI,
-		ProviderName: "myprovider",
 		DefaultModel: "my-default-model",
 		Capabilities: llms.Capabilities{Streaming: true, Tools: true},
 	}

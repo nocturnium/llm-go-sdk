@@ -207,7 +207,7 @@ func TestListModelsFilterByType(t *testing.T) {
 func TestListModelsLimit(t *testing.T) {
 	client := newModelsTestClient(t)
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels returned error: %v", err)
 	}

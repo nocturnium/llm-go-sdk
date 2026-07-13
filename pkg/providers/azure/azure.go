@@ -28,7 +28,6 @@ var ErrMissingDeployment = errors.New("azure: deployment name is required (set A
 // providerConfig defines Azure OpenAI-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderAzure,
-	ProviderName:          "azure",
 	DefaultEmbeddingModel: "", // Deployment dependent
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

@@ -221,7 +221,7 @@ func TestListModelsWithLimit(t *testing.T) {
 
 	client := newGroqTestClient(t, server.URL)
 
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
 	}

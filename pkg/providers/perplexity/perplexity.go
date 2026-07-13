@@ -10,7 +10,6 @@ import (
 // providerConfig defines Perplexity-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderPerplexity,
-	ProviderName:          "perplexity",
 	DefaultEmbeddingModel: "", // Perplexity doesn't support embeddings
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

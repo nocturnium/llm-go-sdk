@@ -252,7 +252,6 @@ func TestBaseProvider_RoutesToResponsesAPI(t *testing.T) {
 	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
 	p := NewBaseProvider(client, ProviderConfig{
 		Provider:        llms.ProviderOpenAI,
-		ProviderName:    "openai",
 		DefaultModel:    "gpt-4o",
 		UseResponsesAPI: true,
 	})
@@ -282,7 +281,6 @@ func TestBaseProvider_ResponsesFailedStatusReturnsError(t *testing.T) {
 	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
 	p := NewBaseProvider(client, ProviderConfig{
 		Provider:        llms.ProviderOpenAI,
-		ProviderName:    "openai",
 		DefaultModel:    "gpt-4o",
 		UseResponsesAPI: true,
 	})

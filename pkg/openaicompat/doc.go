@@ -47,7 +47,6 @@
 //
 //		cfg := openaicompat.ProviderConfig{
 //			Provider:     llms.ProviderOpenAI, // a Provider value used in errors/metadata
-//			ProviderName: "myprovider",        // shown in error messages
 //			DefaultModel: "my-default-model",
 //			Capabilities: llms.Capabilities{Streaming: true, Tools: true},
 //		}

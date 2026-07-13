@@ -10,7 +10,6 @@ import (
 // providerConfig defines Featherless-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderFeatherless,
-	ProviderName:          "featherless",
 	DefaultEmbeddingModel: "", // Featherless doesn't support embeddings by default
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

@@ -10,7 +10,6 @@ import (
 // providerConfig defines DeepSeek-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderDeepSeek,
-	ProviderName:          "deepseek",
 	DefaultEmbeddingModel: "", // DeepSeek doesn't have a public embedding API
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

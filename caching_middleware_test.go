@@ -206,7 +206,7 @@ func TestCachedClient_UnwrapAndIdentity(t *testing.T) {
 }
 
 func TestMemoryResponseCache_TTLExpiry(t *testing.T) {
-	cache := NewMemoryResponseCache(time.Minute)
+	cache := NewMemoryResponseCache(time.Minute, 0)
 	now := time.Unix(0, 0)
 	cache.now = func() time.Time { return now }
 
@@ -226,7 +226,7 @@ func TestMemoryResponseCache_TTLExpiry(t *testing.T) {
 }
 
 func TestMemoryResponseCache_NoExpiryWhenTTLZero(t *testing.T) {
-	cache := NewMemoryResponseCache(0)
+	cache := NewMemoryResponseCache(0, 0)
 	now := time.Unix(0, 0)
 	cache.now = func() time.Time { return now }
 	ctx := context.Background()
@@ -239,7 +239,7 @@ func TestMemoryResponseCache_NoExpiryWhenTTLZero(t *testing.T) {
 }
 
 func TestMemoryResponseCache_BoundedEviction(t *testing.T) {
-	cache := NewBoundedMemoryResponseCache(time.Minute, 3)
+	cache := NewMemoryResponseCache(time.Minute, 3)
 	ctx := context.Background()
 	for i := 0; i < 20; i++ {
 		cache.Set(ctx, fmt.Sprintf("k%d", i), &Response{Content: "v"})
@@ -250,7 +250,7 @@ func TestMemoryResponseCache_BoundedEviction(t *testing.T) {
 }
 
 func TestMemoryResponseCache_UnboundedByDefault(t *testing.T) {
-	cache := NewMemoryResponseCache(time.Minute) // unbounded
+	cache := NewMemoryResponseCache(time.Minute, 0) // unbounded
 	ctx := context.Background()
 	for i := 0; i < 200; i++ {
 		cache.Set(ctx, fmt.Sprintf("k%d", i), &Response{Content: "v"})
@@ -275,7 +275,7 @@ func TestNewCachedClient_DefaultCacheIsBounded(t *testing.T) {
 // policy load-bearing: at capacity the earliest-expiring entry is the victim and
 // a never-expire entry survives.
 func TestMemoryResponseCache_EvictsEarliestExpiringFirst(t *testing.T) {
-	cache := NewBoundedMemoryResponseCache(time.Hour, 3)
+	cache := NewMemoryResponseCache(time.Hour, 3)
 	base := time.Unix(1000, 0)
 	cache.now = func() time.Time { return base }
 
@@ -305,7 +305,7 @@ func TestMemoryResponseCache_EvictsEarliestExpiringFirst(t *testing.T) {
 // where "" (a valid map key) collided with the eviction sentinel and leaked the
 // cap.
 func TestMemoryResponseCache_EmptyStringKeyDoesNotDefeatEviction(t *testing.T) {
-	cache := NewBoundedMemoryResponseCache(time.Hour, 1)
+	cache := NewMemoryResponseCache(time.Hour, 1)
 	ctx := context.Background()
 	cache.Set(ctx, "", &Response{}) // empty-string key is legitimate
 	for i := 0; i < 50; i++ {

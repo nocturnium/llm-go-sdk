@@ -186,7 +186,7 @@ func TestListModels_LimitAndTypeFilter(t *testing.T) {
 	client := newTestClient(t, server.URL)
 
 	// Limit caps the returned slice.
-	result, err := client.ListModels(context.Background(), llms.WithModelsLimit(2))
+	result, err := client.ListModels(context.Background(), llms.WithModelLimit(2))
 	if err != nil {
 		t.Fatalf("ListModels() error = %v", err)
 	}

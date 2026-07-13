@@ -150,17 +150,17 @@ func WithDedicatedModels() ListModelsOption {
 	}
 }
 
-// WithModelsLimit sets the maximum number of models to return.
-func WithModelsLimit(limit int) ListModelsOption {
+// WithModelLimit sets the maximum number of models to return.
+func WithModelLimit(limit int) ListModelsOption {
 	return func(o *ListModelsOptions) {
 		o.Limit = limit
 	}
 }
 
-// WithModelsCursor sets the pagination cursor for fetching the next page.
+// WithModelCursor sets the pagination cursor for fetching the next page.
 // Use the NextCursor value from a previous ListModelsResult.
 // An empty string starts pagination from the beginning.
-func WithModelsCursor(cursor string) ListModelsOption {
+func WithModelCursor(cursor string) ListModelsOption {
 	return func(o *ListModelsOptions) {
 		o.Cursor = cursor
 	}
@@ -181,7 +181,7 @@ type ListModelsResult struct {
 	Models []ModelInfo `json:"models"`
 
 	// NextCursor is the cursor for fetching the next page.
-	// Pass this to WithModelsCursor for subsequent requests.
+	// Pass this to WithModelCursor for subsequent requests.
 	// Empty when HasMore is false or pagination is not supported.
 	NextCursor string `json:"next_cursor,omitempty"`
 

@@ -14,7 +14,6 @@ import (
 // providerConfig defines Ollama-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderOllama,
-	ProviderName:          "ollama",
 	DefaultEmbeddingModel: "nomic-embed-text",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,

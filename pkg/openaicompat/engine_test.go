@@ -376,7 +376,6 @@ func newTestBaseProvider(server *testutil.MockOpenAICompatibleServer) *openaicom
 	})
 	provider := openaicompat.NewBaseProvider(client, openaicompat.ProviderConfig{
 		Provider:              engineProvider,
-		ProviderName:          string(engineProvider),
 		DefaultModel:          engineModel,
 		DefaultEmbeddingModel: embeddingModel,
 		Capabilities: llms.Capabilities{
