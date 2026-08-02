@@ -11,7 +11,7 @@ It is written for SDK consumers and contributors. For the step-by-step recipe to
 add a provider (including coding standards and required tests), see
 [`AGENTS.md`](https://github.com/nocturnium/llm-go-sdk/blob/main/AGENTS.md).
 
-- Module path: `github.com/nocturnium/llm-go-sdk/v5`
+- Module path: `github.com/nocturnium/llm-go-sdk/v6`
 - License: Apache-2.0 (see `LICENSE` and `NOTICE`)
 - No external LLM SDK dependencies; the only notable third-party packages are
   `urfave/cli/v2` (for the CLI), `go.opentelemetry.io/otel` (for tracing and
@@ -185,7 +185,7 @@ The SDK has a small, flat public surface. The guiding rule:
 
 The public surface is exactly:
 
-- **Root (`llms "github.com/nocturnium/llm-go-sdk/v5"`)** — every shared type and
+- **Root (`llms "github.com/nocturnium/llm-go-sdk/v6"`)** — every shared type and
   function: the `LLM` interface, `Message`/`Response`/`Tool` and friends, the
   `CallOption` builders, errors and sentinels, streaming, the capability registry,
   and cost tracking. A single import reaches the core (`llms.Message`,
@@ -198,7 +198,7 @@ The public surface is exactly:
 - **`pkg/providers/<name>`** — the 19 provider implementations (17 chat-registered;
   HuggingFace and Infinity are direct-construct — HuggingFace does chat or
   embeddings per its deployed model, Infinity is embeddings-only). Import the one
-  you need, e.g. `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai`.
+  you need, e.g. `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai`.
 - **`pkg/openaicompat`** — the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
 

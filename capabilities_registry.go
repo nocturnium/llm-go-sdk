@@ -222,6 +222,21 @@ func (r *CapabilityRegistry) registerDefaults() {
 			SupportsJSON:      true,
 		}
 	}
+	// GPT-5.6 (sol/terra/luna) — identical limits across the three; they differ only
+	// in price. MaxContextTokens is the maximum *input* window (922,000), not the
+	// 1,050,000 total context window, since this field is what a caller sizes a
+	// prompt against; knownModels carries the total as ContextLength. See the note
+	// in pkg/providers/openai/models.go.
+	for _, id := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
+		r.capabilities["openai:"+id] = ModelCapabilities{
+			MaxContextTokens:  922000,
+			MaxOutputTokens:   128000,
+			SupportsVision:    true,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      true,
+		}
+	}
 
 	// Anthropic defaults
 	r.defaults[ProviderAnthropic] = ModelCapabilities{
@@ -294,7 +309,10 @@ func (r *CapabilityRegistry) registerDefaults() {
 	// knownModels. SupportsJSON stays false (Anthropic uses tool_choice for
 	// structured output, like every entry above). Reasoning is flagged below — the
 	// same extended-thinking generation as claude-sonnet-4, which is already flagged.
-	for _, id := range []string{"claude-fable-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6"} {
+	for _, id := range []string{
+		"claude-fable-5", "claude-opus-5", "claude-sonnet-5",
+		"claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6",
+	} {
 		r.capabilities["anthropic:"+id] = ModelCapabilities{
 			MaxContextTokens:  1000000,
 			MaxOutputTokens:   128000,
@@ -362,7 +380,10 @@ func (r *CapabilityRegistry) registerDefaults() {
 	// limits (they come from the API; the documented current lineup is 1,048,576 in /
 	// 65,536 out), so limits here match the existing gemini-2.5 entries. Reasoning is
 	// flagged below for pro/flash, mirroring the 2.5 treatment (flash-lite unflagged).
-	for _, id := range []string{"gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview"} {
+	for _, id := range []string{
+		"gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
+		"gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview",
+	} {
 		r.capabilities["gemini:"+id] = ModelCapabilities{
 			MaxContextTokens:  1048576,
 			MaxOutputTokens:   65536,
@@ -555,13 +576,16 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 		"openai:gpt-5", "openai:gpt-5-mini", "openai:gpt-5-nano",
 		"openai:gpt-5.4", "openai:gpt-5.4-mini", "openai:gpt-5.4-nano", "openai:gpt-5.4-pro",
 		"openai:gpt-5.5", "openai:gpt-5.5-pro",
+		"openai:gpt-5.6-sol", "openai:gpt-5.6-terra", "openai:gpt-5.6-luna",
 		"anthropic:claude-sonnet-4", "anthropic:claude-sonnet-4-20250514",
 		// Current Anthropic flagships (same extended-thinking generation).
-		"anthropic:claude-fable-5", "anthropic:claude-opus-4-8", "anthropic:claude-opus-4-7",
+		"anthropic:claude-fable-5", "anthropic:claude-opus-5", "anthropic:claude-sonnet-5",
+		"anthropic:claude-opus-4-8", "anthropic:claude-opus-4-7",
 		"anthropic:claude-opus-4-6", "anthropic:claude-opus-4-5", "anthropic:claude-opus-4-5-20251101",
 		"gemini:gemini-2.5-pro", "gemini:gemini-2.5-flash",
 		// Gemini 3.x pro/flash, mirroring the 2.5 treatment (flash-lite left unflagged).
-		"gemini:gemini-3.1-pro-preview", "gemini:gemini-3.5-flash", "gemini:gemini-3-flash-preview",
+		"gemini:gemini-3.1-pro-preview", "gemini:gemini-3.6-flash", "gemini:gemini-3.5-flash",
+		"gemini:gemini-3-flash-preview",
 	}
 	for _, key := range reasoningModels {
 		if caps, ok := r.capabilities[key]; ok {

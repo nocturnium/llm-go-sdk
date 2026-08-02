@@ -26,7 +26,7 @@ assignees: ''
 package main
 
 import (
-    "github.com/nocturnium/llm-go-sdk/v5"
+    "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 func main() {

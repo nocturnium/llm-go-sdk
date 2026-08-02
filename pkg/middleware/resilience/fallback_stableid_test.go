@@ -6,7 +6,7 @@ import (
 	"syscall"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 // gatedLLM blocks inside GenerateContent until released, letting a test

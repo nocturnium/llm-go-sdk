@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 func TestBuildResponsesRequest_MessagesAndInstructions(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/anthropicapi"
 )
 
 // titleCase capitalizes the first letter of a string.
@@ -24,16 +24,33 @@ func titleCase(s string) string {
 
 // Known Anthropic model metadata that isn't available from the API.
 // Pricing is per million tokens (USD), verified against the official Anthropic
-// models overview and pricing pages (June 2026).
+// models overview and pricing pages (2026-08-02).
 var knownModels = map[string]modelMetadata{
-	// Claude Fable 5 (current flagship; includes the full 1M-token context window
-	// at standard pricing per the official long-context note).
+	// Claude Fable 5 (most capable widely released model; includes the full
+	// 1M-token context window at standard pricing per the official long-context note).
 	"claude-fable-5": {
 		displayName:   "Claude Fable 5",
 		contextLength: 1000000,
 		maxOutput:     128000,
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-fable-5"),
+	},
+	// Claude Opus 5 (current default for complex agentic and enterprise work).
+	"claude-opus-5": {
+		displayName:   "Claude Opus 5",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-opus-5"),
+	},
+	// Claude Sonnet 5 (current Sonnet tier). Note: introductory pricing of $2/$10
+	// per MTok applies through 2026-08-31; the table records the standard $3/$15.
+	"claude-sonnet-5": {
+		displayName:   "Claude Sonnet 5",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-sonnet-5"),
 	},
 	// Claude Opus 4.8 (current most capable Opus-tier model)
 	"claude-opus-4-8": {

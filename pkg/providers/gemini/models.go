@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/geminiapi"
 )
 
 // titleCase capitalizes the first letter of a string.
@@ -29,12 +29,23 @@ func titleCase(s string) string {
 // 65,536 output. Gemini 2.5 Pro uses tiered pricing keyed on prompt size (the values
 // here are the base <=200k tier; see per-model comments for the >200k tier).
 var knownModels = map[string]modelMetadata{
-	// Gemini 3.x — current family (ai.google.dev pricing, June 2026). Context
-	// follows the 2.5 family (1,048,576 in / 65,536 out).
+	// Gemini 3.x — current family (ai.google.dev pricing, verified 2026-08-02).
+	// Context follows the 2.5 family (1,048,576 in / 65,536 out).
+	"gemini-3.6-flash": {
+		displayName: "Gemini 3.6 Flash",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     tokenPricing("gemini-3.6-flash"),
+	},
 	"gemini-3.5-flash": {
 		displayName: "Gemini 3.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3.5-flash"),
+	},
+	// Gemini 3.5 Flash-Lite — base text/image/video shown; audio input is higher.
+	"gemini-3.5-flash-lite": {
+		displayName: "Gemini 3.5 Flash-Lite",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     tokenPricing("gemini-3.5-flash-lite"),
 	},
 	// Gemini 3.1 Pro — tiered: Input 2.00 (<=200k) / 4.00 (>200k); Output 12.00 / 18.00.
 	"gemini-3.1-pro-preview": {

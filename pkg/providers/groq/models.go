@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // ListModels retrieves available models from the Groq API.

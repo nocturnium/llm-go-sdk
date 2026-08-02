@@ -30,6 +30,77 @@ type Pricing struct {
 	Finetune float64 `json:"finetune,omitempty"`
 	// Base is a provider-specific base cost in USD (metadata).
 	Base float64 `json:"base,omitempty"`
+
+	// Tiers optionally reprices the entire request once its total input token
+	// count reaches a threshold. Several providers bill long-context requests at a
+	// higher rate for the whole request rather than only for the tokens past the
+	// threshold — OpenAI's gpt-5 family above 272K input tokens (2x input,
+	// 1.5x output) and Gemini Pro above 200K are the current examples.
+	//
+	// A nil or empty Tiers means flat pricing, so this field is inert for every
+	// model that does not tier. See PricingTier for selection semantics.
+	Tiers []PricingTier `json:"tiers,omitempty"`
+}
+
+// PricingTier is a set of rates that replaces a Pricing's base rates once a
+// request's total input token count reaches MinInputTokens. It is deliberately
+// not an embedded Pricing: tiers do not nest, and the flat fields make that
+// explicit at the type level.
+//
+// Rates are per 1M tokens in USD and follow the same zero-value fallback as
+// Pricing — an unset CacheRead or CacheWrite bills at the tier's own Input rate,
+// not at the base Pricing's rate.
+type PricingTier struct {
+	// MinInputTokens is the inclusive total-input-token threshold at which this
+	// tier takes effect. Total input is PromptTokens + CacheReadTokens +
+	// CacheCreationTokens, since Usage.PromptTokens excludes cache tokens by
+	// contract and providers threshold on the full input.
+	MinInputTokens int `json:"min_input_tokens"`
+
+	// Input is the cost per 1M input (prompt) tokens in USD at this tier.
+	Input float64 `json:"input,omitempty"`
+	// Output is the cost per 1M output (completion) tokens in USD at this tier.
+	Output float64 `json:"output,omitempty"`
+	// CacheRead is the cost per 1M cache-read tokens in USD at this tier.
+	CacheRead float64 `json:"cache_read,omitempty"`
+	// CacheWrite is the cost per 1M cache-write tokens in USD at this tier.
+	CacheWrite float64 `json:"cache_write,omitempty"`
+}
+
+// totalInputTokens returns the token count a pricing tier thresholds against.
+// Usage.PromptTokens excludes cache tokens by contract, so cache reads and cache
+// creations must be added back to recover the request's true input size.
+func totalInputTokens(usage Usage) int {
+	return usage.PromptTokens + usage.CacheReadTokens + usage.CacheCreationTokens
+}
+
+// effective resolves the rates that apply to the given usage, substituting the
+// highest matching tier's rates for the base rates. It returns the receiver
+// unchanged when no tier is configured or none matches, so untiered pricing is
+// unaffected. Tiers need not be sorted; the highest matching threshold wins.
+func (p Pricing) effective(usage Usage) Pricing {
+	if len(p.Tiers) == 0 {
+		return p
+	}
+	total := totalInputTokens(usage)
+	best := -1
+	for i, t := range p.Tiers {
+		if total < t.MinInputTokens {
+			continue
+		}
+		if best == -1 || t.MinInputTokens > p.Tiers[best].MinInputTokens {
+			best = i
+		}
+	}
+	if best == -1 {
+		return p
+	}
+	t := p.Tiers[best]
+	out := p
+	out.Tiers = nil // a resolved tier must not re-resolve
+	out.Input, out.Output = t.Input, t.Output
+	out.CacheRead, out.CacheWrite = t.CacheRead, t.CacheWrite
+	return out
 }
 
 // cacheReadRate returns the effective cache-read rate, defaulting to the Input
@@ -52,14 +123,26 @@ func (p Pricing) cacheWriteRate() float64 {
 
 // cost computes the total USD cost for the given usage under this pricing,
 // accounting for discounted cache-read and cache-write tokens. PromptTokens is
-// assumed to exclude cache tokens (see the Usage contract).
+// assumed to exclude cache tokens (see the Usage contract). When Tiers are
+// configured, the whole request is priced at the highest matching tier.
 func (p Pricing) cost(usage Usage) float64 {
 	const perMillion = 1_000_000.0
-	return float64(usage.PromptTokens)/perMillion*p.Input +
-		float64(usage.CompletionTokens)/perMillion*p.Output +
-		float64(usage.CacheReadTokens)/perMillion*p.cacheReadRate() +
-		float64(usage.CacheCreationTokens)/perMillion*p.cacheWriteRate()
+	e := p.effective(usage)
+	return float64(usage.PromptTokens)/perMillion*e.Input +
+		float64(usage.CompletionTokens)/perMillion*e.Output +
+		float64(usage.CacheReadTokens)/perMillion*e.cacheReadRate() +
+		float64(usage.CacheCreationTokens)/perMillion*e.cacheWriteRate()
 }
+
+// Long-context repricing thresholds. Both providers reprice the *entire* request
+// once total input crosses the threshold, not just the tokens beyond it.
+const (
+	// openAILongContextThreshold is where the gpt-5 family switches to long-context
+	// rates (2x input and cached input, 1.5x output).
+	openAILongContextThreshold = 272_000
+	// geminiLongContextThreshold is where Gemini Pro tiers switch to their >200K rates.
+	geminiLongContextThreshold = 200_000
+)
 
 // DefaultPricing is the single source of truth for built-in token pricing.
 // Prices are in USD per 1 million tokens. Provider model metadata derives its
@@ -105,17 +188,55 @@ var DefaultPricing = map[string]Pricing{
 	"openai:gpt-4.1":                {Input: 2.00, Output: 8.00, CacheRead: 0.50},
 	"openai:gpt-4.1-mini":           {Input: 0.40, Output: 1.60, CacheRead: 0.10},
 	"openai:gpt-4.1-nano":           {Input: 0.10, Output: 0.40, CacheRead: 0.025},
-	// GPT-5 family (cached input ≈0.1× prompt). 5.4/5.5 are the current flagships
-	// (developers.openai.com pricing, June 2026); pro variants priced per the page.
+	// GPT-5 family (cached input ≈0.1× prompt). 5.6 (sol/terra/luna) is the current
+	// flagship line (developers.openai.com pricing, verified 2026-08-02); 5.4/5.5
+	// remain available. Base rates are the short-context tier; models that reprice
+	// above 272K input tokens carry that as a Tier (2× input and cached, 1.5×
+	// output, for the entire request). The mini/nano variants publish no
+	// long-context row, so they are flat. Pro variants have no cached-input rate.
+	"openai:gpt-5.6-sol": {
+		Input: 5.00, Output: 30.00, CacheRead: 0.50, CacheWrite: 6.25,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 10.00, Output: 45.00, CacheRead: 1.00, CacheWrite: 12.50}},
+	},
+	"openai:gpt-5.6-terra": {
+		Input: 2.00, Output: 12.00, CacheRead: 0.20, CacheWrite: 2.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 4.00, Output: 18.00, CacheRead: 0.40, CacheWrite: 5.00}},
+	},
+	"openai:gpt-5.6-luna": {
+		Input: 0.20, Output: 1.20, CacheRead: 0.02, CacheWrite: 0.25,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 0.40, Output: 1.80, CacheRead: 0.04, CacheWrite: 0.50}},
+	},
 	"openai:gpt-5":        {Input: 1.25, Output: 10.00, CacheRead: 0.125},
 	"openai:gpt-5-mini":   {Input: 0.25, Output: 2.00, CacheRead: 0.025},
 	"openai:gpt-5-nano":   {Input: 0.05, Output: 0.40, CacheRead: 0.005},
-	"openai:gpt-5.4":      {Input: 2.50, Output: 15.00, CacheRead: 0.25},
 	"openai:gpt-5.4-mini": {Input: 0.75, Output: 4.50, CacheRead: 0.075},
 	"openai:gpt-5.4-nano": {Input: 0.20, Output: 1.25, CacheRead: 0.02},
-	"openai:gpt-5.4-pro":  {Input: 30.00, Output: 180.00},
-	"openai:gpt-5.5":      {Input: 5.00, Output: 30.00, CacheRead: 0.50},
-	"openai:gpt-5.5-pro":  {Input: 30.00, Output: 180.00},
+	"openai:gpt-5.4": {
+		Input: 2.50, Output: 15.00, CacheRead: 0.25,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 5.00, Output: 22.50, CacheRead: 0.50}},
+	},
+	"openai:gpt-5.4-pro": {
+		Input: 30.00, Output: 180.00,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 60.00, Output: 270.00}},
+	},
+	"openai:gpt-5.5": {
+		Input: 5.00, Output: 30.00, CacheRead: 0.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 10.00, Output: 45.00, CacheRead: 1.00}},
+	},
+	"openai:gpt-5.5-pro": {
+		Input: 30.00, Output: 180.00,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 60.00, Output: 270.00}},
+	},
+	"openai:gpt-5.3-codex": {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-5.2":       {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-5.1":       {Input: 1.25, Output: 10.00, CacheRead: 0.125},
 
 	// OpenAI Embeddings
 	"openai:text-embedding-3-small": {Input: 0.02},
@@ -135,11 +256,19 @@ var DefaultPricing = map[string]Pricing{
 	"anthropic:claude-3-opus-20240229":     {Input: 15.00, Output: 75.00, CacheRead: 1.50, CacheWrite: 18.75},
 	"anthropic:claude-3-sonnet-20240229":   {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
 	"anthropic:claude-3-haiku-20240307":    {Input: 0.25, Output: 1.25, CacheRead: 0.03, CacheWrite: 0.30},
-	// Current Claude lineup (claude.com pricing, June 2026): Opus 4.5+ at $5/$25,
-	// Sonnet 4.x at $3/$15, Haiku 4.5 at $1/$5, Fable 5 at $10/$50; cache read ≈0.1×,
-	// 5m cache write ≈1.25×. Opus 4.1 retains the older $15/$75. Both alias and dated
-	// model ids are covered.
+	// Current Claude lineup (claude.com models overview, verified 2026-08-02):
+	// Fable 5 at $10/$50, Opus 5 and Opus 4.5+ at $5/$25, Sonnet 5 and Sonnet 4.x at
+	// $3/$15, Haiku 4.5 at $1/$5; cache read ≈0.1×, 5m cache write ≈1.25×. Opus 4.1
+	// retains the older $15/$75. Both alias and dated model ids are covered.
+	//
+	// Sonnet 5 carries introductory pricing of $2/$10 per MTok through 2026-08-31.
+	// The table records the standard $3/$15 rate: a static map cannot express a
+	// time-boxed promotion, and estimates that silently expire are worse than
+	// estimates that are consistently conservative.
 	"anthropic:claude-fable-5":             {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-mythos-5":            {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-opus-5":              {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-sonnet-5":            {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
 	"anthropic:claude-opus-4-8":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
 	"anthropic:claude-opus-4-7":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
 	"anthropic:claude-opus-4-6":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
@@ -159,17 +288,33 @@ var DefaultPricing = map[string]Pricing{
 	"anthropic:claude-2.0":                 {Input: 8.00, Output: 24.00},
 	"anthropic:claude-instant-1.2":         {Input: 0.80, Output: 2.40},
 
-	// Google Gemini (cached content billed at ~0.25× prompt). 2.5 Pro uses tiered
-	// pricing (≤200K context shown here).
-	// Gemini 3.x — current family (ai.google.dev pricing, June 2026; cache ≈0.25×).
-	// 3.1 Pro is tiered (≤200K shown). 2.0 models were shut down June 2026.
-	"gemini:gemini-3.5-flash":        {Input: 1.50, Output: 9.00, CacheRead: 0.375},
-	"gemini:gemini-3.1-pro-preview":  {Input: 2.00, Output: 12.00, CacheRead: 0.50},
-	"gemini:gemini-3.1-flash-lite":   {Input: 0.25, Output: 1.50},
-	"gemini:gemini-3-flash-preview":  {Input: 0.50, Output: 3.00},
-	"gemini:gemini-2.5-pro":          {Input: 1.25, Output: 10.00, CacheRead: 0.3125},
-	"gemini:gemini-2.5-flash":        {Input: 0.30, Output: 2.50, CacheRead: 0.075},
-	"gemini:gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40},
+	// Google Gemini (ai.google.dev pricing, verified 2026-08-02). Cache-read rates
+	// are the published per-model figures — Gemini bills cached input at ≈0.1× the
+	// prompt rate, not the 0.25× this table previously assumed. CacheRead here is the
+	// per-token read charge only; Gemini also bills context-cache *storage* per hour
+	// ($1.00/1M/hr on Flash tiers, $4.50/1M/hr on Pro), which is time-based and so
+	// cannot be modeled by this per-token table.
+	//
+	// Pro tiers reprice above 200K input tokens, carried as a Tier below; base rates
+	// are the ≤200K tier. Text rates are used where a model prices audio separately.
+	// 2.0 models shut down 2026-06-01.
+	"gemini:gemini-3.6-flash":      {Input: 1.50, Output: 7.50, CacheRead: 0.15},
+	"gemini:gemini-3.5-flash":      {Input: 1.50, Output: 9.00, CacheRead: 0.15},
+	"gemini:gemini-3.5-flash-lite": {Input: 0.30, Output: 2.50, CacheRead: 0.03},
+	"gemini:gemini-3.1-pro-preview": {
+		Input: 2.00, Output: 12.00, CacheRead: 0.20,
+		Tiers: []PricingTier{{MinInputTokens: geminiLongContextThreshold,
+			Input: 4.00, Output: 18.00, CacheRead: 0.40}},
+	},
+	"gemini:gemini-3.1-flash-lite":  {Input: 0.25, Output: 1.50, CacheRead: 0.025},
+	"gemini:gemini-3-flash-preview": {Input: 0.50, Output: 3.00, CacheRead: 0.05},
+	"gemini:gemini-2.5-pro": {
+		Input: 1.25, Output: 10.00, CacheRead: 0.125,
+		Tiers: []PricingTier{{MinInputTokens: geminiLongContextThreshold,
+			Input: 2.50, Output: 15.00, CacheRead: 0.25}},
+	},
+	"gemini:gemini-2.5-flash":        {Input: 0.30, Output: 2.50, CacheRead: 0.03},
+	"gemini:gemini-2.5-flash-lite":   {Input: 0.10, Output: 0.40, CacheRead: 0.01},
 	"gemini:gemini-2.0-flash-exp":    {Input: 0.10, Output: 0.40},
 	"gemini:gemini-1.5-flash":        {Input: 0.075, Output: 0.30, CacheRead: 0.01875},
 	"gemini:gemini-1.5-flash-8b":     {Input: 0.0375, Output: 0.15},

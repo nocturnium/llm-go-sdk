@@ -142,12 +142,12 @@ jobs:
 
       - name: Check imports
         run: |
-          UNIMPORTED=$(goimports -l -local github.com/nocturnium/llm-go-sdk/v5 .)
+          UNIMPORTED=$(goimports -l -local github.com/nocturnium/llm-go-sdk/v6 .)
           if [ -n "$UNIMPORTED" ]; then
             echo "The following files have import issues:"
             echo "$UNIMPORTED"
             echo ""
-            echo "Run 'goimports -w -local github.com/nocturnium/llm-go-sdk/v5 .' to fix"
+            echo "Run 'goimports -w -local github.com/nocturnium/llm-go-sdk/v6 .' to fix"
             exit 1
           fi
 

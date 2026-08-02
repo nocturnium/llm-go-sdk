@@ -3,8 +3,8 @@
 package fireworks
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // providerConfig defines Fireworks-specific configuration.

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 func TestNew(t *testing.T) {

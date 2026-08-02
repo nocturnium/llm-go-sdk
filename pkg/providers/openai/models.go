@@ -5,16 +5,47 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // Known OpenAI model metadata that isn't available from the API.
 // Pricing is per million tokens (verified against the official OpenAI
 // pricing/models docs, June 2026).
 var knownModels = map[string]modelMetadata{
-	// GPT-5.4 / GPT-5.5 — current flagship lineup (developers.openai.com pricing,
-	// June 2026). Context windows follow the gpt-5 family (400k in / 128k out).
+	// GPT-5.6 (sol/terra/luna) — current flagship lineup (developers.openai.com
+	// model pages, verified 2026-08-02). All three share identical limits and differ
+	// only in price. Pricing is the short-context (<272K) tier — see cost.go.
+	//
+	// OpenAI publishes a total context window (1,050,000) that is larger than the
+	// maximum input (922,000); the remainder is reserved for output. contextLength
+	// is ModelInfo.ContextLength ("maximum context window"), so it carries the total.
+	// The capability registry's MaxContextTokens is documented as the maximum *input*
+	// window and so carries 922,000 — the number a caller should size a prompt
+	// against. This is the first family where the two genuinely differ; earlier
+	// models publish a single figure, which is why every other entry mirrors.
+	"gpt-5.6-sol": {
+		displayName:   "GPT-5.6 Sol",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-5.6-sol"),
+	},
+	"gpt-5.6-terra": {
+		displayName:   "GPT-5.6 Terra",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-5.6-terra"),
+	},
+	"gpt-5.6-luna": {
+		displayName:   "GPT-5.6 Luna",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-5.6-luna"),
+	},
+	// GPT-5.4 / GPT-5.5 — previous flagship lineup, still available.
 	"gpt-5.5": {
 		displayName:   "GPT-5.5",
 		contextLength: 400000,

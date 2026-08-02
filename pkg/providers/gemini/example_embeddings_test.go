@@ -3,8 +3,8 @@ package gemini_test
 import (
 	"context"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/gemini"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/gemini"
 )
 
 // Example_embeddings is a compile guard for the embeddings snippet in the package
