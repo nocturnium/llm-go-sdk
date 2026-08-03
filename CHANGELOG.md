@@ -6,6 +6,42 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`pkg/mcp`: sampling — serve `sampling/createMessage` from any `llms.LLM`.** An MCP
+  server can now ask the host to run a completion, and the host answers with a model it
+  already owns, under its own credentials and budget. `WithSamplingLLM` adapts any
+  `llms.LLM`; `WithSamplingHandler` takes a custom source. Adds `SamplingRequest`,
+  `SamplingResult`, `SamplingMessage`, `ModelPreferences`, `ModelHint`,
+  `SamplingHandler`, `SamplingApprover`, `SamplingApproval`, `ApproveAllSampling`, and
+  `ContentBlock.Data`/`.MimeType` for image content. All additions are
+  apidiff-compatible, and `ContentBlock` stays **comparable** (both new fields are
+  strings) — pinned by a test.
+
+  **Consent is mandatory and enforced at construction.** Configuring sampling without
+  `WithSamplingApprover` makes `NewStdioClient`/`NewHTTPClient` **return an error**.
+  Denying at request time instead would hide the misconfiguration until a server first
+  asks — which is exactly when nobody is watching. `ApproveAllSampling()` is the single,
+  greppable opt-out; do not use it with a server you do not control.
+
+  The approver runs **before** any model call, on the inbound worker rather than the
+  read path, so it may block on real human input. A denial invokes no LLM at all
+  (pinned by a stub that fails the test if called) and returns `CodeInvalidRequest` —
+  a deliberate refusal the server should not retry. `SamplingApproval`'s zero value is
+  a **denial**, so a forgotten field refuses rather than approves. An approval may only
+  **lower** the requested `MaxTokens`, never raise it.
+
+  Host-supplied `llms.CallOption` values are applied **last**, so the host always wins —
+  pass `llms.WithModel` to force a cheaper model regardless of what the server asked for.
+  `modelPreferences` is accepted and **ignored**: model choice belongs to whoever pays
+  for the tokens. `includeContext` is likewise accepted and ignored, since honoring
+  `"allServers"` would splice other servers' conversation into a request made by this one.
+
+  **Transport boundary:** server-initiated requests work over **stdio only**. The
+  Streamable HTTP transport has no standalone SSE listener to receive them and no path
+  to send a response frame back, so a handler registered on an HTTP client is never
+  invoked — and the capability is **not advertised** there, since telling a server this
+  client samples when the request can never arrive leaves it waiting on a promise the
+  transport cannot keep.
+
 - **`pkg/mcp`: server-initiated request dispatch.** The client can now serve
   requests a server sends *to it*, the direction the package previously had no path
   for at all (v6.0.1 made such frames answerable; this makes them serviceable).

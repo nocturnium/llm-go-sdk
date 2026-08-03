@@ -168,6 +168,11 @@ type requestMeta struct {
 type ContentBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
+	// Data is base64-encoded bytes for non-text content (Type "image" or
+	// "audio"). Empty for text.
+	Data string `json:"data,omitempty"`
+	// MimeType is the media type of Data, e.g. "image/png". Empty for text.
+	MimeType string `json:"mimeType,omitempty"`
 }
 
 // CallToolResult is the result of a tools/call request.

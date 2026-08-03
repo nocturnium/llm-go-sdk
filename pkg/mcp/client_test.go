@@ -29,6 +29,9 @@ type mockTransport struct {
 	requestFn     func(raw []byte, id json.RawMessage)
 	responses     [][]byte // response frames written back for server-initiated requests
 	closed        bool
+	// inboundUnsupported models a transport that cannot deliver server-initiated
+	// requests (the HTTP transport's case).
+	inboundUnsupported bool
 }
 
 type recordedCall struct {
@@ -142,6 +145,10 @@ func (m *mockTransport) emitRequest(raw []byte) {
 	}
 	_ = m.respond(context.Background(), payload)
 }
+
+// supportsInbound reports true so tests exercise the inbound path; the HTTP
+// transport's false case is covered separately.
+func (m *mockTransport) supportsInbound() bool { return !m.inboundUnsupported }
 
 func (m *mockTransport) respond(_ context.Context, payload []byte) error {
 	m.mu.Lock()
