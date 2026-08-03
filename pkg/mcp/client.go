@@ -122,6 +122,14 @@ type config struct {
 	samplingLLM        llms.LLM
 	samplingLLMOptions []llms.CallOption
 	samplingApprover   SamplingApprover
+
+	// Roots configuration. roots is a static set; rootsHandler is the dynamic
+	// alternative and implies the listChanged capability.
+	roots        []Root
+	rootsHandler RootsHandler
+
+	// elicitationHandler serves elicitation/create when set.
+	elicitationHandler ElicitationHandler
 }
 
 // buildRequestHandlers resolves the configured capabilities into the handler set
@@ -141,6 +149,18 @@ func buildRequestHandlers(cfg config) (map[string]requestHandler, error) {
 	}
 	if sampling != nil {
 		handlers[methodSamplingCreateMessage] = sampling
+	}
+
+	roots, err := buildRootsHandler(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if roots != nil {
+		handlers[methodRootsList] = roots
+	}
+
+	if elicitation := buildElicitationHandler(cfg); elicitation != nil {
+		handlers[methodElicitationCreate] = elicitation
 	}
 
 	if len(handlers) == 0 {

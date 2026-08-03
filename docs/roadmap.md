@@ -91,7 +91,10 @@ before new surface.
 
 ### Track C — MCP server-side surface (sampling, roots, elicitation)
 
-**Why:** `pkg/mcp` is a client-only implementation. The three capabilities an MCP server can ask
+**Status: complete.** All four steps have shipped; what follows is the record of what each
+delivered.
+
+**Why:** `pkg/mcp` was a client-only implementation. The three capabilities an MCP server can ask
 *of the client* are unimplemented: **sampling** (`sampling/createMessage`), **roots**, and
 **elicitation**. Sampling is the highest-value of the three and a genuine differentiator for this
 SDK specifically — it lets an MCP server request an LLM completion from the host, and this SDK
@@ -114,11 +117,18 @@ to close that loop as cleanly.
    approval may only lower the requested `MaxTokens`, never raise it. `modelPreferences` and
    `includeContext` are accepted and ignored (model choice stays with the host; honoring
    `allServers` would leak other servers' context).
-3. **Roots** — expose filesystem roots to the server. Note there is **no** existing path-confinement
-   discipline in `pkg/mcp` to reuse (`WithWorkDir` sets `cmd.Dir` unvalidated); what roots needs is
-   narrower — validate at registration that each URI is an absolute `file://` with no `..` — and it
-   is advertisement hygiene rather than confinement, since this SDK serves no file reads.
-4. **Elicitation** — structured user-input requests from server to client.
+3. ✅ **Roots.** *(Shipped.)* `WithRoots` for a fixed set (URIs validated at construction) and
+   `WithRootsHandler` for a dynamic one (validated per response, and the only form that advertises
+   `listChanged`; `Client.RootsChanged` emits the notification). Validation requires an absolute
+   `file://` URI with an empty authority and no `.`/`..` segments, and **rejects rather than
+   normalizes** — silently rewriting a caller's path would publish a location they did not write.
+   This is advertisement hygiene, not sandboxing: the SDK serves no file reads, so a root grants no
+   access, but a malformed one misinforms the server.
+4. ✅ **Elicitation.** *(Shipped.)* `WithElicitationHandler` serves `elicitation/create`; the
+   handler is itself the human-in-the-loop, so no separate approver is needed (declining is
+   expressible in the result). Content is dropped on decline/cancel so partially-filled form data
+   cannot leak, and an unrecognized action is reported as an error rather than passed through — a
+   server seeing an unknown action might assume success.
 
 **Transport boundary:** server-initiated requests work over **stdio only**. The Streamable HTTP
 transport has no standalone GET SSE listener to receive them and no path to POST a response frame

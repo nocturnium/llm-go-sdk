@@ -6,6 +6,44 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`pkg/mcp`: roots.** `WithRoots` publishes a fixed set of filesystem roots to the
+  server; `WithRootsHandler` publishes a dynamic one, consulted per request. Adds
+  `Root`, `RootsHandler` and `Client.RootsChanged`.
+
+  URIs are validated: absolute `file://`, empty authority, no `.` or `..` segments.
+  Static roots are validated at **construction** (a bad URI is a wiring bug worth
+  surfacing immediately); dynamic ones per response, and a malformed root is reported
+  to the server rather than published. Validation **rejects rather than normalizes** —
+  silently rewriting a caller's path would publish a location they did not write.
+  Notably `file://relative/path` is rejected: two slashes make `relative` the
+  *authority*, so that URI does not mean what it looks like.
+
+  This is advertisement hygiene, not sandboxing. The SDK serves no file reads, so a
+  root grants a server no access it did not have; what a malformed one does is
+  misinform it. Only a dynamic handler advertises `listChanged`, since only a dynamic
+  set can change, and `RootsChanged` is a no-op otherwise.
+
+- **`pkg/mcp`: elicitation.** `WithElicitationHandler` serves `elicitation/create`,
+  letting a server ask the user for structured input. Adds `ElicitationRequest`,
+  `ElicitationResult`, `ElicitationHandler` and the `ElicitationAccept`/`Decline`/
+  `Cancel` actions.
+
+  No separate approver is needed here, unlike sampling: the handler *is* the
+  human-in-the-loop, and declining is expressible in the result. Content is **dropped**
+  on decline or cancel, so a handler cannot leak partially-filled form data, and an
+  unrecognized action is reported as an error rather than passed through — a server
+  seeing an unknown action might otherwise assume success. With no handler registered
+  the capability is unadvertised and requests get `MethodNotFound`, so a host with no
+  way to ask a human is never presented as able to.
+
+  `RequestedSchema` is server-supplied and therefore untrusted: render it as a form,
+  and never auto-accept a schema you did not show a user — a server can ask for
+  anything, including credentials.
+
+  This completes MCP Track C.
+
+### Added
+
 - **`pkg/mcp`: sampling — serve `sampling/createMessage` from any `llms.LLM`.** An MCP
   server can now ask the host to run a completion, and the host answers with a model it
   already owns, under its own credentials and budget. `WithSamplingLLM` adapts any
