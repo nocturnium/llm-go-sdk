@@ -99,16 +99,33 @@ already owns a provider-agnostic `llms.Model` to serve it with. No other Go LLM 
 to close that loop as cleanly.
 
 **Scope (sequence as separate PRs):**
-1. **Sampling types + capability advertisement** — declare `sampling` in the client's
-   `ClientCapabilities` during `initialize`; add the `sampling/createMessage` request/result types.
-2. **Handler wiring** — route incoming `sampling/createMessage` requests to a caller-supplied
-   handler, plus a built-in adapter that satisfies them from an `llms.Model`. Must include a
-   human-in-the-loop approval hook: the MCP spec treats sampling as requiring user consent, and a
-   server that can silently spend the host's tokens is a real abuse vector.
-3. **Roots** — expose filesystem roots to the server, with the same path-confinement discipline
-   the transport layer already applies elsewhere.
+0. ✅ **Inbound-frame routing fix.** *(Shipped, v6.0.1.)* A prerequisite that turned out to be a
+   live bug: frames were classified on the presence of a JSON-RPC id, so a server-initiated
+   request — which carries both a method and an id — was treated as a response and could resolve
+   an unrelated in-flight call with an empty result.
+1. ✅ **Inbound request dispatch + capability advertisement.** *(Shipped.)* Bounded-concurrency
+   dispatch (`inbound.go`) that refuses rather than drops on overflow (`RefusedRequests`), runs
+   handlers off the transport read path, contains panics, and tears down bounded. Typed
+   `ClientCapabilities` derived from the registered handlers so advertisement cannot drift.
+2. ✅ **Sampling + consent.** *(Shipped.)* `WithSamplingLLM` answers `sampling/createMessage` from
+   any `llms.LLM`; `WithSamplingHandler` takes a custom source. **`WithSamplingApprover` is
+   mandatory** — configuring sampling without it fails client construction, so a server can never
+   silently spend the host's tokens; `ApproveAllSampling()` is the single explicit opt-out. An
+   approval may only lower the requested `MaxTokens`, never raise it. `modelPreferences` and
+   `includeContext` are accepted and ignored (model choice stays with the host; honoring
+   `allServers` would leak other servers' context).
+3. **Roots** — expose filesystem roots to the server. Note there is **no** existing path-confinement
+   discipline in `pkg/mcp` to reuse (`WithWorkDir` sets `cmd.Dir` unvalidated); what roots needs is
+   narrower — validate at registration that each URI is an absolute `file://` with no `..` — and it
+   is advertisement hygiene rather than confinement, since this SDK serves no file reads.
 4. **Elicitation** — structured user-input requests from server to client.
 
-**Risks:** this inverts the request direction (server → client), so the jsonrpc layer needs an
-inbound request path alongside the existing notification pump; sampling additionally needs a
-consent model, so it should not ship without the approval hook in step 2.
+**Transport boundary:** server-initiated requests work over **stdio only**. The Streamable HTTP
+transport has no standalone GET SSE listener to receive them and no path to POST a response frame
+back, so handlers registered on an HTTP client are never invoked and their capabilities are not
+advertised. Adding a GET SSE listener would unblock this wholesale and is worth its own track.
+
+**Risks:** this inverts the request direction (server → client), which the jsonrpc layer now
+handles alongside the notification pump. The concurrency model deliberately differs from that pump:
+dropping a request hangs the server, and serial execution would head-of-line-block everything
+behind a slow sampling call.

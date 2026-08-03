@@ -33,6 +33,12 @@ type transport interface {
 	// id. Transports that cannot send unsolicited frames return
 	// errRespondUnsupported.
 	respond(ctx context.Context, payload []byte) error
+	// supportsInbound reports whether this transport can actually deliver
+	// server-initiated requests and send responses back. A transport that cannot
+	// must not have capabilities advertised on its behalf: telling a server this
+	// client samples, when the request can never arrive, leaves the server waiting
+	// on a promise the transport cannot keep.
+	supportsInbound() bool
 	// close releases transport resources (terminating the subprocess for stdio).
 	close() error
 }

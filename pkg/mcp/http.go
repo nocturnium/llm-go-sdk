@@ -62,6 +62,11 @@ func (t *httpTransport) onRequest(fn func(raw []byte, id json.RawMessage)) {
 	t.requestMu.Unlock()
 }
 
+// supportsInbound reports false: there is no standalone SSE listener to receive
+// server-initiated requests and no path to POST a response frame back. See
+// onRequest.
+func (t *httpTransport) supportsInbound() bool { return false }
+
 // respond reports that this transport cannot send unsolicited frames. See
 // onRequest.
 func (t *httpTransport) respond(_ context.Context, _ []byte) error {

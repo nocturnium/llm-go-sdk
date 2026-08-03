@@ -115,20 +115,53 @@ type config struct {
 	// rootsListChanged records whether the roots handler is dynamic, which is
 	// advertised as the listChanged sub-capability.
 	rootsListChanged bool
+
+	// Sampling configuration. samplingApprover is the consent gate and is
+	// mandatory whenever a sampling source is configured; see buildSamplingHandler.
+	samplingHandler    SamplingHandler
+	samplingLLM        llms.LLM
+	samplingLLMOptions []llms.CallOption
+	samplingApprover   SamplingApprover
 }
 
-// clientCapabilities derives what to advertise from the registered handlers.
-// Advertising is never independent of capability: if no handler serves a method,
-// the capability is nil and the server is told this client does not offer it.
-func (c config) clientCapabilities() ClientCapabilities {
+// buildRequestHandlers resolves the configured capabilities into the handler set
+// to register, returning an error for a configuration that would be unsafe to
+// serve (see buildSamplingHandler's consent requirement).
+func buildRequestHandlers(cfg config) (map[string]requestHandler, error) {
+	handlers := make(map[string]requestHandler, len(cfg.requestHandlers)+1)
+	// Directly-supplied handlers are the test/extension seam; capability options
+	// below take precedence for the methods they own.
+	for method, h := range cfg.requestHandlers {
+		handlers[method] = h
+	}
+
+	sampling, err := buildSamplingHandler(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if sampling != nil {
+		handlers[methodSamplingCreateMessage] = sampling
+	}
+
+	if len(handlers) == 0 {
+		return nil, nil
+	}
+	return handlers, nil
+}
+
+// capabilitiesFor derives what to advertise from the handlers actually
+// registered. Advertising is never independent of capability: if no handler
+// serves a method, the capability is nil and the server is told this client does
+// not offer it.
+func capabilitiesFor(handlers map[string]requestHandler, rootsListChanged bool) ClientCapabilities {
 	var caps ClientCapabilities
-	if _, ok := c.requestHandlers[methodSamplingCreateMessage]; ok {
+	if _, ok := handlers[methodSamplingCreateMessage]; ok {
 		caps.Sampling = &SamplingCapability{}
 	}
-	if _, ok := c.requestHandlers[methodRootsList]; ok {
-		caps.Roots = &RootsCapability{ListChanged: c.rootsListChanged}
+	if _, ok := handlers[methodRootsList]; ok {
+		caps.Roots = &RootsCapability{ListChanged: rootsListChanged}
 	}
-	if _, ok := c.requestHandlers[methodElicitationCreate]; ok {
+	if _, ok := handlers[methodElicitationCreate]; ok {
 		caps.Elicitation = &ElicitationCapability{}
 	}
 	return caps
@@ -254,10 +287,21 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 	// be derived from them. Registering a handler after the handshake would mean
 	// either advertising a capability the client did not yet have, or serving one
 	// the server was never told about.
-	for method, handler := range cfg.requestHandlers {
+	handlers, err := buildRequestHandlers(cfg)
+	if err != nil {
+		_ = t.close()
+		return nil, err
+	}
+	// A transport that cannot deliver server-initiated requests must not have
+	// capabilities advertised on its behalf: a server told this client samples,
+	// whose request can never arrive, waits on a promise the transport cannot keep.
+	if !t.supportsInbound() {
+		handlers = nil
+	}
+	for method, handler := range handlers {
 		c.inbound.register(method, handler)
 	}
-	c.clientCaps = cfg.clientCapabilities()
+	c.clientCaps = capabilitiesFor(handlers, cfg.rootsListChanged)
 
 	t.onNotification(c.dispatchNotification)
 	t.onRequest(c.dispatchRequest)

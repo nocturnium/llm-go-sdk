@@ -76,6 +76,10 @@ func (t *stdioTransport) deliverRequest(raw []byte, id json.RawMessage) {
 	_ = t.write(payload)
 }
 
+// supportsInbound reports true: stdio is bidirectional and the write path is
+// serialized, so server-initiated requests arrive and responses can be sent.
+func (t *stdioTransport) supportsInbound() bool { return true }
+
 // respond writes a response frame for a server-initiated request. write is
 // already serialized by writeMu, so this is safe concurrently with request and
 // notify.
