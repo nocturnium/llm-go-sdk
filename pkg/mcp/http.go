@@ -30,6 +30,8 @@ type httpTransport struct {
 	sessionID string
 	notifyMu  sync.RWMutex
 	notifyFn  func(raw []byte)
+	requestMu sync.RWMutex
+	requestFn func(raw []byte, id json.RawMessage)
 	closeOnce sync.Once
 }
 
@@ -47,6 +49,23 @@ func (t *httpTransport) onNotification(fn func(raw []byte)) {
 	t.notifyMu.Lock()
 	t.notifyFn = fn
 	t.notifyMu.Unlock()
+}
+
+// onRequest records the sink but never invokes it: this transport has no
+// standalone SSE listener, so a server-initiated request can only ever arrive
+// interleaved in a POST's response stream, and there is no path to send a
+// response frame back outside a request/response exchange. Such frames are
+// dropped in extractFrames.
+func (t *httpTransport) onRequest(fn func(raw []byte, id json.RawMessage)) {
+	t.requestMu.Lock()
+	t.requestFn = fn
+	t.requestMu.Unlock()
+}
+
+// respond reports that this transport cannot send unsolicited frames. See
+// onRequest.
+func (t *httpTransport) respond(_ context.Context, _ []byte) error {
+	return errRespondUnsupported
 }
 
 func (t *httpTransport) deliverNotifications(frames [][]byte) {

@@ -37,6 +37,9 @@ type stdioTransport struct {
 	notifyMu sync.RWMutex
 	notifyFn func(raw []byte)
 
+	requestMu sync.RWMutex
+	requestFn func(raw []byte, id json.RawMessage)
+
 	done      chan struct{}
 	closeOnce sync.Once
 }
@@ -45,6 +48,39 @@ func (t *stdioTransport) onNotification(fn func(raw []byte)) {
 	t.notifyMu.Lock()
 	t.notifyFn = fn
 	t.notifyMu.Unlock()
+}
+
+func (t *stdioTransport) onRequest(fn func(raw []byte, id json.RawMessage)) {
+	t.requestMu.Lock()
+	t.requestFn = fn
+	t.requestMu.Unlock()
+}
+
+// deliverRequest routes a server-initiated request to the registered sink. With
+// no sink installed the client cannot serve the request, so it answers
+// MethodNotFound rather than leaving the server waiting for a reply that will
+// never come.
+func (t *stdioTransport) deliverRequest(raw []byte, id json.RawMessage) {
+	t.requestMu.RLock()
+	fn := t.requestFn
+	t.requestMu.RUnlock()
+	if fn != nil {
+		fn(raw, id)
+		return
+	}
+	payload, err := encodeErrorResponse(id, CodeMethodNotFound, "mcp: client does not handle server-initiated requests")
+	if err != nil {
+		return
+	}
+	// Best effort: the read loop must keep serving responses regardless.
+	_ = t.write(payload)
+}
+
+// respond writes a response frame for a server-initiated request. write is
+// already serialized by writeMu, so this is safe concurrently with request and
+// notify.
+func (t *stdioTransport) respond(_ context.Context, payload []byte) error {
+	return t.write(payload)
 }
 
 func (t *stdioTransport) deliverNotification(raw []byte) {
@@ -161,14 +197,27 @@ func (t *stdioTransport) dispatch(line []byte) {
 }
 
 func (t *stdioTransport) dispatchOne(line []byte) {
+	// Classify before consulting pending. A server-initiated request carries an
+	// id too, so routing on the id alone would either resolve an unrelated
+	// in-flight call with an empty result or drop the request entirely.
+	switch kind, rawID := classifyFrame(line); kind {
+	case frameRequest:
+		t.deliverRequest(line, rawID)
+		return
+	case frameNotification:
+		t.deliverNotification(line)
+		return
+	case frameResponse:
+		// Fall through to the id-correlated pending-response path below.
+	}
+
 	id, ok := messageID(line)
 	if !ok {
 		if isNullIDError(line) {
 			t.dispatchNullIDError(line)
 			return
 		}
-		// A server-initiated notification (no id, no error): surface it to the sink.
-		t.deliverNotification(line)
+		// A response whose id could not be parsed: nothing can be correlated.
 		return
 	}
 	t.mu.Lock()

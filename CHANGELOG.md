@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pkg/mcp`: server-initiated requests were misrouted, silently corrupting
+  concurrent calls.** Frame dispatch classified purely on the presence of a JSON-RPC
+  `id`, but a server-initiated request (`sampling/createMessage`, `roots/list`,
+  `elicitation/create`) carries **both** a method and an id — so it was treated as a
+  *response*. If its id collided with an in-flight client call, the request frame was
+  delivered to that caller, which then found neither a result nor an error and
+  returned a **nil-result success**: `CallTool` handed back an empty result with no
+  error. With no collision the frame was dropped and the server waited forever.
+  Server ids are server-chosen while client ids start at 1, so collision was the
+  likely case, not an exotic one. A second flaw: ids were parsed with `ParseInt`, so
+  a non-numeric string id (`"abc"`) failed to parse and was misrouted to the
+  *notification* sink.
+
+  Dispatch now classifies frames three ways (response / notification / request) and
+  ids are echoed back verbatim in their original JSON form, as JSON-RPC requires. A
+  client with no handler registered answers `MethodNotFound` rather than dropping the
+  frame, so a nonconforming server is unblocked instead of hanging. The HTTP framing
+  path drops inbound requests rather than mistaking one for a POST's response.
+
+  No exported API changed. Anyone using `pkg/mcp` against a server that initiates
+  requests should treat prior empty-but-successful tool results as suspect.
+
+## [6.0.0] - 2026-08-03
+
 v6 is a deliberately small major release. The module path is now
 `github.com/nocturnium/llm-go-sdk/v6` (Go semantic import versioning); v5 and v6 are
 distinct module paths and can coexist, so consumers may migrate incrementally. See

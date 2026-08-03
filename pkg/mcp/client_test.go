@@ -26,6 +26,8 @@ type mockTransport struct {
 	calls         []recordedCall
 	notifications []string
 	notifyFn      func(raw []byte)
+	requestFn     func(raw []byte, id json.RawMessage)
+	responses     [][]byte // response frames written back for server-initiated requests
 	closed        bool
 }
 
@@ -110,6 +112,49 @@ func (m *mockTransport) emit(raw []byte) {
 	if fn != nil {
 		fn(raw)
 	}
+}
+
+func (m *mockTransport) onRequest(fn func(raw []byte, id json.RawMessage)) {
+	m.mu.Lock()
+	m.requestFn = fn
+	m.mu.Unlock()
+}
+
+// emitRequest delivers a server-initiated request frame to the registered sink,
+// modeling a server that asks the client to do something (e.g. sampling). With
+// no sink installed it mirrors the real transports by answering MethodNotFound,
+// so the server is never left waiting.
+func (m *mockTransport) emitRequest(raw []byte) {
+	kind, id := classifyFrame(raw)
+	if kind != frameRequest {
+		panic("emitRequest called with a frame that is not a request")
+	}
+	m.mu.Lock()
+	fn := m.requestFn
+	m.mu.Unlock()
+	if fn != nil {
+		fn(raw, id)
+		return
+	}
+	payload, err := encodeErrorResponse(id, CodeMethodNotFound, "mcp: client does not handle server-initiated requests")
+	if err != nil {
+		panic(err)
+	}
+	_ = m.respond(context.Background(), payload)
+}
+
+func (m *mockTransport) respond(_ context.Context, payload []byte) error {
+	m.mu.Lock()
+	m.responses = append(m.responses, append([]byte(nil), payload...))
+	m.mu.Unlock()
+	return nil
+}
+
+// sentResponses returns the response frames this transport wrote back.
+func (m *mockTransport) sentResponses() [][]byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([][]byte(nil), m.responses...)
 }
 
 func (m *mockTransport) close() error {

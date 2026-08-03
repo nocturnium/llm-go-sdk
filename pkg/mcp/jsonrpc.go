@@ -187,13 +187,20 @@ func extractJSONMessage(body []byte) []byte {
 func extractFrames(body []byte) (response []byte, notifications [][]byte) {
 	for _, event := range collectJSONPayloads(body) {
 		for _, msg := range splitJSONMessages(event) {
-			if isNotificationFrame(msg) {
+			switch kind, _ := classifyFrame(msg); kind {
+			case frameNotification:
 				notifications = append(notifications, msg)
+			case frameRequest:
+				// A server-initiated request. It must not be mistaken for this
+				// POST's response, which would resolve the caller with an empty
+				// result. The HTTP transport cannot serve inbound requests at all
+				// (no standalone SSE listener to receive them reliably, and no path
+				// to POST a response frame back), so drop it here.
 				continue
+			default:
+				// The last response frame wins, matching extractJSONMessage.
+				response = msg
 			}
-			// The last non-notification frame is treated as the response, matching
-			// extractJSONMessage's "last JSON-RPC payload wins" behavior.
-			response = msg
 		}
 	}
 	return response, notifications
@@ -223,18 +230,89 @@ func collectJSONPayloads(body []byte) [][]byte {
 	return payloads
 }
 
-// isNotificationFrame reports whether a single JSON-RPC object is a notification
-// (a method call with no id), as opposed to a response (result or error).
-func isNotificationFrame(msg []byte) bool {
+// frameKind classifies an inbound JSON-RPC object by the two fields that
+// determine how it must be handled: whether it carries a method, and whether it
+// carries an id.
+type frameKind int
+
+const (
+	// frameResponse carries no method: it is a result or error answering a
+	// request this client sent, and must be routed to the waiting caller.
+	frameResponse frameKind = iota
+	// frameNotification carries a method but no id: fire-and-forget, no reply.
+	frameNotification
+	// frameRequest carries BOTH a method and an id: the server is asking this
+	// client to do something and is waiting for a response carrying that id.
+	frameRequest
+)
+
+// classifyFrame reports the kind of a single JSON-RPC object and, for a request,
+// the raw id that must be echoed back.
+//
+// The id is returned raw and un-parsed on purpose. JSON-RPC permits an id to be a
+// string or a number, and requires a response to echo it back unchanged — so
+// re-serializing a parsed id risks answering "1" with 1 (or failing outright on a
+// non-numeric string id, which [messageID] does).
+//
+// Distinguishing frameRequest from frameResponse is load-bearing: a request
+// carries an id, so any classifier that keys only on the presence of an id (as
+// [messageID] does) will route a server-initiated request into the pending-response
+// table, where it either resolves an unrelated call with an empty result or is
+// dropped while the server waits forever for a reply.
+func classifyFrame(msg []byte) (frameKind, json.RawMessage) {
 	var probe struct {
 		ID     json.RawMessage `json:"id"`
 		Method string          `json:"method"`
 	}
 	if err := json.Unmarshal(msg, &probe); err != nil {
-		return false
+		return frameResponse, nil
 	}
 	hasID := len(probe.ID) != 0 && !bytes.Equal(probe.ID, []byte("null"))
-	return probe.Method != "" && !hasID
+	switch {
+	case probe.Method != "" && hasID:
+		return frameRequest, probe.ID
+	case probe.Method != "":
+		return frameNotification, nil
+	default:
+		return frameResponse, nil
+	}
+}
+
+// isNotificationFrame reports whether a single JSON-RPC object is a notification
+// (a method call with no id), as opposed to a response (result or error).
+func isNotificationFrame(msg []byte) bool {
+	kind, _ := classifyFrame(msg)
+	return kind == frameNotification
+}
+
+// encodeResponse marshals a successful JSON-RPC response echoing the request's
+// raw id verbatim.
+//
+// A nil or empty result is encoded as an explicit empty object rather than
+// omitted: rpcResponse.Result is omitempty, and a frame carrying neither a result
+// nor an error is exactly the malformed shape that a peer cannot interpret.
+func encodeResponse(id json.RawMessage, result any) ([]byte, error) {
+	encoded := json.RawMessage("{}")
+	if result != nil {
+		marshaled, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("mcp: encode response result: %w", err)
+		}
+		if len(bytes.TrimSpace(marshaled)) > 0 {
+			encoded = marshaled
+		}
+	}
+	return json.Marshal(rpcResponse{JSONRPC: jsonRPCVersion, ID: id, Result: encoded})
+}
+
+// encodeErrorResponse marshals a JSON-RPC error response echoing the request's
+// raw id verbatim.
+func encodeErrorResponse(id json.RawMessage, code int, message string) ([]byte, error) {
+	return json.Marshal(rpcResponse{
+		JSONRPC: jsonRPCVersion,
+		ID:      id,
+		Error:   &RPCError{Code: code, Message: message},
+	})
 }
 
 func splitJSONMessages(raw []byte) [][]byte {
