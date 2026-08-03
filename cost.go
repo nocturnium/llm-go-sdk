@@ -134,6 +134,23 @@ func (p Pricing) cost(usage Usage) float64 {
 		float64(usage.CacheCreationTokens)/perMillion*e.cacheWriteRate()
 }
 
+// costForMode computes cost under a billing mode. A mode's rate card replaces
+// the standard card wholesale, and tiers then resolve against whichever card
+// applies — so a long-context batch request bills at the batch card's
+// long-context tier if it declares one, not at the standard card's tier scaled
+// by a discount.
+//
+// When no card is published for the mode, pricing falls back to standard rates
+// and known is false, so a caller can tell "priced at standard because the mode
+// is unknown" from "priced at the mode's published rate".
+func costForMode(provider Provider, model string, usage Usage, mode PricingMode, standard Pricing, standardKnown bool) (cost float64, known bool) {
+	card, ok := resolveModePricing(provider, model, mode, standard, standardKnown)
+	if !ok {
+		return standard.cost(usage), false
+	}
+	return card.cost(usage), true
+}
+
 // Long-context repricing thresholds. Both providers reprice the *entire* request
 // once total input crosses the threshold, not just the tokens beyond it.
 const (
@@ -399,6 +416,14 @@ type CostTracker struct {
 	mu      sync.RWMutex
 	usage   map[string]*ModelUsage
 	pricing map[string]Pricing
+	// modePricing holds caller-registered rate cards for non-standard billing
+	// lanes, keyed "provider:model:mode". It overlays the built-in table.
+	modePricing map[string]Pricing
+	// modeCost accumulates spend per billing mode, keyed by mode. It lives here
+	// rather than on ModelUsage because ModelUsage is a comparable struct and a
+	// map field would silently make it non-comparable — the same class of change
+	// that forced the v6 major.
+	modeCost map[PricingMode]float64
 }
 
 // NewCostTracker creates a new cost tracker with optional custom pricing.
@@ -415,8 +440,10 @@ func NewCostTracker(customPricing ...map[string]Pricing) *CostTracker {
 	}
 
 	return &CostTracker{
-		usage:   make(map[string]*ModelUsage),
-		pricing: pricing,
+		usage:       make(map[string]*ModelUsage),
+		pricing:     pricing,
+		modePricing: make(map[string]Pricing),
+		modeCost:    make(map[PricingMode]float64),
 	}
 }
 
@@ -436,18 +463,48 @@ const maxSafeTokenCount = 1<<62 - 1
 // Lock contention optimization: Cost calculation is performed before acquiring
 // the write lock to minimize lock hold time under high concurrency.
 func (t *CostTracker) Record(provider Provider, model string, usage Usage) (float64, bool) {
+	return t.RecordMode(provider, model, usage, PricingModeStandard)
+}
+
+// costFor resolves the cost of usage for a provider/model under a billing mode.
+// The caller must hold at least a read lock.
+//
+// Resolution order for a non-standard mode: a rate card registered on this
+// tracker, then the built-in published cards (including provider-wide rules),
+// then standard rates with known=false. An unpriced model is (0, false)
+// whatever the mode — a mode discount on an unknown base is still unknown.
+func (t *CostTracker) costFor(provider Provider, model, key string, usage Usage, mode PricingMode) (float64, bool) {
+	standard, standardKnown := t.pricing[key]
+	if !standardKnown && mode == PricingModeStandard {
+		return 0, false
+	}
+	if mode != PricingModeStandard {
+		if override, ok := t.modePricing[modePricingKey(provider, model, mode)]; ok {
+			return override.cost(usage), true
+		}
+	}
+	cost, known := costForMode(provider, model, usage, mode, standard, standardKnown)
+	if !standardKnown && !known {
+		return 0, false
+	}
+	return cost, known
+}
+
+// RecordMode records usage priced under a billing mode, returning the cost and
+// whether a rate card was known for that provider/model/mode.
+//
+// A mode with no published card prices at standard rates and reports known
+// false, so an unknown mode is never silently discounted. Cost still accumulates
+// into the single per-model [ModelUsage]; use [CostTracker.GetModeCosts] for the
+// per-mode split.
+func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, mode PricingMode) (float64, bool) {
 	key := t.makeKey(provider, model)
 	now := time.Now()
 
-	// Pre-calculate cost OUTSIDE the lock to minimize lock hold time.
-	// Pricing data is read-only after initialization, so this is safe.
-	var cost float64
-	var known bool
+	// Pre-calculate cost OUTSIDE the write lock to minimize lock hold time.
+	// Mode resolution reads the tracker's overlay, so it shares this read lock.
 	t.mu.RLock()
-	if pricing, ok := t.pricing[key]; ok {
-		cost = pricing.cost(usage)
-		known = true
-	}
+	cost, known := t.costFor(provider, model, key, usage, mode)
 	t.mu.RUnlock()
 
 	// Now acquire write lock for minimal duration
@@ -480,7 +537,40 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) (floa
 	u.Requests++
 	u.LastUsed = now
 	u.EstimatedCost += cost
+	t.modeCost[mode] += cost
 	return cost, known
+}
+
+// SetModePricing registers a rate card for a provider/model under a billing
+// mode, overriding any built-in card. Use it for models the SDK does not cover,
+// or for negotiated rates.
+//
+// Setting [PricingModeStandard] is a no-op guard against confusion: use
+// [CostTracker.SetPricing] for standard rates.
+func (t *CostTracker) SetModePricing(provider Provider, model string, mode PricingMode, pricing Pricing) {
+	if mode == PricingModeStandard {
+		t.SetPricing(provider, model, pricing)
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.modePricing[modePricingKey(provider, model, mode)] = pricing
+}
+
+// GetModeCosts returns accumulated cost broken down by billing mode. The
+// returned map is a copy and is safe to retain.
+//
+// This lives on the tracker rather than on [ModelUsage] because ModelUsage is a
+// comparable struct, and adding a map field to it would make it non-comparable —
+// a breaking change for any caller comparing two values with ==.
+func (t *CostTracker) GetModeCosts() map[PricingMode]float64 {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	out := make(map[PricingMode]float64, len(t.modeCost))
+	for mode, cost := range t.modeCost {
+		out[mode] = cost
+	}
+	return out
 }
 
 // RecordEmbedding records usage for an embedding request.
@@ -576,7 +666,14 @@ func (t *CostTracker) GetPricing(provider Provider, model string) (Pricing, bool
 }
 
 func (t *CostTracker) makeKey(provider Provider, model string) string {
-	return fmt.Sprintf("%s:%s", provider, model)
+	return modelPricingKey(provider, model)
+}
+
+// modelPricingKey builds the "provider:model" key used by DefaultPricing and by
+// a tracker's pricing map. Both the tracker and the package-level estimators use
+// it so the two can never drift.
+func modelPricingKey(provider Provider, model string) string {
+	return string(provider) + ":" + model
 }
 
 // CostMiddleware wraps an LLM with cost tracking.
@@ -614,7 +711,9 @@ func (m *CostMiddleware) GenerateContent(ctx context.Context, messages []Message
 		return nil, err
 	}
 
-	m.tracker.Record(m.llm.Provider(), m.llm.Model(), resp.Usage)
+	// Options are applied only after the call succeeds so the error path does not
+	// pay for a CallOptions allocation it will not use.
+	m.tracker.RecordMode(m.llm.Provider(), m.llm.Model(), resp.Usage, ApplyOptions(options...).PricingMode)
 	return resp, nil
 }
 
@@ -637,7 +736,7 @@ func (m *CostMiddleware) Stream(ctx context.Context, messages []Message, options
 		},
 		func() {
 			if lastUsage != nil {
-				m.tracker.Record(m.llm.Provider(), m.llm.Model(), *lastUsage)
+				m.tracker.RecordMode(m.llm.Provider(), m.llm.Model(), *lastUsage, opts.PricingMode)
 			}
 		},
 	), nil
@@ -672,12 +771,28 @@ var _ LLM = (*CostMiddleware)(nil)
 // zero-cost model. Register custom pricing on a CostTracker when the defaults do
 // not include a provider/model.
 func EstimateCost(provider Provider, model string, usage Usage) (float64, bool) {
-	key := fmt.Sprintf("%s:%s", provider, model)
-	pricing, ok := DefaultPricing[key]
-	if !ok {
+	return EstimateCostMode(provider, model, usage, PricingModeStandard)
+}
+
+// EstimateCostMode calculates the estimated cost for a given usage under a
+// billing mode, using the built-in pricing tables.
+//
+// The boolean reports whether a rate card was known for that provider/model/mode
+// specifically. A model priced at standard rates but with no published card for
+// the requested mode returns its standard cost with false, so a caller can tell
+// "this is the batch price" from "this is the standard price because no batch
+// price is published". Not every model has a card in every lane —
+// gpt-5.4-nano, for example, has no Fast mode rate.
+func EstimateCostMode(provider Provider, model string, usage Usage, mode PricingMode) (float64, bool) {
+	standard, standardKnown := DefaultPricing[modelPricingKey(provider, model)]
+	if !standardKnown && mode == PricingModeStandard {
 		return 0, false
 	}
-	return pricing.cost(usage), true
+	cost, known := costForMode(provider, model, usage, mode, standard, standardKnown)
+	if !standardKnown && !known {
+		return 0, false
+	}
+	return cost, known
 }
 
 // FormatCost formats a cost value as a USD string.

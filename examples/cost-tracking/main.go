@@ -23,6 +23,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	// Pricing modes are pure estimation against the built-in tables, so this runs
+	// without any provider credentials.
+	demoPricingModes()
+
 	baseClient := createClient()
 	if baseClient == nil {
 		cancel()
@@ -152,6 +156,51 @@ func main() {
 	fmt.Printf("Before reset - Total requests: %d\n", tracker.GetTotalRequests())
 	tracker.Reset()
 	fmt.Printf("After reset - Total requests: %d\n", tracker.GetTotalRequests())
+}
+
+// demoPricingModes shows how billing lanes change the estimate. The mode is
+// accounting only — it does not route the request. Send the request to the lane
+// with the provider's own mechanism (OpenAI's service_tier, Anthropic's Batches
+// API), then set the matching mode so the recorded cost is right.
+func demoPricingModes() {
+	fmt.Println("\n=== Pricing modes ===")
+
+	// Deliberately below OpenAI's 272K long-context threshold so every lane is
+	// compared on its short-context card. Above the threshold the standard card
+	// tiers up but the batch/flex cards do not (their long-context columns are not
+	// yet carried), which would make the comparison misleading rather than wrong.
+	usage := llms.Usage{PromptTokens: 100_000, CompletionTokens: 100_000}
+	for _, mode := range []llms.PricingMode{
+		llms.PricingModeStandard,
+		llms.PricingModeBatch,
+		llms.PricingModeFlex,
+		llms.PricingModeFast,
+	} {
+		label := string(mode)
+		if mode == llms.PricingModeStandard {
+			label = "standard"
+		}
+		cost, known := llms.EstimateCostMode(llms.ProviderOpenAI, "gpt-5.6-sol", usage, mode)
+		note := ""
+		if !known {
+			// No published card for this lane: priced at standard rates, and the
+			// boolean says so rather than implying a discount that does not exist.
+			note = "  (no published rate for this mode; shown at standard rates)"
+		}
+		fmt.Printf("gpt-5.6-sol %-8s %s%s\n", label, llms.FormatCost(cost), note)
+	}
+
+	// Per-call: tag the request so the tracker books it in the right lane.
+	tracker := llms.NewCostTracker()
+	tracker.RecordMode(llms.ProviderOpenAI, "gpt-5.6-sol", usage, llms.PricingModeBatch)
+	tracker.RecordMode(llms.ProviderOpenAI, "gpt-5.6-sol", usage, llms.PricingModeStandard)
+	for mode, cost := range tracker.GetModeCosts() {
+		label := string(mode)
+		if mode == llms.PricingModeStandard {
+			label = "standard"
+		}
+		fmt.Printf("booked %-8s %s\n", label, llms.FormatCost(cost))
+	}
 }
 
 func createClient() llms.LLM {

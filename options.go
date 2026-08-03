@@ -98,6 +98,12 @@ type CallOptions struct {
 	// Trace contains per-call trace context overrides.
 	Trace *TraceOptions
 
+	// PricingMode selects the billing lane this request is priced under (batch,
+	// flex, fast). It is consumed by cost tracking only and is never sent to the
+	// provider — routing a request to a different lane uses the provider's own
+	// mechanism. The zero value prices at standard rates.
+	PricingMode PricingMode
+
 	// Provider-specific extensions (e.g., LoRAX adapter_id)
 	// These parameters are merged into the request body at the top level
 	ExtraBody map[string]any
@@ -272,6 +278,23 @@ func WithDisableMessageMerging() CallOption {
 func WithEstimateTokens() CallOption {
 	return func(o *CallOptions) {
 		o.EstimateTokens = true
+	}
+}
+
+// WithPricingMode sets the billing lane this request is priced under, so cost
+// tracking reflects batch/flex/fast rates instead of standard ones.
+//
+// It affects accounting only: it does not route the request. Send the request to
+// the lane using the provider's own mechanism (for OpenAI, service_tier via
+// [WithExtraBodyParam]; for Anthropic, the Batches API), then set the matching
+// mode here so the recorded cost is right.
+//
+// A provider/model with no published rate card for the mode is priced at
+// standard rates rather than a guessed discount; [EstimateCostMode] and
+// [CostTracker.RecordMode] report that via their boolean.
+func WithPricingMode(mode PricingMode) CallOption {
+	return func(o *CallOptions) {
+		o.PricingMode = mode
 	}
 }
 
