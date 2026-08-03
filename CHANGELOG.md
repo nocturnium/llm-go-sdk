@@ -6,6 +6,41 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`pkg/mcp`: server-initiated request dispatch.** The client can now serve
+  requests a server sends *to it*, the direction the package previously had no path
+  for at all (v6.0.1 made such frames answerable; this makes them serviceable).
+  Adds `ClientCapabilities` — with `SamplingCapability`, `RootsCapability`,
+  `ElicitationCapability` — plus `Client.ClientCapabilities()` and
+  `Client.RefusedRequests()`. All additions are apidiff-compatible.
+
+  **Capabilities are derived from registered handlers, never declared separately.**
+  A server told this client samples, which then answers `MethodNotFound`, has no way
+  to recover — so handlers are installed before `initialize` and the advertised set
+  is computed from them. Advertisement and capability cannot drift.
+
+  **Concurrency deliberately differs from the notification pump.** That pump is
+  serial and *drops* on overflow, which is fine for progress events. Neither
+  property is safe for requests: dropping one leaves the server waiting forever, and
+  serial execution would head-of-line-block every request behind a slow one
+  (sampling can take tens of seconds). Handlers therefore run concurrently, bounded
+  at 8, and overflow is **refused with an error response and counted** via
+  `RefusedRequests()` rather than dropped. Parsing, handler lookup and refusal stay
+  on the transport read path — they are cheap and a refusal must not consume a
+  slot — while handler execution moves to a worker, so a slow handler cannot stall
+  responses to the client's own in-flight calls.
+
+  A panicking handler is converted into an `InternalError` response and the client
+  keeps serving; the panic value is **not** put on the wire, since it can carry host
+  internals and the peer is not necessarily trusted. Teardown waits for in-flight
+  handlers but is bounded, so a wedged handler cannot make `Close` hang.
+
+  No capability is served yet — this is the machinery. Sampling, roots and
+  elicitation follow.
+
+## [6.1.0] - 2026-08-03
+
+### Added
+
 - **Request-mode pricing (batch / flex / fast).** `PricingMode` plus
   `WithPricingMode`, `CostTracker.RecordMode`/`SetModePricing`/`GetModeCosts`, and
   `EstimateCostMode` price a request under a provider's asynchronous or
@@ -40,6 +75,8 @@ All notable changes to this project will be documented in this file.
   are not yet transcribed, so a batch request above the 272K threshold prices at
   short-context batch rates and reads low. A test pins this as deliberate rather than
   accidental; encoding a guessed long-context batch rate would be worse.
+
+## [6.0.1] - 2026-08-03
 
 ### Fixed
 

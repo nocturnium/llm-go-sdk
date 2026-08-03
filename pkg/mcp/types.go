@@ -17,6 +17,16 @@ const (
 	methodPromptsGet    = "prompts/get"
 )
 
+// Server-initiated REQUEST method names: the server asks this client to do
+// something and waits for a response carrying the request's id. Each is served
+// only when a handler for it is registered; otherwise the client answers
+// MethodNotFound.
+const (
+	methodSamplingCreateMessage = "sampling/createMessage"
+	methodRootsList             = "roots/list"
+	methodElicitationCreate     = "elicitation/create"
+)
+
 // Server-initiated notification method names this client recognizes. The server
 // sends these without an id; the transports surface them to a registered handler.
 const (
@@ -36,10 +46,41 @@ type Implementation struct {
 
 // initializeParams is the payload of the initialize request.
 type initializeParams struct {
-	ProtocolVersion string         `json:"protocolVersion"`
-	Capabilities    map[string]any `json:"capabilities"`
-	ClientInfo      Implementation `json:"clientInfo"`
+	ProtocolVersion string             `json:"protocolVersion"`
+	Capabilities    ClientCapabilities `json:"capabilities"`
+	ClientInfo      Implementation     `json:"clientInfo"`
 }
+
+// ClientCapabilities is what this client advertises during initialize.
+//
+// A nil sub-capability means the feature is NOT offered. Capabilities are
+// derived from the request handlers registered at construction, so a client can
+// never advertise a capability it would then refuse — a server that is told this
+// client samples, and then gets MethodNotFound, has no way to recover.
+//
+// Fields mirror the MCP 2025-06-18 capability shape; see [ServerCapabilities]
+// for the server-side counterpart.
+type ClientCapabilities struct {
+	// Sampling is non-nil when the client serves sampling/createMessage.
+	Sampling *SamplingCapability `json:"sampling,omitempty"`
+	// Roots is non-nil when the client serves roots/list.
+	Roots *RootsCapability `json:"roots,omitempty"`
+	// Elicitation is non-nil when the client serves elicitation/create.
+	Elicitation *ElicitationCapability `json:"elicitation,omitempty"`
+}
+
+// SamplingCapability marks sampling support. It carries no fields, matching the
+// spec's empty-object shape (compare [LoggingCapability]).
+type SamplingCapability struct{}
+
+// RootsCapability marks roots support.
+type RootsCapability struct {
+	// ListChanged reports whether the client emits notifications/roots/list_changed.
+	ListChanged bool `json:"listChanged,omitempty"`
+}
+
+// ElicitationCapability marks elicitation support. It carries no fields.
+type ElicitationCapability struct{}
 
 // InitializeResult is the server's response to initialize.
 type InitializeResult struct {
