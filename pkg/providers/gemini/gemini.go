@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/internal/geminiapi"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/geminiapi"
 )
 
 // Client is a Google Gemini LLM client.

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/internal/httpclient"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 )
 
 func mustMarshalRawMessage(t *testing.T, v any) json.RawMessage {

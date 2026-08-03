@@ -1,6 +1,6 @@
 package synthetic
 
-import llms "github.com/nocturnium/llm-go-sdk/v5"
+import llms "github.com/nocturnium/llm-go-sdk/v6"
 
 func init() {
 	llms.RegisterProvider("synthetic", func(cfg llms.Config) (llms.LLM, error) {

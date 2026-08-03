@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/internal/testutil"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/testutil"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // These tests exercise the OpenAI Responses API (POST /responses) against the

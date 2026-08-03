@@ -24,7 +24,7 @@ schema you want (a `map[string]any` is the most common choice).
 package main
 
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 var weatherTool = llms.NewFunctionTool(
@@ -154,8 +154,8 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 
 func main() {
@@ -317,8 +317,8 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 
 func main() {

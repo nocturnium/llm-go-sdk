@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 const tokenPricingEpsilon = 1e-12

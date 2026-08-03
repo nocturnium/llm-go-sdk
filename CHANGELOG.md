@@ -4,6 +4,87 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+v6 is a deliberately small major release. The module path is now
+`github.com/nocturnium/llm-go-sdk/v6` (Go semantic import versioning); v5 and v6 are
+distinct module paths and can coexist, so consumers may migrate incrementally. See
+`docs/migration-guide.md` for the v5 → v6 guide.
+
+There is exactly **one** breaking change, and it is a compile-time break rather than a
+behavioral one: `llms.Pricing` gained a `Tiers` field so long-context pricing can be
+modeled correctly, and because that field is a slice, `Pricing` is no longer comparable.
+Nothing about existing pricing behavior changes. Most migrations are an import-path bump
+plus `go mod tidy`.
+
+### Changed (BREAKING)
+
+- **Module path → `/v6`.** `go get github.com/nocturnium/llm-go-sdk/v6@v6.0.0` (the core
+  package name stays `llms`).
+- **`llms.Pricing` is no longer comparable.** It gained `Tiers []PricingTier`, so `==`,
+  `!=`, use as a map key, and comparison of any enclosing struct no longer compile. Use
+  `reflect.DeepEqual`, or compare the scalar rate fields directly. Every existing field,
+  its JSON key, and the cost arithmetic for untiered models are unchanged; `Tiers` is
+  omitted from JSON when empty, so serialized metadata for untiered models is
+  byte-identical to v5. This is the sole reason for the major version.
+
+### Added
+
+- **Long-context pricing tiers.** `Pricing.Tiers` models the case where a provider
+  reprices an *entire* request once its input crosses a threshold — OpenAI's gpt-5 family
+  above 272K input tokens (2× input, 1.5× output) and Gemini Pro tiers above 200K. v5
+  priced these at the short-context rate, so **cost estimates for long-context requests on
+  those models were roughly half the true figure**; they are now correct. The threshold is
+  evaluated on total input (`PromptTokens + CacheReadTokens + CacheCreationTokens`), since
+  `Usage.PromptTokens` excludes cache tokens by contract while providers threshold on the
+  full input. Tiers need not be sorted — the highest matching threshold wins — and an unset
+  cache rate on a tier falls back to that tier's own `Input` rate. Models with no published
+  long-context row (OpenAI's mini/nano variants) are deliberately left flat rather than
+  given an invented tier. **If you have dashboards or budget alerts calibrated against v5's
+  understated long-context numbers, re-baseline them.**
+
+- **Current-generation model coverage** (verified against first-party pricing/model pages
+  on 2026-08-02, not inferred): Anthropic `claude-opus-5` ($5/$25) and `claude-sonnet-5`
+  ($3/$15) — the current Claude 5 flagships, previously absent entirely — plus
+  `claude-mythos-5`; OpenAI's `gpt-5.6` line (`-sol`, `-terra`, `-luna`) and the
+  `gpt-5.1`/`5.2`/`5.3-codex` tiers; Google `gemini-3.6-flash` and `gemini-3.5-flash-lite`.
+  Each is registered in all three places that carry model data — provider `knownModels`,
+  `DefaultPricing`, and the capability registry — so `EstimateCost` now returns a price
+  (rather than `ok=false`) and capability lookups no longer fall through to stale provider
+  defaults for these IDs.
+
+### Fixed
+
+- **Gemini cache-read pricing was overstated ~2.5×.** `DefaultPricing` derived Gemini
+  `CacheRead` from an assumed 0.25× multiple of the prompt rate, but Google publishes
+  cached input at ≈0.1×. Every Gemini entry now uses the published per-model figure
+  (e.g. `gemini-2.5-flash` 0.075 → 0.03, `gemini-3.5-flash` 0.375 → 0.15), and models
+  that previously had no cache rate at all — and so silently billed cache reads at the
+  full prompt rate — now carry one. Cost estimates for cache-heavy Gemini workloads were
+  too high; they are now correct.
+
+### Notes
+
+- Claude Sonnet 5 carries introductory pricing of $2/$10 per MTok through 2026-08-31.
+  `DefaultPricing` records the standard $3/$15: a static table cannot express a
+  time-boxed promotion, and an estimate that silently expires is worse than one that is
+  consistently conservative. Register the promotional rate via the cost tracker's
+  custom-pricing API if you need it.
+- OpenAI `gpt-5.x` prices are the short-context (&lt;272K) tier. Requests above 272K input
+  tokens bill at 2× input / 1.5× output for the entire request — not expressible in a
+  per-token table, so cost estimates for those requests will read low.
+- `gpt-5.6` publishes a total context window (1,050,000) larger than its maximum input
+  (922,000), the remainder being reserved for output. `ModelInfo.ContextLength` carries the
+  total; `ModelCapabilities.MaxContextTokens` — documented as the maximum *input* window —
+  carries 922,000, which is the figure to size a prompt against. This is the first model
+  family where the two genuinely differ, which is why every other entry mirrors a single
+  number. Max output is 128,000 for all three variants.
+- Claude Opus 4.1 (`claude-opus-4-1`) is deprecated and retires **2026-08-05**. Its pricing
+  entry is retained for cost attribution of historical usage.
+- Documentation: `docs/roadmap.md` marked MCP Track B items 2–4 (capabilities coverage,
+  notifications, `Register` ergonomics) as shipped — all three have been implemented since
+  the doc was last touched — corrected the apidiff baseline reference from `api/v3.txt` to
+  `api/v5.txt`, and added Track C scoping the unimplemented MCP server-side surface
+  (sampling, roots, elicitation).
+
 ## [5.1.0] - 2026-07-12
 
 ### Changed

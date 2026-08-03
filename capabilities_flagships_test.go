@@ -25,12 +25,19 @@ func TestCapabilityRegistry_CurrentFlagships(t *testing.T) {
 		{ProviderOpenAI, "gpt-5-mini", 400000, 128000, true, true, true},
 		{ProviderOpenAI, "gpt-5.4", 400000, 128000, true, true, true},
 		{ProviderOpenAI, "gpt-5.5-pro", 400000, 128000, true, true, true},
+		// GPT-5.6 — 922k max *input* (of a 1.05M total window), 128k out.
+		{ProviderOpenAI, "gpt-5.6-sol", 922000, 128000, true, true, true},
+		{ProviderOpenAI, "gpt-5.6-terra", 922000, 128000, true, true, true},
+		{ProviderOpenAI, "gpt-5.6-luna", 922000, 128000, true, true, true},
 		// Anthropic current flagships — 1M/128k, reason, JSON via tools (not flagged here).
 		{ProviderAnthropic, "claude-fable-5", 1000000, 128000, true, true, true},
+		{ProviderAnthropic, "claude-opus-5", 1000000, 128000, true, true, true},
+		{ProviderAnthropic, "claude-sonnet-5", 1000000, 128000, true, true, true},
 		{ProviderAnthropic, "claude-opus-4-8", 1000000, 128000, true, true, true},
 		{ProviderAnthropic, "claude-opus-4-5", 200000, 64000, true, true, true},
 		// Gemini 3.x — 1,048,576/65,536; pro/flash reason.
 		{ProviderGemini, "gemini-3.1-pro-preview", 1048576, 65536, true, true, true},
+		{ProviderGemini, "gemini-3.6-flash", 1048576, 65536, true, true, true},
 		{ProviderGemini, "gemini-3.5-flash", 1048576, 65536, true, true, true},
 	}
 

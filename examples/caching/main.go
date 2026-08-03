@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
 )
 
 func main() {

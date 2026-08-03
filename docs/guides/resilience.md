@@ -23,8 +23,8 @@ remain in the root `llms` package:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/middleware/resilience"
 )
 ```
 
@@ -42,9 +42,9 @@ import (
 	"fmt"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 
 func main() {
@@ -288,10 +288,10 @@ overloaded, or down.
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 
 primary, _ := openai.New(openai.WithModel("gpt-4o"))
@@ -392,10 +392,10 @@ import (
 	"log"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/middleware/resilience"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/anthropic"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/middleware/resilience"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 
 func buildClient() (llms.LLM, error) {

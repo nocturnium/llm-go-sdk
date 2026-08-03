@@ -15,7 +15,7 @@ There is no long-term support for previous majors.
 
 | Version | Module path | Status |
 |---------|-------------|--------|
-| **v5.x** | `github.com/nocturnium/llm-go-sdk/v5` | **Supported** — current; all fixes and new work land here |
+| **v5.x** | `github.com/nocturnium/llm-go-sdk/v6` | **Supported** — current; all fixes and new work land here |
 | v4.x | `github.com/nocturnium/llm-go-sdk/v4` | **End of life** as of the v5.0.0 release — no further releases, bug fixes, or security backports |
 | v3.x | `github.com/nocturnium/llm-go-sdk/v3` | **End of life** as of 2026-06-21 — no further releases, bug fixes, or security backports |
 | v2.x | `github.com/nocturnium/llm-go-sdk/v2` | **End of life** as of 2026-06-19 — no further releases, bug fixes, or security backports |
@@ -34,7 +34,7 @@ need a fix on an older major, upgrade to the current major — we do not backpor
 The current major is **v5**. Install it with:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v5@latest
+go get github.com/nocturnium/llm-go-sdk/v6@latest
 ```
 
 See **[docs/migration-guide.md](docs/migration-guide.md)** for the full migration

@@ -1,6 +1,6 @@
 package openai
 
-import llms "github.com/nocturnium/llm-go-sdk/v5"
+import llms "github.com/nocturnium/llm-go-sdk/v6"
 
 // This file holds per-call (llms.CallOption) helpers for the Responses API.
 // Note these return llms.CallOption and are passed to GenerateContent/Call/Stream,

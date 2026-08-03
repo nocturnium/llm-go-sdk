@@ -1,3 +1,98 @@
+# Migrating from v5 to v6
+
+v6 is a small major release. There is exactly **one** breaking change, it is a
+compile-time break rather than a behavioral one, and most codebases will not hit
+it at all: the migration is an import-path bump plus `go mod tidy`.
+
+The reason for the major is Go's semantic import versioning. `llms.Pricing`
+gained a `Tiers` field so that long-context pricing can be modeled correctly, and
+because that field is a slice, `Pricing` is no longer a *comparable* type. Any
+code doing `pricingA == pricingB` stops compiling. That is an incompatible change
+under the Go compatibility rules, so it gets a major even though nothing about
+existing pricing behavior changes.
+
+## 1. Update the import path
+
+```bash
+go get github.com/nocturnium/llm-go-sdk/v6@v6.0.0
+```
+
+Rewrite every import of the module from the `/v5` path to `/v6` (the core package
+name stays `llms`):
+
+```bash
+# from the root of your module
+grep -rl 'nocturnium/llm-go-sdk/v5' --include='*.go' . \
+  | xargs sed -i 's#nocturnium/llm-go-sdk/v5#nocturnium/llm-go-sdk/v6#g'
+go mod tidy
+```
+
+For the overwhelming majority of codebases, that plus the compiler is the entire
+migration.
+
+## 2. `llms.Pricing` is no longer comparable
+
+`Pricing` gained a `Tiers []PricingTier` field, so it can no longer be compared
+with `==` or `!=`, used as a map key, or compared as part of an enclosing struct.
+The compiler will point at every site.
+
+```go
+// Before (v5) — no longer compiles
+if got == want { ... }
+seen := map[Pricing]bool{}
+
+// After (v6)
+if reflect.DeepEqual(got, want) { ... }
+seen := map[string]bool{} // key by model id, or by a comparable projection
+```
+
+If you only compare the token rates and don't care about tiers, comparing the
+scalar fields directly is cheaper than reflection and states the intent:
+
+```go
+if got.Input == want.Input && got.Output == want.Output { ... }
+```
+
+**Everything else about `Pricing` is unchanged** — the existing fields, their JSON
+keys, and the cost arithmetic for models without tiers all behave exactly as in
+v5. `Tiers` is omitted from JSON when empty, so serialized model metadata for
+untiered models is byte-identical to v5.
+
+## 3. Long-context pricing is now modeled (no action required)
+
+Several providers reprice an *entire* request once its input crosses a threshold
+— OpenAI's gpt-5 family above 272K input tokens (2× input, 1.5× output) and
+Gemini Pro tiers above 200K. v5 priced these at the short-context rate, so cost
+estimates for long-context requests were roughly half the true figure. v6 carries
+the published long-context rates as `Tiers` and applies them automatically.
+
+This needs no code change, but **be aware that `EstimateCost` and the cost tracker
+will now report higher (correct) figures for long-context requests** on those
+models. If you have dashboards or budget alerts calibrated against v5's
+understated numbers, re-baseline them.
+
+The threshold is evaluated on *total* input — `PromptTokens + CacheReadTokens +
+CacheCreationTokens` — because `Usage.PromptTokens` excludes cache tokens by
+contract while providers threshold on the full input.
+
+To model tiering for your own models, attach tiers to a custom `Pricing`:
+
+```go
+llms.Pricing{
+    Input: 5.00, Output: 30.00,
+    Tiers: []llms.PricingTier{{
+        MinInputTokens: 272_000,
+        Input:          10.00,
+        Output:         45.00,
+    }},
+}
+```
+
+Tiers need not be sorted; the highest matching threshold wins, and an unset cache
+rate on a tier falls back to that tier's own `Input` rate.
+
+---
+
 # Migrating from v4 to v5
 
 v5 is a major release that removes the last of the long-deprecated shims and
@@ -344,10 +439,10 @@ all shared types live in the root package.
 
 | Package | Import path | What's in it |
 |---------|-------------|--------------|
-| Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v5` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
-| Providers | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/<name>` | The 19 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
-| All-providers registry | `github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all` | Blank-import only. Registers the 17 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
-| OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v5/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
+| Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v6` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
+| Providers | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>` | The 19 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
+| All-providers registry | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` | Blank-import only. Registers the 17 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
+| OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
 
 Everything else lives under `internal/` and is not importable by external code.
 
@@ -364,8 +459,8 @@ import (
 	"fmt"
 	"log"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/pkg/providers/openai"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 
 func main() {
@@ -398,8 +493,8 @@ factory, then call `llms.New` or `llms.NewFromEnv`:
 
 ```go
 import (
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	_ "github.com/nocturnium/llm-go-sdk/v5/pkg/providers/all" // registers the 17 auto-registered chat providers
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 17 auto-registered chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o-mini"})

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 // WebSearchTool represents Z.AI's native web search tool format.

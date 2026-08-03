@@ -24,7 +24,7 @@ import (
 	tiktoken "github.com/pkoukk/tiktoken-go"
 	tiktokenloader "github.com/pkoukk/tiktoken-go-loader"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 // offlineOnce installs the embedded (offline) BPE loader exactly once. tiktoken's

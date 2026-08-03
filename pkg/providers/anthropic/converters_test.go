@@ -3,8 +3,8 @@ package anthropic
 import (
 	"testing"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
-	"github.com/nocturnium/llm-go-sdk/v5/internal/anthropicapi"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/anthropicapi"
 )
 
 func TestConvertMessages_DeduplicatesToolResultsRequestWide(t *testing.T) {

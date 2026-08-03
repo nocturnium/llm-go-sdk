@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 // TestWithEmbeddingModel verifies WithEmbeddingModel sets the embedding model field.

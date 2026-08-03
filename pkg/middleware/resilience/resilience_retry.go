@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	llms "github.com/nocturnium/llm-go-sdk/v5"
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 // RetryConfig configures retry behavior
