@@ -38,6 +38,11 @@ const (
 	methodNotificationsPromptsChanged   = "notifications/prompts/list_changed"
 )
 
+// Client-initiated notification method names this client may send.
+const (
+	methodNotificationsRootsChanged = "notifications/roots/list_changed"
+)
+
 // Implementation identifies an MCP client or server.
 type Implementation struct {
 	Name    string `json:"name"`
