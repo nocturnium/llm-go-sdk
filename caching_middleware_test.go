@@ -163,6 +163,7 @@ func TestDefaultCacheKey_CoversAllOutputAffectingOptions(t *testing.T) {
 		"StreamBufferSize":  true, // streaming transport (Stream is not cached)
 		"StreamSendTimeout": true, // streaming transport
 		"Trace":             true, // observability context
+		"PricingMode":       true, // cost accounting only; never sent to the provider
 	}
 	ot := reflect.TypeOf(CallOptions{})
 	for i := 0; i < ot.NumField(); i++ {

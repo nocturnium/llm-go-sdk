@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Request-mode pricing (batch / flex / fast).** `PricingMode` plus
+  `WithPricingMode`, `CostTracker.RecordMode`/`SetModePricing`/`GetModeCosts`, and
+  `EstimateCostMode` price a request under a provider's asynchronous or
+  premium-latency rate card instead of the interactive one. The zero value is
+  standard, so existing behavior is unchanged; every addition is apidiff-compatible.
+
+  **Rates are absolute per-model cards, not multipliers** — because that is how
+  providers publish them and the ratios are not uniform. OpenAI's Fast mode is 2×
+  standard on `gpt-5.6-sol` but 2.5× on `gpt-5.5`; its Batch tier drops cached-input
+  pricing entirely for some older models; and not every model appears in every
+  tier's table (`gpt-5.4-nano` has no Fast row at all). A per-provider multiplier
+  would have invented precision the published data does not have. Anthropic's Batch
+  tier is the one exception: it publishes a flat 50% rule, so those cards are derived
+  from stated policy rather than transcribed, with prompt-cache multipliers applied
+  to the batch input rate as documented.
+
+  Seeded from first-party tables verified 2026-08-02: OpenAI Batch/Flex/Fast for the
+  gpt-5.6/5.5/5.4 families, and Anthropic Batch (all models) plus Fast (Opus 5 and
+  Opus 4.8 only — Opus 4.7 rejects fast mode and Opus 4.6 silently runs at standard
+  rates). A provider/model with no published card for a mode is priced at **standard**
+  rates and reports `known=false`, so an unknown lane is never silently discounted.
+
+  The mode is **accounting only** — it does not route the request. Send the request to
+  the lane with the provider's own mechanism (OpenAI's `service_tier` via
+  `WithExtraBodyParam`, Anthropic's Batches API), then set the matching mode.
+
+  Per-mode cost lives on the tracker (`GetModeCosts`) rather than on `ModelUsage`,
+  which stays **comparable** — adding a map field to it would have been the same
+  breaking change that forced v6.
+
+  *Known gap:* OpenAI publishes separate long-context columns for Batch and Flex that
+  are not yet transcribed, so a batch request above the 272K threshold prices at
+  short-context batch rates and reads low. A test pins this as deliberate rather than
+  accidental; encoding a guessed long-context batch rate would be worse.
+
 ### Fixed
 
 - **`pkg/mcp`: server-initiated requests were misrouted, silently corrupting
