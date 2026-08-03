@@ -60,6 +60,13 @@ type Client struct {
 	// notifier holds the server-notification handler state behind a pointer so the
 	// Client struct itself stays comparable (a mutex by value would not be).
 	notifier *notifier
+	// inbound holds the server-initiated request handler state, pointer-held for
+	// the same comparability reason as notifier.
+	inbound *inbound
+	// clientCaps is what this client advertised during initialize. It is derived
+	// from the registered request handlers and written once, before the Client is
+	// returned to the caller.
+	clientCaps ClientCapabilities
 }
 
 // notifier carries the registered handlers for server-initiated notifications.
@@ -101,6 +108,30 @@ type config struct {
 	timeout         time.Duration
 	allowPrivateIPs bool
 	allowHTTP       bool
+
+	// requestHandlers are installed before initialize so advertised capabilities
+	// can be derived from them. Keyed by JSON-RPC method.
+	requestHandlers map[string]requestHandler
+	// rootsListChanged records whether the roots handler is dynamic, which is
+	// advertised as the listChanged sub-capability.
+	rootsListChanged bool
+}
+
+// clientCapabilities derives what to advertise from the registered handlers.
+// Advertising is never independent of capability: if no handler serves a method,
+// the capability is nil and the server is told this client does not offer it.
+func (c config) clientCapabilities() ClientCapabilities {
+	var caps ClientCapabilities
+	if _, ok := c.requestHandlers[methodSamplingCreateMessage]; ok {
+		caps.Sampling = &SamplingCapability{}
+	}
+	if _, ok := c.requestHandlers[methodRootsList]; ok {
+		caps.Roots = &RootsCapability{ListChanged: c.rootsListChanged}
+	}
+	if _, ok := c.requestHandlers[methodElicitationCreate]; ok {
+		caps.Elicitation = &ElicitationCapability{}
+	}
+	return caps
 }
 
 // Option configures a Client.
@@ -217,11 +248,24 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 		namePrefix: cfg.namePrefix,
 		clientInfo: cfg.clientInfo,
 		notifier:   newNotifier(),
+		inbound:    newInbound(),
 	}
+	// Handlers are installed BEFORE initialize so the advertised capabilities can
+	// be derived from them. Registering a handler after the handshake would mean
+	// either advertising a capability the client did not yet have, or serving one
+	// the server was never told about.
+	for method, handler := range cfg.requestHandlers {
+		c.inbound.register(method, handler)
+	}
+	c.clientCaps = cfg.clientCapabilities()
+
 	t.onNotification(c.dispatchNotification)
+	t.onRequest(c.dispatchRequest)
 	if err := c.initialize(ctx); err != nil {
 		_ = t.close()
-		c.notifier.stop() // don't leak the notification pump when the handshake fails
+		// Don't leak the pumps when the handshake fails.
+		c.notifier.stop()
+		c.inbound.stop()
 		return nil, err
 	}
 	// If the caller cancels the governing context without ever calling Close, tear
@@ -238,8 +282,10 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 func (c *Client) initialize(ctx context.Context) error {
 	params := initializeParams{
 		ProtocolVersion: protocolVersion,
-		Capabilities:    map[string]any{}, // a tools-only client advertises no capabilities
-		ClientInfo:      c.clientInfo,
+		// Derived from the registered request handlers: a tools-only client
+		// advertises nothing, and a capability is claimed only if it will be served.
+		Capabilities: c.clientCaps,
+		ClientInfo:   c.clientInfo,
 	}
 	var result InitializeResult
 	if err := c.call(ctx, methodInitialize, params, &result); err != nil {
@@ -416,6 +462,12 @@ func (c *Client) ServerInfo() Implementation { return c.serverInfo }
 //	if c.ServerCapabilities().Resources != nil { /* safe to ListResources */ }
 func (c *Client) ServerCapabilities() ServerCapabilities { return c.serverCaps }
 
+// ClientCapabilities returns what this client advertised to the server during
+// initialize, derived from the request handlers registered at construction. A
+// nil sub-capability means the feature was not offered, and a server-initiated
+// request for it is answered with MethodNotFound.
+func (c *Client) ClientCapabilities() ClientCapabilities { return c.clientCaps }
+
 // Close releases the client's transport resources (terminating the subprocess
 // for stdio clients, DELETE-ing the session for HTTP clients) and stops the
 // notification pump. It is idempotent and safe to call concurrently with the
@@ -436,5 +488,7 @@ func (c *Client) Close() error {
 func (c *Client) closeInternal() error {
 	err := c.transport.close()
 	c.notifier.stop()
+	// Bounded: a wedged request handler must not make Close hang.
+	c.inbound.stop()
 	return err
 }
