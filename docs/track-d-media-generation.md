@@ -191,9 +191,20 @@ D6 is opt-in. D7 closes.
 
 - **Cost of live tests.** Video jobs cost $0.40 to $2.40 per clip. Gate video live tests on a second
   env var (`LLM_SDK_LIVE_VIDEO=1`) and cap duration at the minimum the model allows.
-- **Unverified endpoints** (from research, must be probed before the packet is dispatched):
-  ElevenLabs flows GET path and video create path; OpenAI TTS SSE event schema; Mistral TTS REST
-  path; Gemini TTS `mimeType` string; `gpt-image-2` per-image price table.
+- **Verified 2026-09-05 by probe** (was unverified in research):
+  - ElevenLabs flows: `POST /v1/flows/image`, `GET /v1/flows/image/{id}`, `POST /v1/flows/video`,
+    `GET /v1/flows/video/{id}`. Status `pending|generating|completed|failed`; completed carries
+    `content_url` (signed, ~1 h) + `content_mime_type`; failed carries `failure_reason` in
+    `timeout|model_error|moderated|invalid_parameters|dependency_failed|charging_failed|internal_error`
+    (not charged). Non-Pro accounts get 402 `{"detail":{"code":"paid_plan_required"}}`; the key in
+    `.env` is Creator tier, so flows live tests must skip on 402.
+  - OpenAI TTS `stream_format:"sse"`: `data: {"type":"speech.audio.delta","audio":"<b64>"}` repeated,
+    then `{"type":"speech.audio.done","usage":{"input_tokens","output_tokens","total_tokens"}}`,
+    then `data: [DONE]`. Not supported on `tts-1`/`tts-1-hd`.
+  - Mistral TTS: `POST /v1/audio/speech` JSON `{model, input, voice_id|ref_audio, response_format
+    pcm|wav|mp3|flac|opus, stream}` → `{"audio_data":"<b64>"}`; streaming is the same path with
+    `stream:true` (event-stream, event schema undocumented); moderation → 403.
+- **Still unverified**: Gemini TTS `mimeType` string; `gpt-image-2` per-image price table.
 - **Two OpenAI image pricing units** coexist (per 1M image tokens and per-image approximations).
   Store the token rate as source of truth and compute from `usage.output_tokens`.
 - **URL TTLs** make `MediaAsset` a footgun if callers hold it. `Wait` on providers with TTL under
