@@ -6,7 +6,10 @@
 //   - Tool calling with tool_use and tool_result content blocks
 package anthropicapi
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // MessagesRequest represents a request to the Anthropic Messages API.
 type MessagesRequest struct {
@@ -23,13 +26,54 @@ type MessagesRequest struct {
 	Tools         []Tool          `json:"tools,omitempty"`
 	ToolChoice    any             `json:"tool_choice,omitempty"`
 	Thinking      *ThinkingConfig `json:"thinking,omitempty"`
+	OutputConfig  *OutputConfig   `json:"output_config,omitempty"`
+
+	// ExtraBody carries caller-supplied fields merged into the top-level request
+	// body by MarshalJSON. Standard fields always win over an ExtraBody key of the
+	// same name.
+	ExtraBody map[string]any `json:"-"`
 }
 
-// ThinkingConfig enables Anthropic extended thinking with an explicit token
-// budget. When set, the model emits thinking content blocks before its answer.
+// MarshalJSON merges ExtraBody into the top-level request object.
+func (r MessagesRequest) MarshalJSON() ([]byte, error) {
+	type plain MessagesRequest // no MarshalJSON: avoids recursion
+	base, err := json.Marshal(plain(r))
+	if err != nil {
+		return nil, err
+	}
+	if len(r.ExtraBody) == 0 {
+		return base, nil
+	}
+	m := make(map[string]json.RawMessage, len(r.ExtraBody)+16)
+	for k, v := range r.ExtraBody {
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("anthropic: marshal extra body field %q: %w", k, err)
+		}
+		m[k] = raw
+	}
+	var std map[string]json.RawMessage
+	if err := json.Unmarshal(base, &std); err != nil {
+		return nil, err
+	}
+	for k, v := range std {
+		m[k] = v
+	}
+	return json.Marshal(m)
+}
+
+// ThinkingConfig configures Anthropic extended thinking. Type is one of
+// "enabled" (with BudgetTokens, pre-4.6 models), "adaptive" (4.6+ models; the
+// model decides how much to think) or "disabled".
 type ThinkingConfig struct {
-	Type         string `json:"type"`          // "enabled"
-	BudgetTokens int    `json:"budget_tokens"` // tokens the model may spend thinking
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"` // "enabled" only
+}
+
+// OutputConfig carries output-shaping parameters. Effort controls thinking depth
+// and overall token spend on models that support adaptive thinking.
+type OutputConfig struct {
+	Effort string `json:"effort,omitempty"` // "low" | "medium" | "high" | "xhigh" | "max"
 }
 
 // Message represents a message in the conversation.
@@ -70,10 +114,12 @@ type ContentPart struct {
 }
 
 // ImageSource represents the source of an image for Anthropic's vision API.
+// Type "base64" carries MediaType+Data; type "url" carries URL.
 type ImageSource struct {
-	Type      string `json:"type"`       // "base64"
-	MediaType string `json:"media_type"` // e.g., "image/png", "image/jpeg"
-	Data      string `json:"data"`       // Base64-encoded image data
+	Type      string `json:"type"`                 // "base64" or "url"
+	MediaType string `json:"media_type,omitempty"` // e.g., "image/png", "image/jpeg"
+	Data      string `json:"data,omitempty"`       // Base64-encoded image data
+	URL       string `json:"url,omitempty"`        // Publicly reachable image URL
 }
 
 // Tool represents a tool definition for Anthropic.

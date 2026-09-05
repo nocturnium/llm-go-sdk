@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **`pkg/providers/anthropic`: behavior parity with the other providers.** A review
+  of the Anthropic provider against the OpenAI-compatible and Gemini paths found a
+  set of silent divergences; all are now aligned or documented (see the package
+  doc's "Behavior Notes"):
+  - `Stream` with `WithJSONSchema`/`WithJSONMode` now delivers the JSON on the
+    terminal chunk's `Content`, matching `GenerateContent`.
+  - `WithJSONMode` is honored (forced tool with an open object schema) instead of
+    being ignored.
+  - A streamed tool call with no arguments yields `Arguments == "{}"` rather than
+    an empty string that fails to parse.
+  - A stream closed by the server before `message_stop` completes normally instead
+    of surfacing a `StreamError`.
+  - A system message anywhere but `messages[0]` is rejected by validation instead
+    of being dropped.
+  - `llms.WithExtraBody` / `WithExtraBodyParam` are merged into the request body
+    (standard fields win on collision).
+  - URL image sources are sent as `{"type":"url"}` instead of returning an error.
+  - `redacted_thinking` blocks are captured on `ReasoningContent.Metadata` and
+    replayed on the next turn.
+  - `Usage.TotalTokens` now includes cache-read and cache-creation tokens, as the
+    OpenAI and Gemini providers already did. `PromptTokens` is unchanged.
+  - Thinking is sent in the shape each model generation accepts: `budget_tokens`
+    on Claude 4.5 and earlier, `{type:"adaptive"}` plus `output_config.effort` on
+    4.6 through the 5 family (where `budget_tokens` is rejected), and effort only
+    on Fable/Mythos (thinking always on). `Enabled: false` sends
+    `{type:"disabled"}` where accepted.
+  - `temperature`/`top_p` are dropped only for the models that reject them
+    (Opus 4.7/4.8, Opus 5, Sonnet 5, Fable/Mythos). Opus 4.6, Sonnet 4.6 and
+    earlier, previously stripped by an over-broad match, receive them again.
+  - A forcing `tool_choice` is softened to `auto` on Fable 5.1 / Mythos, which
+    reject it.
+
 ### Added
 
 - **`pkg/mcp`: roots.** `WithRoots` publishes a fixed set of filesystem roots to the
