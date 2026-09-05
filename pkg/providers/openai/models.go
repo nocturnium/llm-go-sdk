@@ -275,11 +275,17 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeEmbedding},
 		pricing:       tokenPricing("text-embedding-ada-002"),
 	},
+	"gpt-image-2":               {displayName: "gpt-image-2", types: []llms.ModelType{llms.ModelTypeImage}},
+	"gpt-image-1.5":             {displayName: "gpt-image-1.5", types: []llms.ModelType{llms.ModelTypeImage}},
+	"gpt-image-1-mini":          {displayName: "gpt-image-1-mini", types: []llms.ModelType{llms.ModelTypeImage}},
+	"gpt-4o-mini-tts":           {displayName: "gpt-4o-mini-tts", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gpt-transcribe":            {displayName: "gpt-transcribe", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gpt-4o-transcribe":         {displayName: "gpt-4o-transcribe", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gpt-4o-mini-transcribe":    {displayName: "gpt-4o-mini-transcribe", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gpt-4o-transcribe-diarize": {displayName: "gpt-4o-transcribe-diarize", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"sora-2":                    {displayName: "sora-2", types: []llms.ModelType{llms.ModelTypeVideo}},
+	"sora-2-pro":                {displayName: "sora-2-pro", types: []llms.ModelType{llms.ModelTypeVideo}},
 	// Image models
-	"dall-e-3": {
-		displayName: "DALL-E 3",
-		types:       []llms.ModelType{llms.ModelTypeImage},
-	},
 	"dall-e-2": {
 		displayName: "DALL-E 2",
 		types:       []llms.ModelType{llms.ModelTypeImage},
@@ -506,6 +512,15 @@ func inferModelTypes(id string) []llms.ModelType {
 		}
 	}
 
+	if strings.HasPrefix(idLower, "sora") {
+		return []llms.ModelType{llms.ModelTypeVideo}
+	}
+	if strings.HasPrefix(idLower, "gpt-image") {
+		return []llms.ModelType{llms.ModelTypeImage}
+	}
+	if strings.Contains(idLower, "transcribe") || strings.Contains(idLower, "tts") {
+		return []llms.ModelType{llms.ModelTypeAudio}
+	}
 	// Chat/completion models
 	if strings.HasPrefix(idLower, "gpt-4o") {
 		return []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}

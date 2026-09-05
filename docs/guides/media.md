@@ -1,8 +1,7 @@
 # Media Generation
 
 The media core defines provider-independent interfaces for images, video, speech,
-and transcription. D0 supplies the contracts and transport helpers; provider
-implementations follow in D1 and later packets. Media capabilities are separate
+and transcription. OpenAI implements these contracts using shared media routes. Media capabilities are separate
 from the `llms.LLM` chat interface.
 
 ## Interfaces
@@ -62,7 +61,7 @@ func generateVideo(ctx context.Context, generator llms.VideoGenerator) (*llms.Vi
     ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
     defer cancel()
     job, err := generator.GenerateVideo(ctx, "Clouds over a mountain",
-        llms.WithVideoDuration(5))
+        llms.WithVideoDuration(4))
     if err != nil {
         return nil, err
     }
@@ -76,8 +75,8 @@ in which case `Cancel` returns `ErrJobCancelNotSupported`.
 
 ## Cost tracking
 
-`MediaPricing` stores USD rates by `provider:model` and billing unit. It is empty
-in D0; configure rates before concurrent use. Provider-reported `MediaUsage.Cost`
+`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI rates are included;
+configure any custom rates before concurrent use. Provider-reported `MediaUsage.Cost`
 takes precedence over the table. `MediaCost` returns `ok=false` for missing rates
 or mismatched units.
 
@@ -88,7 +87,32 @@ media and token costs. Media accounting leaves `ModelUsage` unchanged.
 
 ## Providers
 
-D1+ will fill this table as provider implementations ship.
+OpenAI-compatible providers inherit the interfaces even when media flags are off;
+unsupported operations return the corresponding `Err*NotSupported`.
 
 | Provider | Images | Video | Speech | Transcription |
 | --- | --- | --- | --- | --- |
+| OpenAI | Generation + edits (`gpt-image-1.5`); ignores `Seed`, `AspectRatio`, `NegativePrompt`, `SafetyTolerance` | Async MP4 (`sora-2`); ignores `Audio`, `LastFrame`, `ReferenceImages`, `Seed`, `NegativePrompt` | Binary + SSE (`gpt-4o-mini-tts`) | Multipart (`gpt-4o-mini-transcribe`) |
+
+OpenAI image edits and transcription accept inline `MediaInput.Data` uploads.
+Set `MIMEType` so audio receives the correct upload extension. Word timestamps
+select `verbose_json`, supported only with `whisper-1`; diarization selects
+`diarized_json`, supported only with `gpt-4o-transcribe-diarize`. Incompatible
+model/format combinations (including requesting both options) fail with
+`ErrInvalidParameters` before a request is sent. The default format is `json`,
+which also carries usage. Explicit usage takes precedence over `duration`:
+Whisper duration usage bills minutes; GPT transcription token usage accounts for
+audio input, text input, and text output. The two verified GPT transcription
+models have converter-computed `Usage.Cost`; unverified models remain unpriced.
+Select `text`, `srt`, or `vtt` through `WithTranscribeExtra` using the
+`response_format` key; the raw text or subtitles are returned in `Text`.
+Streaming transcription is not implemented.
+
+Speech defaults to voice `alloy` and container `mp3`. `tts-1` and `tts-1-hd` do
+not support SSE. Binary speech has no reported usage and leaves the billing unit empty.
+`gpt-4o-mini-tts` can be priced only from SSE done token usage. `CreateSpeechStream` exposes
+terminal token usage; the core `AudioChunk` interface has no usage field.
+
+Video supports 4, 8, or 12 seconds and defaults to landscape 720p. Sora prices
+cover only 720p; higher-resolution results remain unpriced. Job cancellation is
+unsupported. Always pass a bounded context to streams and video `Wait`.

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- OpenAI image generation and editing, speech synthesis and SSE streaming, multipart transcription, and polling video jobs, with shared configurable OpenAI-compatible media routes and media pricing.
+
 ### Changed
 
 - **`pkg/providers/anthropic`: behavior parity with the other providers.** A review

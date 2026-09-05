@@ -124,3 +124,150 @@ func TestClient_DoMultipart_SortedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClient_DoMultipart_RawBody(t *testing.T) {
+	for _, body := range []string{"", "Hi.\n", "1\n00:00:00,000 --> 00:00:02,000\nHi.\n", "\x00\xffraw bytes"} {
+		t.Run(body, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if err := r.ParseMultipartForm(1024); err != nil {
+					t.Error(err)
+					return
+				}
+				defer func() { _ = r.MultipartForm.RemoveAll() }()
+				if r.FormValue("model") != "transcribe" {
+					t.Error("missing replayed form field")
+				}
+				if calls == 1 {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				_, _ = io.WriteString(w, body)
+			}))
+			defer server.Close()
+			policy := DefaultRetryPolicy()
+			policy.InitialDelay, policy.MaxDelay = time.Microsecond, time.Millisecond
+			client := NewClient(WithAllowHTTP(true), WithAllowPrivateIPs(true), WithRetryPolicy(policy))
+			out := []byte("previous")
+			err := client.DoMultipart(context.Background(), http.MethodPost, server.URL, map[string]string{"model": "transcribe"}, nil, nil, &out)
+			if err != nil || string(out) != body || calls != 2 {
+				t.Fatalf("out=%q calls=%d err=%v", out, calls, err)
+			}
+		})
+	}
+}
+
+func TestClient_DoMultipart_BinaryResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Header().Set("X-Generation-Id", "generation-1")
+		w.Header().Add("X-Metadata", "one")
+		w.Header().Add("X-Metadata", "two")
+		_, _ = w.Write([]byte("RIFF\x00\xffWAVE"))
+	}))
+	defer server.Close()
+	client := NewClient(WithAllowHTTP(true), WithAllowPrivateIPs(true))
+	var out BinaryResponse
+	err := client.DoMultipart(context.Background(), http.MethodPost, server.URL, nil, nil, nil, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out.Data) != "RIFF\x00\xffWAVE" || out.ContentType != "audio/wav" || out.Header.Get("X-Generation-Id") != "generation-1" || len(out.Header.Values("X-Metadata")) != 2 {
+		t.Fatalf("response: %+v", out)
+	}
+}
+
+func TestClient_DoMultipart_RawErrors(t *testing.T) {
+	for _, binary := range []bool{false, true} {
+		for _, status := range []int{http.StatusBadRequest, http.StatusOK} {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if status == http.StatusOK {
+					w.Header().Set("Content-Length", "104857601")
+				}
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, "failure")
+			}))
+			client := NewClient(WithAllowHTTP(true), WithAllowPrivateIPs(true))
+			raw := []byte("previous")
+			response := BinaryResponse{Data: []byte("previous"), ContentType: "original"}
+			var out any = &raw
+			if binary {
+				out = &response
+			}
+			err := client.DoMultipart(context.Background(), http.MethodPost, server.URL, nil, nil, nil, out)
+			server.Close()
+			if err == nil {
+				t.Fatal("accepted HTTP error or oversized response")
+			}
+			if status == http.StatusOK && !strings.Contains(err.Error(), "maximum size") {
+				t.Fatal(err)
+			}
+			if string(raw) != "previous" || string(response.Data) != "previous" || response.ContentType != "original" {
+				t.Fatal("modified output on failure")
+			}
+		}
+	}
+}
+
+func TestMultipartRawBody_UnknownLengthAndReadError(t *testing.T) {
+	// Supply chunks without allocating a second full-size fixture.
+	response := &http.Response{ContentLength: -1, Body: io.NopCloser(io.MultiReader(
+		io.LimitReader(multipartZeroReader{}, maxResponseSize), strings.NewReader("x"),
+	))}
+	if _, err := readMultipartRawBody(response); err == nil || !strings.Contains(err.Error(), "maximum size") {
+		t.Fatalf("oversized chunked body: %v", err)
+	}
+	response.Body = io.NopCloser(multipartFailedReader{})
+	if _, err := readMultipartRawBody(response); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("read error: %v", err)
+	}
+}
+
+type multipartZeroReader struct{}
+
+func (multipartZeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+type multipartFailedReader struct{}
+
+func (multipartFailedReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestClient_DoMultipart_PlainRepeatedFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reader, err := r.MultipartReader()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		for _, want := range []string{"word", "segment"} {
+			part, err := reader.NextPart()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			disposition := part.Header.Get("Content-Disposition")
+			if strings.Contains(disposition, "filename") || part.Header.Get("Content-Type") != "" {
+				t.Errorf("file headers on plain field: %v", part.Header)
+			}
+			if disposition != `form-data; name="timestamp_granularities[]"` {
+				t.Errorf("unexpected disposition %q", disposition)
+			}
+			data, err := io.ReadAll(part)
+			if err != nil || string(data) != want {
+				t.Errorf("got %q %v", data, err)
+			}
+			_ = part.Close()
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := NewClient(WithAllowHTTP(true), WithAllowPrivateIPs(true))
+	err := client.DoMultipart(context.Background(), http.MethodPost, server.URL, nil, []MultipartFile{
+		{Field: "timestamp_granularities[]", Data: []byte("word")},
+		{Field: "timestamp_granularities[]", Data: []byte("segment")},
+	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+}

@@ -18,7 +18,7 @@ import (
 type MultipartFile struct {
 	// Field is the form field name.
 	Field string
-	// Filename is the uploaded filename.
+	// Filename is the uploaded filename; empty emits a plain form field.
 	Filename string
 	// ContentType is the file MIME type; empty defaults to application/octet-stream.
 	ContentType string
@@ -27,6 +27,9 @@ type MultipartFile struct {
 }
 
 // DoMultipart sends fields and files to the absolute URL path and decodes JSON into out.
+// A *[]byte out receives the raw body; a *BinaryResponse receives Data,
+// ContentType, and a copy of Header. Raw responses are limited to maxResponseSize
+// (100 MB); exceeding the limit returns an error without updating out.
 // A nil out skips decoding. It shares DoJSON's retry and error handling policy;
 // the encoded body is retained so every retry sends the complete form.
 // Fields are sorted by name. Headers override defaults, including Content-Type.
@@ -68,12 +71,48 @@ func (c *Client) DoMultipart(ctx context.Context, method, path string, fields ma
 	if resp.StatusCode >= 400 {
 		return c.handleErrorResponse(resp)
 	}
+	switch target := out.(type) {
+	case *[]byte:
+		data, err := readMultipartRawBody(resp)
+		if err != nil {
+			return err
+		}
+		if target == nil {
+			return fmt.Errorf("nil multipart raw response target")
+		}
+		*target = data
+		return nil
+	case *BinaryResponse:
+		data, err := readMultipartRawBody(resp)
+		if err != nil {
+			return err
+		}
+		if target == nil {
+			return fmt.Errorf("nil multipart binary response target")
+		}
+		*target = BinaryResponse{Data: data, ContentType: resp.Header.Get("Content-Type"), Header: resp.Header.Clone()}
+		return nil
+	}
 	if out != nil {
 		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(out); err != nil {
 			return fmt.Errorf("decode multipart response: %w", err)
 		}
 	}
 	return nil
+}
+
+func readMultipartRawBody(resp *http.Response) ([]byte, error) {
+	if resp.ContentLength > maxResponseSize {
+		return nil, fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("read multipart response: %w", err)
+	}
+	if len(data) > maxResponseSize {
+		return nil, fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
+	}
+	return data, nil
 }
 
 func writeMultipartFile(writer *multipart.Writer, file MultipartFile) error {
@@ -83,6 +122,12 @@ func writeMultipartFile(writer *multipart.Writer, file MultipartFile) error {
 	}
 	if strings.ContainsAny(contentType, "\r\n") {
 		return fmt.Errorf("invalid multipart content type")
+	}
+	if file.Filename == "" {
+		if err := writer.WriteField(file.Field, string(file.Data)); err != nil {
+			return fmt.Errorf("write multipart field: %w", err)
+		}
+		return nil
 	}
 	header := make(textproto.MIMEHeader)
 	header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": file.Field, "filename": file.Filename}))

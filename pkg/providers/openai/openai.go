@@ -1,4 +1,6 @@
-// Package openai provides an OpenAI LLM implementation using native HTTP
+// Package openai provides OpenAI chat and media clients using native HTTP.
+// Media defaults are gpt-image-1.5, gpt-4o-mini-tts,
+// gpt-4o-mini-transcribe, and sora-2. Override them with request options.
 package openai
 
 import (
@@ -10,8 +12,13 @@ const defaultBaseURL = "https://api.openai.com/v1"
 
 // defaultProviderConfig defines OpenAI-specific configuration.
 var defaultProviderConfig = openaicompat.ProviderConfig{
-	Provider:              llms.ProviderOpenAI,
-	DefaultEmbeddingModel: "text-embedding-3-small",
+	Provider:                  llms.ProviderOpenAI,
+	Media:                     openaicompat.MediaCapabilities{Images: true, ImageEdits: true, Speech: true, SpeechStream: true, Transcription: true, Videos: true},
+	DefaultImageModel:         "gpt-image-1.5",
+	DefaultSpeechModel:        "gpt-4o-mini-tts",
+	DefaultTranscriptionModel: "gpt-4o-mini-transcribe",
+	DefaultVideoModel:         "sora-2",
+	DefaultEmbeddingModel:     "text-embedding-3-small",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,
 		Tools:            true,

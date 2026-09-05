@@ -8,9 +8,26 @@ type MediaRate struct {
 	USD float64
 }
 
-// MediaPricing holds rates keyed by "provider:model". Providers fill this in D1+.
+// MediaPricing holds rates keyed by "provider:model".
 // Configure the table before concurrent use; concurrent mutation is unsupported.
-var MediaPricing = map[string]MediaRate{}
+// Sora rates are the 720p base; higher resolutions are unpriced.
+// gpt-4o-transcribe and gpt-4o-mini-transcribe are token-billed and priced
+// by the provider converter, including separate audio/text input rates.
+// gpt-4o-mini-tts is priced only with StreamSpeech SSE done usage; Synthesize
+// has no usage and remains unpriced (CreateSpeechStream exposes the usage).
+// gpt-transcribe is intentionally absent because its price is unverified.
+var MediaPricing = map[string]MediaRate{
+	"openai:gpt-image-2":      {Unit: MediaUnitMTokenOut, USD: 30},
+	"openai:gpt-image-1.5":    {Unit: MediaUnitMTokenOut, USD: 32},
+	"openai:gpt-image-1":      {Unit: MediaUnitMTokenOut, USD: 40},
+	"openai:gpt-image-1-mini": {Unit: MediaUnitMTokenOut, USD: 8},
+	"openai:gpt-4o-mini-tts":  {Unit: MediaUnitMTokenOut, USD: 12},
+	"openai:tts-1":            {Unit: MediaUnitKChar, USD: 0.015},
+	"openai:tts-1-hd":         {Unit: MediaUnitKChar, USD: 0.030},
+	"openai:whisper-1":        {Unit: MediaUnitMinute, USD: 0.006},
+	"openai:sora-2":           {Unit: MediaUnitSecond, USD: 0.10},
+	"openai:sora-2-pro":       {Unit: MediaUnitSecond, USD: 0.30},
+}
 
 // GetMediaRate returns the rate for provider/model and whether it is known.
 func GetMediaRate(provider, model string) (MediaRate, bool) {
