@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- ElevenLabs native media-only provider: speech and streaming, character timestamps, dialogue, Scribe transcription, sound effects/music, and Pro-plan Flows image editing/generation and polling video jobs, with media pricing and plan/moderation errors.
+
 - OpenRouter chat and media provider with native image/video discovery, polling video jobs, speech and transcription, provider-reported media costs, optional speech usage lookup, and HTTP-Referer/X-Title attribution options.
 
 - OpenAI image generation and editing, speech synthesis and SSE streaming, multipart transcription, and polling video jobs, with shared configurable OpenAI-compatible media routes and media pricing.

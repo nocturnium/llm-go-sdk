@@ -1,2 +1,2 @@
 # apidiff export-data baseline is gob-encoded binary; don't diff or munge EOLs.
-api/v3.txt binary
+api/*.txt binary

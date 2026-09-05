@@ -11,6 +11,8 @@ type Provider string
 
 // Provider constants define the supported LLM providers.
 const (
+	// ProviderElevenLabs identifies the native media-only provider.
+	ProviderElevenLabs Provider = "elevenlabs"
 	// ProviderOpenRouter is the OpenRouter provider.
 	ProviderOpenRouter Provider = "openrouter"
 	// ProviderOpenAI is the OpenAI provider.

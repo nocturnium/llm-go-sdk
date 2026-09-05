@@ -192,12 +192,15 @@ D6 is opt-in. D7 closes.
 - **Cost of live tests.** Video jobs cost $0.40 to $2.40 per clip. Gate video live tests on a second
   env var (`LLM_SDK_LIVE_VIDEO=1`) and cap duration at the minimum the model allows.
 - **Verified 2026-09-05 by probe** (was unverified in research):
-  - ElevenLabs flows: `POST /v1/flows/image`, `GET /v1/flows/image/{id}`, `POST /v1/flows/video`,
-    `GET /v1/flows/video/{id}`. Status `pending|generating|completed|failed`; completed carries
-    `content_url` (signed, ~1 h) + `content_mime_type`; failed carries `failure_reason` in
+  - ElevenLabs flows: the create/GET paths `POST /v1/flows/image`,
+    `GET /v1/flows/image/{id}`, `POST /v1/flows/video`, `GET /v1/flows/video/{id}`
+    and the 402 plan gate were verified by probe and docs. Non-Pro accounts get
+    402 `{"detail":{"code":"paid_plan_required"}}`; the `.env` key is Creator tier.
+    Poll transitions `pending|generating|completed|failed`, completed `content_url`
+    (signed, ~1 h) + `content_mime_type`, and failed `failure_reason` values
     `timeout|model_error|moderated|invalid_parameters|dependency_failed|charging_failed|internal_error`
-    (not charged). Non-Pro accounts get 402 `{"detail":{"code":"paid_plan_required"}}`; the key in
-    `.env` is Creator tier, so flows live tests must skip on 402.
+    (not charged) come from the API reference and remain **unobserved on the Creator key**.
+    Flows live tests therefore skip on 402; successful polling is covered by mock tests.
   - OpenAI TTS `stream_format:"sse"`: `data: {"type":"speech.audio.delta","audio":"<b64>"}` repeated,
     then `{"type":"speech.audio.done","usage":{"input_tokens","output_tokens","total_tokens"}}`,
     then `data: [DONE]`. Not supported on `tts-1`/`tts-1-hd`.
