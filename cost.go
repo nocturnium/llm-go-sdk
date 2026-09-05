@@ -413,6 +413,8 @@ type ModelUsage struct {
 // an RWMutex internally to allow concurrent reads (GetUsage, GetTotalCost,
 // GetAllUsage) while serializing writes (Record, RecordEmbedding).
 type CostTracker struct {
+	media map[string]MediaTotal
+
 	mu      sync.RWMutex
 	usage   map[string]*ModelUsage
 	pricing map[string]Pricing
@@ -604,6 +606,9 @@ func (t *CostTracker) GetTotalCost() float64 {
 	for _, u := range t.usage {
 		total += u.EstimatedCost
 	}
+	for _, u := range t.media {
+		total += u.Cost
+	}
 	return total
 }
 
@@ -648,6 +653,7 @@ func (t *CostTracker) Reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.usage = make(map[string]*ModelUsage)
+	t.media = nil
 }
 
 // SetPricing sets or updates pricing for a model.

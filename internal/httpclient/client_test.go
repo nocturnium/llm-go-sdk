@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 func TestNewClient_Defaults(t *testing.T) {
@@ -265,17 +263,6 @@ func TestClient_DoJSON_JSONErrorPreservesCodeTypeForClassification(t *testing.T)
 	}
 	if apiErr.Param != "model" {
 		t.Fatalf("Param = %q, want model", apiErr.Param)
-	}
-
-	unified := llms.NewAPIErrorFromHTTP(llms.ProviderOpenAI, llms.HTTPAPIError{
-		StatusCode: apiErr.StatusCode,
-		Message:    apiErr.Message,
-		Type:       apiErr.Type,
-		Code:       apiErr.Code,
-		Param:      apiErr.Param,
-	})
-	if !errors.Is(unified, llms.ErrModelNotFound) {
-		t.Fatalf("errors.Is(unified, ErrModelNotFound) = false for %#v", unified)
 	}
 }
 

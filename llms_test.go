@@ -842,3 +842,36 @@ func TestMessageWithToolCalls(t *testing.T) {
 		t.Errorf("unexpected function name: %s", msg.ToolCalls[0].Function.Name)
 	}
 }
+
+type testMediaCapableLLM struct {
+	testPlainLLM
+	caps Capabilities
+}
+
+func (c testMediaCapableLLM) Capabilities() Capabilities { return c.caps }
+
+func TestHasMediaCapabilities(t *testing.T) {
+	for _, helper := range []struct {
+		name  string
+		check func(LLM) bool
+		caps  Capabilities
+	}{
+		{"image", HasImageGeneration, Capabilities{ImageGeneration: true}},
+		{"video", HasVideoGeneration, Capabilities{VideoGeneration: true}},
+		{"speech", HasSpeech, Capabilities{Speech: true}},
+		{"transcription", HasTranscription, Capabilities{Transcription: true}},
+	} {
+		t.Run(helper.name, func(t *testing.T) {
+			if helper.check(testPlainLLM{}) || helper.check(testMediaCapableLLM{}) {
+				t.Fatal("advertised absent capability")
+			}
+			client := testMediaCapableLLM{caps: helper.caps}
+			if !helper.check(testWrapper{LLM: client}) {
+				t.Fatal("lost wrapped capability flag")
+			}
+			if SupportsImageGeneration(client) || SupportsVideoGeneration(client) || SupportsSpeech(client) || SupportsTranscription(client) {
+				t.Fatal("flags confused with interface implementations")
+			}
+		})
+	}
+}

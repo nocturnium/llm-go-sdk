@@ -43,6 +43,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Provider-agnostic media core.** Adds image generation/editing, video jobs, speech and transcription interfaces, shared media assets and moderation errors, media cost tracking, and multipart, binary, and polling transport helpers. Adds `ModelInfo.DeprecatedAt` and the four `Capabilities` fields `ImageGeneration`, `VideoGeneration`, `Speech`, and `Transcription`. HTTP 402 now maps to `ErrPlanRequired`; previously, unrecognized codes with `invalid_request_error` fell through to `ErrInvalidParameters`.
+
 - **`pkg/mcp`: roots.** `WithRoots` publishes a fixed set of filesystem roots to the
   server; `WithRootsHandler` publishes a dynamic one, consulted per request. Adds
   `Root`, `RootsHandler` and `Client.RootsChanged`.

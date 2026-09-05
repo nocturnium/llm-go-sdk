@@ -97,6 +97,15 @@ func GetMiddleware(llm LLM) []Wrapper {
 // This allows client code to check capabilities at runtime rather than
 // relying on type assertions or trial-and-error.
 type Capabilities struct {
+	// ImageGeneration indicates support for ImageGeneration operations.
+	ImageGeneration bool
+	// VideoGeneration indicates support for VideoGeneration operations.
+	VideoGeneration bool
+	// Speech indicates support for Speech operations.
+	Speech bool
+	// Transcription indicates support for Transcription operations.
+	Transcription bool
+
 	// Streaming indicates the provider supports streaming responses
 	Streaming bool
 
@@ -207,4 +216,28 @@ func SupportsReasoning(llm LLM) bool {
 // SupportsPromptCaching checks if the LLM supports prompt caching.
 func SupportsPromptCaching(llm LLM) bool {
 	return HasCapability(llm, func(c Capabilities) bool { return c.PromptCaching })
+}
+
+// HasImageGeneration checks the ImageGeneration Capabilities flag.
+// For media, Supports*(any) asserts an interface; Has*(LLM) reads a Capabilities flag.
+func HasImageGeneration(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.ImageGeneration })
+}
+
+// HasVideoGeneration checks the VideoGeneration Capabilities flag.
+// For media, Supports*(any) asserts an interface; Has*(LLM) reads a Capabilities flag.
+func HasVideoGeneration(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.VideoGeneration })
+}
+
+// HasSpeech checks the Speech Capabilities flag.
+// For media, Supports*(any) asserts an interface; Has*(LLM) reads a Capabilities flag.
+func HasSpeech(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.Speech })
+}
+
+// HasTranscription checks the Transcription Capabilities flag.
+// For media, Supports*(any) asserts an interface; Has*(LLM) reads a Capabilities flag.
+func HasTranscription(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.Transcription })
 }

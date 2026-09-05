@@ -468,3 +468,27 @@ func TestGeminiModels(t *testing.T) {
 		}
 	})
 }
+
+func TestModelCapabilities_Media(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		caps     ModelCapabilities
+		wantType ModelType
+		wantCaps Capabilities
+	}{
+		{"image", ModelCapabilities{ImageGeneration: true}, ModelTypeImage, Capabilities{ImageGeneration: true}},
+		{"video", ModelCapabilities{VideoGeneration: true}, ModelTypeVideo, Capabilities{VideoGeneration: true}},
+		{"speech", ModelCapabilities{Speech: true}, ModelTypeAudio, Capabilities{Speech: true}},
+		{"transcription", ModelCapabilities{Transcription: true}, ModelTypeAudio, Capabilities{Transcription: true}},
+		{"both audio", ModelCapabilities{Speech: true, Transcription: true}, ModelTypeAudio, Capabilities{Speech: true, Transcription: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if types := tc.caps.ModelTypes(); len(types) != 1 || types[0] != tc.wantType {
+				t.Fatalf("types: %v", types)
+			}
+			if got := tc.caps.ToCapabilities(); got != tc.wantCaps {
+				t.Fatalf("caps: %+v", got)
+			}
+		})
+	}
+}

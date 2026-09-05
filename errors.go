@@ -100,6 +100,7 @@ type apiStatusClassification struct {
 
 var apiStatusClassifications = map[int]apiStatusClassification{
 	401: {err: ErrAuthenticationFailed},
+	402: {err: ErrPlanRequired},
 	403: {err: ErrPermissionDenied},
 	404: {err: ErrModelNotFound},
 	408: {err: ErrTimeout, retryable: true},
@@ -550,3 +551,39 @@ func WrapHTTPError(provider Provider, operation string, err error) error {
 	// For other errors, wrap with provider context
 	return WrapProviderError(provider, operation, err)
 }
+
+// ErrPlanRequired indicates a paid plan is required (HTTP 402).
+var ErrPlanRequired = errors.New("paid plan required")
+
+// ErrAssetExpired indicates a hosted media asset's download URL has expired.
+var ErrAssetExpired = errors.New("media asset expired")
+
+// ModerationStage identifies where content was filtered.
+type ModerationStage string
+
+const (
+	// ModerationInput identifies filtering of submitted content.
+	ModerationInput ModerationStage = "input"
+	// ModerationOutput identifies filtering of generated content.
+	ModerationOutput ModerationStage = "output"
+)
+
+// ModerationError describes content filtering and whether a charge was incurred.
+type ModerationError struct {
+	// Stage identifies whether input or output was filtered.
+	Stage ModerationStage
+	// Reasons contains provider-supplied explanations.
+	Reasons []string
+	// Charged reports whether the provider charged for this request.
+	Charged bool
+	// Provider identifies the provider that filtered the content.
+	Provider string
+}
+
+// Error describes the filtering stage, provider, and reasons.
+func (e *ModerationError) Error() string {
+	return fmt.Sprintf("%s: content filtered at %s (charged=%t): %v", e.Provider, e.Stage, e.Charged, e.Reasons)
+}
+
+// Unwrap returns ErrContentFiltered for errors.Is compatibility.
+func (e *ModerationError) Unwrap() error { return ErrContentFiltered }
