@@ -3,6 +3,8 @@ package featherless
 import (
 	"net/http"
 	"time"
+
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 // Option is a function that configures a Featherless client.
@@ -10,12 +12,13 @@ type Option func(*options)
 
 // options contains configuration options for the Featherless client.
 type options struct {
-	APIKey         string
-	Model          string
-	EmbeddingModel string
-	BaseURL        string
-	HTTPClient     *http.Client
-	Timeout        time.Duration
+	SpeechUsageHandler func(model string, usage llms.MediaUsage)
+	APIKey             string
+	Model              string
+	EmbeddingModel     string
+	BaseURL            string
+	HTTPClient         *http.Client
+	Timeout            time.Duration
 	// AllowPrivateIPs allows requests to private/loopback IPs.
 	// Off by default for SSRF safety; see WithAllowPrivateIPs.
 	AllowPrivateIPs bool
@@ -95,4 +98,12 @@ func apply(opts ...Option) *options {
 		opt(options)
 	}
 	return options
+}
+
+// WithSpeechUsageHandler receives StreamSpeech terminal character usage and its model.
+// The handler runs before the audio channel closes. It must return promptly and be
+// safe for concurrent calls. A nil handler disables reporting; failed streams and
+// done events without input_characters do not report usage.
+func WithSpeechUsageHandler(handler func(model string, usage llms.MediaUsage)) Option {
+	return func(o *options) { o.SpeechUsageHandler = handler }
 }

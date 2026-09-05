@@ -433,6 +433,8 @@ type ImageData struct {
 
 // ImageUsage describes image or audio token accounting.
 type ImageUsage struct {
+	// InputCharacters is reported by character-billed speech services.
+	InputCharacters    *int     `json:"input_characters,omitempty"`
 	PromptTokens       int      `json:"prompt_tokens,omitempty"`
 	CompletionTokens   int      `json:"completion_tokens,omitempty"`
 	Cost               *float64 `json:"cost,omitempty"`

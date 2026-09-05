@@ -1,7 +1,7 @@
 # Media Generation
 
 The media core defines provider-independent interfaces for images, video, speech,
-and transcription. OpenAI, OpenRouter, ElevenLabs and Gemini implement these contracts using shared and native media routes. Media capabilities are separate
+and transcription. OpenAI, OpenRouter, ElevenLabs, Gemini and the thin providers below implement these contracts using shared and native media routes. Media capabilities are separate
 from the `llms.LLM` chat interface.
 
 ## Interfaces
@@ -75,7 +75,7 @@ in which case `Cancel` returns `ErrJobCancelNotSupported`.
 
 ## Cost tracking
 
-`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI, ElevenLabs and Gemini rates are included;
+`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI, ElevenLabs, Gemini, Together AI, Groq, Featherless, Mistral and Z.AI rates are included;
 configure any custom rates before concurrent use. Provider-reported `MediaUsage.Cost`
 takes precedence over the table. `MediaCost` returns `ok=false` for missing rates
 or mismatched units.
@@ -96,6 +96,110 @@ unsupported operations return the corresponding `Err*NotSupported`.
 | OpenAI | Generation + edits (`gpt-image-1.5`); ignores `Seed`, `AspectRatio`, `NegativePrompt`, `SafetyTolerance` | Async MP4 (`sora-2`); ignores `Audio`, `LastFrame`, `ReferenceImages`, `Seed`, `NegativePrompt` | Binary + SSE (`gpt-4o-mini-tts`) | Multipart (`gpt-4o-mini-transcribe`) |
 | ElevenLabs | Flows generation + edits (`gemini-3.1-flash-lite-image`), Pro plan+ | Flows async (`veo-3.1-fast-generate-001`), Pro plan+ | Binary/chunked TTS, timestamps, dialogue, SFX/music | Scribe multipart (`scribe_v2`) |
 | OpenRouter | Generation (`google/gemini-3.1-flash-lite-image`); native `/images` | Native async MP4 (`google/veo-3.1-lite`) | Binary mp3/pcm; optional cost lookup | Multipart JSON/verbose JSON (`openai/whisper-1`) |
+| Together AI | Generation (`black-forest-labs/FLUX.1-schnell`), base64 or eager URL download | Native `/v2/videos` (`ByteDance/Seedance-2.5`) | Binary + raw SSE (`hexgrad/Kokoro-82M`) | Multipart (`openai/whisper-large-v3`) |
+| Groq | — | — | WAV only (`canopylabs/orpheus-v1-english`), 200 characters | Transcription + translation (`whisper-large-v3-turbo`) |
+| Featherless | — | — | Binary + SSE (`hexgrad/Kokoro-82M`) | — |
+| Mistral | — | — | JSON base64 (`voxtral-mini-tts-2603`), no streaming | Multipart (`voxtral-mini-latest`) |
+| Z.AI | One URL image (`cogview-4-250304`), eager download | Native async (`cogvideox-3`) | — | Multipart (`glm-asr-2512`), clips up to 30 seconds |
+
+### Thin OpenAI-compatible providers
+
+These routes and prices use the supplied first-party documentation verification
+from 2026-09-05. **Live operation remains unverified:** Together, Groq, Featherless
+and Mistral had no keys during verification; the Z.AI account returned code `1113`
+(insufficient balance) on every media route. Integration tests are gated on
+`TOGETHER_API_KEY`, `GROQ_API_KEY`, `FEATHERLESS_API_KEY`, `MISTRAL_API_KEY` and
+`ZAI_API_KEY` respectively, and skip quota or plan errors. The generic `LLM_API_KEY`
+fallback alone does not enable live tests.
+
+Media models are independent of chat models; select alternatives with the
+per-request `WithImageModel`, `WithSpeechModel`, `WithTranscribeModel`, and
+`WithVideoModel` options. Image edits and streaming transcription are unsupported.
+All native requests and downloads use the client's timeout and HTTP/private-IP
+policy; no API credentials are sent to generated asset URLs.
+
+- **Together AI:** defaults to `https://api.together.xyz/v1`. Images default to
+  explicit JPEG and base64, with eager URL downloads using a User-Agent. Size
+  `WxH` maps to width/height; AspectRatio, Seed, NegativePrompt and OutputFormat
+  map directly. Extras merge last. Usage follows the model's `MediaPricing` unit:
+  per-image rates count images; megapixel rates (including Schnell and Imagen 4.0
+  Fast) require effective width/height, otherwise Unit stays empty. Quality and
+  SafetyTolerance are ignored. Speech defaults to `af_bella`; Language maps to
+  `language` and Format.SampleRate to `sample_rate`. Containers are WAV, MP3 and
+  raw; `mulaw` belongs in Extra `response_encoding`. Speech counts Unicode
+  characters / 1000. StreamSpeech defaults to raw and rejects other containers;
+  it decodes `{object:"audio.tts.chunk", b64}` SSE frames until `[DONE]`.
+  Transcription defaults to `verbose_json` for duration accounting; Extra can
+  select `json`. It accepts uploads up to 80 MiB or a URL sent as the `file`
+  string, maps diarization to `diarize`, and sends bracket-free
+  `timestamp_granularities`. Words retain `speaker_id`.
+  Video uses `/v2/videos`, stripping only a trailing `/v1` segment from BaseURL
+  and preserving proxy prefixes. The default `ByteDance/Seedance-2.5` is the
+  cheapest matching entry on the [pricing page](https://www.together.ai/pricing)
+  and [catalog](https://docs.together.ai/docs/serverless/models) linked from the
+  [video guide](https://docs.together.ai/docs/inference/videos/overview), checked
+  2026-09-05; no static estimate is supplied for that default.
+  Duration is sent as a string `seconds`; reported seconds take precedence for
+  usage. Queued and unknown states keep polling; failed/cancelled states stop.
+  Resolution, AspectRatio, Audio, Seed, NegativePrompt and OutputFormat map to
+  native fields. First/last frames require URLs; typed ReferenceImages is rejected
+  because its schema is unverified, while native `media.reference_images` can be
+  passed through Extra. `outputs.cost` is retained as `Metadata["outputs_cost"]`:
+  its billing unit is unverified, so it never becomes USD Cost. Known flat-job
+  pricing rows use an empty unit and become explicit Cost with seconds retained.
+- **Groq:** speech defaults to WAV and voice `autumn` only for
+  `canopylabs/orpheus-v1-english`. Other models, including Arabic, require an
+  explicit Voice. More than 200 Unicode characters or a non-WAV container
+  (including Extra `response_format`) fails before HTTP. Speech streaming is
+  unsupported. `Translate` uses `/audio/translations` with Transcribe's options.
+  Both accept inline audio or URLs and default to `verbose_json` for duration;
+  Extra can select JSON or text. Word timestamps use `timestamp_granularities[]`.
+  Diarization is unsupported. Uploads are capped at 25 MiB; Groq also documents
+  a 100 MiB developer tier, which this conservative SDK cap does not enable.
+- **Featherless:** speech defaults to `af_bella` and MP3; Opus, AAC, FLAC, WAV and
+  PCM are also accepted, subject to model support. Unary usage counts Unicode
+  characters / 1000. The [request pricing table](https://featherless.ai/docs/request-pricing-and-credits)
+  confirms Kokoro, Orpheus and Chatterbox rates of $0.004, $0.015 and $0.025 per
+  thousand characters. StreamSpeech sets `stream:true` and `stream_format:sse`,
+  decoding `speech.audio.delta/done`. `featherless.WithSpeechUsageHandler`
+  receives terminal `usage.input_characters` converted to KChar plus the model;
+  the core AudioChunk has no usage field. The callback runs before channel close
+  and must return promptly and handle concurrent streams. Missing usage remains
+  unknown; failed streams do not invoke it. Instructions and speed (0.25–4) are
+  accepted, with effects dependent on the model.
+- **Mistral:** speech maps Voice to `voice_id`; `ref_audio` is available through
+  Extra when no voice is specified. JSON `audio_data` is decoded from base64.
+  MP3 is the default; PCM, WAV, FLAC and Opus are accepted, with MIME types
+  `audio/mpeg`, `audio/L16`, `audio/wav`, `audio/flac` and `audio/ogg` respectively.
+  Only moderation/content error codes map to ModerationError; a plain 403 retains
+  normal status classification. Streaming speech is unsupported. Transcription
+  accepts uploads up to 25 MiB or `file_url`, maps timestamps and diarization to
+  `timestamp_granularities` and `diarize`, and sends repeated `context_bias`
+  fields for Keyterms. `usage.prompt_audio_seconds` bills minutes (seconds / 60).
+  Prompt has no verified mapping and is ignored.
+- **Z.AI:** images omit `n` and `response_format`; those extras are rejected.
+  Other extras merge last; effective model/prompt and quality are validated.
+  Seed, NegativePrompt, AspectRatio, OutputFormat and SafetyTolerance are ignored.
+  Images retain URL and a thirty-day expiry and eagerly fill Data. Filtering
+  without image data returns ModerationError. Async images are unsupported.
+  Video maps duration (5/10), Resolution to Size, Audio to `with_audio`, and URL
+  first/last frames to `image_url`. Extra accepts native `quality` and `fps`
+  (30/60); polling uses `/async-result/{id}`. The `cogvideox-3` flat $0.20 rate
+  comes from MediaPricing and becomes explicit Cost, retaining seconds quantity.
+  Transcription accepts inline WAV (`audio/wav`) or MP3 (`audio/mpeg`, `audio/mp3`)
+  up to 25 MiB, maps Keyterms to `hotwords[]`, and remains unpriced. Code `1113`
+  matches ErrQuotaExceeded; `1301` maps to input-stage ModerationError.
+  The workspace `.env` uses `ZAI_TOKEN`, while the SDK and live-test gate read
+  `ZAI_API_KEY`; export the latter explicitly to run live tests.
+
+Speech Language is ignored by Groq, Featherless and Mistral. All media routes
+remain live-unverified; the changes above are covered by mock HTTP tests.
+
+Transcription charges use duration only when the vendor reports it; missing
+duration is not inferred from upload size. Native video jobs use `PollingVideoJob`;
+Cancel returns `ErrJobCancelNotSupported`. Always use bounded contexts for Wait
+and streams. Video extras use native vendor field names; resolved duration is
+validated and used for accounting.
 
 ### OpenRouter
 

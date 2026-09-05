@@ -95,3 +95,48 @@ func TestMediaPricing_GeminiReconciliation(t *testing.T) {
 		})
 	}
 }
+
+// Thin media models are an explicit reconciliation allowlist: these rates use
+// media units, and need not appear in the token-priced chat capability registry.
+func TestMediaPricing_ThinProviderReconciliation(t *testing.T) {
+	expected := map[string]MediaRate{
+		"togetherai:cartesia/sonic":                   {Unit: MediaUnitKChar, USD: 0.065},
+		"togetherai:canopylabs/orpheus-3b-0.1-ft":     {Unit: MediaUnitKChar, USD: 0.015},
+		"togetherai:hexgrad/Kokoro-82M":               {Unit: MediaUnitKChar, USD: 0.004},
+		"togetherai:openai/whisper-large-v3":          {Unit: MediaUnitMinute, USD: 0.0015},
+		"togetherai:black-forest-labs/FLUX.1-schnell": {Unit: MediaUnitMegapixel, USD: 0.0027},
+		"togetherai:black-forest-labs/FLUX.2-dev":     {Unit: MediaUnitImage, USD: 0.0154},
+		"togetherai:black-forest-labs/FLUX.2-pro":     {Unit: MediaUnitImage, USD: 0.03},
+		"togetherai:google/imagen-4.0-fast":           {Unit: MediaUnitMegapixel, USD: 0.02},
+		"togetherai:openai/gpt-image-1.5":             {Unit: MediaUnitImage, USD: 0.034},
+		"togetherai:openai/sora-2":                    {Unit: "", USD: 0.8},
+		"groq:canopylabs/orpheus-v1-english":          {Unit: MediaUnitKChar, USD: 0.022},
+		"groq:canopylabs/orpheus-arabic-saudi":        {Unit: MediaUnitKChar, USD: 0.04},
+		"groq:whisper-large-v3":                       {Unit: MediaUnitMinute, USD: 0.00185},
+		"groq:whisper-large-v3-turbo":                 {Unit: MediaUnitMinute, USD: 0.000667},
+		"mistral:voxtral-mini-latest":                 {Unit: MediaUnitMinute, USD: 0.003},
+		"mistral:voxtral-mini-tts-2603":               {Unit: MediaUnitKChar, USD: 0.016},
+		"featherless:hexgrad/Kokoro-82M":              {Unit: MediaUnitKChar, USD: 0.004},
+		"featherless:canopylabs/orpheus-3b-0.1-ft":    {Unit: MediaUnitKChar, USD: 0.015},
+		"featherless:ResembleAI/chatterbox":           {Unit: MediaUnitKChar, USD: 0.025},
+		"zai:cogvideox-3":                             {Unit: "", USD: 0.20},
+		"zai:glm-image":                               {Unit: MediaUnitImage, USD: 0.015},
+		"zai:cogview-4-250304":                        {Unit: MediaUnitImage, USD: 0.01},
+	}
+	for key, want := range expected {
+		if got, ok := MediaPricing[key]; !ok || got != want {
+			t.Errorf("%s: got %+v, %t; want %+v", key, got, ok, want)
+		}
+	}
+	if _, ok := MediaCost("togetherai", "black-forest-labs/FLUX.1-schnell", MediaUsage{}); ok {
+		t.Error("unknown size was priced")
+	}
+}
+
+func TestMediaPricing_RemovedUnverifiedVideoRows(t *testing.T) {
+	for _, model := range []string{"google/veo-3.1", "Wan-AI/wan2.7"} {
+		if _, ok := GetMediaRate("togetherai", model); ok {
+			t.Errorf("unverified video row retained: %s", model)
+		}
+	}
+}

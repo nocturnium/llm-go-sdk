@@ -17,6 +17,41 @@ type MediaRate struct {
 // has no usage and remains unpriced (CreateSpeechStream exposes the usage).
 // gpt-transcribe is intentionally absent because its price is unverified.
 var MediaPricing = map[string]MediaRate{
+	// https://www.together.ai/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	// Speech enum: https://docs.together.ai/reference/audio-speech (cartesia/sonic).
+	// Video rows use an empty unit for a flat job price (no core video unit).
+	// The native job converts these to explicit Cost and retains seconds as quantity.
+	"togetherai:cartesia/sonic":                   {Unit: MediaUnitKChar, USD: 0.065},
+	"togetherai:canopylabs/orpheus-3b-0.1-ft":     {Unit: MediaUnitKChar, USD: 0.015},
+	"togetherai:hexgrad/Kokoro-82M":               {Unit: MediaUnitKChar, USD: 0.004},
+	"togetherai:openai/whisper-large-v3":          {Unit: MediaUnitMinute, USD: 0.0015},
+	"togetherai:black-forest-labs/FLUX.1-schnell": {Unit: MediaUnitMegapixel, USD: 0.0027},
+	"togetherai:black-forest-labs/FLUX.2-dev":     {Unit: MediaUnitImage, USD: 0.0154},
+	"togetherai:black-forest-labs/FLUX.2-pro":     {Unit: MediaUnitImage, USD: 0.03},
+	"togetherai:google/imagen-4.0-fast":           {Unit: MediaUnitMegapixel, USD: 0.02},
+	"togetherai:openai/gpt-image-1.5":             {Unit: MediaUnitImage, USD: 0.034},
+	"togetherai:openai/sora-2":                    {Unit: "", USD: 0.8},
+
+	// https://groq.com/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	"groq:canopylabs/orpheus-v1-english":   {Unit: MediaUnitKChar, USD: 0.022},
+	"groq:canopylabs/orpheus-arabic-saudi": {Unit: MediaUnitKChar, USD: 0.04},
+	"groq:whisper-large-v3":                {Unit: MediaUnitMinute, USD: 0.00185},
+	"groq:whisper-large-v3-turbo":          {Unit: MediaUnitMinute, USD: 0.000667},
+
+	// https://mistral.ai/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	"mistral:voxtral-mini-latest":   {Unit: MediaUnitMinute, USD: 0.003},
+	"mistral:voxtral-mini-tts-2603": {Unit: MediaUnitKChar, USD: 0.016},
+
+	// Featherless exact IDs/rates: https://featherless.ai/docs/request-pricing-and-credits (2026-09-05).
+	"featherless:hexgrad/Kokoro-82M":           {Unit: MediaUnitKChar, USD: 0.004},
+	"featherless:canopylabs/orpheus-3b-0.1-ft": {Unit: MediaUnitKChar, USD: 0.015},
+	"featherless:ResembleAI/chatterbox":        {Unit: MediaUnitKChar, USD: 0.025},
+
+	// Z.AI: https://docs.z.ai/guides/overview/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	"zai:cogvideox-3":      {Unit: "", USD: 0.20},
+	"zai:glm-image":        {Unit: MediaUnitImage, USD: 0.015},
+	"zai:cogview-4-250304": {Unit: MediaUnitImage, USD: 0.01},
+
 	// Gemini native media, verified 2026-09-05. Image rows use 1K and Veo
 	// rows use 720p with audio. Converters report exact size/resolution Cost;
 	// TTS converters include input tokens as well as output tokens.
