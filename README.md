@@ -19,6 +19,9 @@ Ollama server by changing a single import and constructor — everything else
 - **Unified interface** — a single `LLM` interface works across chat providers
 - **Native HTTP** — zero external LLM SDK dependencies, built on `net/http`
 - **Streaming** — real-time token streaming over channels
+- **Media generation** — provider-agnostic image, video, speech and transcription
+  interfaces (`ImageGenerator`, `VideoGenerator`, `SpeechSynthesizer`, `Transcriber`) with
+  async video jobs, asset fetching and per-unit cost tracking; see `docs/guides/media.md`
 - **Tool / function calling** — consistent tool-calling API across providers, plus an
   automatic `RunTools` agent loop
 - **MCP client** — connect to Model Context Protocol servers (`pkg/mcp`) and use their tools

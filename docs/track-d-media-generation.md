@@ -1,6 +1,10 @@
 # Track D — Media generation (image, video, speech, transcription)
 
-Status: **PLANNED** (research complete 2026-09-05, no code yet).
+Status: **IMPLEMENTED D0-D5, D7** on `feat/track-d-media` (2026-09-05); D6 dedicated providers opt-in and not started.
+Live verification: OpenAI (image, speech, stream, transcription incl. diarization), OpenRouter (chat, image,
+speech, transcription, one Veo 3.1 Lite video job), ElevenLabs (speech, stream, timestamps, transcription, SFX;
+flows skip on Creator tier), Gemini (speech, transcription; image/video paid-only on the free-tier key).
+Together, Groq, Featherless, Mistral and Z.AI are documentation-verified only (no keys / no balance).
 Scope decision: additive, `feat:` minors on `/v6`. No breaking change is required.
 
 ## 1. Where the SDK stands

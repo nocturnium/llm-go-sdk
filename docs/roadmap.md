@@ -142,7 +142,8 @@ behind a slow sampling call.
 
 ### Track D — Media generation (image, video, speech, transcription)
 
-**Status: planned.** Research complete 2026-09-05; full design and packet sequence in
+**Status: packets D0 to D5 and D7 shipped (2026-09-05); D6 dedicated providers remain opt-in.** Research and
+full design in
 [`docs/track-d-media-generation.md`](track-d-media-generation.md).
 
 **Why:** the SDK can list image and audio models but cannot call a single generation endpoint,
@@ -153,15 +154,15 @@ client covers OpenAI, Azure, OpenRouter audio, Together, Groq, Featherless, Mist
 native adapters cover ElevenLabs and Gemini.
 
 **Scope (sequence as separate PRs):**
-0. Core interfaces (`ImageGenerator`, `VideoGenerator`/`VideoJob`, `SpeechSynthesizer`,
+0. ✅ Core interfaces (`ImageGenerator`, `VideoGenerator`/`VideoJob`, `SpeechSynthesizer`,
    `Transcriber`), `MediaAsset`, moderation error, `MediaPricing`, multipart/binary/poll transport.
-1. `openaicompat` media routes + OpenAI (gpt-image-2, sora-2, gpt-4o-mini-tts, gpt-transcribe).
-2. OpenRouter provider (chat + `/images`, `/videos`, `/audio/*`).
-3. ElevenLabs provider (TTS, STT, SFX, music, flows image/video).
-4. Gemini media (native image, Veo 3.1, TTS, transcribe).
-5. Thin-provider enablement (Together, Groq, Featherless, Mistral, Z.AI).
-6. Dedicated providers on explicit go: fal, Replicate, Black Forest Labs, Deepgram.
-7. Docs, examples, release.
+1. ✅ `openaicompat` media routes + OpenAI (gpt-image-2, sora-2, gpt-4o-mini-tts, gpt-transcribe).
+2. ✅ OpenRouter provider (chat + `/images`, `/videos`, `/audio/*`).
+3. ✅ ElevenLabs provider (TTS, STT, SFX, music, flows image/video).
+4. ✅ Gemini media (native image, Veo 3.1, TTS, transcribe).
+5. ✅ Thin-provider enablement (Together, Groq, Featherless, Mistral, Z.AI).
+6. ⏸ Dedicated providers on explicit go: fal, Replicate, Black Forest Labs, Deepgram. *(Not started; opt-in.)*
+7. ✅ Docs, examples, release.
 
 **Risks:** video live tests are expensive (gate behind a second env var); several endpoint details
 are unverified until probed; asset URLs expire (10 min on BFL); ElevenLabs image/video is a
