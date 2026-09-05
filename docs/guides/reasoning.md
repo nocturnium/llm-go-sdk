@@ -36,9 +36,26 @@ Effort levels are `ReasoningEffortMinimal`, `ReasoningEffortLow`,
 budget but you only supplied an effort, the SDK derives one via
 `llms.ReasoningBudgetForEffort`.
 
-Anthropic extended thinking has extra requirements that the SDK handles for you:
-the budget must be at least 1024 tokens, `max_tokens` must exceed it (the SDK
-raises `max_tokens` automatically), and `temperature`/`top_p` must be omitted.
+Anthropic's thinking request shape depends on the model generation, and the SDK
+picks the right one from the model name:
+
+- **Claude 4.5 and earlier** (Opus 4.1/4.5, Sonnet 4/4.5, Haiku 4.5, 3.x): sends
+  `thinking: {type: "enabled", budget_tokens}`. The budget must be at least 1024
+  tokens and `max_tokens` must exceed it (the SDK raises `max_tokens`
+  automatically); `temperature`/`top_p` are omitted while thinking is on.
+- **Opus 4.6 / Sonnet 4.6, Opus 4.7 / 4.8, Opus 5, Sonnet 5**: sends
+  `thinking: {type: "adaptive"}` and maps the effort onto
+  `output_config.effort` (`minimal` becomes `low`). `BudgetTokens` is ignored;
+  the API rejects `budget_tokens` on 4.7 and later. An explicit
+  `Enabled: false` sends `thinking: {type: "disabled"}`.
+- **Fable / Mythos**: thinking is always on and the parameter is omitted; only
+  `output_config.effort` is sent. `Enabled: false` is ignored.
+
+Two Anthropic-only adjustments are applied silently to keep requests valid:
+a forcing `tool_choice` (required or a named tool) is softened to `auto` while
+thinking is on, and a JSON-schema / JSON-mode request disables thinking on
+generations where it can be turned off, because Anthropic rejects thinking
+alongside a forced tool.
 
 ## Reading reasoning output
 

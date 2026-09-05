@@ -256,7 +256,7 @@ mechanism differs by provider:
 | --- | --- |
 | OpenAI-compatible (openai, azure, groq, deepseek, mistral, fireworks, togetherai, and others built on `pkg/openaicompat`) | Native `response_format` with `json_object` and `json_schema` (including `strict`). |
 | Gemini (native) | Maps `json_schema` to `responseSchema` + `responseMimeType: application/json`; `json_object` maps to `responseMimeType` only. |
-| Anthropic (native) | No `response_format` field. For `json_schema` the SDK **forces a single tool** whose `input_schema` is your schema, sets `tool_choice` to that tool, and exposes the tool input as `Response.Content`. |
+| Anthropic (native) | No `response_format` field. For `json_schema` the SDK **forces a single tool** whose `input_schema` is your schema, sets `tool_choice` to that tool, and exposes the tool input as `Response.Content` (on both `GenerateContent` and `Stream`, where the JSON arrives on the terminal chunk). `json_object` uses the same mechanism with a permissive `{"type":"object"}` schema. `Strict` has no Anthropic equivalent and is ignored. On Fable 5.1 / Mythos, which reject a forcing `tool_choice`, the SDK sends `auto` plus a system instruction naming the tool. |
 
 Because of these differences, prefer `WithJSONSchema` / `GenerateTyped` over
 `WithJSONMode` when you need a guaranteed shape: the schema path has a defined
@@ -264,8 +264,9 @@ behavior on every provider, including the Anthropic forced-tool fallback.
 
 !!! warning "JSON object mode is not universal"
     Bare `WithJSONMode()` (no schema) is best-effort and is not meaningfully
-    enforced by every backend. For Anthropic in particular, structured output is
-    driven by the schema path. When in doubt, supply a schema.
+    enforced by every backend. Anthropic serves it through a forced tool with an
+    open object schema, so you get a JSON object but no shape guarantee. When in
+    doubt, supply a schema.
 
 ### Checking support at runtime
 

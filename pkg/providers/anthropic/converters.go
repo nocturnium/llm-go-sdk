@@ -21,12 +21,39 @@ func cacheControlTTL(ttl time.Duration) string {
 }
 
 const (
-	contentTypeToolUse = "tool_use"
+	contentTypeToolUse          = "tool_use"
+	contentTypeRedactedThinking = "redacted_thinking"
+
+	// redactedThinkingMetadataKey is the ReasoningContent.Metadata key under which
+	// encrypted redacted_thinking blocks ([]string) are carried so they can be
+	// replayed verbatim on the next turn.
+	redactedThinkingMetadataKey = "anthropic_redacted_thinking"
 )
 
 // ErrUnsupportedImageSource is returned when an image source type is not supported.
-// Anthropic only supports base64-encoded images, not URL-based images.
-var ErrUnsupportedImageSource = errors.New("anthropic: unsupported image source type (only base64 is supported, not URL)")
+// Anthropic accepts base64 and URL image sources.
+var ErrUnsupportedImageSource = errors.New("anthropic: unsupported image source type (base64 and url are supported)")
+
+// convertUsage maps Anthropic usage onto the neutral llms.Usage. Anthropic's
+// input_tokens already excludes cached tokens (matching the Usage contract), so
+// TotalTokens is rebuilt to include the cache-read and cache-creation tokens the
+// way OpenAI's and Gemini's provider totals do.
+func convertUsage(u anthropicapi.Usage) llms.Usage {
+	usage := llms.Usage{
+		PromptTokens:        u.InputTokens,
+		CompletionTokens:    u.OutputTokens,
+		CacheReadTokens:     u.CacheReadInputTokens,
+		CacheCreationTokens: u.CacheCreationInputTokens,
+	}
+	usage.TotalTokens = totalTokens(usage)
+	return usage
+}
+
+// totalTokens is the cross-provider total: every token processed for the
+// request, cached or not.
+func totalTokens(u llms.Usage) int {
+	return u.PromptTokens + u.CacheReadTokens + u.CacheCreationTokens + u.CompletionTokens
+}
 
 // convertResponse converts an Anthropic API response to an llms.Response.
 func convertResponse(resp *anthropicapi.MessagesResponse, structuredToolName ...string) *llms.Response {
@@ -36,19 +63,15 @@ func convertResponse(resp *anthropicapi.MessagesResponse, structuredToolName ...
 	}
 
 	response := &llms.Response{
+		ID:           resp.ID,
 		Content:      anthropicapi.ExtractTextContent(resp.Content),
 		FinishReason: convertStopReason(resp.StopReason),
-		Usage: llms.Usage{
-			PromptTokens:        resp.Usage.InputTokens,
-			CompletionTokens:    resp.Usage.OutputTokens,
-			TotalTokens:         resp.Usage.InputTokens + resp.Usage.OutputTokens,
-			CacheReadTokens:     resp.Usage.CacheReadInputTokens,
-			CacheCreationTokens: resp.Usage.CacheCreationInputTokens,
-		},
+		Usage:        convertUsage(resp.Usage),
 	}
 
 	// Extract tool calls and extended-thinking blocks.
 	var reasoningText, reasoningSignature string
+	var redacted []string
 	for _, part := range resp.Content {
 		switch part.Type {
 		case contentTypeToolUse:
@@ -69,13 +92,21 @@ func convertResponse(resp *anthropicapi.MessagesResponse, structuredToolName ...
 			if part.Signature != "" {
 				reasoningSignature = part.Signature
 			}
+		case contentTypeRedactedThinking:
+			if part.Data != "" {
+				redacted = append(redacted, part.Data)
+			}
 		}
 	}
-	if reasoningText != "" || reasoningSignature != "" {
-		response.SetReasoning(&llms.ReasoningContent{
+	if reasoningText != "" || reasoningSignature != "" || len(redacted) > 0 {
+		rc := &llms.ReasoningContent{
 			Content:   reasoningText,
 			Signature: reasoningSignature,
-		})
+		}
+		if len(redacted) > 0 {
+			rc.Metadata = map[string]any{redactedThinkingMetadataKey: redacted}
+		}
+		response.SetReasoning(rc)
 	}
 
 	return response
@@ -145,13 +176,26 @@ func convertMessages(messages []llms.Message) ([]anthropicapi.Message, error) {
 		// and later turns of an agentic thinking+tools loop do not fail with
 		// "messages.N: must start with a thinking block". Only a signed block can
 		// be replayed (an unsigned summary would itself be rejected).
-		if msg.Role == llms.RoleAssistant && msg.Reasoning != nil && msg.Reasoning.Signature != "" {
-			thinking := anthropicapi.ContentPart{
-				Type:      "thinking",
-				Thinking:  msg.Reasoning.Content,
-				Signature: msg.Reasoning.Signature,
+		if msg.Role == llms.RoleAssistant && msg.Reasoning != nil {
+			var thinking []anthropicapi.ContentPart
+			if msg.Reasoning.Signature != "" {
+				thinking = append(thinking, anthropicapi.ContentPart{
+					Type:      "thinking",
+					Thinking:  msg.Reasoning.Content,
+					Signature: msg.Reasoning.Signature,
+				})
 			}
-			content = append([]anthropicapi.ContentPart{thinking}, content...)
+			// Encrypted redacted_thinking blocks are opaque and must be echoed
+			// back verbatim so the turn stays valid.
+			for _, data := range redactedThinkingBlocks(msg.Reasoning) {
+				thinking = append(thinking, anthropicapi.ContentPart{
+					Type: contentTypeRedactedThinking,
+					Data: data,
+				})
+			}
+			if len(thinking) > 0 {
+				content = append(thinking, content...)
+			}
 		}
 
 		// Apply a per-message cache breakpoint to the last content block so the
@@ -187,8 +231,8 @@ func convertContentParts(parts []llms.ContentPart) ([]anthropicapi.ContentPart, 
 			})
 		case llms.PartTypeImage:
 			if part.Image != nil {
-				// Anthropic requires base64 images with source object
-				if part.Image.Source == llms.ImageSourceBase64 {
+				switch part.Image.Source {
+				case llms.ImageSourceBase64:
 					result = append(result, anthropicapi.ContentPart{
 						Type: "image",
 						Source: &anthropicapi.ImageSource{
@@ -197,8 +241,13 @@ func convertContentParts(parts []llms.ContentPart) ([]anthropicapi.ContentPart, 
 							Data:      part.Image.Data,
 						},
 					})
-				} else {
-					// Return error for unsupported image sources (e.g., URL)
+				case llms.ImageSourceURL:
+					// Anthropic fetches the image server-side from a public URL.
+					result = append(result, anthropicapi.ContentPart{
+						Type:   "image",
+						Source: &anthropicapi.ImageSource{Type: "url", URL: part.Image.Data},
+					})
+				default:
 					return nil, fmt.Errorf("%w: got %q", ErrUnsupportedImageSource, part.Image.Source)
 				}
 			}
@@ -260,5 +309,28 @@ func convertStopReason(reason string) llms.FinishReason {
 		return llms.FinishReasonStop
 	default:
 		return llms.FinishReason(reason)
+	}
+}
+
+// redactedThinkingBlocks returns the encrypted redacted_thinking payloads stored
+// on a ReasoningContent by convertResponse / Stream, tolerating both the
+// []string form and a JSON-roundtripped []any form.
+func redactedThinkingBlocks(rc *llms.ReasoningContent) []string {
+	if rc == nil || rc.Metadata == nil {
+		return nil
+	}
+	switch v := rc.Metadata[redactedThinkingMetadataKey].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			if s, ok := e.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }

@@ -205,7 +205,7 @@ Providers whose default capability set advertises vision:
 | Provider | Vision | Notes |
 | --- | --- | --- |
 | `openai` | Yes | GPT-4o and other GPT-4 vision models |
-| `anthropic` | Yes | All Claude 3+ models |
+| `anthropic` | Yes | All Claude 3+ models; base64 and URL sources |
 | `gemini` | Yes | All Gemini models |
 | `azure` | Yes | Model/deployment dependent |
 | `groq` | Yes | Llama 3.2 Vision models |

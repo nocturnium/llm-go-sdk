@@ -59,6 +59,9 @@ Token usage is normalized so cost is computed consistently across providers:
 - `Usage.CacheReadTokens` — tokens served from cache (discounted).
 - `Usage.CacheCreationTokens` — tokens written to cache (Anthropic).
 
+`Usage.PromptTokens` always excludes cached tokens and `Usage.TotalTokens` always
+includes them, on every provider, so the two are comparable across backends.
+
 ```go
 fmt.Printf("prompt=%d cache_read=%d cache_creation=%d\n",
     resp.Usage.PromptTokens, resp.Usage.CacheReadTokens, resp.Usage.CacheCreationTokens)

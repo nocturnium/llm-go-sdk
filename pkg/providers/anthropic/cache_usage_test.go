@@ -27,10 +27,13 @@ func TestConvertResponse_CacheUsage(t *testing.T) {
 
 	result := convertResponse(&resp)
 
+	// Anthropic's input_tokens already excludes cached tokens. TotalTokens is
+	// rebuilt to include them (10 + 7 + 3 + 5) so it matches the provider-total
+	// semantics of the OpenAI and Gemini paths.
 	assertUsage(t, result.Usage, llms.Usage{
 		PromptTokens:        10,
 		CompletionTokens:    5,
-		TotalTokens:         15,
+		TotalTokens:         25,
 		CacheReadTokens:     7,
 		CacheCreationTokens: 3,
 	})
