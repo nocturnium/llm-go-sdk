@@ -1,6 +1,6 @@
 # Providers
 
-llm-go-sdk ships first-class clients for **19 providers** behind a single
+llm-go-sdk ships first-class clients for **20 providers** behind a single
 [`llms.LLM`](index.md) interface. Each provider lives in its own subpackage
 under `pkg/providers/<name>` and is constructed with functional options, for
 example:
@@ -36,6 +36,7 @@ code works regardless of which provider you picked.
 | Provider | Import path | Auth / host env var(s) | API style | Default chat model | Notes |
 |----------|-------------|------------------------|-----------|--------------------|-------|
 | openai | `pkg/providers/openai` | `OPENAI_API_KEY` | OpenAI native | `gpt-4o` | Chat, vision, tools, embeddings (`text-embedding-3-small`) |
+| openrouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` | Images, async video, speech, transcription; embeddings require a model option |
 | anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | Native (Messages) | `claude-sonnet-4-20250514` | Vision, tools, thinking, prompt caching |
 | gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-2.5-flash` | Vision, tools, embeddings (`text-embedding-004`) |
 | azure | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` (or `AZURE_OPENAI_KEY`) + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | deployment-dependent | Uses deployment + endpoint, not a model name |
@@ -86,7 +87,7 @@ Azure differs: it uses `WithEndpoint(...)` and `WithDeployment(...)` instead of
 ## Construct by name
 
 You can also build any chat provider from a string name. Blank-import the `all`
-package to register the 17 auto-registered chat providers, then call `llms.New`:
+package to register the 18 auto-registered chat providers, then call `llms.New`:
 
 ```go
 import (
@@ -127,19 +128,45 @@ Other helpers:
 - `llms.RegisteredProviders() []string` lists the registered chat providers.
 
 !!! warning "Two providers are not auto-registered: infinity and huggingface"
-    The `all` package registers 17 chat providers but **not** infinity or
+    The `all` package registers 18 chat providers but **not** infinity or
     huggingface. Infinity does not implement chat generation (embeddings and
     reranking only). HuggingFace *does* serve chat (and embeddings), but it needs
     an explicit Inference-Endpoint URL and a chat-vs-embeddings mode, so it cannot
     be built from a name alone. Construct either one directly —
     `infinity.New(...)` / `huggingface.New(...)`. The auto-registered set is:
     anthropic, azure, cerebras, deepseek, featherless, fireworks, gemini, groq,
-    llamacpp, mistral, ollama, openai, perplexity, runpod, synthetic, togetherai,
+    llamacpp, mistral, ollama, openai, openrouter, perplexity, runpod, synthetic, togetherai,
     zai.
 
 ---
 
 ## Per-provider notes
+
+### OpenRouter — chat and native media
+
+```go
+import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openrouter"
+
+client, err := openrouter.New(
+    openrouter.WithSiteURL("https://example.com"), // optional HTTP-Referer
+    openrouter.WithAppName("My app"),             // optional X-Title
+)
+```
+
+Chat defaults to `google/gemini-3.5-flash-lite`, verified in public discovery on
+2026-09-05. Image and video catalogs are available through `ListImageModels` and
+`ListVideoModels`. `ListModels` fetches `/models`, supports local type/limit
+filtering, and rejects cursors. Model metadata is uncached; token prices are not
+inferred from the catalog. Supply an embedding model with `WithEmbeddingModel`.
+
+Media responses preserve reported costs. `WithUsageLookup()` optionally fetches
+speech cost using the response's generation ID. Lookup errors return the audio
+alongside the error; avoid repeating the paid synthesis call. The speech default
+`fish-audio/s2.1-pro` was live-verified on 2026-09-05 via
+[GET /models?output_modalities=speech](https://openrouter.ai/api/v1/models?output_modalities=speech).
+`ListSpeechModels` returns typed entries with reported character pricing.
+Unset voices are omitted; specify `WithSpeechVoice` for providers requiring one.
+See the [media guide](guides/media.md) for defaults and option mappings.
 
 ### Azure OpenAI — deployments & endpoint
 

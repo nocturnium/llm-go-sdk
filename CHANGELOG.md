@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- OpenRouter chat and media provider with native image/video discovery, polling video jobs, speech and transcription, provider-reported media costs, optional speech usage lookup, and HTTP-Referer/X-Title attribution options.
+
 - OpenAI image generation and editing, speech synthesis and SSE streaming, multipart transcription, and polling video jobs, with shared configurable OpenAI-compatible media routes and media pricing.
 
 ### Changed

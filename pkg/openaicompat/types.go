@@ -425,6 +425,7 @@ type ImageEditRequest struct {
 
 // ImageData describes one generated image.
 type ImageData struct {
+	MediaType     string `json:"media_type,omitempty"`
 	B64JSON       string `json:"b64_json,omitempty"`
 	URL           string `json:"url,omitempty"`
 	RevisedPrompt string `json:"revised_prompt,omitempty"`
@@ -432,9 +433,12 @@ type ImageData struct {
 
 // ImageUsage describes image or audio token accounting.
 type ImageUsage struct {
-	InputTokens        int `json:"input_tokens,omitempty"`
-	OutputTokens       int `json:"output_tokens,omitempty"`
-	TotalTokens        int `json:"total_tokens,omitempty"`
+	PromptTokens       int      `json:"prompt_tokens,omitempty"`
+	CompletionTokens   int      `json:"completion_tokens,omitempty"`
+	Cost               *float64 `json:"cost,omitempty"`
+	InputTokens        int      `json:"input_tokens,omitempty"`
+	OutputTokens       int      `json:"output_tokens,omitempty"`
+	TotalTokens        int      `json:"total_tokens,omitempty"`
 	InputTokensDetails *struct {
 		TextTokens  int `json:"text_tokens,omitempty"`
 		ImageTokens int `json:"image_tokens,omitempty"`
@@ -459,13 +463,31 @@ type ImageStreamEvent struct {
 
 // SpeechRequest requests binary audio or SSE audio deltas.
 type SpeechRequest struct {
-	Model          string   `json:"model"`
-	Input          string   `json:"input"`
-	Voice          string   `json:"voice"`
-	Instructions   string   `json:"instructions,omitempty"`
-	ResponseFormat string   `json:"response_format,omitempty"`
-	Speed          *float64 `json:"speed,omitempty"`
-	StreamFormat   string   `json:"stream_format,omitempty"`
+	ExtraBody      map[string]any `json:"-"`
+	Model          string         `json:"model"`
+	Input          string         `json:"input"`
+	Voice          string         `json:"voice"`
+	Instructions   string         `json:"instructions,omitempty"`
+	ResponseFormat string         `json:"response_format,omitempty"`
+	Speed          *float64       `json:"speed,omitempty"`
+	StreamFormat   string         `json:"stream_format,omitempty"`
+}
+
+// MarshalJSON merges extensions while reserving all standard speech fields.
+func (r SpeechRequest) MarshalJSON() ([]byte, error) {
+	type plain SpeechRequest
+	extra := make(map[string]any, len(r.ExtraBody))
+	for k, v := range r.ExtraBody {
+		switch k {
+		case "model", "input", "voice", "instructions", "response_format", "speed", "stream_format":
+		default:
+			extra[k] = v
+		}
+	}
+	if len(extra) == 0 {
+		return json.Marshal(plain(r))
+	}
+	return marshalMediaExtra(plain(r), extra)
 }
 
 // SpeechStreamEvent contains base64 audio or terminal usage; Err reports stream failures.
@@ -502,10 +524,11 @@ type TranscriptionResponse struct {
 
 // TranscriptionUsage reports either duration billing or token billing.
 type TranscriptionUsage struct {
-	Type              string  `json:"type"`
-	Seconds           float64 `json:"seconds,omitempty"`
-	TotalTokens       int     `json:"total_tokens,omitempty"`
-	InputTokens       int     `json:"input_tokens,omitempty"`
+	Cost              *float64 `json:"cost,omitempty"`
+	Type              string   `json:"type"`
+	Seconds           float64  `json:"seconds,omitempty"`
+	TotalTokens       int      `json:"total_tokens,omitempty"`
+	InputTokens       int      `json:"input_tokens,omitempty"`
 	InputTokenDetails struct {
 		TextTokens  int `json:"text_tokens,omitempty"`
 		AudioTokens int `json:"audio_tokens,omitempty"`

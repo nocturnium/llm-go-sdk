@@ -11,6 +11,8 @@ type Provider string
 
 // Provider constants define the supported LLM providers.
 const (
+	// ProviderOpenRouter is the OpenRouter provider.
+	ProviderOpenRouter Provider = "openrouter"
 	// ProviderOpenAI is the OpenAI provider.
 	ProviderOpenAI      Provider = "openai"
 	ProviderTogetherAI  Provider = "togetherai"

@@ -163,6 +163,7 @@ func TestTranscriptionUsage(t *testing.T) {
 		quantity             float64
 		cost                 *float64
 	}{
+		{"openrouter tokens without type", "openai/gpt-4o-transcribe", `{"text":"Hi","usage":{"total_tokens":10,"input_tokens":7,"output_tokens":3,"cost":0.0000475}}`, "", 0, floatPointer(.0000475)},
 		{"duration", "whisper-1", `{"duration":999,"usage":{"type":"duration","seconds":120}}`, llms.MediaUnitMinute, 2, nil},
 		{"tokens", "gpt-4o-transcribe", `{"duration":999,"usage":{"type":"tokens","total_tokens":25,"input_tokens":16,"input_token_details":{"text_tokens":4,"audio_tokens":12},"output_tokens":9}}`, llms.MediaUnitMTokenOut, .000009, floatPointer(.000172)},
 		{"mini", "gpt-4o-mini-transcribe", `{"usage":{"type":"tokens","input_token_details":{"text_tokens":4,"audio_tokens":12},"output_tokens":9}}`, llms.MediaUnitMTokenOut, .000009, floatPointer(.000086)},
@@ -215,5 +216,80 @@ func TestVideoStatusCostAndUnknown(t *testing.T) {
 		if out := ConvertVideoStatus(&obj); out.Cost != nil {
 			t.Fatal(out)
 		}
+	}
+}
+
+func TestMediaReportedCostAndMIME(t *testing.T) {
+	cost := 0.0
+	out, err := ConvertImageResponse(&ImageResponse{Data: []ImageData{{B64JSON: "aGk=", MediaType: "image/jpeg"}}, Usage: &ImageUsage{Cost: &cost}}, "model", "png")
+	if err != nil || out.Images[0].MIMEType != "image/jpeg" || out.Usage.Cost == nil || *out.Usage.Cost != 0 {
+		t.Fatal(out, err)
+	}
+	for _, payload := range []string{
+		`{"text":"hello","usage":{"seconds":120,"cost":0.25}}`,
+		`{"text":"hello","usage":{"type":"duration","seconds":120,"cost":0.25}}`,
+	} {
+		var wire TranscriptionResponse
+		if err := json.Unmarshal([]byte(payload), &wire); err != nil {
+			t.Fatal(err)
+		}
+		out := ConvertTranscriptionResponse(&wire, "openai/whisper-1")
+		if out.DurationSeconds != 120 || out.Usage.Unit != llms.MediaUnitMinute || out.Usage.Quantity != 2 || out.Usage.Cost == nil || *out.Usage.Cost != .25 {
+			t.Fatal(out)
+		}
+	}
+	outT := ConvertTranscriptionResponse(&TranscriptionResponse{Usage: &TranscriptionUsage{Type: "tokens", Cost: &cost, OutputTokens: 10}}, "gpt-4o-transcribe")
+	if outT.Usage.Cost == nil || *outT.Usage.Cost != 0 {
+		t.Fatal("provider cost did not override estimate")
+	}
+	for _, value := range []any{ImageData{}, ImageUsage{}, TranscriptionUsage{}} {
+		data, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "media_type") || strings.Contains(string(data), "cost") {
+			t.Fatal(string(data))
+		}
+	}
+}
+
+func TestImageCompletionTokens(t *testing.T) {
+	for _, tc := range []struct {
+		out, completion int
+		quantity        float64
+		unit            llms.MediaUnit
+	}{
+		{0, 4175, 4175.0 / 1e6, llms.MediaUnitMTokenOut},
+		{10, 4175, 10.0 / 1e6, llms.MediaUnitMTokenOut},
+		{0, 0, 0, ""},
+	} {
+		usage := tokenMediaUsage(&ImageUsage{OutputTokens: tc.out, CompletionTokens: tc.completion, Cost: floatPointer(.04)})
+		if usage.Quantity != tc.quantity || usage.Unit != tc.unit || *usage.Cost != .04 {
+			t.Fatal(usage)
+		}
+	}
+}
+
+func TestSpeechRequestExtras(t *testing.T) {
+	req := BuildSpeechRequest("model", "hello", &llms.SpeechOptions{})
+	original, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(original) != `{"model":"model","input":"hello","voice":"alloy","response_format":"mp3"}` {
+		t.Fatal(string(original))
+	}
+	req.ExtraBody = map[string]any{"provider": map[string]any{}, "model": "bad", "speed": 99, "voice": "bad"}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	json.Unmarshal(data, &body)
+	if body["model"] != "model" || body["voice"] != "alloy" || body["provider"] == nil {
+		t.Fatal(body)
+	}
+	if _, ok := body["speed"]; ok {
+		t.Fatal(body)
 	}
 }

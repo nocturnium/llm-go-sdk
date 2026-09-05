@@ -17,6 +17,7 @@ import (
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/mistral"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/ollama"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openrouter"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/perplexity"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/runpod"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/synthetic"

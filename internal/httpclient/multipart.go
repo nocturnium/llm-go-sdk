@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -42,6 +41,9 @@ func (c *Client) DoMultipart(ctx context.Context, method, path string, fields ma
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if strings.ContainsAny(name, "\r\n") {
+			return fmt.Errorf("invalid multipart field")
+		}
 		value := fields[name]
 		if err := writer.WriteField(name, value); err != nil {
 			return fmt.Errorf("write multipart field: %w", err)
@@ -120,8 +122,8 @@ func writeMultipartFile(writer *multipart.Writer, file MultipartFile) error {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	if strings.ContainsAny(contentType, "\r\n") {
-		return fmt.Errorf("invalid multipart content type")
+	if strings.ContainsAny(contentType, "\r\n") || strings.ContainsAny(file.Field, "\r\n") || strings.ContainsAny(file.Filename, "\r\n") {
+		return fmt.Errorf("invalid multipart field, filename or content type")
 	}
 	if file.Filename == "" {
 		if err := writer.WriteField(file.Field, string(file.Data)); err != nil {
@@ -129,8 +131,13 @@ func writeMultipartFile(writer *multipart.Writer, file MultipartFile) error {
 		}
 		return nil
 	}
+	// mime.FormatMediaType sorts parameters and leaves simple tokens unquoted,
+	// which some servers (OpenRouter) reject. RFC 7578 §4.2 expects
+	// name="..." then filename="..." with quoted values, matching
+	// multipart.Writer.CreateFormFile.
 	header := make(textproto.MIMEHeader)
-	header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{"name": file.Field, "filename": file.Filename}))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
+		escapeMultipartQuotes(file.Field), escapeMultipartQuotes(file.Filename)))
 	header.Set("Content-Type", contentType)
 	part, err := writer.CreatePart(header)
 	if err != nil {
@@ -140,4 +147,10 @@ func writeMultipartFile(writer *multipart.Writer, file MultipartFile) error {
 		return fmt.Errorf("write multipart file: %w", err)
 	}
 	return nil
+}
+
+// escapeMultipartQuotes mirrors the escaping multipart.Writer applies to
+// Content-Disposition parameter values.
+func escapeMultipartQuotes(v string) string {
+	return strings.NewReplacer("\\", "\\\\", `"`, `\"`).Replace(v)
 }

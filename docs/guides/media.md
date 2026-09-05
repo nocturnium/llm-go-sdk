@@ -1,7 +1,7 @@
 # Media Generation
 
 The media core defines provider-independent interfaces for images, video, speech,
-and transcription. OpenAI implements these contracts using shared media routes. Media capabilities are separate
+and transcription. OpenAI and OpenRouter implement these contracts using shared and native media routes. Media capabilities are separate
 from the `llms.LLM` chat interface.
 
 ## Interfaces
@@ -93,6 +93,58 @@ unsupported operations return the corresponding `Err*NotSupported`.
 | Provider | Images | Video | Speech | Transcription |
 | --- | --- | --- | --- | --- |
 | OpenAI | Generation + edits (`gpt-image-1.5`); ignores `Seed`, `AspectRatio`, `NegativePrompt`, `SafetyTolerance` | Async MP4 (`sora-2`); ignores `Audio`, `LastFrame`, `ReferenceImages`, `Seed`, `NegativePrompt` | Binary + SSE (`gpt-4o-mini-tts`) | Multipart (`gpt-4o-mini-transcribe`) |
+| OpenRouter | Generation (`google/gemini-3.1-flash-lite-image`); native `/images` | Native async MP4 (`google/veo-3.1-lite`) | Binary mp3/pcm; optional cost lookup | Multipart JSON/verbose JSON (`openai/whisper-1`) |
+
+### OpenRouter
+
+`GenerateImage` maps `WithImageAspectRatio` and `WithImageSeed` to native body
+keys. Pass `resolution` (for example `"1K"`) and `input_references` through
+`WithImageExtra`; extras merge last and override typed options. The provider's
+`media_type` overrides the requested image MIME type. Image edits, image streaming
+on the core interface, speech SSE and streaming transcription are unsupported.
+`NegativePrompt` and `SafetyTolerance` have no verified image wire mapping.
+
+`ListImageModels` and `ListVideoModels` return typed native discovery entries.
+Speech defaults to mp3 and `fish-audio/s2.1-pro`, live-verified on 2026-09-05 via
+[GET /models?output_modalities=speech](https://openrouter.ai/api/v1/models?output_modalities=speech).
+`ListSpeechModels` returns this catalog and reported `pricing.input_char`.
+An unset voice is omitted; providers choose their defaults or require an explicit
+`WithSpeechVoice`. Transcription uploads use `audio.<ext>` filenames derived from
+`MediaInput.MIMEType` and include the content type. Empty or unsupported MIME types
+return `ErrInvalidParameters` listing supported audio types.
+
+Image, transcription and video responses retain `usage.cost` without static
+`MediaPricing` rows. Transcription usage with seconds and no type bills minutes.
+`openrouter.WithUsageLookup()` enables one post-speech `GET /generation?id=...`
+using `X-Generation-Id`. Missing IDs or costs leave usage unknown. Lookup failures
+leave Cost nil and return successful audio.
+`SpeechResponse.Metadata["generation_id"]` retains `X-Generation-Id` even when
+lookup is disabled. Call `client.GenerationCost(ctx, id)` to retrieve cost later
+or handle lookup errors explicitly. `WithSpeechExtra` forwards `input_references`
+and `provider`; standard speech fields cannot be overridden by extras.
+This lookup is disabled by default.
+
+Video sends integer `duration`, `resolution`, `aspect_ratio`, `generate_audio`,
+`seed`, and first/last `frame_images`. Frames accept URL or inline image Data;
+FileID and typed ReferenceImages are rejected because their mappings are unverified.
+Frames serialize as `{type:"image_url", image_url:{url:...}, frame_type:...}`.
+Pass native `input_references` and HTTPS-only `callback_url` through `WithVideoExtra`.
+Additional extras (`size`, `provider`, `upscale_factor`, `creativity` and model-specific
+passthrough keys) merge last; typed field names remain reserved, including when
+unset. `NegativePrompt` and `output_format` are ignored because neither appears in
+the [video request schema](https://openrouter.ai/openapi.json), checked 2026-09-05.
+Moderation uses input stage until `in_progress` has been observed, then output stage.
+An unspecified duration leaves the video usage unit empty.
+`Wait` downloads every content index and retains each unsigned URL. Expired jobs
+wrap `ErrAssetExpired`; moderation maps to `ModerationError`. Cancellation is
+unsupported. The default `google/veo-3.1-lite` has the lowest directly comparable
+published per-second rate ($0.03 at 720p without audio) in discovery on 2026-09-05;
+use a supported duration (minimum 4 seconds), `WithVideoResolution("720p")` and
+`WithVideoAudio(false)` for that rate. Token-priced models cannot be ranked without
+a token conversion formula. The separately gated 480p live test uses the listed
+`x-ai/grok-imagine-video` model at one second ($0.05 minimum clip).
+
+### OpenAI
 
 OpenAI image edits and transcription accept inline `MediaInput.Data` uploads.
 Set `MIMEType` so audio receives the correct upload extension. Word timestamps

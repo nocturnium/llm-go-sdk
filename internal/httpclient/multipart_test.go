@@ -271,3 +271,40 @@ func TestClient_DoMultipart_PlainRepeatedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClient_DoMultipart_FilePartDispositionIsRFC7578(t *testing.T) {
+	var raw []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true))
+	var out map[string]any
+	err := client.DoMultipart(context.Background(), http.MethodPost, server.URL+"/upload", nil,
+		[]MultipartFile{{Field: "file", Filename: `au"dio.mp3`, ContentType: "audio/mpeg", Data: []byte("x")}}, nil, &out)
+	if err != nil {
+		t.Fatalf("DoMultipart: %v", err)
+	}
+	want := `Content-Disposition: form-data; name="file"; filename="au\"dio.mp3"`
+	if !strings.Contains(string(raw), want) {
+		t.Fatalf("file part disposition not RFC 7578 shaped; body:\n%s", raw)
+	}
+}
+
+func TestMultipartRejectsHeaderInjection(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("request sent") }))
+	defer server.Close()
+	c := NewClient(WithAllowHTTP(true), WithAllowPrivateIPs(true))
+	for _, file := range []MultipartFile{
+		{Field: "file", Filename: "audio.mp3\r\nX: 1"},
+		{Field: "file\nX: 1", Filename: "audio.mp3"},
+		{Field: "file", Filename: "audio.mp3", ContentType: "audio/mpeg\rX: 1"},
+	} {
+		if err := c.DoMultipart(context.Background(), http.MethodPost, server.URL, nil, []MultipartFile{file}, nil, nil); err == nil {
+			t.Fatal("accepted header injection")
+		}
+	}
+}

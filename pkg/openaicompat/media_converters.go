@@ -34,6 +34,9 @@ func ConvertImageResponse(resp *ImageResponse, model, format string) (*llms.Imag
 	out := &llms.ImageResponse{Model: model, Images: make([]llms.MediaAsset, 0, len(resp.Data))}
 	for _, item := range resp.Data {
 		asset := llms.MediaAsset{URL: item.URL, RevisedPrompt: item.RevisedPrompt, MIMEType: "image/" + format}
+		if item.MediaType != "" {
+			asset.MIMEType = item.MediaType
+		}
 		if item.B64JSON != "" {
 			data, err := base64.StdEncoding.DecodeString(item.B64JSON)
 			if err != nil {
@@ -50,7 +53,16 @@ func ConvertImageResponse(resp *ImageResponse, model, format string) (*llms.Imag
 }
 
 func tokenMediaUsage(usage *ImageUsage) llms.MediaUsage {
-	return llms.MediaUsage{Unit: llms.MediaUnitMTokenOut, Quantity: float64(usage.OutputTokens) / 1e6}
+	tokens := usage.OutputTokens
+	if tokens == 0 {
+		tokens = usage.CompletionTokens
+	}
+	out := llms.MediaUsage{Cost: usage.Cost}
+	if tokens > 0 {
+		out.Unit = llms.MediaUnitMTokenOut
+		out.Quantity = float64(tokens) / 1e6
+	}
+	return out
 }
 
 // BuildSpeechRequest converts options with an mp3 container and alloy voice by default.
@@ -109,7 +121,11 @@ func ConvertTranscriptionResponse(resp *TranscriptionResponse, model string) *ll
 		out.Words = append(out.Words, llms.TranscriptWord{Start: w.Start, End: w.End, Word: w.Word})
 	}
 	if u := resp.Usage; u != nil {
-		switch u.Type {
+		usageType := u.Type
+		if usageType == "" && u.Seconds > 0 {
+			usageType = "duration"
+		}
+		switch usageType {
 		case "duration":
 			out.DurationSeconds = u.Seconds
 			out.Usage = llms.MediaUsage{Unit: llms.MediaUnitMinute, Quantity: u.Seconds / 60}
@@ -119,6 +135,9 @@ func ConvertTranscriptionResponse(resp *TranscriptionResponse, model string) *ll
 				cost := (float64(u.InputTokenDetails.AudioTokens)*rates.audioIn + float64(u.InputTokenDetails.TextTokens)*rates.textIn + float64(u.OutputTokens)*rates.textOut) / 1e6
 				out.Usage.Cost = &cost
 			}
+		}
+		if u.Cost != nil {
+			out.Usage.Cost = u.Cost
 		}
 	} else if resp.Duration > 0 {
 		out.Usage = llms.MediaUsage{Unit: llms.MediaUnitMinute, Quantity: resp.Duration / 60}
