@@ -276,8 +276,9 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		var lastContent string
 
 		// finish delivers the terminal chunk. It runs on message_stop and, like
-		// the other providers, on a clean EOF so a proxy that closes the
-		// connection after the last event is not reported as an error.
+		// the other providers, on a clean EOF (one arriving after message_delta
+		// reported the stop reason) so a proxy that closes the connection after
+		// the last event is not reported as an error.
 		finish := func() {
 			// A tool_use block that never received content_block_stop (EOF
 			// mid-block) is still surfaced rather than dropped.
@@ -356,9 +357,14 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					sender.ForwardTerminalOnEarlyExit(llms.SendContextCanceled)
 					return
 				}
-				if errors.Is(err, io.EOF) {
+				if errors.Is(err, io.EOF) && finishReason != "" {
 					finish()
 					return
+				}
+				if errors.Is(err, io.EOF) {
+					// EOF before message_delta: the stream was truncated. Report it
+					// rather than delivering a Done chunk that looks like success.
+					err = fmt.Errorf("stream ended before message_delta: %w", io.ErrUnexpectedEOF)
 				}
 				streamErr := &llms.StreamError{
 					Cause:       anthropicapi.WrapError("stream read", err),
@@ -605,15 +611,16 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 		}
 	}
 
-	// Add tool choice if specified. Anthropic rejects extended thinking combined
-	// with a forcing tool_choice (type "any" or "tool") — only "auto"/"none" are
-	// allowed — and Fable 5.1 / Mythos reject forcing choices outright, so
-	// soften a forcing choice to "auto" in those cases, keeping the request
-	// valid rather than failing with HTTP 400.
+	// Add tool choice if specified. Budget-based extended thinking (pre-4.6
+	// models) rejects a forcing tool_choice (type "any" or "tool") — only
+	// "auto"/"none" are allowed — and Fable 5.1 / Mythos reject forcing choices
+	// outright, so soften a forcing choice to "auto" in those cases, keeping the
+	// request valid rather than failing with HTTP 400. Adaptive thinking (4.6+)
+	// and Fable 5 accept a forcing choice, verified live.
 	if opts.ToolChoice != nil {
 		forcing := opts.ToolChoice.Mode == llms.ToolChoiceRequired || opts.ToolChoice.Mode == llms.ToolChoiceTool
-		thinkingOn := req.Thinking != nil && req.Thinking.Type != "disabled" || gen == genAlwaysOn
-		if forcing && (thinkingOn || rejectsForcedToolChoice(model)) {
+		budgetThinking := req.Thinking != nil && req.Thinking.Type == "enabled"
+		if forcing && (budgetThinking || rejectsForcedToolChoice(model)) {
 			req.ToolChoice = anthropicapi.ToolChoiceAuto{Type: "auto"}
 		} else {
 			req.ToolChoice = convertToolChoice(opts.ToolChoice)
@@ -635,9 +642,10 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 //   - Fable/Mythos: thinking is always on and the parameter is omitted; only
 //     output_config.effort is sent. Enabled=false is ignored (400 otherwise).
 //
-// A forced structured-output tool cannot be combined with thinking (Anthropic
-// rejects a forcing tool_choice alongside thinking), so thinking is skipped in
-// that case on generations where it can be turned off.
+// A forced structured-output tool cannot be combined with budget-based
+// thinking (pre-4.6 models reject a forcing tool_choice alongside thinking), so
+// thinking is skipped in that case on legacy models only; adaptive thinking
+// accepts a forcing tool_choice.
 func applyThinking(req *anthropicapi.MessagesRequest, gen modelGeneration, rc *llms.ReasoningConfig, structured bool) {
 	if rc == nil {
 		return
@@ -657,7 +665,7 @@ func applyThinking(req *anthropicapi.MessagesRequest, gen modelGeneration, rc *l
 			req.Thinking = &anthropicapi.ThinkingConfig{Type: "disabled"}
 			return
 		}
-		if !enabled || structured {
+		if !enabled {
 			return
 		}
 		req.Thinking = &anthropicapi.ThinkingConfig{Type: "adaptive"}

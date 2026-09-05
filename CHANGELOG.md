@@ -16,8 +16,9 @@ All notable changes to this project will be documented in this file.
     being ignored.
   - A streamed tool call with no arguments yields `Arguments == "{}"` rather than
     an empty string that fails to parse.
-  - A stream closed by the server before `message_stop` completes normally instead
-    of surfacing a `StreamError`.
+  - A stream closed by the server after `message_delta` but before `message_stop`
+    completes normally instead of surfacing a `StreamError`; an EOF before
+    `message_delta` is still reported as a truncated-stream error.
   - A system message anywhere but `messages[0]` is rejected by validation instead
     of being dropped.
   - `llms.WithExtraBody` / `WithExtraBodyParam` are merged into the request body
@@ -36,7 +37,9 @@ All notable changes to this project will be documented in this file.
     (Opus 4.7/4.8, Opus 5, Sonnet 5, Fable/Mythos). Opus 4.6, Sonnet 4.6 and
     earlier, previously stripped by an over-broad match, receive them again.
   - A forcing `tool_choice` is softened to `auto` on Fable 5.1 / Mythos, which
-    reject it.
+    reject it. The existing softening for extended thinking now applies only to
+    budget-based thinking (Claude <= 4.5); adaptive thinking accepts a forcing
+    choice, verified live on Opus 4.6 and Sonnet 5.
 
 ### Added
 

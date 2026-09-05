@@ -452,4 +452,61 @@ func TestBuildRequest_ForcedToolChoiceSoftenedOnFable51(t *testing.T) {
 	}
 }
 
+func TestBuildRequest_AdaptiveThinkingKeepsForcedToolChoiceAndStructured(t *testing.T) {
+	tool := llms.Tool{Type: llms.ToolTypeFunction, Function: &llms.FunctionDefinition{Name: "f"}}
+	for _, model := range []string{"claude-opus-4-6", "claude-sonnet-5", "claude-fable-5"} {
+		c := newTestClientFor(t, model)
+		req, err := c.buildRequest(userMsg("x"), llms.ApplyOptions(
+			llms.WithReasoningEffort(llms.ReasoningEffortLow),
+			llms.WithTools([]llms.Tool{tool}), llms.WithToolChoiceRequired()), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := req.ToolChoice.(anthropicapi.ToolChoiceAny); !ok {
+			t.Errorf("%s: forced tool_choice must be preserved with adaptive thinking, got %#v", model, req.ToolChoice)
+		}
+
+		req, err = c.buildRequest(userMsg("x"), llms.ApplyOptions(
+			llms.WithReasoningEffort(llms.ReasoningEffortLow), llms.WithJSONMode()), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := req.ToolChoice.(anthropicapi.ToolChoiceTool); !ok {
+			t.Errorf("%s: structured output must force the tool, got %#v", model, req.ToolChoice)
+		}
+		if classifyModel(model) != genAlwaysOn && (req.Thinking == nil || req.Thinking.Type != "adaptive") {
+			t.Errorf("%s: structured output must keep adaptive thinking, got %+v", model, req.Thinking)
+		}
+	}
+}
+
+func TestStream_EOFBeforeMessageDeltaIsAnError(t *testing.T) {
+	events := []string{
+		sseMessageStart,
+		`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}`,
+		// connection dropped mid-message
+	}
+	c := sseServer(t, events)
+	chunks, err := c.Stream(context.Background(), userMsg("hi"))
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	var streamErr error
+	for ch := range chunks {
+		if ch.Error != nil {
+			streamErr = ch.Error
+		}
+	}
+	var se *llms.StreamError
+	if !errors.As(streamErr, &se) {
+		t.Fatalf("expected StreamError for truncated stream, got %v", streamErr)
+	}
+	if se.LastContent != "Hel" {
+		t.Errorf("LastContent = %q", se.LastContent)
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
