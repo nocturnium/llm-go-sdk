@@ -51,11 +51,12 @@ picks the right one from the model name:
 - **Fable / Mythos**: thinking is always on and the parameter is omitted; only
   `output_config.effort` is sent. `Enabled: false` is ignored.
 
-Two Anthropic-only adjustments are applied silently to keep requests valid:
-a forcing `tool_choice` (required or a named tool) is softened to `auto` while
-thinking is on, and a JSON-schema / JSON-mode request disables thinking on
-generations where it can be turned off, because Anthropic rejects thinking
-alongside a forced tool.
+Two Anthropic-only adjustments are applied silently on budget-based models
+(Claude 4.5 and earlier) to keep requests valid: a forcing `tool_choice`
+(required or a named tool) is softened to `auto` while thinking is on, and a
+JSON-schema / JSON-mode request disables thinking, because those models reject
+thinking alongside a forced tool. Adaptive thinking on 4.6 and later accepts a
+forcing `tool_choice`, so nothing is changed there.
 
 ## Reading reasoning output
 

@@ -45,17 +45,19 @@
 //   - temperature and top_p are dropped for Opus 4.7/4.8, Opus 5, Sonnet 5 and
 //     Fable/Mythos, which reject them. FrequencyPenalty and PresencePenalty have
 //     no Anthropic equivalent and are never sent. Message.Name is not sent.
-//   - Extended thinking silently softens a forcing tool_choice to "auto" and
-//     raises max_tokens above the budget on budget-based models. Fable 5.1 and
-//     Mythos reject a forcing tool_choice outright, so it is softened there too.
+//   - Budget-based extended thinking (Claude <= 4.5) silently softens a forcing
+//     tool_choice to "auto" and raises max_tokens above the budget. Fable 5.1
+//     and Mythos reject a forcing tool_choice outright, so it is softened there
+//     too. Adaptive thinking (4.6+) keeps a forcing tool_choice as given.
 //   - JSON output is served through a forced tool; JSONSchema.Strict is ignored.
-//     Requesting JSON disables thinking on generations where it can be turned
-//     off, because Anthropic rejects thinking alongside a forced tool.
+//     Requesting JSON disables budget-based thinking on Claude <= 4.5, because
+//     those models reject thinking alongside a forced tool.
 //   - A system message anywhere but messages[0] is a validation error, as on
 //     the OpenAI-compatible providers.
 //   - A streamed tool call with no arguments yields Arguments "{}".
-//   - A stream that ends (EOF) before message_stop is treated as a normal
-//     completion, as on the other providers.
+//   - A stream that ends (EOF) after message_delta but before message_stop is
+//     treated as a normal completion, as on the other providers. An EOF before
+//     message_delta is reported as a StreamError (truncated stream).
 //   - Encrypted redacted_thinking blocks are carried on
 //     ReasoningContent.Metadata and replayed verbatim on the next turn.
 //
