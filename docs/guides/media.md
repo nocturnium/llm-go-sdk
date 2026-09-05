@@ -1,7 +1,7 @@
 # Media Generation
 
 The media core defines provider-independent interfaces for images, video, speech,
-and transcription. OpenAI, OpenRouter and ElevenLabs implement these contracts using shared and native media routes. Media capabilities are separate
+and transcription. OpenAI, OpenRouter, ElevenLabs and Gemini implement these contracts using shared and native media routes. Media capabilities are separate
 from the `llms.LLM` chat interface.
 
 ## Interfaces
@@ -75,7 +75,7 @@ in which case `Cancel` returns `ErrJobCancelNotSupported`.
 
 ## Cost tracking
 
-`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI and ElevenLabs rates are included;
+`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI, ElevenLabs and Gemini rates are included;
 configure any custom rates before concurrent use. Provider-reported `MediaUsage.Cost`
 takes precedence over the table. `MediaCost` returns `ok=false` for missing rates
 or mismatched units.
@@ -92,6 +92,7 @@ unsupported operations return the corresponding `Err*NotSupported`.
 
 | Provider | Images | Video | Speech | Transcription |
 | --- | --- | --- | --- | --- |
+| Gemini | Native generation + inline edits (`gemini-3.1-flash-image`); paid quota | Veo LRO + authenticated MP4 (`veo-3.1-lite-generate-preview`); paid quota | PCM-only TTS (`gemini-3.1-flash-tts-preview`); no streaming | Interactions (`gemini-3.5-transcribe`) |
 | OpenAI | Generation + edits (`gpt-image-1.5`); ignores `Seed`, `AspectRatio`, `NegativePrompt`, `SafetyTolerance` | Async MP4 (`sora-2`); ignores `Audio`, `LastFrame`, `ReferenceImages`, `Seed`, `NegativePrompt` | Binary + SSE (`gpt-4o-mini-tts`) | Multipart (`gpt-4o-mini-transcribe`) |
 | ElevenLabs | Flows generation + edits (`gemini-3.1-flash-lite-image`), Pro plan+ | Flows async (`veo-3.1-fast-generate-001`), Pro plan+ | Binary/chunked TTS, timestamps, dialogue, SFX/music | Scribe multipart (`scribe_v2`) |
 | OpenRouter | Generation (`google/gemini-3.1-flash-lite-image`); native `/images` | Native async MP4 (`google/veo-3.1-lite`) | Binary mp3/pcm; optional cost lookup | Multipart JSON/verbose JSON (`openai/whisper-1`) |
@@ -246,3 +247,78 @@ Typed ReferenceImages is rejected. Image NegativePrompt/OutputFormat/SafetyToler
 video OutputFormat, speech Instructions and transcription Prompt have no verified
 mapping and are ignored. Flows image credit pricing remains unknown (empty Unit);
 video usage records explicitly specified duration in seconds, with Cost nil.
+
+
+### Gemini
+
+Construct `gemini.New()` with `GEMINI_API_KEY` or `WithAPIKey`; `GOOGLE_API_KEY`
+and then `LLM_API_KEY` are fallbacks. Media models are independent of the chat
+model. Override defaults with `gemini.WithImageModel`, `WithVideoModel`,
+`WithSpeechModel`, `WithSpeechVoice`, and `WithTranscriptionModel`, or the
+corresponding per-request `llms` options. Media methods use the shared HTTP
+client timeout (5 minutes by default); `WithTimeout` changes it.
+
+Native images use `generateContent`, defaulting to size `1K` and aspect `1:1`.
+Case-insensitive sizes `512`, `1K`, `2K`, and `4K` map to `imageConfig.imageSize`; supported sizes
+and aspect ratios depend on the model. Edits accept inline Data with an image
+MIMEType; URL/FileID inputs are rejected. Text response parts are ignored.
+Only one candidate is requested. Imagen is not supported.
+
+Veo defaults to 8 seconds, `720p`, `16:9`, with audio. Duration accepts 4/6/8,
+resolution accepts case-insensitive `720p`/`1080p`/`4k`, and aspect accepts `16:9`/`9:16`.
+Inline first/last frames and up to three reference images are supported, along
+with Seed and NegativePrompt. `WithVideoExtra` accepts `personGeneration`.
+Disabling audio is rejected because its native wire mapping is unverified.
+`Wait` downloads MP4 using `x-goog-api-key`, retains the URL and bytes, and sets
+a conservative 47-hour expiry. Download hosts must be
+`generativelanguage.googleapis.com` or the configured baseURL host (including its
+port). HTTP/private-IP opt-outs never allow arbitrary download hosts; transport
+HTTPS and SSRF protections still apply independently. The terminal operation is
+retained by Poll and reused by Wait without another status request.
+Filtering returns an output-stage `ModerationError`; failed operations match
+`ErrJobFailed`. Cancellation is unsupported. Use a bounded context or
+`gemini.WithPollPolicy` for video and transcription polling.
+
+Image/video models require paid quota. Free-tier keys can return HTTP 429 with
+`free_tier` or `limit: 0`; live image/video tests skip those conditions. Video
+live tests additionally require `LLM_SDK_LIVE_VIDEO=1`.
+
+TTS defaults to voice `Kore` and returns raw mono PCM s16le at 24000 Hz. The
+response MIME rate is parsed into `Format.SampleRate`. Container must be unset
+or `pcm`; other containers return `ErrInvalidParameters`. No conversion to WAV
+or compressed audio is performed. Without Instructions, input is prefixed with
+`Say: ` to avoid the model's text-output refusal; with Instructions, the prompt
+is `<Instructions>: <text>`. `StreamSpeech` returns `ErrSpeechStreamNotSupported`.
+`WithSpeechExtra` accepts `multiSpeakerVoiceConfig` with native
+`speakerVoiceConfigs` entries (`speaker`, `voiceConfig.prebuiltVoiceConfig.voiceName`)
+in place of the single voice.
+
+Transcription accepts inline Data or an audio URL with an audio MIMEType.
+Caller URLs use the client HTTP/private-IP policy; HTTPS/public hosts are the default.
+Language maps to `language_codes`, Keyterms to `custom_vocabulary`. Default mode
+is `smart`; Diarize and WordTimestamps select `verbatim` with speaker labels and
+word timing. `WithTranscribeExtra` accepts `mode` (`smart`, `verbatim`, or the
+native verbatim object). Smart mode cannot combine with diarization/timestamps;
+custom vocabulary cannot combine with either, even via extras. Conflicts return
+`ErrInvalidParameters` before I/O. Word annotations populate Words, Speaker and
+duration (maximum word end); text items are concatenated. In-progress interactions
+are polled to completion, including unknown non-terminal statuses; failed/cancelled
+statuses and error objects terminate polling. Transcription.Language stays empty
+because the verified response does not report a detected language.
+
+Image costs use the published per-model size table; missing sizes leave Unit empty
+and Cost nil so MediaCost cannot fall back to an unrelated base rate.
+Veo costs use model/resolution rates with audio. Root `MediaPricing` rows are
+only the 1K/720p base estimates. Missing exact image/video model/variant prices
+remain Unpriced in RecordMedia. TTS Cost includes prompt and candidate tokens, with output
+million-token usage. Transcription Cost uses $2/M audio-input tokens and $12/M
+text-output tokens from a per-model rate table. Output tokens sum text-modality
+`candidates_tokens_details` across `model_invocation_token_counts`;
+`total_output_tokens` is used only when the invocation array is absent.
+Minute quantity is **derived** as audio tokens / 25 / 60,
+not measured audio duration. Unknown models remain without converter Cost.
+
+Image Seed/NegativePrompt/Quality/OutputFormat/SafetyTolerance, video OutputFormat,
+speech Language/Speed/Timestamps, and transcription Prompt have no verified native
+mapping and are ignored. Other extras are rejected rather than forwarded as guessed
+wire fields.

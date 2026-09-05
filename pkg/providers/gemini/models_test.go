@@ -321,8 +321,13 @@ func TestKnownModelsMetadata(t *testing.T) {
 			if len(meta.types) == 0 {
 				t.Errorf("model %q has no types", id)
 			}
-			// All Gemini models should have pricing (even if zero)
-			if meta.pricing == nil {
+			// Native media pricing uses different units and modality-specific
+			// converters; it must not be represented as chat token pricing.
+			mediaOnly := len(meta.types) == 1 && (meta.types[0] == llms.ModelTypeImage || meta.types[0] == llms.ModelTypeVideo || meta.types[0] == llms.ModelTypeAudio)
+			if mediaOnly && meta.pricing != nil {
+				t.Errorf("media model %q has chat pricing", id)
+			}
+			if !mediaOnly && meta.pricing == nil {
 				t.Errorf("model %q has nil pricing", id)
 			}
 		})

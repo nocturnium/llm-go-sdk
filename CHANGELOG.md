@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Gemini native image generation/editing, Veo polling video jobs with authenticated downloads, PCM speech, and Interactions transcription with speaker labels and word timing; media model options, pricing, and quota-aware live tests.
+
 - ElevenLabs native media-only provider: speech and streaming, character timestamps, dialogue, Scribe transcription, sound effects/music, and Pro-plan Flows image editing/generation and polling video jobs, with media pricing and plan/moderation errors.
 
 - OpenRouter chat and media provider with native image/video discovery, polling video jobs, speech and transcription, provider-reported media costs, optional speech usage lookup, and HTTP-Referer/X-Title attribution options.

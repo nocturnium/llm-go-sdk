@@ -17,6 +17,20 @@ type MediaRate struct {
 // has no usage and remains unpriced (CreateSpeechStream exposes the usage).
 // gpt-transcribe is intentionally absent because its price is unverified.
 var MediaPricing = map[string]MediaRate{
+	// Gemini native media, verified 2026-09-05. Image rows use 1K and Veo
+	// rows use 720p with audio. Converters report exact size/resolution Cost;
+	// TTS converters include input tokens as well as output tokens.
+	"gemini:gemini-2.5-flash-image":        {Unit: MediaUnitImage, USD: 0.039},
+	"gemini:gemini-3.1-flash-image":        {Unit: MediaUnitImage, USD: 0.067},
+	"gemini:gemini-3.1-flash-lite-image":   {Unit: MediaUnitImage, USD: 0.0336},
+	"gemini:gemini-3-pro-image":            {Unit: MediaUnitImage, USD: 0.134},
+	"gemini:veo-3.1-generate-preview":      {Unit: MediaUnitSecond, USD: 0.4},
+	"gemini:veo-3.1-fast-generate-preview": {Unit: MediaUnitSecond, USD: 0.1},
+	"gemini:veo-3.1-lite-generate-preview": {Unit: MediaUnitSecond, USD: 0.05},
+	"gemini:gemini-3.1-flash-tts-preview":  {Unit: MediaUnitMTokenOut, USD: 20},
+	"gemini:gemini-2.5-flash-preview-tts":  {Unit: MediaUnitMTokenOut, USD: 10},
+	"gemini:gemini-2.5-pro-preview-tts":    {Unit: MediaUnitMTokenOut, USD: 20},
+
 	// ElevenLabs API pricing, https://elevenlabs.io/pricing/api (2026-09-05).
 	"elevenlabs:eleven_v3":                {Unit: MediaUnitKChar, USD: 0.10},
 	"elevenlabs:eleven_multilingual_v2":   {Unit: MediaUnitKChar, USD: 0.10},

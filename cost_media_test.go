@@ -67,3 +67,31 @@ func TestCostTracker_RecordMedia_Concurrent(t *testing.T) {
 		t.Fatal("reset retained media")
 	}
 }
+
+func TestMediaPricing_GeminiReconciliation(t *testing.T) {
+	expected := map[string]MediaRate{
+		"gemini-2.5-flash-image":        {Unit: MediaUnitImage, USD: 0.039},
+		"gemini-3.1-flash-image":        {Unit: MediaUnitImage, USD: 0.067},
+		"gemini-3.1-flash-lite-image":   {Unit: MediaUnitImage, USD: 0.0336},
+		"gemini-3-pro-image":            {Unit: MediaUnitImage, USD: 0.134},
+		"veo-3.1-generate-preview":      {Unit: MediaUnitSecond, USD: 0.4},
+		"veo-3.1-fast-generate-preview": {Unit: MediaUnitSecond, USD: 0.1},
+		"veo-3.1-lite-generate-preview": {Unit: MediaUnitSecond, USD: 0.05},
+		"gemini-3.1-flash-tts-preview":  {Unit: MediaUnitMTokenOut, USD: 20},
+		"gemini-2.5-flash-preview-tts":  {Unit: MediaUnitMTokenOut, USD: 10},
+		"gemini-2.5-pro-preview-tts":    {Unit: MediaUnitMTokenOut, USD: 20},
+	}
+	for model, want := range expected {
+		t.Run(model, func(t *testing.T) {
+			got, ok := GetMediaRate("gemini", model)
+			if !ok || got != want {
+				t.Fatalf("rate = %+v, %t; want %+v", got, ok, want)
+			}
+			exact := 1.23
+			cost, ok := MediaCost("gemini", model, MediaUsage{Unit: want.Unit, Quantity: 2, Cost: &exact})
+			if !ok || cost != exact {
+				t.Fatalf("exact cost did not override base: %v, %t", cost, ok)
+			}
+		})
+	}
+}

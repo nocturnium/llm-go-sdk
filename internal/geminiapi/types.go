@@ -74,6 +74,9 @@ type FunctionDeclaration struct {
 
 // GenerationConfig contains generation settings
 type GenerationConfig struct {
+	ResponseModalities []string      `json:"responseModalities,omitempty"`
+	ImageConfig        *ImageConfig  `json:"imageConfig,omitempty"`
+	SpeechConfig       *SpeechConfig `json:"speechConfig,omitempty"`
 	// Temperature and TopP are pointers so an explicit 0.0 is serialized while an
 	// unset (nil) value is omitted, letting the model apply its own default.
 	Temperature      *float64        `json:"temperature,omitempty"`
@@ -102,9 +105,10 @@ type SafetySetting struct {
 
 // GenerateContentResponse represents the response from the Gemini API
 type GenerateContentResponse struct {
-	Candidates    []Candidate    `json:"candidates"`
-	UsageMetadata *UsageMetadata `json:"usageMetadata,omitempty"`
-	ModelVersion  string         `json:"modelVersion,omitempty"`
+	PromptFeedback *PromptFeedback `json:"promptFeedback,omitempty"`
+	Candidates     []Candidate     `json:"candidates"`
+	UsageMetadata  *UsageMetadata  `json:"usageMetadata,omitempty"`
+	ModelVersion   string          `json:"modelVersion,omitempty"`
 }
 
 // Candidate represents a response candidate
@@ -123,11 +127,12 @@ type SafetyRating struct {
 
 // UsageMetadata contains token usage information
 type UsageMetadata struct {
-	PromptTokenCount        int `json:"promptTokenCount"`
-	CandidatesTokenCount    int `json:"candidatesTokenCount"`
-	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
-	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
-	TotalTokenCount         int `json:"totalTokenCount"`
+	PromptTokensDetails     []ModalityTokenCount `json:"promptTokensDetails,omitempty"`
+	PromptTokenCount        int                  `json:"promptTokenCount"`
+	CandidatesTokenCount    int                  `json:"candidatesTokenCount"`
+	ThoughtsTokenCount      int                  `json:"thoughtsTokenCount,omitempty"`
+	CachedContentTokenCount int                  `json:"cachedContentTokenCount,omitempty"`
+	TotalTokenCount         int                  `json:"totalTokenCount"`
 }
 
 // StreamChunk represents a streaming response chunk
@@ -254,4 +259,215 @@ type ModelsListResponse struct {
 type ModelsListParams struct {
 	PageSize  int    // Max results per page (default 50, max 1000)
 	PageToken string // Pagination token
+}
+
+// ModalityTokenCount reports generateContent input tokens by modality.
+type ModalityTokenCount struct {
+	Modality   string `json:"modality"`
+	TokenCount int    `json:"tokenCount"`
+}
+
+// ImageConfig selects native image aspect ratio and size.
+type ImageConfig struct {
+	AspectRatio string `json:"aspectRatio,omitempty"`
+	ImageSize   string `json:"imageSize,omitempty"`
+}
+
+// SpeechConfig selects either one voice or named speaker voices.
+type SpeechConfig struct {
+	VoiceConfig             *VoiceConfig             `json:"voiceConfig,omitempty"`
+	MultiSpeakerVoiceConfig *MultiSpeakerVoiceConfig `json:"multiSpeakerVoiceConfig,omitempty"`
+}
+
+// VoiceConfig selects a prebuilt voice.
+type VoiceConfig struct {
+	PrebuiltVoiceConfig PrebuiltVoiceConfig `json:"prebuiltVoiceConfig"`
+}
+
+// PrebuiltVoiceConfig identifies a Gemini voice.
+type PrebuiltVoiceConfig struct {
+	VoiceName string `json:"voiceName"`
+}
+
+// MultiSpeakerVoiceConfig maps script speakers to voices.
+type MultiSpeakerVoiceConfig struct {
+	SpeakerVoiceConfigs []SpeakerVoiceConfig `json:"speakerVoiceConfigs"`
+}
+
+// SpeakerVoiceConfig associates a speaker with a voice.
+type SpeakerVoiceConfig struct {
+	Speaker     string      `json:"speaker"`
+	VoiceConfig VoiceConfig `json:"voiceConfig"`
+}
+
+// PredictLongRunningRequest submits a native Veo job.
+type PredictLongRunningRequest struct {
+	Instances  []VideoInstance `json:"instances"`
+	Parameters VideoParameters `json:"parameters"`
+}
+
+// VideoImage holds an inline Veo image reference.
+type VideoImage struct {
+	BytesBase64Encoded string `json:"bytesBase64Encoded"`
+	MIMEType           string `json:"mimeType"`
+}
+
+// VideoReferenceImage wraps a Veo reference image.
+type VideoReferenceImage struct {
+	Image VideoImage `json:"image"`
+}
+
+// VideoInstance describes the prompt and optional frames/references.
+type VideoInstance struct {
+	Prompt          string                `json:"prompt"`
+	Image           *VideoImage           `json:"image,omitempty"`
+	LastFrame       *VideoImage           `json:"lastFrame,omitempty"`
+	ReferenceImages []VideoReferenceImage `json:"referenceImages,omitempty"`
+}
+
+// VideoParameters controls Veo output.
+type VideoParameters struct {
+	AspectRatio      string `json:"aspectRatio"`
+	Resolution       string `json:"resolution"`
+	DurationSeconds  int    `json:"durationSeconds"`
+	NumberOfVideos   int    `json:"numberOfVideos"`
+	Seed             *int64 `json:"seed,omitempty"`
+	NegativePrompt   string `json:"negativePrompt,omitempty"`
+	PersonGeneration string `json:"personGeneration,omitempty"`
+}
+
+// Operation is a Gemini long-running operation.
+type Operation struct {
+	Name     string                  `json:"name"`
+	Done     bool                    `json:"done"`
+	Error    *OperationError         `json:"error,omitempty"`
+	Response *VideoOperationResponse `json:"response,omitempty"`
+}
+
+// OperationError describes an asynchronous provider failure.
+type OperationError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Status  string `json:"status"`
+}
+
+// VideoOperationResponse holds the completed Veo result.
+type VideoOperationResponse struct {
+	GenerateVideoResponse GeneratedVideoResponse `json:"generateVideoResponse"`
+}
+
+// GeneratedVideoResponse contains generated files or filtering reasons.
+type GeneratedVideoResponse struct {
+	GeneratedSamples        []GeneratedVideoSample `json:"generatedSamples"`
+	RAIMediaFilteredCount   int                    `json:"raiMediaFilteredCount"`
+	RAIMediaFilteredReasons []string               `json:"raiMediaFilteredReasons"`
+}
+
+// GeneratedVideoSample points to a Gemini Files API video.
+type GeneratedVideoSample struct {
+	Video VideoFile `json:"video"`
+}
+
+// VideoFile identifies a downloadable video.
+type VideoFile struct {
+	URI string `json:"uri"`
+}
+
+// InteractionRequest submits audio for transcription.
+type InteractionRequest struct {
+	Model            string                      `json:"model"`
+	Input            []InteractionInput          `json:"input"`
+	GenerationConfig InteractionGenerationConfig `json:"generation_config"`
+}
+
+// InteractionInput contains inline or remote audio.
+type InteractionInput struct {
+	Type     string `json:"type"`
+	MIMEType string `json:"mime_type"`
+	Data     string `json:"data,omitempty"`
+	URI      string `json:"uri,omitempty"`
+}
+
+// InteractionGenerationConfig holds transcription configuration.
+type InteractionGenerationConfig struct {
+	TranscriptionConfig TranscriptionConfig `json:"transcription_config"`
+}
+
+// TranscriptionConfig selects smart or verbatim transcription.
+type TranscriptionConfig struct {
+	LanguageCodes    []string `json:"language_codes,omitempty"`
+	CustomVocabulary []string `json:"custom_vocabulary,omitempty"`
+	// Mode is "smart" or a VerbatimMode object.
+	Mode any `json:"mode"`
+}
+
+// VerbatimMode enables speaker labels and word timing.
+type VerbatimMode struct {
+	Type                   string   `json:"type"`
+	DiarizationMode        string   `json:"diarization_mode,omitempty"`
+	TimestampGranularities []string `json:"timestamp_granularities,omitempty"`
+}
+
+// Interaction is an Interactions API result, possibly still in progress.
+type Interaction struct {
+	Error  *InteractionError `json:"error,omitempty"`
+	ID     string            `json:"id"`
+	Status string            `json:"status"`
+	Usage  *InteractionUsage `json:"usage,omitempty"`
+	Steps  []InteractionStep `json:"steps"`
+}
+
+// InteractionUsage reports transcription token consumption.
+type InteractionUsage struct {
+	// Nil means absent; a present empty array must not use aggregate output tokens.
+	ModelInvocationTokenCounts []ModelInvocationTokenCount `json:"model_invocation_token_counts"`
+	TotalInputTokens           int                         `json:"total_input_tokens"`
+	TotalOutputTokens          int                         `json:"total_output_tokens"`
+	InputTokensByModality      []InteractionModalityTokens `json:"input_tokens_by_modality"`
+}
+
+// InteractionModalityTokens reports input tokens for one modality.
+type InteractionModalityTokens struct {
+	Modality string `json:"modality"`
+	Tokens   int    `json:"tokens"`
+}
+
+// InteractionStep contains model output content.
+type InteractionStep struct {
+	Type    string               `json:"type"`
+	Content []InteractionContent `json:"content"`
+}
+
+// InteractionContent contains transcript text and word annotations.
+type InteractionContent struct {
+	Type        string           `json:"type"`
+	Text        string           `json:"text"`
+	Annotations []WordAnnotation `json:"annotations"`
+}
+
+// WordAnnotation describes a timed word within transcript text.
+type WordAnnotation struct {
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	Speaker     string `json:"speaker"`
+	StartOffset string `json:"start_offset"`
+	EndOffset   string `json:"end_offset"`
+	StartIndex  int    `json:"start_index"`
+	EndIndex    int    `json:"end_index"`
+}
+
+// PromptFeedback describes input filtering before candidates are generated.
+type PromptFeedback struct {
+	BlockReason   string         `json:"blockReason,omitempty"`
+	SafetyRatings []SafetyRating `json:"safetyRatings,omitempty"`
+}
+
+// ModelInvocationTokenCount reports candidate tokens for one model invocation.
+type ModelInvocationTokenCount struct {
+	CandidatesTokensDetails []InteractionModalityTokens `json:"candidates_tokens_details"`
+}
+
+// InteractionError retains an asynchronous Interactions failure message.
+type InteractionError struct {
+	Message string `json:"message"`
 }

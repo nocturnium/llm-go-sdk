@@ -29,6 +29,19 @@ func titleCase(s string) string {
 // 65,536 output. Gemini 2.5 Pro uses tiered pricing keyed on prompt size (the values
 // here are the base <=200k tier; see per-model comments for the >200k tier).
 var knownModels = map[string]modelMetadata{
+	// Native media metadata; token context limits remain API-supplied.
+	"gemini-2.5-flash-image":        {displayName: "gemini-2.5-flash-image", types: []llms.ModelType{llms.ModelTypeImage}},
+	"gemini-3.1-flash-image":        {displayName: "gemini-3.1-flash-image", types: []llms.ModelType{llms.ModelTypeImage}},
+	"gemini-3.1-flash-lite-image":   {displayName: "gemini-3.1-flash-lite-image", types: []llms.ModelType{llms.ModelTypeImage}},
+	"gemini-3-pro-image":            {displayName: "gemini-3-pro-image", types: []llms.ModelType{llms.ModelTypeImage}},
+	"veo-3.1-generate-preview":      {displayName: "veo-3.1-generate-preview", types: []llms.ModelType{llms.ModelTypeVideo}},
+	"veo-3.1-fast-generate-preview": {displayName: "veo-3.1-fast-generate-preview", types: []llms.ModelType{llms.ModelTypeVideo}},
+	"veo-3.1-lite-generate-preview": {displayName: "veo-3.1-lite-generate-preview", types: []llms.ModelType{llms.ModelTypeVideo}},
+	"gemini-3.1-flash-tts-preview":  {displayName: "gemini-3.1-flash-tts-preview", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gemini-2.5-flash-preview-tts":  {displayName: "gemini-2.5-flash-preview-tts", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gemini-2.5-pro-preview-tts":    {displayName: "gemini-2.5-pro-preview-tts", types: []llms.ModelType{llms.ModelTypeAudio}},
+	"gemini-3.5-transcribe":         {displayName: "gemini-3.5-transcribe", types: []llms.ModelType{llms.ModelTypeAudio}},
+
 	// Gemini 3.x — current family (ai.google.dev pricing, verified 2026-08-02).
 	// Context follows the 2.5 family (1,048,576 in / 65,536 out).
 	"gemini-3.6-flash": {
@@ -302,7 +315,7 @@ func convertGeminiModel(m *geminiapi.ModelInfo) llms.ModelInfo {
 		if info.DisplayName == "" {
 			info.DisplayName = metadata.displayName
 		}
-		info.Types = metadata.types
+		info.Types = append([]llms.ModelType(nil), metadata.types...)
 		info.Pricing = metadata.pricing
 	} else {
 		// Infer from model ID and supported methods

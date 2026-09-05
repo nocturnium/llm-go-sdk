@@ -1,7 +1,8 @@
 // Package gemini provides a Google Gemini LLM client using native HTTP.
 //
 // This package implements the llms.LLM interface for Google's Gemini API,
-// supporting Gemini 2.0, Gemini 1.5, and Gemini 1.0 model families.
+// supporting Gemini 2.5 and 3.x chat families and native media models.
+// Native transport is required for contents/parts, Veo operations and Interactions.
 //
 // # Configuration
 //
@@ -23,13 +24,16 @@
 //
 // # Supported Features
 //
-//   - Chat completions (all Gemini models)
+//   - Chat completions (chat models)
 //   - Streaming responses
 //   - Function/tool calling
-//   - Vision (all Gemini models)
+//   - Vision (supported chat models)
 //   - Embeddings (text-embedding-004)
 //   - JSON mode
-//   - Safety settings configuration
+//   - Native image generation and inline image editing
+//   - Veo video jobs with authenticated MP4 downloads
+//   - PCM-only speech synthesis (no speech streaming)
+//   - Interactions transcription with optional speaker labels and word timestamps
 //
 // # Configuration Options
 //
@@ -52,7 +56,14 @@
 //
 // # Default Model
 //
-// The default model is gemini-2.5-flash. Override with WithModel.
+// The default chat model is gemini-2.5-flash. Override with WithModel.
+// Media defaults are gemini-3.1-flash-image, veo-3.1-lite-generate-preview,
+// gemini-3.1-flash-tts-preview (voice Kore), and gemini-3.5-transcribe.
+// Override with WithImageModel, WithVideoModel, WithSpeechModel, WithSpeechVoice,
+// and WithTranscriptionModel. Image and video models require paid quota.
+// Speech returns raw mono PCM s16le at 24 kHz; its default prompt prefix is
+// "Say: ", or "<Instructions>: " when speech instructions are supplied.
+// WithPollPolicy controls video and transcription polling.
 //
 // # Thread Safety
 //

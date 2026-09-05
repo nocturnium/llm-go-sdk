@@ -1,4 +1,3 @@
-// Package gemini provides a Google Gemini LLM implementation using native HTTP
 package gemini
 
 import (
@@ -130,6 +129,9 @@ func (c *Client) Capabilities() llms.Capabilities {
 	// Gemini supports embeddings but not batch
 	result.Embeddings = true
 	result.Batch = false
+	// Media methods select their own models independently of the chat model.
+	result.ImageGeneration, result.VideoGeneration = true, true
+	result.Speech, result.Transcription = true, true
 	return result
 }
 
