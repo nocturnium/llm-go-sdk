@@ -9,6 +9,9 @@ import (
 type ModelType string
 
 const (
+	// ModelTypeVideo indicates models that generate video.
+	ModelTypeVideo ModelType = "video"
+
 	// ModelTypeChat indicates models that support chat/conversation
 	ModelTypeChat ModelType = "chat"
 
@@ -39,6 +42,9 @@ const (
 
 // ModelInfo represents metadata about an available model.
 type ModelInfo struct {
+	// DeprecatedAt is the scheduled deprecation date, if known.
+	DeprecatedAt *time.Time `json:"deprecated_at,omitempty"`
+
 	// ID is the model identifier used in API calls (e.g., "gpt-4o", "claude-3-opus-20240229")
 	ID string `json:"id"`
 

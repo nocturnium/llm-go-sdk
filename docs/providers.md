@@ -1,6 +1,6 @@
 # Providers
 
-llm-go-sdk ships first-class clients for **19 providers** behind a single
+llm-go-sdk ships first-class clients for **21 providers**, with chat clients sharing the
 [`llms.LLM`](index.md) interface. Each provider lives in its own subpackage
 under `pkg/providers/<name>` and is constructed with functional options, for
 example:
@@ -17,7 +17,7 @@ client, err := openai.New(
 )
 ```
 
-Every provider's `New(...) (*Client, error)` returns a `*Client` that satisfies
+Every chat provider's `New(...) (*Client, error)` returns a `*Client` that satisfies
 the `llms.LLM` interface, so the same `GenerateContent` / `Stream` / typed-output
 code works regardless of which provider you picked.
 
@@ -27,7 +27,8 @@ code works regardless of which provider you picked.
     chat providers are **OpenAI-compatible**: they build on
     [`pkg/openaicompat`](guides/custom-providers.md) and speak the OpenAI
     chat-completions wire format. **infinity** is not a chat provider at all —
-    it serves embeddings and reranking only.
+    it serves embeddings and reranking only. **elevenlabs** uses native media APIs
+    for speech, transcription, images and video, without chat.
 
 ---
 
@@ -36,19 +37,21 @@ code works regardless of which provider you picked.
 | Provider | Import path | Auth / host env var(s) | API style | Default chat model | Notes |
 |----------|-------------|------------------------|-----------|--------------------|-------|
 | openai | `pkg/providers/openai` | `OPENAI_API_KEY` | OpenAI native | `gpt-4o` | Chat, vision, tools, embeddings (`text-embedding-3-small`) |
+| elevenlabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | n/a (no chat) | Speech, Scribe STT, SFX/music; Pro-plan Flows images/video; direct-construct |
+| openrouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` | Images, async video, speech, transcription; embeddings require a model option |
 | anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | Native (Messages) | `claude-sonnet-4-20250514` | Vision, tools, thinking, prompt caching |
 | gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-2.5-flash` | Vision, tools, embeddings (`text-embedding-004`) |
 | azure | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` (or `AZURE_OPENAI_KEY`) + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | deployment-dependent | Uses deployment + endpoint, not a model name |
-| groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` | Fast inference; no embeddings |
+| groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` | Fast inference; WAV speech, transcription/translation; no embeddings |
 | cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `llama3.1-70b` | Fast inference; no embeddings |
 | deepseek | `pkg/providers/deepseek` | `DEEPSEEK_API_KEY` | OpenAI-compatible | `deepseek-chat` | Reasoning models; no public embeddings |
-| mistral | `pkg/providers/mistral` | `MISTRAL_API_KEY` | OpenAI-compatible | `mistral-large-latest` | Embeddings (`mistral-embed`) |
+| mistral | `pkg/providers/mistral` | `MISTRAL_API_KEY` | OpenAI-compatible | `mistral-large-latest` | Embeddings (`mistral-embed`); speech and transcription media |
 | fireworks | `pkg/providers/fireworks` | `FIREWORKS_API_KEY` | OpenAI-compatible | `accounts/fireworks/models/llama-v3p1-70b-instruct` | Embeddings (`nomic-ai/nomic-embed-text-v1.5`) |
-| togetherai | `pkg/providers/togetherai` | `TOGETHER_API_KEY` | OpenAI-compatible | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Large OSS model catalog |
-| featherless | `pkg/providers/featherless` | `FEATHERLESS_API_KEY` | OpenAI-compatible | `Qwen/Qwen3-32B` | Serverless OSS models |
+| togetherai | `pkg/providers/togetherai` | `TOGETHER_API_KEY` | OpenAI-compatible | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Large OSS catalog; image, video, speech and transcription media |
+| featherless | `pkg/providers/featherless` | `FEATHERLESS_API_KEY` | OpenAI-compatible | `Qwen/Qwen3-32B` | Serverless OSS models; binary/SSE speech media |
 | synthetic | `pkg/providers/synthetic` | `SYNTHETIC_API_KEY` | OpenAI-compatible | `hf:Qwen/Qwen3-Coder-480B-A35B-Instruct` | Coding-oriented OSS models |
 | perplexity | `pkg/providers/perplexity` | `PERPLEXITY_API_KEY` or `PPLX_API_KEY` | OpenAI-compatible | `sonar` | Search-augmented generation |
-| zai | `pkg/providers/zai` | `ZAI_API_KEY` | OpenAI-compatible | `glm-4.7` | GLM models; optional Coding API + native web search |
+| zai | `pkg/providers/zai` | `ZAI_API_KEY` | OpenAI-compatible | `glm-4.7` | GLM models; image/video/transcription media on general API; optional Coding API + native web search |
 | runpod | `pkg/providers/runpod` | `RUNPOD_API_KEY` + endpoint ID | OpenAI-compatible | endpoint-dependent | Serverless vLLM endpoints |
 | ollama | `pkg/providers/ollama` | `OLLAMA_HOST` (default `http://localhost:11434`) | OpenAI-compatible | `llama3.2` | Local models; embeddings (`nomic-embed-text`) |
 | llamacpp | `pkg/providers/llamacpp` | `LLAMA_CPP_HOST` (default `http://localhost:8080`) | OpenAI-compatible | discovered from server | Local `llama.cpp` server |
@@ -86,7 +89,7 @@ Azure differs: it uses `WithEndpoint(...)` and `WithDeployment(...)` instead of
 ## Construct by name
 
 You can also build any chat provider from a string name. Blank-import the `all`
-package to register the 17 auto-registered chat providers, then call `llms.New`:
+package to register the 18 auto-registered chat providers, then call `llms.New`:
 
 ```go
 import (
@@ -126,20 +129,48 @@ Other helpers:
 - `llms.NewFromEnv()` reads `LLM_PROVIDER` / `LLM_MODEL`.
 - `llms.RegisteredProviders() []string` lists the registered chat providers.
 
-!!! warning "Two providers are not auto-registered: infinity and huggingface"
-    The `all` package registers 17 chat providers but **not** infinity or
-    huggingface. Infinity does not implement chat generation (embeddings and
+!!! warning "Three providers are not auto-registered: infinity, huggingface and elevenlabs"
+    The `all` package registers 18 chat providers but **not** infinity,
+    huggingface or elevenlabs. ElevenLabs supports media only. Infinity does not
+    implement chat generation (embeddings and
     reranking only). HuggingFace *does* serve chat (and embeddings), but it needs
     an explicit Inference-Endpoint URL and a chat-vs-embeddings mode, so it cannot
-    be built from a name alone. Construct either one directly —
-    `infinity.New(...)` / `huggingface.New(...)`. The auto-registered set is:
+    be built from a name alone. Construct these directly —
+    `infinity.New(...)` / `huggingface.New(...)` / `elevenlabs.New(...)`.
+    The auto-registered set is:
     anthropic, azure, cerebras, deepseek, featherless, fireworks, gemini, groq,
-    llamacpp, mistral, ollama, openai, perplexity, runpod, synthetic, togetherai,
+    llamacpp, mistral, ollama, openai, openrouter, perplexity, runpod, synthetic, togetherai,
     zai.
 
 ---
 
 ## Per-provider notes
+
+### OpenRouter — chat and native media
+
+```go
+import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openrouter"
+
+client, err := openrouter.New(
+    openrouter.WithSiteURL("https://example.com"), // optional HTTP-Referer
+    openrouter.WithAppName("My app"),             // optional X-Title
+)
+```
+
+Chat defaults to `google/gemini-3.5-flash-lite`, verified in public discovery on
+2026-09-05. Image and video catalogs are available through `ListImageModels` and
+`ListVideoModels`. `ListModels` fetches `/models`, supports local type/limit
+filtering, and rejects cursors. Model metadata is uncached; token prices are not
+inferred from the catalog. Supply an embedding model with `WithEmbeddingModel`.
+
+Media responses preserve reported costs. `WithUsageLookup()` optionally fetches
+speech cost using the response's generation ID. Lookup errors return the audio
+alongside the error; avoid repeating the paid synthesis call. The speech default
+`fish-audio/s2.1-pro` was live-verified on 2026-09-05 via
+[GET /models?output_modalities=speech](https://openrouter.ai/api/v1/models?output_modalities=speech).
+`ListSpeechModels` returns typed entries with reported character pricing.
+Unset voices are omitted; specify `WithSpeechVoice` for providers requiring one.
+See the [media guide](guides/media.md) for defaults and option mappings.
 
 ### Azure OpenAI — deployments & endpoint
 

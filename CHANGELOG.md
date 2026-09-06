@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Together AI, Groq, Featherless, Mistral and Z.AI media routes, including native Together/Z.AI video jobs, vendor speech and transcription mappings, Together raw SSE, Featherless terminal character-usage callbacks, quota/moderation errors, sourced pricing, and gated integration tests. Together video preserves proxy prefixes and keeps unverified outputs.cost as metadata. Wire contracts are documentation-verified; live availability remains unverified.
+
+- Gemini native image generation/editing, Veo polling video jobs with authenticated downloads, PCM speech, and Interactions transcription with speaker labels and word timing; media model options, pricing, and quota-aware live tests.
+
+- ElevenLabs native media-only provider: speech and streaming, character timestamps, dialogue, Scribe transcription, sound effects/music, and Pro-plan Flows image editing/generation and polling video jobs, with media pricing and plan/moderation errors.
+
+- OpenRouter chat and media provider with native image/video discovery, polling video jobs, speech and transcription, provider-reported media costs, optional speech usage lookup, and HTTP-Referer/X-Title attribution options.
+
+- OpenAI image generation and editing, speech synthesis and SSE streaming, multipart transcription, and polling video jobs, with shared configurable OpenAI-compatible media routes and media pricing.
+
 ### Changed
 
 - **`pkg/providers/anthropic`: behavior parity with the other providers.** A review
@@ -42,6 +54,8 @@ All notable changes to this project will be documented in this file.
     choice, verified live on Opus 4.6 and Sonnet 5.
 
 ### Added
+
+- **Provider-agnostic media core.** Adds image generation/editing, video jobs, speech and transcription interfaces, shared media assets and moderation errors, media cost tracking, and multipart, binary, and polling transport helpers. Adds `ModelInfo.DeprecatedAt` and the four `Capabilities` fields `ImageGeneration`, `VideoGeneration`, `Speech`, and `Transcription`. HTTP 402 now maps to `ErrPlanRequired`; previously, unrecognized codes with `invalid_request_error` fell through to `ErrInvalidParameters`.
 
 - **`pkg/mcp`: roots.** `WithRoots` publishes a fixed set of filesystem roots to the
   server; `WithRootsHandler` publishes a dynamic one, consulted per request. Adds

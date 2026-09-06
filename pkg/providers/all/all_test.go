@@ -23,6 +23,7 @@ func TestAllRegistersChatProviders(t *testing.T) {
 		"mistral",
 		"ollama",
 		"openai",
+		"openrouter",
 		"perplexity",
 		"runpod",
 		"synthetic",

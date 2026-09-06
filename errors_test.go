@@ -1,10 +1,15 @@
 package llms
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 )
 
 func TestAPIError_Error(t *testing.T) {
@@ -132,6 +137,7 @@ func TestAPIError_StatusClassification(t *testing.T) {
 		retryable bool
 	}{
 		{401, ErrAuthenticationFailed, false},
+		{402, ErrPlanRequired, false},
 		{403, ErrPermissionDenied, false},
 		{404, ErrModelNotFound, false},
 		{408, ErrTimeout, true},
@@ -751,4 +757,31 @@ func containsAt(s, substr string, start int) bool {
 		}
 	}
 	return false
+}
+
+// TestNewAPIErrorFromHTTP_ModelNotFound preserves the transport-to-root
+// classification assertion here so httpclient's own tests do not import llms.
+func TestNewAPIErrorFromHTTP_ModelNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"model not found\ntry another","type":"invalid_request_error","code":"model_not_found","param":"model"}}`))
+	}))
+	defer server.Close()
+	client := httpclient.NewClient(httpclient.WithAllowPrivateIPs(true), httpclient.WithAllowHTTP(true))
+	err := client.DoJSON(context.Background(), httpclient.Request{Method: http.MethodPost, URL: server.URL}, nil)
+	var apiErr *httpclient.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *httpclient.APIError, got %v", err)
+	}
+	unified := NewAPIErrorFromHTTP(ProviderOpenAI, HTTPAPIError{
+		StatusCode: apiErr.StatusCode,
+		Message:    apiErr.Message,
+		Type:       apiErr.Type,
+		Code:       apiErr.Code,
+		Param:      apiErr.Param,
+	})
+	if !errors.Is(unified, ErrModelNotFound) {
+		t.Fatalf("errors.Is(unified, ErrModelNotFound) = false for %#v", unified)
+	}
 }

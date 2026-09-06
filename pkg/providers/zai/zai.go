@@ -1,16 +1,24 @@
 // Package zai provides a Z.AI LLM implementation using native HTTP.
 // Z.AI uses OpenAI-compatible APIs for their GLM models.
+// Media defaults: cogview-4-250304, glm-asr-2512, cogvideox-3.
+// Override media models with per-request options. Media routes are documentation-verified only.
 package zai
 
 import (
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // providerConfig defines Z.AI-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
+	Media:                     openaicompat.MediaCapabilities{Images: true, Transcription: true, Videos: true, VideosPath: "/videos/generations"},
+	DefaultImageModel:         "cogview-4-250304",
+	DefaultTranscriptionModel: "glm-asr-2512",
+	DefaultVideoModel:         "cogvideox-3",
+
 	Provider:              llms.ProviderZAI,
 	DefaultEmbeddingModel: "", // Z.AI does not provide embeddings in the documented API
 	Capabilities: llms.Capabilities{
@@ -31,7 +39,8 @@ var providerConfig = openaicompat.ProviderConfig{
 // can be shared across multiple goroutines without additional synchronization.
 type Client struct {
 	openaicompat.BaseProvider
-	options *options
+	options   *options
+	mediaHTTP *httpclient.Client
 }
 
 // New creates a new Z.AI client with the given options.
@@ -82,6 +91,7 @@ func New(opts ...Option) (*Client, error) {
 	return &Client{
 		BaseProvider: openaicompat.NewBaseProvider(client, cfg),
 		options:      options,
+		mediaHTTP:    newMediaHTTP(options),
 	}, nil
 }
 
@@ -93,3 +103,9 @@ var _ llms.CapableProvider = (*Client)(nil)
 
 // Ensure Client implements the ModelLister interface.
 var _ llms.ModelLister = (*Client)(nil)
+
+var (
+	_ llms.Transcriber    = (*Client)(nil)
+	_ llms.ImageGenerator = (*Client)(nil)
+	_ llms.VideoGenerator = (*Client)(nil)
+)

@@ -1,5 +1,7 @@
 // Package featherless provides a Featherless.ai LLM implementation using native HTTP
 // Featherless.ai provides an OpenAI-compatible API with access to thousands of open-source models
+// Media defaults: hexgrad/Kokoro-82M.
+// Override media models with per-request options. Media routes are documentation-verified only.
 package featherless
 
 import (
@@ -9,6 +11,9 @@ import (
 
 // providerConfig defines Featherless-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
+	Media:              openaicompat.MediaCapabilities{Speech: true, SpeechStream: true},
+	DefaultSpeechModel: "hexgrad/Kokoro-82M",
+
 	Provider:              llms.ProviderFeatherless,
 	DefaultEmbeddingModel: "", // Featherless doesn't support embeddings by default
 	Capabilities: llms.Capabilities{
@@ -73,3 +78,7 @@ var _ llms.LLM = (*Client)(nil)
 
 // Ensure Client implements the CapableProvider interface.
 var _ llms.CapableProvider = (*Client)(nil)
+
+var (
+	_ llms.SpeechSynthesizer = (*Client)(nil)
+)

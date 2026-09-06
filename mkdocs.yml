@@ -1,5 +1,5 @@
 site_name: llm-go-sdk
-site_description: A unified, dependency-light Go SDK for 18 LLM providers.
+site_description: A unified, dependency-light Go SDK for 21 AI providers.
 site_url: https://nocturnium.github.io/llm-go-sdk/
 repo_url: https://github.com/nocturnium/llm-go-sdk
 repo_name: nocturnium/llm-go-sdk
@@ -87,6 +87,7 @@ nav:
       - Reasoning: guides/reasoning.md
       - Prompt Caching: guides/caching.md
       - Embeddings & Reranking: guides/embeddings.md
+      - Media Generation: guides/media.md
       - Vision: guides/vision.md
       - Resilience: guides/resilience.md
       - Observability & Cost: guides/observability.md

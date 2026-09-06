@@ -25,6 +25,7 @@ go run ./examples/caching
 go run ./examples/mcp /path/to/dir
 go run ./examples/vision
 go run ./examples/embeddings
+go run ./examples/media
 go run ./examples/resilience
 go run ./examples/fallback
 go run ./examples/cost-tracking
@@ -42,6 +43,7 @@ go run ./examples/cost-tracking
 | **mcp** | Connect to an MCP server and drive its tools via RunTools |
 | **vision** | Image analysis with multi-modal messages |
 | **embeddings** | Text embeddings for semantic search |
+| **media** | Image, speech, transcription and video generation with cost tracking |
 | **resilience** | Circuit breakers and retry patterns |
 | **fallback** | Multi-provider failover chains |
 | **cost-tracking** | Token usage and cost estimation |

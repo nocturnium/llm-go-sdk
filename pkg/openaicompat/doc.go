@@ -15,6 +15,11 @@
 //     llms.Embedder interfaces onto the Client, including message preparation,
 //     streaming, token estimation, and error wrapping.
 //
+// BaseProvider also implements all media interfaces, even when Media flags are
+// disabled. AsImageGenerator and similar assertions therefore succeed for thin
+// providers; disabled operations return their matching llms.Err*NotSupported.
+// Consult Capabilities for enabled media flags and handle operation-specific errors.
+//
 // # Building a custom provider
 //
 // The fast path is to embed [BaseProvider]. It implements Call, GenerateContent,

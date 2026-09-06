@@ -44,6 +44,8 @@ func RequireAPIKey(providerName, explicit string, providerEnvVars ...string) (st
 // Common environment variable names for providers.
 // These constants help avoid typos and provide a single source of truth.
 const (
+	EnvElevenLabsAPIKey  = "ELEVENLABS_API_KEY"
+	EnvOpenRouterAPIKey  = "OPENROUTER_API_KEY"
 	EnvOpenAIAPIKey      = "OPENAI_API_KEY"
 	EnvAnthropicAPIKey   = "ANTHROPIC_API_KEY"
 	EnvGeminiAPIKey      = "GEMINI_API_KEY"

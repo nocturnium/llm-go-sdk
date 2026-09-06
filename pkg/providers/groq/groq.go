@@ -1,14 +1,21 @@
 // Package groq provides a Groq LLM implementation using native HTTP.
 // Groq uses an OpenAI-compatible API with ultra-fast inference.
+// Media defaults: canopylabs/orpheus-v1-english, whisper-large-v3-turbo.
+// Override media models with per-request options. Media routes are documentation-verified only.
 package groq
 
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // providerConfig defines Groq-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
+	Media:                     openaicompat.MediaCapabilities{Speech: true, Transcription: true},
+	DefaultSpeechModel:        "canopylabs/orpheus-v1-english",
+	DefaultTranscriptionModel: "whisper-large-v3-turbo",
+
 	Provider:              llms.ProviderGroq,
 	DefaultEmbeddingModel: "", // Groq doesn't support embeddings yet
 	Capabilities: llms.Capabilities{
@@ -29,7 +36,8 @@ var providerConfig = openaicompat.ProviderConfig{
 // can be shared across multiple goroutines without additional synchronization.
 type Client struct {
 	openaicompat.BaseProvider
-	options *options
+	options   *options
+	mediaHTTP *httpclient.Client
 }
 
 // New creates a new Groq client with the given options.
@@ -65,6 +73,7 @@ func New(opts ...Option) (*Client, error) {
 	return &Client{
 		BaseProvider: openaicompat.NewBaseProvider(client, cfg),
 		options:      options,
+		mediaHTTP:    newMediaHTTP(options),
 	}, nil
 }
 
@@ -73,3 +82,8 @@ var _ llms.LLM = (*Client)(nil)
 
 // Ensure Client implements the CapableProvider interface.
 var _ llms.CapableProvider = (*Client)(nil)
+
+var (
+	_ llms.SpeechSynthesizer = (*Client)(nil)
+	_ llms.Transcriber       = (*Client)(nil)
+)

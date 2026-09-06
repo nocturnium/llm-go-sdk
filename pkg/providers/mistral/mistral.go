@@ -1,14 +1,21 @@
 // Package mistral provides a Mistral AI LLM implementation using native HTTP.
 // Mistral AI uses an OpenAI-compatible API.
+// Media defaults: voxtral-mini-tts-2603, voxtral-mini-latest.
+// Override media models with per-request options. Media routes are documentation-verified only.
 package mistral
 
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // providerConfig defines Mistral-specific configuration.
 var providerConfig = openaicompat.ProviderConfig{
+	Media:                     openaicompat.MediaCapabilities{Speech: true, Transcription: true},
+	DefaultSpeechModel:        "voxtral-mini-tts-2603",
+	DefaultTranscriptionModel: "voxtral-mini-latest",
+
 	Provider:              llms.ProviderMistral,
 	DefaultEmbeddingModel: "mistral-embed",
 	Capabilities: llms.Capabilities{
@@ -28,7 +35,8 @@ var providerConfig = openaicompat.ProviderConfig{
 // Thread-safety: All methods are safe for concurrent use.
 type Client struct {
 	openaicompat.BaseProvider
-	options *options
+	options   *options
+	mediaHTTP *httpclient.Client
 }
 
 // New creates a new Mistral client with the given options.
@@ -64,6 +72,7 @@ func New(opts ...Option) (*Client, error) {
 	return &Client{
 		BaseProvider: openaicompat.NewBaseProvider(client, cfg),
 		options:      options,
+		mediaHTTP:    newMediaHTTP(options),
 	}, nil
 }
 
@@ -75,3 +84,8 @@ var _ llms.Embedder = (*Client)(nil)
 
 // Ensure Client implements the CapableProvider interface.
 var _ llms.CapableProvider = (*Client)(nil)
+
+var (
+	_ llms.SpeechSynthesizer = (*Client)(nil)
+	_ llms.Transcriber       = (*Client)(nil)
+)

@@ -9,6 +9,15 @@ import (
 // This allows accurate per-model capability reporting instead of static
 // provider-level defaults.
 type ModelCapabilities struct {
+	// ImageGeneration indicates support for ImageGeneration operations.
+	ImageGeneration bool
+	// VideoGeneration indicates support for VideoGeneration operations.
+	VideoGeneration bool
+	// Speech indicates support for Speech operations.
+	Speech bool
+	// Transcription indicates support for Transcription operations.
+	Transcription bool
+
 	MaxContextTokens      int  // Maximum input context window
 	MaxOutputTokens       int  // Maximum output tokens
 	SupportsVision        bool // Can process images
@@ -655,6 +664,15 @@ func (mc ModelCapabilities) ModelTypes() []ModelType {
 	if mc.SupportsEmbeddings {
 		types = append(types, ModelTypeEmbedding)
 	}
+	if mc.ImageGeneration {
+		types = append(types, ModelTypeImage)
+	}
+	if mc.VideoGeneration {
+		types = append(types, ModelTypeVideo)
+	}
+	if mc.Speech || mc.Transcription {
+		types = append(types, ModelTypeAudio)
+	}
 	return types
 }
 
@@ -662,6 +680,11 @@ func (mc ModelCapabilities) ModelTypes() []ModelType {
 // This allows easy integration with existing Capabilities() implementations.
 func (mc ModelCapabilities) ToCapabilities() Capabilities {
 	return Capabilities{
+		ImageGeneration: mc.ImageGeneration,
+		VideoGeneration: mc.VideoGeneration,
+		Speech:          mc.Speech,
+		Transcription:   mc.Transcription,
+
 		Streaming:        mc.SupportsStreaming,
 		Tools:            mc.SupportsTools,
 		Vision:           mc.SupportsVision,

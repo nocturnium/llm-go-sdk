@@ -369,3 +369,218 @@ type ModelsListResponse struct {
 	Object string          `json:"object"` // "list"
 	Data   []ModelResponse `json:"data"`
 }
+
+// ImageGenerationRequest is the JSON image generation request. ExtraBody overrides standard fields.
+type ImageGenerationRequest struct {
+	Model             string         `json:"model"`
+	Prompt            string         `json:"prompt"`
+	N                 int            `json:"n,omitempty"`
+	Size              string         `json:"size,omitempty"`
+	Quality           string         `json:"quality,omitempty"`
+	OutputFormat      string         `json:"output_format,omitempty"`
+	OutputCompression *int           `json:"output_compression,omitempty"`
+	Background        string         `json:"background,omitempty"`
+	Moderation        string         `json:"moderation,omitempty"`
+	Stream            bool           `json:"stream,omitempty"`
+	PartialImages     *int           `json:"partial_images,omitempty"`
+	User              string         `json:"user,omitempty"`
+	ResponseFormat    string         `json:"response_format,omitempty"`
+	ExtraBody         map[string]any `json:"-"`
+}
+
+// MarshalJSON merges additional body keys last.
+func (r ImageGenerationRequest) MarshalJSON() ([]byte, error) {
+	type plain ImageGenerationRequest
+	return marshalMediaExtra(plain(r), r.ExtraBody)
+}
+
+func marshalMediaExtra(value any, extra map[string]any) ([]byte, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	for key, value := range extra {
+		fields[key] = value
+	}
+	return json.Marshal(fields)
+}
+
+// ImageEditRequest contains multipart fields and inline image uploads.
+type ImageEditRequest struct {
+	Model         string            `json:"model"`
+	Prompt        string            `json:"prompt"`
+	N             int               `json:"n,omitempty"`
+	Size          string            `json:"size,omitempty"`
+	Quality       string            `json:"quality,omitempty"`
+	OutputFormat  string            `json:"output_format,omitempty"`
+	InputFidelity string            `json:"input_fidelity,omitempty"`
+	Images        []llms.MediaInput `json:"-"`
+	Mask          *llms.MediaInput  `json:"-"`
+	ExtraBody     map[string]any    `json:"-"`
+}
+
+// ImageData describes one generated image.
+type ImageData struct {
+	MediaType     string `json:"media_type,omitempty"`
+	B64JSON       string `json:"b64_json,omitempty"`
+	URL           string `json:"url,omitempty"`
+	RevisedPrompt string `json:"revised_prompt,omitempty"`
+}
+
+// ImageUsage describes image or audio token accounting.
+type ImageUsage struct {
+	// InputCharacters is reported by character-billed speech services.
+	InputCharacters    *int     `json:"input_characters,omitempty"`
+	PromptTokens       int      `json:"prompt_tokens,omitempty"`
+	CompletionTokens   int      `json:"completion_tokens,omitempty"`
+	Cost               *float64 `json:"cost,omitempty"`
+	InputTokens        int      `json:"input_tokens,omitempty"`
+	OutputTokens       int      `json:"output_tokens,omitempty"`
+	TotalTokens        int      `json:"total_tokens,omitempty"`
+	InputTokensDetails *struct {
+		TextTokens  int `json:"text_tokens,omitempty"`
+		ImageTokens int `json:"image_tokens,omitempty"`
+	} `json:"input_tokens_details,omitempty"`
+}
+
+// ImageResponse is a generated image response.
+type ImageResponse struct {
+	Created int64       `json:"created,omitempty"`
+	Data    []ImageData `json:"data"`
+	Usage   *ImageUsage `json:"usage,omitempty"`
+}
+
+// ImageStreamEvent is an image generation or edit SSE event; Err is a transport/decoding error.
+type ImageStreamEvent struct {
+	Type              string      `json:"type,omitempty"`
+	B64JSON           string      `json:"b64_json,omitempty"`
+	PartialImageIndex int         `json:"partial_image_index,omitempty"`
+	Usage             *ImageUsage `json:"usage,omitempty"`
+	Err               error       `json:"-"`
+}
+
+// SpeechRequest requests binary audio or SSE audio deltas.
+type SpeechRequest struct {
+	ExtraBody      map[string]any `json:"-"`
+	Model          string         `json:"model"`
+	Input          string         `json:"input"`
+	Voice          string         `json:"voice"`
+	Instructions   string         `json:"instructions,omitempty"`
+	ResponseFormat string         `json:"response_format,omitempty"`
+	Speed          *float64       `json:"speed,omitempty"`
+	StreamFormat   string         `json:"stream_format,omitempty"`
+}
+
+// MarshalJSON merges extensions while reserving all standard speech fields.
+func (r SpeechRequest) MarshalJSON() ([]byte, error) {
+	type plain SpeechRequest
+	extra := make(map[string]any, len(r.ExtraBody))
+	for k, v := range r.ExtraBody {
+		switch k {
+		case "model", "input", "voice", "instructions", "response_format", "speed", "stream_format":
+		default:
+			extra[k] = v
+		}
+	}
+	if len(extra) == 0 {
+		return json.Marshal(plain(r))
+	}
+	return marshalMediaExtra(plain(r), extra)
+}
+
+// SpeechStreamEvent contains base64 audio or terminal usage; Err reports stream failures.
+type SpeechStreamEvent struct {
+	Type  string      `json:"type,omitempty"`
+	Audio string      `json:"audio,omitempty"`
+	Usage *ImageUsage `json:"usage,omitempty"`
+	Err   error       `json:"-"`
+}
+
+// TranscriptionRequest contains multipart transcription fields and an inline audio file.
+type TranscriptionRequest struct {
+	File                   llms.MediaInput `json:"-"`
+	Model                  string          `json:"model"`
+	Language               string          `json:"language,omitempty"`
+	Prompt                 string          `json:"prompt,omitempty"`
+	ResponseFormat         string          `json:"response_format,omitempty"`
+	Temperature            *float64        `json:"temperature,omitempty"`
+	TimestampGranularities []string        `json:"timestamp_granularities,omitempty"`
+	Stream                 bool            `json:"stream,omitempty"`
+	Include                []string        `json:"include,omitempty"`
+	ExtraBody              map[string]any  `json:"-"`
+}
+
+// TranscriptionResponse covers JSON, verbose JSON, diarized JSON, and text responses.
+type TranscriptionResponse struct {
+	Text     string                 `json:"text"`
+	Language string                 `json:"language,omitempty"`
+	Duration float64                `json:"duration,omitempty"`
+	Segments []TranscriptionSegment `json:"segments,omitempty"`
+	Words    []TranscriptionWord    `json:"words,omitempty"`
+	Usage    *TranscriptionUsage    `json:"usage,omitempty"`
+}
+
+// TranscriptionUsage reports either duration billing or token billing.
+type TranscriptionUsage struct {
+	Cost              *float64 `json:"cost,omitempty"`
+	Type              string   `json:"type"`
+	Seconds           float64  `json:"seconds,omitempty"`
+	TotalTokens       int      `json:"total_tokens,omitempty"`
+	InputTokens       int      `json:"input_tokens,omitempty"`
+	InputTokenDetails struct {
+		TextTokens  int `json:"text_tokens,omitempty"`
+		AudioTokens int `json:"audio_tokens,omitempty"`
+	} `json:"input_token_details,omitempty"`
+	OutputTokens int `json:"output_tokens,omitempty"`
+}
+
+// TranscriptionSegment is one timed, optionally speaker-labeled segment.
+type TranscriptionSegment struct {
+	// ID is an integer on verbose_json responses and a string such as
+	// "seg_0" on diarized_json responses, so it is kept as raw JSON.
+	ID      json.RawMessage `json:"id,omitempty"`
+	Start   float64         `json:"start"`
+	End     float64         `json:"end"`
+	Text    string          `json:"text"`
+	Speaker string          `json:"speaker,omitempty"`
+}
+
+// TranscriptionWord is one timed word.
+type TranscriptionWord struct {
+	Word  string  `json:"word"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+}
+
+// VideoCreateRequest submits a video job; Seconds is a wire string.
+type VideoCreateRequest struct {
+	Model          string `json:"model"`
+	Prompt         string `json:"prompt"`
+	Seconds        string `json:"seconds,omitempty"`
+	Size           string `json:"size,omitempty"`
+	InputReference string `json:"input_reference,omitempty"`
+}
+
+// VideoObject describes a submitted video job.
+type VideoObject struct {
+	ID        string      `json:"id"`
+	Object    string      `json:"object,omitempty"`
+	Status    string      `json:"status"`
+	Progress  *float64    `json:"progress,omitempty"`
+	CreatedAt int64       `json:"created_at,omitempty"`
+	ExpiresAt int64       `json:"expires_at,omitempty"`
+	Model     string      `json:"model,omitempty"`
+	Seconds   string      `json:"seconds,omitempty"`
+	Size      string      `json:"size,omitempty"`
+	Error     *VideoError `json:"error,omitempty"`
+}
+
+// VideoError describes a failed video job.
+type VideoError struct {
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}

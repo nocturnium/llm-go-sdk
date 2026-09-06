@@ -52,6 +52,8 @@ var crossHostRedirectCredentialHeaders = []string{
 	"x-goog-api-key",
 	"api-key",
 	"x-api-key",
+	"xi-api-key",
+	"x-key",
 	"Authorization",
 	"Proxy-Authorization",
 }

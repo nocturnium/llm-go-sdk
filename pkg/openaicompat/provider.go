@@ -6,9 +6,18 @@ import (
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
-// ProviderConfig defines the configuration for an OpenAI-compatible provider.
-// This is used to customize the base provider behavior.
+// MediaCapabilities enables media operations and optionally overrides their routes.
+type MediaCapabilities struct {
+	Images, ImageEdits, Speech, SpeechStream, Transcription, Videos        bool
+	ImagesPath, ImageEditsPath, SpeechPath, TranscriptionsPath, VideosPath string
+}
+
+// ProviderConfig customizes the behavior of an OpenAI-compatible provider.
 type ProviderConfig struct {
+	// Media controls supported media operations independently of chat.
+	Media MediaCapabilities
+	// Default media models are used unless request options override them.
+	DefaultImageModel, DefaultSpeechModel, DefaultTranscriptionModel, DefaultVideoModel string
 	// Provider is the provider type (e.g., llms.ProviderOpenAI). Its string form
 	// is also used as the label in error messages.
 	Provider llms.Provider
@@ -58,6 +67,18 @@ type BaseProvider struct {
 // constructor. End users normally construct clients through provider packages
 // such as openai.New or through the llms.New registry path.
 func NewBaseProvider(client *Client, config ProviderConfig) BaseProvider {
+	// Copy the client so route overrides do not mutate another provider's client.
+	if client != nil {
+		copied := *client
+		paths := []*string{&copied.mediaPaths.ImagesPath, &copied.mediaPaths.ImageEditsPath, &copied.mediaPaths.SpeechPath, &copied.mediaPaths.TranscriptionsPath, &copied.mediaPaths.VideosPath}
+		overrides := []string{config.Media.ImagesPath, config.Media.ImageEditsPath, config.Media.SpeechPath, config.Media.TranscriptionsPath, config.Media.VideosPath}
+		for i, override := range overrides {
+			if override != "" {
+				*paths[i] = override
+			}
+		}
+		client = &copied
+	}
 	return BaseProvider{
 		client:         client,
 		config:         config,
@@ -235,6 +256,10 @@ func (p *BaseProvider) Capabilities() llms.Capabilities {
 	// (e.g. Azure, llama.cpp), so the declaration is honored as-is.
 	caps.Embeddings = static.Embeddings
 	caps.Batch = static.Batch
+	caps.ImageGeneration = p.config.Media.Images
+	caps.VideoGeneration = p.config.Media.Videos
+	caps.Speech = p.config.Media.Speech
+	caps.Transcription = p.config.Media.Transcription
 
 	return caps
 }

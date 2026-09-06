@@ -42,7 +42,7 @@ func TestCheckRedirect_StripsCredentialsOnCrossHostRedirect(t *testing.T) {
 	}
 
 	headers := <-foreignHeaders
-	for _, header := range []string{"x-goog-api-key", "api-key", "x-api-key", "Authorization"} {
+	for _, header := range []string{"x-goog-api-key", "api-key", "x-api-key", "xi-api-key", "x-key", "Authorization"} {
 		if got := headers.Get(header); got != "" {
 			t.Errorf("expected %s to be stripped, got %q", header, got)
 		}
@@ -83,6 +83,8 @@ func redirectCredentialTestHeaders() map[string]string {
 		"x-goog-api-key": "gemini-secret",
 		"api-key":        "azure-secret",
 		"x-api-key":      "anthropic-secret",
+		"xi-api-key":     "elevenlabs-secret",
+		"x-key":          "bfl-secret",
 		"Authorization":  "Bearer openai-secret",
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,10 +18,12 @@ const defaultBaseURL = "https://generativelanguage.googleapis.com/v1beta"
 
 // Client is a Gemini API client.
 type Client struct {
-	httpClient *httpclient.Client
-	baseURL    string
-	apiKey     string
-	model      string
+	httpClient      *httpclient.Client
+	baseURL         string
+	apiKey          string
+	model           string
+	allowPrivateIPs bool
+	allowHTTP       bool
 }
 
 // ClientConfig configures the Gemini client.
@@ -58,10 +61,12 @@ func NewClient(config ClientConfig) *Client {
 	}
 
 	return &Client{
-		httpClient: httpClient,
-		baseURL:    baseURL,
-		apiKey:     config.APIKey,
-		model:      config.Model,
+		httpClient:      httpClient,
+		baseURL:         baseURL,
+		apiKey:          config.APIKey,
+		model:           config.Model,
+		allowPrivateIPs: config.AllowPrivateIPs,
+		allowHTTP:       config.AllowHTTP,
 	}
 }
 
@@ -186,7 +191,7 @@ func GetFinishReason(reason string) string {
 		return "stop"
 	case "MAX_TOKENS":
 		return "length"
-	case "SAFETY":
+	case "SAFETY", "IMAGE_SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII":
 		return "content_filter"
 	case "RECITATION":
 		return "content_filter"
@@ -362,4 +367,119 @@ func WrapError(operation string, err error) error {
 
 func sanitizeModelName(model string) string {
 	return httpclient.SanitizeModelName(strings.TrimPrefix(model, "models/"))
+}
+
+// mediaRequest sends a request under the configured API base path.
+func (c *Client) mediaRequest(ctx context.Context, method, route string, body, out any) error {
+	if err := ctx.Err(); err != nil {
+		return WrapError(route, err)
+	}
+	endpoint, err := url.JoinPath(c.baseURL, route)
+	if err != nil {
+		return WrapError("media URL", err)
+	}
+	return WrapError(route, c.httpClient.DoJSON(ctx, httpclient.Request{Method: method, URL: endpoint, Headers: c.getHeaders(), Body: body}, out))
+}
+
+// PredictLongRunning submits a Veo request and validates the operation name.
+// Transport and malformed-resource errors carry Gemini provider context.
+func (c *Client) PredictLongRunning(ctx context.Context, model string, req *PredictLongRunningRequest) (*Operation, error) {
+	var out Operation
+	if err := c.mediaRequest(ctx, http.MethodPost, "models/"+sanitizeModelName(model)+":predictLongRunning", req, &out); err != nil {
+		return nil, err
+	}
+	if err := validateOperationName(out.Name); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func validResourceID(id string) bool {
+	if id == "" || id == "." || id == ".." {
+		return false
+	}
+	for _, ch := range id {
+		switch {
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9', strings.ContainsRune("-_.~", ch):
+		default:
+			return false
+		}
+	}
+	return true
+}
+func validateOperationName(name string) error {
+	parts := strings.Split(name, "/")
+	if len(parts) != 4 || parts[0] != "models" || parts[2] != "operations" || !validResourceID(parts[1]) || !validResourceID(parts[3]) {
+		return WrapError(fmt.Sprintf("invalid operation name %q", name), llms.ErrInvalidParameters)
+	}
+	return nil
+}
+
+// GetOperation reads a models/{model}/operations/{id} resource.
+// Invalid resource names return ErrInvalidParameters before sending credentials.
+func (c *Client) GetOperation(ctx context.Context, name string) (*Operation, error) {
+	if err := validateOperationName(name); err != nil {
+		return nil, err
+	}
+	var out Operation
+	if err := c.mediaRequest(ctx, http.MethodGet, name, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateInteraction submits an Interactions request, returning provider errors.
+func (c *Client) CreateInteraction(ctx context.Context, req *InteractionRequest) (*Interaction, error) {
+	var out Interaction
+	if err := c.mediaRequest(ctx, http.MethodPost, "interactions", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetInteraction reads an interaction by ID; invalid IDs return ErrInvalidParameters.
+func (c *Client) GetInteraction(ctx context.Context, id string) (*Interaction, error) {
+	if !validResourceID(id) {
+		return nil, WrapError("invalid interaction ID", llms.ErrInvalidParameters)
+	}
+	var out Interaction
+	if err := c.mediaRequest(ctx, http.MethodGet, "interactions/"+id, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DownloadFile downloads bounded binary data with x-goog-api-key. URLs must use
+// generativelanguage.googleapis.com or the configured baseURL host. HTTP/private-IP
+// opt-outs relax transport restrictions only; they never allow arbitrary hosts.
+// The shared transport independently enforces HTTPS and SSRF restrictions and
+// strips credentials on cross-host redirects. Invalid URLs fail before any I/O.
+func (c *Client) DownloadFile(ctx context.Context, uri string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, WrapError("download file", err)
+	}
+	u, err := url.Parse(uri)
+	if err != nil || u.User != nil || u.Fragment != "" {
+		return nil, WrapError("invalid file URL", llms.ErrInvalidParameters)
+	}
+	base, baseErr := url.Parse(c.baseURL)
+	if !strings.EqualFold(u.Hostname(), "generativelanguage.googleapis.com") && (baseErr != nil || u.Host == "" || !strings.EqualFold(u.Host, base.Host)) {
+		return nil, WrapError("untrusted file host", llms.ErrInvalidParameters)
+	}
+	if err := c.ValidateMediaURL(uri); err != nil {
+		return nil, WrapError("file URL", err)
+	}
+	response, err := c.httpClient.DoBinary(ctx, http.MethodGet, uri, nil, c.getHeaders())
+	if err != nil {
+		return nil, WrapError("download file", err)
+	}
+	return response.Data, nil
+}
+
+// ValidateMediaURL checks caller audio URLs using this client's transport policy.
+// Unlike authenticated file downloads, caller audio may use any permitted host.
+func (c *Client) ValidateMediaURL(uri string) error {
+	opts := httpclient.DefaultURLValidationOptions()
+	opts.AllowPrivateIPs, opts.AllowHTTP = c.allowPrivateIPs, c.allowHTTP
+	return httpclient.ValidateURL(uri, opts)
 }

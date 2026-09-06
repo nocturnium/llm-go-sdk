@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,11 +13,13 @@ import (
 	"strings"
 	"time"
 
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 )
 
 // Client is an OpenAI-compatible API client
 type Client struct {
+	mediaPaths   MediaCapabilities
 	httpClient   *httpclient.Client
 	baseURL      string
 	apiKey       string
@@ -27,13 +30,15 @@ type Client struct {
 
 // ClientConfig configures the client
 type ClientConfig struct {
-	BaseURL      string
-	APIKey       string
-	Headers      map[string]string
-	HTTPClient   *http.Client
-	Timeout      time.Duration // Timeout for the underlying HTTP client; 0 uses the default.
-	AzureAPIKey  bool          // Use api-key header instead of Authorization
-	AzureVersion string        // Azure API version (appended to URLs)
+	// Media route overrides; empty values use OpenAI defaults.
+	ImagesPath, ImageEditsPath, SpeechPath, TranscriptionsPath, VideosPath string
+	BaseURL                                                                string
+	APIKey                                                                 string
+	Headers                                                                map[string]string
+	HTTPClient                                                             *http.Client
+	Timeout                                                                time.Duration // Timeout for the underlying HTTP client; 0 uses the default.
+	AzureAPIKey                                                            bool          // Use api-key header instead of Authorization
+	AzureVersion                                                           string        // Azure API version (appended to URLs)
 
 	// AllowPrivateIPs allows requests to private/loopback IPs (SSRF opt-out).
 	AllowPrivateIPs bool
@@ -58,6 +63,7 @@ func NewClient(config ClientConfig) *Client {
 
 	return &Client{
 		httpClient:   httpClient,
+		mediaPaths:   MediaCapabilities{ImagesPath: config.ImagesPath, ImageEditsPath: config.ImageEditsPath, SpeechPath: config.SpeechPath, TranscriptionsPath: config.TranscriptionsPath, VideosPath: config.VideosPath},
 		baseURL:      config.BaseURL,
 		apiKey:       config.APIKey,
 		headers:      config.Headers,
@@ -301,4 +307,277 @@ func appendPath(baseURL, suffix string) (string, error) {
 	}
 	u.Path = path.Join(basePath, suffixPath)
 	return u.String(), nil
+}
+
+func (c *Client) mediaURL(override, fallback string) string {
+	if override == "" {
+		override = fallback
+	}
+	return c.buildURL(override)
+}
+
+// CreateImage posts an image generation request and returns a wire response or transport error.
+func (c *Client) CreateImage(ctx context.Context, req *ImageGenerationRequest) (*ImageResponse, error) {
+	var out ImageResponse
+	err := c.httpClient.DoJSON(ctx, httpclient.Request{Method: http.MethodPost, URL: c.mediaURL(c.mediaPaths.ImagesPath, "/images/generations"), Headers: c.getHeaders(), Body: req}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateImageStream returns image SSE events. Consumers must drain the channel
+// or cancel ctx. Parsing and transport failures appear in the event's Err field.
+func (c *Client) CreateImageStream(ctx context.Context, req *ImageGenerationRequest) (<-chan ImageStreamEvent, error) {
+	copied := *req
+	copied.Stream = true
+	// Streaming must win over any non-streaming ExtraBody value.
+	copied.ExtraBody = make(map[string]any, len(req.ExtraBody))
+	for k, v := range req.ExtraBody {
+		copied.ExtraBody[k] = v
+	}
+	copied.ExtraBody["stream"] = true
+	return mediaStream(ctx, c, c.mediaURL(c.mediaPaths.ImagesPath, "/images/generations"), &copied,
+		func(e *ImageStreamEvent, typ string, err error) bool {
+			e.Err = err
+			if e.Type == "" {
+				e.Type = typ
+			}
+			return e.Type == "image_generation.completed" || e.Type == "image_edit.completed"
+		})
+}
+
+// EditImage uploads inline images and an optional mask as multipart data.
+// URL/FileID uploads and malformed inputs return a validation error.
+func (c *Client) EditImage(ctx context.Context, req *ImageEditRequest) (*ImageResponse, error) {
+	fields, files, err := multipartMediaFields(req, req.ExtraBody)
+	if err != nil {
+		return nil, err
+	}
+	if len(req.Images) == 0 || len(req.Images) > 16 {
+		return nil, fmt.Errorf("image edits require 1-16 images")
+	}
+	for _, input := range req.Images {
+		file, err := mediaUpload("image[]", input)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	if req.Mask != nil {
+		file, err := mediaUpload("mask", *req.Mask)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	var out ImageResponse
+	err = c.httpClient.DoMultipart(ctx, http.MethodPost, c.mediaURL(c.mediaPaths.ImageEditsPath, "/images/edits"), fields, files, c.getHeaders(), &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateSpeech returns audio bytes and the response content type, or a transport error.
+func (c *Client) CreateSpeech(ctx context.Context, req *SpeechRequest) ([]byte, string, error) {
+	out, err := c.httpClient.DoBinary(ctx, http.MethodPost, c.mediaURL(c.mediaPaths.SpeechPath, "/audio/speech"), req, c.getHeaders())
+	if err != nil {
+		return nil, "", err
+	}
+	return out.Data, out.ContentType, nil
+}
+
+// CreateSpeechStream returns SSE audio events, closing after done or [DONE].
+// Consumers must drain the channel or cancel ctx. Audio remains base64 encoded.
+func (c *Client) CreateSpeechStream(ctx context.Context, req *SpeechRequest) (<-chan SpeechStreamEvent, error) {
+	copied := *req
+	copied.StreamFormat = "sse"
+	return mediaStream(ctx, c, c.mediaURL(c.mediaPaths.SpeechPath, "/audio/speech"), &copied,
+		func(e *SpeechStreamEvent, typ string, err error) bool {
+			e.Err = err
+			if e.Type == "" {
+				e.Type = typ
+			}
+			return e.Type == "speech.audio.done"
+		})
+}
+
+func mediaStream[T any](ctx context.Context, c *Client, endpoint string, req any, finish func(*T, string, error) bool) (<-chan T, error) {
+	body, err := c.httpClient.DoStream(ctx, httpclient.Request{Method: http.MethodPost, URL: endpoint, Headers: c.getHeaders(), Body: req})
+	if err != nil {
+		return nil, err
+	}
+	events := make(chan T, 8)
+	go func() {
+		defer close(events)
+		reader := httpclient.NewSSEReader(body)
+		defer func() { _ = reader.Close() }()
+		for {
+			event, err := reader.Read()
+			if err == nil && event.Data == "[DONE]" {
+				return
+			}
+			if errors.Is(err, io.EOF) {
+				err = fmt.Errorf("media stream ended before completion: %w", errors.Join(io.ErrUnexpectedEOF, llms.ErrStreamInterrupted))
+			}
+			if err == nil && event.Data == "" {
+				continue
+			}
+			var value T
+			typ := ""
+			if err == nil {
+				typ = event.Event
+				err = json.Unmarshal([]byte(event.Data), &value)
+			}
+			done := finish(&value, typ, err)
+			select {
+			case events <- value:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil || done {
+				return
+			}
+		}
+	}()
+	return events, nil
+}
+
+// CreateTranscription uploads audio and decodes the selected response format.
+// Streaming transcription is unsupported. Uploads must contain at most 25 MB of inline data.
+func (c *Client) CreateTranscription(ctx context.Context, req *TranscriptionRequest) (*TranscriptionResponse, error) {
+	fields, files, err := multipartMediaFields(req, req.ExtraBody)
+	if err != nil {
+		return nil, err
+	}
+	if fields["stream"] == "true" {
+		return nil, fmt.Errorf("streaming transcription is unsupported")
+	}
+	if fields["response_format"] == "" {
+		fields["response_format"] = "json"
+	}
+	if err := validateTranscriptionFormat(fields["model"], fields["response_format"]); err != nil {
+		return nil, err
+	}
+	file, err := mediaUpload("file", req.File)
+	if err != nil {
+		return nil, err
+	}
+	if len(file.Data) > 25*1024*1024 {
+		return nil, fmt.Errorf("transcription file exceeds 25 MB")
+	}
+	files = append(files, file)
+	var out TranscriptionResponse
+	var raw []byte
+	var target any = &out
+	switch fields["response_format"] {
+	case contentTypeText, "srt", "vtt":
+		target = &raw
+	}
+	err = c.httpClient.DoMultipart(ctx, http.MethodPost, c.mediaURL(c.mediaPaths.TranscriptionsPath, "/audio/transcriptions"), fields, files, c.getHeaders(), target)
+	if err != nil {
+		return nil, err
+	}
+	if target == &raw {
+		out.Text = string(raw)
+	}
+	return &out, nil
+}
+
+func multipartMediaFields(req any, extra map[string]any) (map[string]string, []httpclient.MultipartFile, error) {
+	for key, value := range extra {
+		switch value.(type) {
+		case string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
+		default:
+			return nil, nil, fmt.Errorf("%w: multipart extra %q must be scalar", llms.ErrInvalidParameters, key)
+		}
+	}
+	data, err := marshalMediaExtra(req, extra)
+	if err != nil {
+		return nil, nil, err
+	}
+	var values map[string]any
+	if err := json.Unmarshal(data, &values); err != nil {
+		return nil, nil, err
+	}
+	fields := make(map[string]string, len(values))
+	var repeated []httpclient.MultipartFile
+	for key, value := range values {
+		if array, ok := value.([]any); ok {
+			for _, item := range array {
+				// An empty filename makes this a regular form field, allowing repeated keys.
+				repeated = append(repeated, httpclient.MultipartFile{Field: strings.TrimSuffix(key, "[]") + "[]", Data: []byte(fmt.Sprint(item))})
+			}
+		} else {
+			fields[key] = fmt.Sprint(value)
+		}
+	}
+	return fields, repeated, nil
+}
+
+func mediaUpload(field string, input llms.MediaInput) (httpclient.MultipartFile, error) {
+	if err := input.Validate(); err != nil {
+		return httpclient.MultipartFile{}, err
+	}
+	if len(input.Data) == 0 {
+		return httpclient.MultipartFile{}, fmt.Errorf("multipart upload requires inline Data: %w", llms.ErrInvalidParameters)
+	}
+	extensions := map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/mp4": ".m4a", "audio/flac": ".flac", "audio/ogg": ".ogg", "audio/webm": ".webm"}
+	return httpclient.MultipartFile{Field: field, Filename: "upload" + extensions[input.MIMEType], ContentType: input.MIMEType, Data: input.Data}, nil
+}
+
+// CreateVideo submits a video job, returning its initial state or a transport error.
+func (c *Client) CreateVideo(ctx context.Context, req *VideoCreateRequest) (*VideoObject, error) {
+	var out VideoObject
+	err := c.httpClient.DoJSON(ctx, httpclient.Request{Method: http.MethodPost, URL: c.mediaURL(c.mediaPaths.VideosPath, "/videos"), Headers: c.getHeaders(), Body: req}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) videoURL(id string, content bool) (string, error) {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\?#%") {
+		return "", fmt.Errorf("invalid video ID: %w", llms.ErrInvalidParameters)
+	}
+	endpoint, err := url.Parse(c.mediaURL(c.mediaPaths.VideosPath, "/videos"))
+	if err != nil {
+		return "", err
+	}
+	endpoint.Path = path.Join(endpoint.Path, id)
+	if content {
+		endpoint.Path = path.Join(endpoint.Path, "content")
+		query := endpoint.Query()
+		query.Set("variant", "video")
+		endpoint.RawQuery = query.Encode()
+	}
+	return endpoint.String(), nil
+}
+
+// GetVideo retrieves the current job state. Invalid IDs fail before any request.
+func (c *Client) GetVideo(ctx context.Context, id string) (*VideoObject, error) {
+	endpoint, err := c.videoURL(id, false)
+	if err != nil {
+		return nil, err
+	}
+	var out VideoObject
+	err = c.httpClient.DoJSON(ctx, httpclient.Request{Method: http.MethodGet, URL: endpoint, Headers: c.getHeaders()}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetVideoContent downloads the completed MP4 bytes or returns a transport error.
+func (c *Client) GetVideoContent(ctx context.Context, id string) ([]byte, error) {
+	endpoint, err := c.videoURL(id, true)
+	if err != nil {
+		return nil, err
+	}
+	out, err := c.httpClient.DoBinary(ctx, http.MethodGet, endpoint, nil, c.getHeaders())
+	if err != nil {
+		return nil, err
+	}
+	return out.Data, nil
 }
