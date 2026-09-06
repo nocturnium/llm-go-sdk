@@ -71,12 +71,17 @@ func TestLiveElevenLabs_SynthesizeWithTimestamps(t *testing.T) {
 }
 func TestLiveElevenLabs_Transcribe(t *testing.T) {
 	c, ctx := liveClient(t)
-	audio := liveMP3(t, c, ctx)
-	out, err := c.Transcribe(ctx, llms.MediaInput{Data: audio.Audio.Data, MIMEType: "audio/mpeg"})
+	// A longer, distinctive sentence keeps Scribe from guessing the wrong
+	// language on a sub-second clip.
+	speech, err := c.Synthesize(ctx, "The quick brown fox jumps over the lazy dog.", llms.WithSpeechModel("eleven_flash_v2_5"), llms.WithSpeechFormat(llms.AudioFormat{Container: "mp3", SampleRate: 44100, BitRate: 64000}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.ToLower(out.Text), "hi") || out.Usage.Unit != llms.MediaUnitMinute {
+	out, err := c.Transcribe(ctx, llms.MediaInput{Data: speech.Audio.Data, MIMEType: "audio/mpeg"}, llms.WithTranscribeLanguage("en"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToLower(out.Text), "fox") || out.Usage.Unit != llms.MediaUnitMinute {
 		t.Fatalf("unexpected transcript: %+v", out)
 	}
 }
