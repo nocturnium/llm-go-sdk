@@ -386,9 +386,10 @@ any fal application path is accepted, but option mapping and validation target
 the defaults.
 
 **Usage units, unpriced:** images report megapixels summed over every generated
-output (images when dimensions are absent), video billed seconds (6 or 10;
-omitted bills 6), speech Unicode runes / 1000 (KChar) and transcription minutes
-from the last chunk end (empty unit without chunks). Cost is always nil: fal
+output (quantity zero when fal omits a dimension; the unit never changes), video
+billed seconds (6 or 10; omitted bills 6), speech Unicode runes / 1000 (KChar)
+and transcription minutes from the last well-formed chunk end (empty unit without
+chunks; malformed chunks are skipped and counted in `Metadata["skipped_chunks"]`). Cost is always nil: fal
 publishes per-model prices only on client-rendered pages that could not be
 verified, so `MediaPricing` carries no fal rates. `X-Fal-Billable-Units` on result
 responses is preserved as `Metadata["billable_units"]` without deriving cost.

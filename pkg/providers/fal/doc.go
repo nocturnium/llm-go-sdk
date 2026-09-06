@@ -47,7 +47,8 @@
 //
 // Pricing is NOT tabulated: fal publishes per-model prices only on client-side
 // rendered pages that could not be verified. Usage reports Unit and Quantity
-// (megapixels or images, seconds, kchar, minutes) and leaves Cost nil.
+// (megapixels, seconds, kchar, minutes) and leaves Cost nil; image quantity is
+// zero when fal omits a dimension so the unit never changes.
 //
 // # Images
 //
@@ -78,7 +79,9 @@
 // rejected. Language, Prompt, Diarize (plus Extra num_speakers) and
 // WordTimestamps (chunk_level word) map directly; Translate sets task
 // translate. Segments come from chunks; Words are populated only for word
-// chunk_level. Minute usage derives from the last chunk end.
+// chunk_level. Minute usage derives from the last chunk end. Chunks with
+// malformed timestamps are skipped, counted in Metadata["skipped_chunks"], and
+// usage is suppressed only when every chunk was skipped.
 //
 // # Error mapping
 //
