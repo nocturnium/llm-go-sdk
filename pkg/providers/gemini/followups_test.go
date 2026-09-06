@@ -38,7 +38,7 @@ func TestBlockedPrompt_ReturnsModerationError(t *testing.T) {
 func TestBlockedPrompt_Stream(t *testing.T) {
 	c := followupClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte(`data: {"promptFeedback":{"blockReason":"PROHIBITED_CONTENT"}}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"promptFeedback":{"blockReason":"PROHIBITED_CONTENT"},"usageMetadata":{"promptTokenCount":5,"totalTokenCount":5}}` + "\n\n"))
 	})
 	ch, err := c.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
 	if err != nil {
@@ -49,7 +49,7 @@ func TestBlockedPrompt_Stream(t *testing.T) {
 		last = chunk
 	}
 	var mod *llms.ModerationError
-	if !errors.As(last.Error, &mod) || mod.Charged {
+	if !errors.As(last.Error, &mod) || !mod.Charged || last.Usage == nil || last.Usage.PromptTokens != 5 {
 		t.Fatalf("last = %+v", last)
 	}
 }

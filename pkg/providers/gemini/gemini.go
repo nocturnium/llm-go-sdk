@@ -288,7 +288,14 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 			// Input filtering arrives as a candidate-less chunk carrying
 			// promptFeedback.blockReason; surface it as a ModerationError.
 			if blockErr := blockedStreamChunk(chunk); blockErr != nil {
-				sender.SendFinal(llms.StreamChunk{Error: blockErr})
+				// Keep the prompt-token usage on the terminal chunk so cost
+				// tracking still records what the provider charged.
+				final := llms.StreamChunk{Error: blockErr}
+				if chunk.UsageMetadata != nil {
+					u := convertUsageMetadata(chunk.UsageMetadata)
+					final.Usage = &u
+				}
+				sender.SendFinal(final)
 				return
 			}
 
