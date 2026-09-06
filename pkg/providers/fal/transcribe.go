@@ -89,8 +89,9 @@ func transcribeBody(audio llms.MediaInput, task string, o *llms.TranscribeOption
 // Transcribe queues Whisper speech-to-text. Inputs are HTTPS URLs or inline Data
 // (sent as a data URI, at most 25 MB); FileID is rejected. Language, Prompt,
 // Diarize (plus Extra num_speakers) and WordTimestamps (chunk_level word) map
-// directly. Usage is minutes from the last chunk end when chunks exist; otherwise
-// the unit is empty. Cost stays nil.
+// directly. Usage is minutes from the last well-formed chunk end when any exist;
+// otherwise the unit is empty. Chunks with malformed timestamps are skipped and
+// counted in Metadata["skipped_chunks"]. Cost stays nil.
 func (c *Client) Transcribe(ctx context.Context, audio llms.MediaInput, opts ...llms.TranscribeOption) (*llms.Transcription, error) {
 	return c.transcribe(ctx, audio, "transcribe", opts...)
 }
