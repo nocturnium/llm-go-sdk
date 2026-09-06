@@ -134,9 +134,9 @@ Requires **Go 1.25+**.
 
 ## Supported Providers
 
-The SDK ships **21 providers** (18 chat-registered; HuggingFace, Infinity and ElevenLabs are
+The SDK ships **22 providers** (18 chat-registered; HuggingFace, Infinity, ElevenLabs and fal are
 direct-construct — HuggingFace serves chat or embeddings per its deployed model,
-Infinity serves embeddings/reranking and ElevenLabs serves media only).
+Infinity serves embeddings/reranking, and ElevenLabs and fal serve media only).
 Import each from its canonical path
 `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>`. Every chat provider also
 falls back to `LLM_API_KEY` if its own key var is unset. "OpenAI-compatible"
@@ -147,6 +147,7 @@ schema); "Native" providers implement a provider-specific wire format.
 |----------|-------------------------------------------|------------------------|-----------|-------------------------------|
 | OpenAI | `pkg/providers/openai` | `OPENAI_API_KEY` | Native (OpenAI) | `gpt-4o` (default); chat, streaming, tools, vision, JSON mode, embeddings (`text-embedding-3-*`), custom base URL |
 | ElevenLabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | Speech, Scribe transcription, SFX/music, Pro-plan Flows image/video; direct-construct, no chat |
+| fal | `pkg/providers/fal` | `FAL_KEY` | Native media | Images (`fal-ai/flux/schnell`), async video (Hailuo 02), Kokoro speech, Whisper STT via the fal queue; direct-construct, no chat, unpriced |
 | OpenRouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` (default); images, speech, transcription, async video, model discovery |
 | Anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | **Native** (Messages API) | `claude-sonnet-4-20250514` (default); chat, streaming, tools, vision, extended thinking, prompt caching (`cache_control`) |
 | Gemini | `pkg/providers/gemini` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | **Native** (Gemini API) | `gemini-2.5-flash` (default); chat, streaming, tools, vision, embeddings (`text-embedding-004`), JSON mode, safety settings |
@@ -181,6 +182,7 @@ via the provider's `WithAPIKey(...)` option. Copy [`.env.example`](./.env.exampl
 | `OPENAI_API_KEY` | OpenAI API key | OpenAI |
 | `OPENROUTER_API_KEY` | OpenRouter API key | OpenRouter |
 | `ELEVENLABS_API_KEY` | ElevenLabs API key | ElevenLabs |
+| `FAL_KEY` | fal.ai API key | fal |
 | `ANTHROPIC_API_KEY` | Anthropic API key | Anthropic |
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Google Gemini API key (either accepted) | Gemini |
 | `GROQ_API_KEY` | Groq API key | Groq |
@@ -221,7 +223,7 @@ Everything else lives under `internal/` and is not importable by external code.
 | Location | Role |
 |----------|------|
 | Root (`llms "github.com/nocturnium/llm-go-sdk/v6"`) | The core: `LLM` interface, `Message`/`Response`/`Tool` types, options, errors, streaming, cost-tracking and response-caching middleware, capability registry |
-| `pkg/providers/<name>` | **Provider implementations** (21 providers; 18 chat-registered) |
+| `pkg/providers/<name>` | **Provider implementations** (22 providers; 18 chat-registered) |
 | `pkg/openaicompat` | Shared OpenAI-compatible base client; the base for building custom providers |
 | `pkg/mcp` | Model Context Protocol client (`tools/list`, `tools/call`) |
 | `pkg/middleware/resilience` | Resilience middleware: retry, circuit breaker, fallback chain, rate limiting |
@@ -946,7 +948,7 @@ client, err = zai.New(zai.WithAPIKey("..."), zai.WithUseCodingAPI())
 ## CLI
 
 A CLI tool (`llms-cli`) is included for testing providers. It supports the **18
-auto-registered chat providers** (every provider except HuggingFace, Infinity and ElevenLabs, which
+auto-registered chat providers** (every provider except HuggingFace, Infinity, ElevenLabs and fal, which
 are constructed directly); run `./llms-cli providers` for the full list of providers,
 their default models, and the env vars they read.
 

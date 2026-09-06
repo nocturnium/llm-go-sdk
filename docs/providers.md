@@ -1,6 +1,6 @@
 # Providers
 
-llm-go-sdk ships first-class clients for **21 providers**, with chat clients sharing the
+llm-go-sdk ships first-class clients for **22 providers**, with chat clients sharing the
 [`llms.LLM`](index.md) interface. Each provider lives in its own subpackage
 under `pkg/providers/<name>` and is constructed with functional options, for
 example:
@@ -28,7 +28,8 @@ code works regardless of which provider you picked.
     [`pkg/openaicompat`](guides/custom-providers.md) and speak the OpenAI
     chat-completions wire format. **infinity** is not a chat provider at all —
     it serves embeddings and reranking only. **elevenlabs** uses native media APIs
-    for speech, transcription, images and video, without chat.
+    for speech, transcription, images and video, without chat. **fal** talks to the
+    fal.ai queue API for images, video, speech and transcription, also without chat.
 
 ---
 
@@ -38,6 +39,7 @@ code works regardless of which provider you picked.
 |----------|-------------|------------------------|-----------|--------------------|-------|
 | openai | `pkg/providers/openai` | `OPENAI_API_KEY` | OpenAI native | `gpt-4o` | Chat, vision, tools, embeddings (`text-embedding-3-small`) |
 | elevenlabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | n/a (no chat) | Speech, Scribe STT, SFX/music; Pro-plan Flows images/video; direct-construct |
+| fal | `pkg/providers/fal` | `FAL_KEY` | Native media | n/a (no chat) | Images, video, Kokoro speech, Whisper STT; direct-construct |
 | openrouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` | Images, async video, speech, transcription; embeddings require a model option |
 | anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | Native (Messages) | `claude-sonnet-4-20250514` | Vision, tools, thinking, prompt caching |
 | gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-2.5-flash` | Vision, tools, embeddings (`text-embedding-004`) |
@@ -129,14 +131,14 @@ Other helpers:
 - `llms.NewFromEnv()` reads `LLM_PROVIDER` / `LLM_MODEL`.
 - `llms.RegisteredProviders() []string` lists the registered chat providers.
 
-!!! warning "Three providers are not auto-registered: infinity, huggingface and elevenlabs"
+!!! warning "Four providers are not auto-registered: infinity, huggingface, elevenlabs and fal"
     The `all` package registers 18 chat providers but **not** infinity,
-    huggingface or elevenlabs. ElevenLabs supports media only. Infinity does not
+    huggingface, elevenlabs or fal. ElevenLabs and fal support media only. Infinity does not
     implement chat generation (embeddings and
     reranking only). HuggingFace *does* serve chat (and embeddings), but it needs
     an explicit Inference-Endpoint URL and a chat-vs-embeddings mode, so it cannot
     be built from a name alone. Construct these directly —
-    `infinity.New(...)` / `huggingface.New(...)` / `elevenlabs.New(...)`.
+    `infinity.New(...)` / `huggingface.New(...)` / `elevenlabs.New(...)` / `fal.New(...)`.
     The auto-registered set is:
     anthropic, azure, cerebras, deepseek, featherless, fireworks, gemini, groq,
     llamacpp, mistral, ollama, openai, openrouter, perplexity, runpod, synthetic, togetherai,

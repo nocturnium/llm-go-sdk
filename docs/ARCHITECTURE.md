@@ -265,7 +265,7 @@ llm-go-sdk/
 │   ├── observability/  # observability middleware (moved out of root in v3)
 │   │   ├── logging*.go / metrics*.go     # logging + metrics middleware
 │   │   └── otel*.go / langfuse*.go       # OTel + Langfuse tracing
-│   └── providers/<name>/   # provider implementations (19 providers)
+│   └── providers/<name>/   # provider implementations (22 providers)
 │
 ├── internal/           # not importable by external code
 │   ├── httpclient/     # shared HTTP client: retry, backoff, SSE, security

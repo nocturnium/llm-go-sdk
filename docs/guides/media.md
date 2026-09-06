@@ -1,7 +1,7 @@
 # Media Generation
 
 The media core defines provider-independent interfaces for images, video, speech,
-and transcription. OpenAI, OpenRouter, ElevenLabs, Gemini and the thin providers below implement these contracts using shared and native media routes. Media capabilities are separate
+and transcription. OpenAI, OpenRouter, ElevenLabs, fal, Gemini and the thin providers below implement these contracts using shared and native media routes. Media capabilities are separate
 from the `llms.LLM` chat interface.
 
 ## Interfaces
@@ -80,7 +80,7 @@ in which case `Cancel` returns `ErrJobCancelNotSupported`.
 
 ## Cost tracking
 
-`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI, ElevenLabs, Gemini, Together AI, Groq, Featherless, Mistral and Z.AI rates are included;
+`MediaPricing` stores USD rates by `provider:model` and billing unit. OpenAI, ElevenLabs, Gemini, Together AI, Groq, Featherless, Mistral and Z.AI rates are included (fal is unpriced);
 configure any custom rates before concurrent use. Provider-reported `MediaUsage.Cost`
 takes precedence over the table. `MediaCost` returns `ok=false` for missing rates
 or mismatched units.
@@ -100,6 +100,7 @@ unsupported operations return the corresponding `Err*NotSupported`.
 | Gemini | Native generation + inline edits (`gemini-3.1-flash-image`); paid quota | Veo LRO + authenticated MP4 (`veo-3.1-lite-generate-preview`); paid quota | PCM-only TTS (`gemini-3.1-flash-tts-preview`); no streaming | Interactions (`gemini-3.5-transcribe`) |
 | OpenAI | Generation + edits (`gpt-image-1.5`); ignores `Seed`, `AspectRatio`, `NegativePrompt`, `SafetyTolerance` | Async MP4 (`sora-2`); ignores `Audio`, `LastFrame`, `ReferenceImages`, `Seed`, `NegativePrompt` | Binary + SSE (`gpt-4o-mini-tts`) | Multipart (`gpt-4o-mini-transcribe`) |
 | ElevenLabs | Flows generation + edits (`gemini-3.1-flash-lite-image`), Pro plan+ | Flows async (`veo-3.1-fast-generate-001`), Pro plan+ | Binary/chunked TTS, timestamps, dialogue, SFX/music | Scribe multipart (`scribe_v2`) |
+| fal | Queue generation (`fal-ai/flux/schnell`), eager download | Queue async MP4 (`fal-ai/minimax/hailuo-02/standard/text-to-video`), cancel supported | Queue WAV (`fal-ai/kokoro/american-english`); no streaming | Queue JSON (`fal-ai/whisper`), URL or data URI |
 | OpenRouter | Generation (`google/gemini-3.1-flash-lite-image`); native `/images` | Native async MP4 (`google/veo-3.1-lite`) | Binary mp3/pcm; optional cost lookup | Multipart JSON/verbose JSON (`openai/whisper-1`) |
 | Together AI | Generation (`black-forest-labs/FLUX.1-schnell`), base64 or eager URL download | Native `/v2/videos` (`ByteDance/Seedance-2.5`) | Binary + raw SSE (`hexgrad/Kokoro-82M`) | Multipart (`openai/whisper-large-v3`) |
 | Groq | — | — | WAV only (`canopylabs/orpheus-v1-english`), 200 characters | Transcription + translation (`whisper-large-v3-turbo`) |
@@ -361,6 +362,63 @@ video OutputFormat, speech Instructions and transcription Prompt have no verifie
 mapping and are ignored. Flows image credit pricing remains unknown (empty Unit);
 video usage records explicitly specified duration in seconds, with Cost nil.
 
+### fal.ai
+
+Construct `fal.New()` directly using `FAL_KEY` (fal's canonical variable; or
+`WithAPIKey`, then `LLM_API_KEY` fallback). It implements the image, video, speech
+and transcription interfaces but no chat interface, so it is absent from the
+registry and `pkg/providers/all`. Every call goes through the fal queue at
+`https://queue.fal.run`: `POST /{model}` submits, then the client polls
+`.../requests/{id}/status` (`IN_QUEUE` → `IN_PROGRESS` → `COMPLETED`), fetches
+`.../requests/{id}` and downloads the hosted file. Tracking URLs returned by the
+queue are used when they share the queue origin; otherwise
+`{base}/{namespace}/requests/{id}/...` is derived, where the namespace is the
+first two segments of the model ID (`fal-ai/flux` for `fal-ai/flux/schnell`) —
+fal rejects request routes under the full model path. `WithQueuePriority("low")` sets `X-Fal-Queue-Priority`. Requests
+default to 120 seconds each; bound polling with a context or `fal.WithPollPolicy`.
+
+**Endpoints and defaults:** images `fal-ai/flux/schnell`, video
+`fal-ai/minimax/hailuo-02/standard/text-to-video`, speech
+`fal-ai/kokoro/american-english` (voice `af_heart`) and transcription
+`fal-ai/whisper`. Override with `fal.WithImageModel`, `WithVideoModel`,
+`WithSpeechModel`, `WithTranscriptionModel` or the per-request `llms` options;
+any fal application path is accepted, but option mapping and validation target
+the defaults.
+
+**Usage units, unpriced:** images report megapixels summed over every generated
+output (images when dimensions are absent), video billed seconds (6 or 10;
+omitted bills 6), speech Unicode runes / 1000 (KChar) and transcription minutes
+from the last chunk end (empty unit without chunks). Cost is always nil: fal
+publishes per-model prices only on client-rendered pages that could not be
+verified, so `MediaPricing` carries no fal rates. `X-Fal-Billable-Units` on result
+responses is preserved as `Metadata["billable_units"]` without deriving cost.
+
+**Asset handling:** results are downloaded eagerly through the SSRF-validated
+transport without credentials (the API key never reaches `fal.media`). Assets
+retain URL, bytes and MIME type; `ExpiresAt` stays zero because fal publishes no
+TTL. Images map `Size` (`WxH`, wins over `AspectRatio`), `AspectRatio`
+(1:1/4:3/3:4/16:9/9:16 presets), `Count`, `Seed` and `Format` (jpeg/png);
+`NegativePrompt`, `Quality` and `SafetyTolerance` are rejected. Fully
+NSFW-flagged results return an output-stage `ModerationError`; partial flags drop
+those images and record `Metadata["nsfw_indices"]`. Video accepts
+`DurationSeconds` 6 or 10 only; `Resolution`, `AspectRatio` and the other typed
+options are rejected, and `Cancel` issues the queue cancel route (already
+completed jobs return `ErrInvalidParameters`). Speech accepts `Voice` (validated
+for the default Kokoro application only), `Speed` and an empty or `wav` Format;
+`Timestamps`, `Language` and `Instructions` are rejected and `StreamSpeech`
+returns `ErrSpeechStreamNotSupported`. Transcription accepts an HTTPS URL or
+inline Data up to 25 MB (sent as a base64 data URI, never FileID) with
+`Language`, `Prompt`, `Diarize` (plus Extra `num_speakers`) and
+`WordTimestamps` (`chunk_level: "word"`); `Translate` sets `task: "translate"`.
+Extra merges last on every route, with the typed keys reserved.
+
+**Error mapping:** 401/403 wrap `ErrAuthenticationFailed`, 429 `ErrRateLimited`,
+400/422 `ErrInvalidParameters` (`content_policy_violation` becomes an
+input-stage `ModerationError`, `no_media_generated` `ErrIncompleteResponse`),
+404 `ErrModelNotFound`, `*_timeout` types and 504 `ErrTimeout`, other 5xx
+`ErrServiceUnavailable`, any other 4xx `ErrInvalidParameters`. Only the body
+`error_type` is consulted (the `X-Fal-Error-Type` header is not exposed). Failed `COMPLETED` statuses carry the same mapping
+joined with `ErrJobFailed`. `*httpclient.APIError` stays in the chain.
 
 ### Gemini
 

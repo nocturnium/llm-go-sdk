@@ -13,6 +13,8 @@ type Provider string
 const (
 	// ProviderElevenLabs identifies the native media-only provider.
 	ProviderElevenLabs Provider = "elevenlabs"
+	// ProviderFal identifies the native media-only fal.ai queue provider.
+	ProviderFal Provider = "fal"
 	// ProviderOpenRouter is the OpenRouter provider.
 	ProviderOpenRouter Provider = "openrouter"
 	// ProviderOpenAI is the OpenAI provider.
