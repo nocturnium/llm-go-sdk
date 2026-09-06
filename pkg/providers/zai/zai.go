@@ -43,6 +43,17 @@ type Client struct {
 	mediaHTTP *httpclient.Client
 }
 
+// resolveBaseURL applies the coding-endpoint switch (only when the default
+// BaseURL is in use, so an explicit BaseURL always wins) and strips
+// trailing slashes.
+func resolveBaseURL(options *options) string {
+	baseURL := options.BaseURL
+	if options.UseCodingAPI && baseURL == "https://api.z.ai/api/paas/v4" {
+		baseURL = "https://api.z.ai/api/coding/paas/v4"
+	}
+	return strings.TrimRight(baseURL, "/")
+}
+
 // New creates a new Z.AI client with the given options.
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
@@ -56,15 +67,7 @@ func New(opts ...Option) (*Client, error) {
 
 	// Build the base URL for OpenAI-compatible API
 	// Format: https://api.z.ai/api/paas/v4 (general) or https://api.z.ai/api/coding/paas/v4 (coding)
-	baseURL := options.BaseURL
-
-	// If UseCodingAPI is enabled and the user hasn't provided a custom BaseURL,
-	// switch to the coding endpoint
-	if options.UseCodingAPI && baseURL == "https://api.z.ai/api/paas/v4" {
-		baseURL = "https://api.z.ai/api/coding/paas/v4"
-	}
-
-	baseURL = strings.TrimSuffix(baseURL, "/")
+	baseURL := resolveBaseURL(options)
 
 	clientConfig := openaicompat.ClientConfig{
 		BaseURL: baseURL,

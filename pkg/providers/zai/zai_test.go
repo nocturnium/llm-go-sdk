@@ -193,8 +193,8 @@ func TestWithUseCodingAPI(t *testing.T) {
 }
 
 func TestNew_CodingEndpoint(t *testing.T) {
-	// The actual endpoint switching is handled internally,
-	// but we can test that the option is accepted
+	// UseCodingAPI switches the default BaseURL to the coding endpoint and the
+	// client still constructs.
 	client, err := New(
 		WithAPIKey("test-key"),
 		WithUseCodingAPI(),
@@ -202,21 +202,22 @@ func TestNew_CodingEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if client.Provider() != llms.ProviderZAI {
 		t.Errorf("expected provider ZAI, got %s", client.Provider())
+	}
+	if got := resolveBaseURL(apply(WithAPIKey("test-key"), WithUseCodingAPI())); got != "https://api.z.ai/api/coding/paas/v4" {
+		t.Errorf("coding endpoint not applied: %s", got)
 	}
 }
 
 func TestNew_CustomBaseURLWithCodingAPI(t *testing.T) {
-	// When a custom BaseURL is provided, UseCodingAPI should not override it
-	opts := apply(
+	// When a custom BaseURL is provided, UseCodingAPI must not override it.
+	got := resolveBaseURL(apply(
 		WithBaseURL("https://custom.api.z.ai/v1"),
 		WithUseCodingAPI(),
-	)
-
-	if opts.BaseURL != "https://custom.api.z.ai/v1" {
-		t.Errorf("expected BaseURL 'https://custom.api.z.ai/v1', got %s", opts.BaseURL)
+	))
+	if got != "https://custom.api.z.ai/v1" {
+		t.Errorf("expected BaseURL 'https://custom.api.z.ai/v1', got %s", got)
 	}
 }
 
@@ -262,32 +263,28 @@ func TestNew_MissingAPIKeyErrorType(t *testing.T) {
 }
 
 func TestNew_CodingEndpointSwitch(t *testing.T) {
-	// Test that UseCodingAPI switches the endpoint when using default BaseURL
-	client, err := New(
-		WithAPIKey("test-key"),
-		WithUseCodingAPI(),
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// The client is created successfully - endpoint switching is internal
-	if client.Provider() != llms.ProviderZAI {
-		t.Errorf("expected provider ZAI, got %s", client.Provider())
+	// UseCodingAPI switches the endpoint only when the default BaseURL is in
+	// use; without the option the default is kept.
+	for _, tc := range []struct {
+		opts []Option
+		want string
+	}{
+		{[]Option{WithUseCodingAPI()}, "https://api.z.ai/api/coding/paas/v4"},
+		{nil, "https://api.z.ai/api/paas/v4"},
+		{[]Option{WithUseCodingAPI(), WithBaseURL("https://api.z.ai/api/paas/v4/")}, "https://api.z.ai/api/paas/v4"},
+	} {
+		if got := resolveBaseURL(apply(tc.opts...)); got != tc.want {
+			t.Errorf("opts %v: got %s want %s", tc.opts, got, tc.want)
+		}
 	}
 }
 
 func TestNew_TrailingSlashRemoved(t *testing.T) {
-	// Test that trailing slashes are removed from BaseURL
-	client, err := New(
-		WithAPIKey("test-key"),
-		WithBaseURL("https://api.z.ai/api/paas/v4/"),
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// Trailing slashes are removed from BaseURL so routes join cleanly.
+	if got := resolveBaseURL(apply(WithBaseURL("https://api.z.ai/api/paas/v4/"))); got != "https://api.z.ai/api/paas/v4" {
+		t.Errorf("trailing slash retained: %s", got)
 	}
-
-	if client.Provider() != llms.ProviderZAI {
-		t.Errorf("expected provider ZAI, got %s", client.Provider())
+	if got := resolveBaseURL(apply(WithBaseURL("https://custom.example/v1///"))); got != "https://custom.example/v1" {
+		t.Errorf("all trailing slashes must be stripped, got %s", got)
 	}
 }
