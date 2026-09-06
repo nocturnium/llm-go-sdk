@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -31,7 +32,7 @@ func main() {
 	}
 	oai, err := openai.New()
 	if err != nil {
-		log.Fatal(err)
+		fatal("client", err)
 	}
 
 	tracker := llms.NewCostTracker()
@@ -45,7 +46,7 @@ func main() {
 			llms.WithImageSize("1024x1024"),
 		)
 		if err != nil {
-			log.Fatalf("image: %v", err)
+			fatal("image", err)
 		}
 		tracker.RecordMedia(string(oai.Provider()), img.Model, img.Usage)
 		writeFile("lighthouse.png", img.Images[0].Data)
@@ -58,7 +59,7 @@ func main() {
 	if os.Getenv(llms.EnvElevenLabsAPIKey) != "" {
 		el, err := elevenlabs.New()
 		if err != nil {
-			log.Fatal(err)
+			fatal("client", err)
 		}
 		speaker, speechModel, providerName = el, "eleven_flash_v2_5", string(el.Provider())
 	}
@@ -67,7 +68,7 @@ func main() {
 		llms.WithSpeechFormat(llms.AudioFormat{Container: "mp3"}),
 	)
 	if err != nil {
-		log.Fatalf("speech: %v", err)
+		fatal("speech", err)
 	}
 	tracker.RecordMedia(providerName, speech.Model, speech.Usage)
 	writeFile("hello.mp3", speech.Audio.Data)
@@ -75,7 +76,7 @@ func main() {
 	// 3. Speech-to-text, feeding the audio we just produced.
 	transcript, err := oai.Transcribe(ctx, llms.MediaInput{Data: speech.Audio.Data, MIMEType: "audio/mpeg"})
 	if err != nil {
-		log.Fatalf("transcribe: %v", err)
+		fatal("transcribe", err)
 	}
 	tracker.RecordMedia(string(oai.Provider()), transcript.Model, transcript.Usage)
 	fmt.Printf("Transcript: %q\n", transcript.Text)
@@ -89,11 +90,11 @@ func main() {
 			llms.WithVideoResolution("720p"),
 		)
 		if err != nil {
-			log.Fatalf("video: %v", err)
+			fatal("video", err)
 		}
 		video, err := job.Wait(ctx)
 		if err != nil {
-			log.Fatalf("video wait: %v", err)
+			fatal("video wait", err)
 		}
 		tracker.RecordMedia(string(oai.Provider()), video.Model, video.Usage)
 		writeFile("boat.mp4", video.Videos[0].Data)
@@ -107,7 +108,14 @@ func main() {
 
 func writeFile(name string, data []byte) {
 	if err := os.WriteFile(name, data, 0o600); err != nil {
-		log.Fatalf("write %s: %v", name, err)
+		fatal("write "+name, err)
 	}
 	fmt.Printf("Wrote %s (%d bytes)\n", name, len(data))
+}
+
+// fatal logs a provider error and exits. Provider errors can echo request
+// or environment-derived text, so newlines are stripped before logging to
+// keep each entry on one line (and to satisfy CodeQL's log-injection check).
+func fatal(op string, err error) {
+	log.Fatalf("%s: %s", op, strings.ReplaceAll(err.Error(), "\n", " "))
 }
