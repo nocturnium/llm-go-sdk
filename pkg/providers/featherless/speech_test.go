@@ -25,7 +25,12 @@ func TestStreamSpeech(t *testing.T) {
 				t.Fatal(err)
 			}
 			count := 0
+			var usage *llms.MediaUsage
 			for chunk := range chunks {
+				if chunk.Usage != nil {
+					usage = chunk.Usage
+					continue
+				}
 				count++
 				if audio == "%%%" {
 					if chunk.Err == nil {
@@ -37,6 +42,12 @@ func TestStreamSpeech(t *testing.T) {
 			}
 			if count != 1 {
 				t.Fatal(count)
+			}
+			if audio == "%%%" && usage != nil {
+				t.Fatal("failed stream must not report usage")
+			}
+			if audio != "%%%" && (usage == nil || usage.Unit != llms.MediaUnitKChar || usage.Quantity != .005) {
+				t.Fatalf("usage = %+v", usage)
 			}
 			b := server.LastRequest().Body
 			if b["stream"] != true || b["stream_format"] != "sse" || b["voice"] != "custom" || b["instructions"] != "quiet" {

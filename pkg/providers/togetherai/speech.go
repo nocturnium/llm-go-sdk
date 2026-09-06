@@ -66,7 +66,8 @@ func (c *Client) Synthesize(ctx context.Context, text string, opts ...llms.Speec
 
 // StreamSpeech decodes Together audio.tts.chunk SSE frames until [DONE].
 // Only raw output supports SSE; other containers return ErrInvalidParameters.
-// Drain the channel or cancel ctx to release the connection.
+// Drain the channel or cancel ctx to release the connection. [DONE] is followed
+// by a Data-less chunk carrying the same per-character usage Synthesize reports.
 func (c *Client) StreamSpeech(ctx context.Context, text string, opts ...llms.SpeechOption) (<-chan llms.AudioChunk, error) {
 	o := llms.ApplySpeechOptions(opts...)
 	if o.Format.Container != "" && o.Format.Container != "raw" {
@@ -95,6 +96,11 @@ func (c *Client) StreamSpeech(ctx context.Context, text string, opts ...llms.Spe
 					continue
 				}
 				if event.Data == "[DONE]" {
+					usage := llms.MediaUsage{Unit: llms.MediaUnitKChar, Quantity: float64(utf8.RuneCountInString(text)) / 1000}
+					select {
+					case chunks <- llms.AudioChunk{Usage: &usage}:
+					case <-ctx.Done():
+					}
 					return
 				}
 				var frame struct {

@@ -311,15 +311,22 @@ func TestMediaProviderFlagsAndRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := 0
+	var audio, terminal int
 	for chunk := range stream {
 		if chunk.Err != nil {
 			t.Fatal(chunk.Err)
 		}
-		count++
+		if chunk.Usage != nil {
+			if len(chunk.Data) != 0 || chunk.Usage.Unit == "" {
+				t.Fatalf("terminal usage chunk = %+v", chunk)
+			}
+			terminal++
+			continue
+		}
+		audio++
 	}
-	if count != 1 {
-		t.Fatal(count)
+	if audio != 1 || terminal != 1 {
+		t.Fatal(audio, terminal)
 	}
 	if _, err := on.Transcribe(ctx, input); err != nil {
 		t.Fatal(err)

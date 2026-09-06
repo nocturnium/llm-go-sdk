@@ -56,6 +56,9 @@ func (c *Client) Synthesize(ctx context.Context, text string, opts ...llms.Speec
 
 // StreamSpeech decodes OpenAI-shaped SSE speech.audio.delta events.
 // Drain the channel or cancel ctx; transport and decoding errors are terminal chunks.
+// A successful stream ends with a Data-less chunk whose Usage is the reported
+// input_characters (KChar), or the request's Unicode character count when the
+// done event carries none; WithSpeechUsageHandler still receives reported usage.
 func (c *Client) StreamSpeech(ctx context.Context, text string, opts ...llms.SpeechOption) (<-chan llms.AudioChunk, error) {
 	req, err := speechRequest(text, llms.ApplySpeechOptions(opts...))
 	if err != nil {
@@ -75,8 +78,16 @@ func (c *Client) StreamSpeech(ctx context.Context, text string, opts ...llms.Spe
 		defer cancel()
 		for event := range events {
 			if event.Type == "speech.audio.done" && event.Err == nil {
-				if event.Usage != nil && event.Usage.InputCharacters != nil && *event.Usage.InputCharacters >= 0 && c.options.SpeechUsageHandler != nil {
-					c.options.SpeechUsageHandler(req.Model, llms.MediaUsage{Unit: llms.MediaUnitKChar, Quantity: float64(*event.Usage.InputCharacters) / 1000})
+				usage := openaicompat.SpeechStreamUsage(event.Usage)
+				if usage != nil && c.options.SpeechUsageHandler != nil {
+					c.options.SpeechUsageHandler(req.Model, *usage)
+				}
+				if usage == nil {
+					usage = &llms.MediaUsage{Unit: llms.MediaUnitKChar, Quantity: float64(utf8.RuneCountInString(text)) / 1000}
+				}
+				select {
+				case chunks <- llms.AudioChunk{Usage: usage}:
+				case <-ctx.Done():
 				}
 				return
 			}

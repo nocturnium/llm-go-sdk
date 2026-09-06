@@ -88,6 +88,24 @@ func ConvertSpeechResponse(data []byte, contentType string, req *SpeechRequest, 
 	return out
 }
 
+// SpeechStreamUsage converts the usage on a speech.audio.done event into media
+// usage: character-billed services report input_characters (KChar), token-billed
+// ones report output tokens (MTokenOut). It returns nil when the event carries
+// no usable usage.
+func SpeechStreamUsage(usage *ImageUsage) *llms.MediaUsage {
+	if usage == nil {
+		return nil
+	}
+	if usage.InputCharacters != nil && *usage.InputCharacters >= 0 {
+		return &llms.MediaUsage{Unit: llms.MediaUnitKChar, Quantity: float64(*usage.InputCharacters) / 1000, Cost: usage.Cost}
+	}
+	out := tokenMediaUsage(usage)
+	if out.Unit == "" && out.Cost == nil {
+		return nil
+	}
+	return &out
+}
+
 func convertSpeechEvent(event SpeechStreamEvent) llms.AudioChunk {
 	if event.Err != nil {
 		return llms.AudioChunk{Err: event.Err}

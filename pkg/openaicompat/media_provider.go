@@ -120,8 +120,8 @@ func (p *BaseProvider) Synthesize(ctx context.Context, text string, options ...l
 
 // StreamSpeech returns audio chunks. A disabled SpeechStream flag or a legacy
 // tts-1/tts-1-hd model returns ErrSpeechStreamNotSupported. Drain the channel or
-// cancel ctx. D0 AudioChunk has no usage field; terminal usage is exposed by
-// Client.CreateSpeechStream for callers needing streaming accounting.
+// cancel ctx. When the speech.audio.done event carries usage, a terminal
+// Data-less chunk with Usage is sent before the channel closes.
 func (p *BaseProvider) StreamSpeech(ctx context.Context, text string, options ...llms.SpeechOption) (<-chan llms.AudioChunk, error) {
 	if !p.config.Media.SpeechStream {
 		return nil, WrapError(p.Provider(), "stream speech", llms.ErrSpeechStreamNotSupported)
@@ -145,6 +145,12 @@ func (p *BaseProvider) StreamSpeech(ctx context.Context, text string, options ..
 		defer cancel()
 		for event := range events {
 			if event.Type == "speech.audio.done" && event.Err == nil {
+				if usage := SpeechStreamUsage(event.Usage); usage != nil {
+					select {
+					case chunks <- llms.AudioChunk{Usage: usage}:
+					case <-ctx.Done():
+					}
+				}
 				return
 			}
 			chunk := convertSpeechEvent(event)
