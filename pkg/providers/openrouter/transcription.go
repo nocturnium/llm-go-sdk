@@ -41,6 +41,10 @@ func (c *Client) Transcribe(ctx context.Context, audio llms.MediaInput, opts ...
 		fields["prompt"] = req.Prompt
 	}
 	for k, v := range o.Extra {
+		switch k {
+		case "model", "file", "language", "prompt", "timestamp_granularities[]":
+			return nil, fmt.Errorf("openrouter: transcription Extra key %q is reserved for the typed option: %w", k, llms.ErrInvalidParameters)
+		}
 		switch v.(type) {
 		case string, bool, int, float64:
 			fields[k] = fmt.Sprint(v)

@@ -41,6 +41,8 @@ func TestTranscriptionValidation(t *testing.T) {
 		{llms.WithTranscribeDiarization(true)},
 		{llms.WithTranscribeExtra(map[string]any{"response_format": 123})},
 		{llms.WithTranscribeExtra(map[string]any{"response_format": "text"})},
+		{llms.WithTranscribeExtra(map[string]any{"model": "other/model"})},
+		{llms.WithTranscribeExtra(map[string]any{"language": "fr"})},
 		{llms.WithTranscribeWordTimestamps(true), llms.WithTranscribeExtra(map[string]any{"bad": []int{1}})},
 		{llms.WithTranscribeWordTimestamps(true), llms.WithTranscribeExtra(map[string]any{"stream": true})},
 	} {

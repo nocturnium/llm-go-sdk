@@ -30,6 +30,10 @@ type videoObject struct {
 // request and polling wire differs from OpenAI. Wait polls and downloads the
 // result with the configured transport policy. Cancel is unsupported.
 // Frame inputs must be URLs; unsupported sources return ErrInvalidParameters.
+// defaultVideoDurationSeconds is the duration Z.AI renders when the request
+// omits one; usage accounting assumes it so a billed job never reports zero.
+const defaultVideoDurationSeconds = 5
+
 func (c *Client) GenerateVideo(ctx context.Context, prompt string, opts ...llms.VideoOption) (llms.VideoJob, error) {
 	o := llms.ApplyVideoOptions(opts...)
 	if strings.TrimSpace(prompt) == "" {
@@ -134,7 +138,11 @@ func (c *Client) GenerateVideo(ctx context.Context, prompt string, opts ...llms.
 		if len(current.VideoResult) == 0 {
 			return nil, c.mediaError(llms.ErrJobFailed)
 		}
-		usage := llms.MediaUsage{Unit: llms.MediaUnitSecond, Quantity: float64(o.DurationSeconds)}
+		billed := o.DurationSeconds
+		if billed == 0 {
+			billed = defaultVideoDurationSeconds
+		}
+		usage := llms.MediaUsage{Unit: llms.MediaUnitSecond, Quantity: float64(billed)}
 		if rate, ok := llms.GetMediaRate("zai", model); ok && rate.Unit == "" {
 			cost := rate.USD
 			usage.Cost = &cost

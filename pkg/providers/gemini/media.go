@@ -73,6 +73,10 @@ func startMedia(ctx context.Context, operation, model string) (context.Context, 
 	}
 }
 func pricedUsage(unit llms.MediaUnit, quantity float64, table map[string]map[string]float64, model, variant string) llms.MediaUsage {
+	// Unit is withheld when the model/variant has no verified rate: MediaCost
+	// falls back to the per-model registry rate whenever the unit matches, and
+	// that would bill an unpriced variant (e.g. 4k) at the base (720p) rate.
+	// Leaving the unit empty keeps such usage recorded as Unpriced.
 	u := llms.MediaUsage{Quantity: quantity}
 	if rate, ok := table[model][variant]; ok {
 		cost := rate * quantity

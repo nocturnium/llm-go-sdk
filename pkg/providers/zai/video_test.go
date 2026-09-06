@@ -159,3 +159,30 @@ func TestVideo_PromptLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestVideo_DefaultDurationBilled(t *testing.T) {
+	c := mediaTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/videos/generations":
+			if _, ok := mediaJSON(t, r)["duration"]; ok {
+				t.Error("duration must be omitted when the caller did not set one")
+			}
+			fmt.Fprint(w, `{"id":"job","task_status":"PROCESSING"}`)
+		case "/async-result/job":
+			fmt.Fprintf(w, `{"task_status":"SUCCESS","video_result":[{"url":"http://%s/asset"}]}`, r.Host)
+		case "/asset":
+			fmt.Fprint(w, "video")
+		default:
+			t.Error(r.URL.Path)
+			w.WriteHeader(404)
+		}
+	})
+	job, err := c.GenerateVideo(context.Background(), "clouds")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := job.Wait(context.Background())
+	if err != nil || out.Usage.Unit != llms.MediaUnitSecond || out.Usage.Quantity != defaultVideoDurationSeconds {
+		t.Fatalf("%+v %v", out, err)
+	}
+}
