@@ -137,9 +137,10 @@ type UsageMetadata struct {
 
 // StreamChunk represents a streaming response chunk
 type StreamChunk struct {
-	Candidates    []Candidate    `json:"candidates,omitempty"`
-	UsageMetadata *UsageMetadata `json:"usageMetadata,omitempty"`
-	ModelVersion  string         `json:"modelVersion,omitempty"`
+	Candidates     []Candidate     `json:"candidates,omitempty"`
+	PromptFeedback *PromptFeedback `json:"promptFeedback,omitempty"`
+	UsageMetadata  *UsageMetadata  `json:"usageMetadata,omitempty"`
+	ModelVersion   string          `json:"modelVersion,omitempty"`
 }
 
 // ExtractTextContent extracts the answer text from parts, skipping thought

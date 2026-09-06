@@ -1069,7 +1069,7 @@ func TestConvertMessages(t *testing.T) {
 		{Role: llms.RoleUser, Content: "How are you?"},
 	}
 
-	result := convertMessages(messages)
+	result, _ := convertMessages(messages)
 
 	if len(result) != 3 {
 		t.Fatalf("expected 3 contents, got %d", len(result))
@@ -1104,7 +1104,7 @@ func TestConvertMessages_WithImage(t *testing.T) {
 		},
 	}
 
-	result := convertMessages(messages)
+	result, _ := convertMessages(messages)
 
 	if len(result) != 1 {
 		t.Fatalf("expected 1 content, got %d", len(result))
