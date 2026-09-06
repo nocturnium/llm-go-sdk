@@ -391,6 +391,11 @@ func (c *Client) SynthesizeDialogue(ctx context.Context, lines []DialogueLine, o
 	if o.Model != "eleven_v3" {
 		return nil, invalid("dialog requires eleven_v3")
 	}
+	if o.Voice == "" && c.options.Voice == "" {
+		// The dialog route carries a voice per line; the TTS route built by
+		// speechRequest is discarded below, so satisfy it with the first line.
+		o.Voice = lines[0].VoiceID
+	}
 	r, err := c.speechRequest(text.String(), o)
 	if err != nil {
 		return nil, err

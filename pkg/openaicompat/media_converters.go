@@ -166,6 +166,8 @@ func BuildVideoRequest(model, prompt string, opts *llms.VideoOptions) *VideoCrea
 	return req
 }
 
+// videoSize maps a resolution/aspect pair (or an explicit WxH) to an OpenAI
+// size string; it returns "" for combinations the wire does not accept.
 func videoSize(resolution, aspect string) string {
 	switch resolution {
 	case videoSize720pPortrait, videoSize720pLandscape, videoSize1024pPortrait, videoSize1024pLandscape:
@@ -181,10 +183,7 @@ func videoSize(resolution, aspect string) string {
 	if aspect == "" {
 		aspect = "16:9"
 	}
-	if size, ok := sizes[resolution+":"+aspect]; ok {
-		return size
-	}
-	return videoSize720pLandscape
+	return sizes[resolution+":"+aspect]
 }
 
 // ConvertVideoStatus maps wire states and progress (percent) to SDK states and

@@ -33,7 +33,7 @@ func WrapError(operation string, err error) error {
 		var plain string
 		if json.Unmarshal(envelope.Detail, &detail) == nil && detail.Message != "" {
 			message = detail.Message
-		} else if json.Unmarshal(envelope.Detail, &plain) == nil {
+		} else if json.Unmarshal(envelope.Detail, &plain) == nil && plain != "" {
 			message = plain
 		}
 	}

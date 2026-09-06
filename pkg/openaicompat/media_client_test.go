@@ -402,6 +402,9 @@ func TestMediaProviderValidationAndErrors(t *testing.T) {
 	if _, err := p.GenerateVideo(ctx, "moon", llms.WithVideoFirstFrame(llms.MediaInput{})); !errors.Is(err, llms.ErrInvalidParameters) {
 		t.Fatal(err)
 	}
+	if _, err := p.GenerateVideo(ctx, "moon", llms.WithVideoResolution("480p")); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatal(err)
+	}
 	p = NewBaseProvider(bad, config)
 	failures := []func() error{
 		func() error { _, e := p.GenerateImage(ctx, "moon"); return e },

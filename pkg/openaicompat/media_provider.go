@@ -210,6 +210,9 @@ func (p *BaseProvider) GenerateVideo(ctx context.Context, prompt string, options
 			return nil, WrapError(p.Provider(), "generate video", err)
 		}
 	}
+	if videoSize(opts.Resolution, opts.AspectRatio) == "" {
+		return nil, WrapError(p.Provider(), "generate video", fmt.Errorf("unsupported video resolution %q / aspect ratio %q: %w", opts.Resolution, opts.AspectRatio, llms.ErrInvalidParameters))
+	}
 	req := BuildVideoRequest(p.config.DefaultVideoModel, prompt, opts)
 	obj, err := p.client.CreateVideo(ctx, req)
 	if err != nil {

@@ -303,6 +303,16 @@ func TestSynthesizeDialogue(t *testing.T) {
 	if err != nil || out.Model != "eleven_v3" || out.Usage.Quantity != 0.004 || string(out.Audio.Data) != "dialog" {
 		t.Fatal(out, err)
 	}
+	noVoice := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/text-to-dialogue" { //nolint:misspell // ElevenLabs wire route.
+			t.Error(r.URL)
+		}
+		_, _ = w.Write([]byte("dialog"))
+	})
+	noVoice.options.Voice = ""
+	if out, err := noVoice.SynthesizeDialogue(context.Background(), []DialogueLine{{Text: "Hi", VoiceID: "a"}}); err != nil || string(out.Audio.Data) != "dialog" {
+		t.Fatal("dialog must not require a client voice:", out, err)
+	}
 	for _, lines := range [][]DialogueLine{nil, {{Text: "", VoiceID: "a"}}, {{Text: "Hi", VoiceID: "../x"}}} {
 		if _, err = c.SynthesizeDialogue(context.Background(), lines); !errors.Is(err, llms.ErrInvalidParameters) {
 			t.Fatal(err)

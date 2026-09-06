@@ -150,6 +150,7 @@ func TestWrapError(t *testing.T) {
 		{404, `{"detail":"missing"}`, llms.ErrModelNotFound, "missing"},
 		{503, `{"detail":"unavailable"}`, llms.ErrServiceUnavailable, "unavailable"},
 		{418, `teapot`, nil, "teapot"},
+		{422, `{"detail":null}`, llms.ErrInvalidParameters, `{"detail":null}`},
 	} {
 		t.Run(tc.message, func(t *testing.T) {
 			c := testClient(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(tc.code); _, _ = w.Write([]byte(tc.body)) })
