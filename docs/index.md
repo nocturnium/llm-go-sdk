@@ -102,11 +102,11 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
 ## Supported providers
 
-**19 providers** — 17 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct) and Infinity (embeddings and reranking).
+**22 providers** — 18 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct), Infinity (embeddings and reranking), and the media-only ElevenLabs and fal clients.
 
 | Native | OpenAI-compatible | Local / self-hosted | Direct-construct |
 | --- | --- | --- | --- |
-| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity |
+| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity, elevenlabs, fal |
 
 !!! tip "Construct by name"
     Blank-import `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` to register the 17

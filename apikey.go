@@ -45,6 +45,7 @@ func RequireAPIKey(providerName, explicit string, providerEnvVars ...string) (st
 // These constants help avoid typos and provide a single source of truth.
 const (
 	EnvElevenLabsAPIKey  = "ELEVENLABS_API_KEY"
+	EnvFalAPIKey         = "FAL_KEY" // fal.ai's canonical variable name
 	EnvOpenRouterAPIKey  = "OPENROUTER_API_KEY"
 	EnvOpenAIAPIKey      = "OPENAI_API_KEY"
 	EnvAnthropicAPIKey   = "ANTHROPIC_API_KEY"
