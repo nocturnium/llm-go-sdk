@@ -142,7 +142,7 @@ func (m *MockOpenAICompatibleServer) StreamRequestClosed() <-chan struct{} {
 }
 
 func (m *MockOpenAICompatibleServer) handle(w http.ResponseWriter, r *http.Request) {
-	body := m.captureRequest(r)
+	body := m.captureRequest(w, r)
 
 	if m.errorStatus != 0 {
 		writeJSON(w, m.errorStatus, m.errorBody)
@@ -218,11 +218,13 @@ func (m *MockOpenAICompatibleServer) handle(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (m *MockOpenAICompatibleServer) captureRequest(r *http.Request) map[string]any {
+func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *http.Request) map[string]any {
 	var body map[string]any
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		body = map[string]any{}
-		if err := r.ParseMultipartForm(32 << 20); err == nil {
+		const maxMultipartBytes = 64 << 20 // bound the body before parsing (gosec)
+		r.Body = http.MaxBytesReader(w, r.Body, maxMultipartBytes)
+		if err := r.ParseMultipartForm(32 << 20); err == nil { // #nosec G120 -- body bounded by MaxBytesReader above; test-only mock server
 			defer func() { _ = r.MultipartForm.RemoveAll() }()
 			for key, values := range r.MultipartForm.Value {
 				if len(values) == 1 {
