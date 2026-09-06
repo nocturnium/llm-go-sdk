@@ -36,7 +36,7 @@ func TestThoughtSignature_ToolCallRoundTrip(t *testing.T) {
 	// as RunTools does, copying resp.ToolCalls) and assert the signature rides
 	// back out on the functionCall part.
 	msgs := []llms.Message{{Role: llms.RoleAssistant, ToolCalls: got.ToolCalls}}
-	contents := convertMessages(msgs)
+	contents, _ := convertMessages(msgs)
 	if len(contents) != 1 || len(contents[0].Parts) != 1 {
 		t.Fatalf("expected 1 content with 1 part, got %+v", contents)
 	}
@@ -90,7 +90,7 @@ func TestThoughtSignature_AbsentIsEmpty(t *testing.T) {
 		t.Fatalf("expected empty signature, got %+v", got.ToolCalls)
 	}
 	// And the re-emitted part must not invent one.
-	contents := convertMessages([]llms.Message{{Role: llms.RoleAssistant, ToolCalls: got.ToolCalls}})
+	contents, _ := convertMessages([]llms.Message{{Role: llms.RoleAssistant, ToolCalls: got.ToolCalls}})
 	if contents[0].Parts[0].ThoughtSignature != "" {
 		t.Fatalf("outbound invented a signature: %q", contents[0].Parts[0].ThoughtSignature)
 	}

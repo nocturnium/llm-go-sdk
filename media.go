@@ -179,12 +179,17 @@ type AudioFormat struct {
 	SampleRate, BitRate int
 }
 
-// AudioChunk is one streaming audio event.
+// AudioChunk is one streaming audio event. A successful stream ends with a
+// terminal chunk that carries Usage and no Data when the provider can account
+// for the request; consumers should treat a chunk with empty Data as
+// non-audio. Failed streams end with an Err chunk instead.
 type AudioChunk struct {
 	// Data contains audio bytes.
 	Data []byte
 	// Alignment contains optional timestamps for this chunk.
 	Alignment *Alignment
+	// Usage is set on the terminal chunk of a successful stream when known.
+	Usage *MediaUsage
 	// Err indicates a streaming failure.
 	Err error
 }

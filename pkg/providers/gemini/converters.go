@@ -2,6 +2,7 @@ package gemini
 
 import (
 	"encoding/json"
+	"fmt"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 	"github.com/nocturnium/llm-go-sdk/v6/internal/geminiapi"
@@ -14,7 +15,19 @@ const (
 // convertResponse converts a Gemini API response to an llms.Response.
 func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 	if len(resp.Candidates) == 0 {
-		return &llms.Response{}
+		// A prompt blocked by input filtering comes back with HTTP 200, no
+		// candidates, promptFeedback.blockReason and usage for the prompt
+		// tokens that were still counted. Keep the usage and mark the finish
+		// reason so callers and cost tracking see it; Chat turns this into a
+		// ModerationError (see blockedPrompt).
+		response := &llms.Response{}
+		if resp.PromptFeedback != nil && resp.PromptFeedback.BlockReason != "" {
+			response.FinishReason = llms.FinishReasonContentFilter
+		}
+		if resp.UsageMetadata != nil {
+			response.Usage = convertUsageMetadata(resp.UsageMetadata)
+		}
+		return response
 	}
 
 	candidate := resp.Candidates[0]
@@ -68,6 +81,32 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 	return response
 }
 
+// blockedPrompt returns a ModerationError when Gemini filtered the prompt
+// before generating any candidate, or nil otherwise. Charged reports whether
+// the response still counted prompt tokens.
+func blockedPrompt(resp *geminiapi.GenerateContentResponse) error {
+	if resp == nil {
+		return nil
+	}
+	return blockedPromptFeedback(len(resp.Candidates), resp.PromptFeedback, resp.UsageMetadata)
+}
+
+// blockedStreamChunk is blockedPrompt for a streaming chunk.
+func blockedStreamChunk(chunk *geminiapi.StreamChunk) error {
+	if chunk == nil {
+		return nil
+	}
+	return blockedPromptFeedback(len(chunk.Candidates), chunk.PromptFeedback, chunk.UsageMetadata)
+}
+
+func blockedPromptFeedback(candidates int, feedback *geminiapi.PromptFeedback, usage *geminiapi.UsageMetadata) error {
+	if candidates != 0 || feedback == nil || feedback.BlockReason == "" {
+		return nil
+	}
+	charged := usage != nil && usage.PromptTokenCount > 0
+	return &llms.ModerationError{Provider: "gemini", Stage: llms.ModerationInput, Reasons: []string{feedback.BlockReason}, Charged: charged}
+}
+
 // convertUsageMetadata maps Gemini usage metadata to the neutral llms.Usage.
 // PromptTokens excludes cached tokens; CompletionTokens must include reasoning
 // tokens (Usage contract). Whether candidatesTokenCount already includes
@@ -96,8 +135,10 @@ func convertUsageMetadata(um *geminiapi.UsageMetadata) llms.Usage {
 	}
 }
 
-// convertMessages converts llms.Message slice to geminiapi.Content slice.
-func convertMessages(messages []llms.Message) []geminiapi.Content {
+// convertMessages converts llms.Message slice to geminiapi.Content slice. It
+// returns ErrInvalidParameters for content Gemini cannot accept, such as
+// URL-sourced images.
+func convertMessages(messages []llms.Message) ([]geminiapi.Content, error) {
 	var result []geminiapi.Content
 
 	for _, msg := range messages {
@@ -115,15 +156,26 @@ func convertMessages(messages []llms.Message) []geminiapi.Content {
 				respData = map[string]any{"result": msg.Content}
 			}
 
+			// Gemini identifies the call being answered by name, and this
+			// provider issues the function name as the tool-call ID, so a
+			// caller that only round-trips ToolCallID still matches.
+			name := msg.Name
+			if name == "" {
+				name = msg.ToolCallID
+			}
 			parts = append(parts, geminiapi.Part{
 				FunctionResponse: &geminiapi.FunctionResponse{
-					Name:     msg.Name,
+					Name:     name,
 					Response: respData,
 				},
 			})
 		case len(msg.Parts) > 0:
 			// Handle multi-part content (including images)
-			parts = append(parts, convertContentParts(msg.Parts)...)
+			converted, err := convertContentParts(msg.Parts)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, converted...)
 		case msg.Content != "":
 			parts = append(parts, geminiapi.Part{
 				Text: msg.Content,
@@ -136,7 +188,11 @@ func convertMessages(messages []llms.Message) []geminiapi.Content {
 		for _, tc := range msg.ToolCalls {
 			if tc.Function != nil {
 				var args map[string]any
-				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil && tc.Function.Arguments != "" {
+					// Mirror the tool-response branch: keep unparseable
+					// arguments rather than replaying the call with none.
+					args = map[string]any{"arguments": tc.Function.Arguments}
+				}
 
 				parts = append(parts, geminiapi.Part{
 					FunctionCall: &geminiapi.FunctionCall{
@@ -156,11 +212,13 @@ func convertMessages(messages []llms.Message) []geminiapi.Content {
 		}
 	}
 
-	return result
+	return result, nil
 }
 
-// convertContentParts converts llms.ContentPart to geminiapi.Part.
-func convertContentParts(parts []llms.ContentPart) []geminiapi.Part {
+// convertContentParts converts llms.ContentPart to geminiapi.Part. Gemini only
+// accepts inline (base64) image data; URL-sourced images return
+// ErrInvalidParameters instead of being dropped silently.
+func convertContentParts(parts []llms.ContentPart) ([]geminiapi.Part, error) {
 	result := make([]geminiapi.Part, 0, len(parts))
 	for _, part := range parts {
 		switch part.Type {
@@ -169,21 +227,23 @@ func convertContentParts(parts []llms.ContentPart) []geminiapi.Part {
 				Text: part.Text,
 			})
 		case llms.PartTypeImage:
-			if part.Image != nil {
-				// Gemini uses inlineData for base64 images
-				if part.Image.Source == llms.ImageSourceBase64 {
-					result = append(result, geminiapi.Part{
-						InlineData: &geminiapi.InlineData{
-							MimeType: part.Image.MediaType,
-							Data:     part.Image.Data,
-						},
-					})
-				}
-				// Note: For URL images, you'd need to fetch and convert to base64
+			if part.Image == nil {
+				continue
+			}
+			switch part.Image.Source {
+			case llms.ImageSourceBase64:
+				result = append(result, geminiapi.Part{
+					InlineData: &geminiapi.InlineData{
+						MimeType: part.Image.MediaType,
+						Data:     part.Image.Data,
+					},
+				})
+			default:
+				return nil, fmt.Errorf("gemini: image source %q is unsupported; supply base64 inline data: %w", part.Image.Source, llms.ErrInvalidParameters)
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 // convertRole converts llms.Role to Gemini role string.

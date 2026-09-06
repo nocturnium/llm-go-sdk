@@ -79,7 +79,12 @@ func TestSpeech_NativeStream(t *testing.T) {
 				t.Fatal(err)
 			}
 			count := 0
+			var usage *llms.MediaUsage
 			for chunk := range ch {
+				if chunk.Usage != nil {
+					usage = chunk.Usage
+					continue
+				}
 				count++
 				if (chunk.Err != nil) != tc.fail {
 					t.Error(chunk.Err)
@@ -90,6 +95,9 @@ func TestSpeech_NativeStream(t *testing.T) {
 			}
 			if count != 1 {
 				t.Fatal(count)
+			}
+			if tc.fail != (usage == nil) || (!tc.fail && (usage.Unit != llms.MediaUnitKChar || usage.Quantity != .002)) {
+				t.Fatalf("usage = %+v fail = %v", usage, tc.fail)
 			}
 		})
 	}

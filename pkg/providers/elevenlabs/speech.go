@@ -290,7 +290,9 @@ func convertAlignment(a *wireAlignment) (*llms.Alignment, error) {
 	return out, nil
 }
 
-// StreamSpeech streams raw TTS audio. Drain the channel or cancel ctx. Failures
+// StreamSpeech streams raw TTS audio. Drain the channel or cancel ctx. A clean
+// end of stream is followed by a Data-less chunk carrying the request's
+// character usage (the same accounting Synthesize reports). Failures
 // after setup produce a terminal Err chunk. If the buffer is full, the error path
 // evicts one buffered audio chunk to guarantee terminal error delivery without blocking.
 // SFX/music and timestamps are unsupported.
@@ -352,6 +354,12 @@ func (c *Client) StreamSpeech(ctx context.Context, text string, opts ...llms.Spe
 			if readErr != nil {
 				if !errors.Is(readErr, io.EOF) {
 					terminal(readErr)
+					return
+				}
+				usage := r.usage
+				select {
+				case chunks <- llms.AudioChunk{Usage: &usage}:
+				case <-ctx.Done():
 				}
 				return
 			}

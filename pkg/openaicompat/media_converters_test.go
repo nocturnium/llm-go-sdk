@@ -293,3 +293,26 @@ func TestSpeechRequestExtras(t *testing.T) {
 		t.Fatal(body)
 	}
 }
+
+func TestSpeechStreamUsage(t *testing.T) {
+	chars, negative := 250, -1
+	cost := 0.5
+	for _, tc := range []struct {
+		in   *ImageUsage
+		want *llms.MediaUsage
+	}{
+		{nil, nil},
+		{&ImageUsage{}, nil},
+		{&ImageUsage{InputCharacters: &chars}, &llms.MediaUsage{Unit: llms.MediaUnitKChar, Quantity: .25}},
+		{&ImageUsage{InputCharacters: &negative, OutputTokens: 100}, &llms.MediaUsage{Unit: llms.MediaUnitMTokenOut, Quantity: 1e-4}},
+		{&ImageUsage{Cost: &cost}, &llms.MediaUsage{Cost: &cost}},
+	} {
+		got := SpeechStreamUsage(tc.in)
+		if (got == nil) != (tc.want == nil) {
+			t.Fatalf("%+v: got %+v", tc.in, got)
+		}
+		if got != nil && (got.Unit != tc.want.Unit || got.Quantity != tc.want.Quantity || (got.Cost == nil) != (tc.want.Cost == nil)) {
+			t.Fatalf("%+v: got %+v want %+v", tc.in, got, tc.want)
+		}
+	}
+}

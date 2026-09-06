@@ -86,7 +86,10 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		return nil, err
 	}
 
-	req := c.buildRequest(prepared, opts)
+	req, err := c.buildRequest(prepared, opts)
+	if err != nil {
+		return nil, err
+	}
 
 	model := c.options.Model
 	if opts.Model != "" {
@@ -98,6 +101,9 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		return nil, geminiapi.WrapError("generate content", err)
 	}
 
+	if err := blockedPrompt(resp); err != nil {
+		return nil, err
+	}
 	if err := validateNonEmptyFinish(resp); err != nil {
 		return nil, err
 	}
@@ -150,7 +156,10 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		return nil, err
 	}
 
-	req := c.buildRequest(prepared, opts)
+	req, err := c.buildRequest(prepared, opts)
+	if err != nil {
+		return nil, err
+	}
 
 	model := c.options.Model
 	if opts.Model != "" {
@@ -276,6 +285,20 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 			}
 			chunksRead++
 
+			// Input filtering arrives as a candidate-less chunk carrying
+			// promptFeedback.blockReason; surface it as a ModerationError.
+			if blockErr := blockedStreamChunk(chunk); blockErr != nil {
+				// Keep the prompt-token usage on the terminal chunk so cost
+				// tracking still records what the provider charged.
+				final := llms.StreamChunk{Error: blockErr}
+				if chunk.UsageMetadata != nil {
+					u := convertUsageMetadata(chunk.UsageMetadata)
+					final.Usage = &u
+				}
+				sender.SendFinal(final)
+				return
+			}
+
 			if len(chunk.Candidates) > 0 {
 				candidate := chunk.Candidates[0]
 
@@ -389,11 +412,15 @@ func splitSystemInstruction(messages []llms.Message) (*geminiapi.Content, []llms
 	}, contents
 }
 
-func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) *geminiapi.GenerateContentRequest {
+func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) (*geminiapi.GenerateContentRequest, error) {
 	systemInstruction, contents := splitSystemInstruction(messages)
+	converted, err := convertMessages(contents)
+	if err != nil {
+		return nil, err
+	}
 	req := &geminiapi.GenerateContentRequest{
 		SystemInstruction: systemInstruction,
-		Contents:          convertMessages(contents),
+		Contents:          converted,
 	}
 
 	// Add generation config. Temperature/TopP are forwarded as pointers so an
@@ -449,7 +476,7 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) *
 		req.Tools = convertTools(opts.Tools)
 	}
 
-	return req
+	return req, nil
 }
 
 // Embed generates embeddings for one or more texts

@@ -191,7 +191,7 @@ func TestBuildRequest_SystemInstruction(t *testing.T) {
 		{Role: llms.RoleSystem, Content: "you are helpful"},
 		{Role: llms.RoleUser, Content: "hi"},
 	}
-	req := client.buildRequest(msgs, llms.ApplyOptions())
+	req, _ := client.buildRequest(msgs, llms.ApplyOptions())
 	if req.SystemInstruction == nil {
 		t.Fatal("system message was not promoted to SystemInstruction")
 	}
@@ -219,7 +219,7 @@ func TestBuildRequest_MultipleAndNonLeadingSystemMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareMessages: %v", err)
 	}
-	req := client.buildRequest(prepared, opts)
+	req, _ := client.buildRequest(prepared, opts)
 
 	if req.SystemInstruction == nil {
 		t.Fatal("system messages were not promoted to SystemInstruction")
@@ -254,7 +254,7 @@ func TestBuildRequest_ToolMessageWithoutToolCallID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareMessages: %v", err)
 	}
-	req := client.buildRequest(prepared, opts)
+	req, _ := client.buildRequest(prepared, opts)
 
 	if len(req.Contents) != 3 {
 		t.Fatalf("expected 3 contents, got %d", len(req.Contents))

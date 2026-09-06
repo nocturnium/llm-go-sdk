@@ -204,15 +204,23 @@ func TestStreamSpeech(t *testing.T) {
 	}
 	var data []byte
 	count := 0
+	var usage *llms.MediaUsage
 	for chunk := range chunks {
 		if chunk.Err != nil {
 			t.Fatal(chunk.Err)
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+			continue
 		}
 		data = append(data, chunk.Data...)
 		count++
 	}
 	if count < 1 || string(data) != "ID3audio" {
 		t.Fatal(count, string(data))
+	}
+	if usage == nil || usage.Unit != llms.MediaUnitKChar || usage.Quantity != .002 {
+		t.Fatalf("usage = %+v", usage)
 	}
 }
 func TestStreamSpeech_Cancel(t *testing.T) {

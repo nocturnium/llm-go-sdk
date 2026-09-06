@@ -26,7 +26,7 @@ func FuzzConvertMessages(f *testing.F) {
 		}
 
 		// Should not panic
-		result := convertMessages(messages)
+		result, _ := convertMessages(messages)
 
 		if len(result) == 0 && content != "" {
 			t.Error("expected non-empty result for non-empty content")
@@ -52,7 +52,7 @@ func FuzzConvertMessages_ToolResponse(f *testing.F) {
 		}
 
 		// Should not panic
-		_ = convertMessages(messages)
+		_, _ = convertMessages(messages)
 	})
 }
 
@@ -109,7 +109,7 @@ func FuzzConvertContentParts(f *testing.F) {
 		}
 
 		// Should not panic
-		_ = convertContentParts(parts)
+		_, _ = convertContentParts(parts)
 	})
 }
 

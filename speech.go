@@ -161,6 +161,8 @@ type SpeechSynthesizer interface {
 	// Synthesize returns generated audio or a validation/provider error.
 	Synthesize(ctx context.Context, text string, opts ...SpeechOption) (*SpeechResponse, error)
 	// StreamSpeech returns audio chunks; consumers must drain the channel or cancel ctx.
+	// A successful stream ends with a Data-less chunk carrying Usage when the
+	// provider reports or can compute it.
 	StreamSpeech(ctx context.Context, text string, opts ...SpeechOption) (<-chan AudioChunk, error)
 }
 

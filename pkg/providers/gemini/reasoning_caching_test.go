@@ -94,7 +94,7 @@ func TestGeminiBuildRequest_ThinkingConfig(t *testing.T) {
 	messages := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
 
 	// A budget enables thinking with thought summaries.
-	req := client.buildRequest(messages, llms.ApplyOptions(llms.WithReasoningBudget(2048)))
+	req, _ := client.buildRequest(messages, llms.ApplyOptions(llms.WithReasoningBudget(2048)))
 	if req.GenerationConfig.ThinkingConfig == nil {
 		t.Fatal("expected ThinkingConfig to be set")
 	}
@@ -107,7 +107,7 @@ func TestGeminiBuildRequest_ThinkingConfig(t *testing.T) {
 
 	// Explicitly disabling reasoning sets a zero budget.
 	disabled := false
-	req = client.buildRequest(messages, llms.ApplyOptions(llms.WithReasoning(llms.ReasoningConfig{Enabled: &disabled})))
+	req, _ = client.buildRequest(messages, llms.ApplyOptions(llms.WithReasoning(llms.ReasoningConfig{Enabled: &disabled})))
 	if req.GenerationConfig.ThinkingConfig == nil || req.GenerationConfig.ThinkingConfig.ThinkingBudget == nil ||
 		*req.GenerationConfig.ThinkingConfig.ThinkingBudget != 0 {
 		t.Errorf("expected disabled thinking (budget 0), got %+v", req.GenerationConfig.ThinkingConfig)

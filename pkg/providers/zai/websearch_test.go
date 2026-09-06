@@ -2,6 +2,7 @@ package zai
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -61,8 +62,9 @@ func TestBuildWebSearchTool_FullConfig(t *testing.T) {
 
 func TestBuildWebSearchTool_JSON(t *testing.T) {
 	cfg := &llms.WebSearchConfig{
-		Enabled:     true,
-		ResultCount: 10,
+		Enabled:        true,
+		ResultCount:    10,
+		IncludeResults: true,
 	}
 	tool := BuildWebSearchTool(cfg)
 
@@ -74,5 +76,32 @@ func TestBuildWebSearchTool_JSON(t *testing.T) {
 	expected := `{"type":"web_search","web_search":{"enable":"True","search_result":"True","count":"10"}}`
 	if string(data) != expected {
 		t.Errorf("unexpected JSON:\ngot:  %s\nwant: %s", string(data), expected)
+	}
+}
+
+func TestBuildWebSearchTool_IncludeResultsOptIn(t *testing.T) {
+	tool := BuildWebSearchTool(&llms.WebSearchConfig{Enabled: true})
+	if tool.WebSearch.SearchResult != "" {
+		t.Fatalf("search_result must be omitted unless IncludeResults is set, got %q", tool.WebSearch.SearchResult)
+	}
+	data, _ := json.Marshal(tool)
+	if string(data) != `{"type":"web_search","web_search":{"enable":"True"}}` {
+		t.Fatalf("json = %s", data)
+	}
+}
+
+func TestNewWebSearchTool_DomainExclude(t *testing.T) {
+	_, err := NewWebSearchTool(&llms.WebSearchConfig{Enabled: true, DomainExclude: []string{"spam.example"}})
+	if !errors.Is(err, ErrWebSearchDomainExclude) || !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("err = %v", err)
+	}
+	if tool, err := NewWebSearchTool(&llms.WebSearchConfig{Enabled: false, DomainExclude: []string{"spam.example"}}); tool != nil || err != nil {
+		t.Fatalf("disabled config must not be validated: %v %v", tool, err)
+	}
+	if tool, err := NewWebSearchTool(&llms.WebSearchConfig{Enabled: true, DomainFilter: []string{"a.example"}}); err != nil || tool.WebSearch.SearchDomainFilter != "a.example" {
+		t.Fatalf("tool = %+v err = %v", tool, err)
+	}
+	if BuildWebSearchTool(&llms.WebSearchConfig{Enabled: true, DomainExclude: []string{"x"}}) == nil {
+		t.Fatal("lenient builder must still return a tool")
 	}
 }

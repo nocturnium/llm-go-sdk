@@ -14,6 +14,11 @@ from the `llms.LLM` chat interface.
 | `SpeechSynthesizer` | `Synthesize`, `StreamSpeech` | `SpeechResponse` or `AudioChunk` stream |
 | `Transcriber` | `Transcribe` | `Transcription` |
 
+A successful `StreamSpeech` stream ends with a Data-less `AudioChunk` whose
+`Usage` carries the request's accounting (character or token based, per
+provider) when it is known; skip chunks with empty `Data` when concatenating
+audio. Failed streams end with an `Err` chunk and report no usage.
+
 Each request uses its own options: `ImageOption`, `VideoOption`, `SpeechOption`,
 or `TranscribeOption`. Constructors carry the capability prefix, such as
 `WithImageAspectRatio`, `WithVideoDuration`, `WithSpeechVoice`, and
@@ -128,7 +133,8 @@ policy; no API credentials are sent to generated asset URLs.
   `language` and Format.SampleRate to `sample_rate`. Containers are WAV, MP3 and
   raw; `mulaw` belongs in Extra `response_encoding`. Speech counts Unicode
   characters / 1000. StreamSpeech defaults to raw and rejects other containers;
-  it decodes `{object:"audio.tts.chunk", b64}` SSE frames until `[DONE]`.
+  it decodes `{object:"audio.tts.chunk", b64}` SSE frames until `[DONE]`, then
+  emits the same per-character usage Synthesize reports.
   Transcription defaults to `verbose_json` for duration accounting; Extra can
   select `json`. It accepts uploads up to 80 MiB or a URL sent as the `file`
   string, maps diarization to `diarize`, and sends bracket-free
@@ -161,11 +167,13 @@ policy; no API credentials are sent to generated asset URLs.
   characters / 1000. The [request pricing table](https://featherless.ai/docs/request-pricing-and-credits)
   confirms Kokoro, Orpheus and Chatterbox rates of $0.004, $0.015 and $0.025 per
   thousand characters. StreamSpeech sets `stream:true` and `stream_format:sse`,
-  decoding `speech.audio.delta/done`. `featherless.WithSpeechUsageHandler`
-  receives terminal `usage.input_characters` converted to KChar plus the model;
-  the core AudioChunk has no usage field. The callback runs before channel close
-  and must return promptly and handle concurrent streams. Missing usage remains
-  unknown; failed streams do not invoke it. Instructions and speed (0.25–4) are
+  decoding `speech.audio.delta/done`. A successful stream ends
+  with a Data-less `AudioChunk` whose `Usage` is the reported
+  `usage.input_characters` (KChar), or the request's Unicode character count when
+  the done event carries none. `featherless.WithSpeechUsageHandler` additionally
+  receives the reported usage plus the model; the callback runs before channel
+  close and must return promptly and handle concurrent streams. Failed streams
+  report no usage. Instructions and speed (0.25–4) are
   accepted, with effects dependent on the model.
 - **Mistral:** speech maps Voice to `voice_id`; `ref_audio` is available through
   Extra when no voice is specified. JSON `audio_data` is decoded from base64.
@@ -268,8 +276,9 @@ Streaming transcription is not implemented.
 
 Speech defaults to voice `alloy` and container `mp3`. `tts-1` and `tts-1-hd` do
 not support SSE. Binary speech has no reported usage and leaves the billing unit empty.
-`gpt-4o-mini-tts` can be priced only from SSE done token usage. `CreateSpeechStream` exposes
-terminal token usage; the core `AudioChunk` interface has no usage field.
+`gpt-4o-mini-tts` can be priced only from SSE done token usage, which `StreamSpeech`
+delivers as a terminal Data-less `AudioChunk` carrying `Usage` (`CreateSpeechStream`
+exposes the raw done event).
 
 Video supports 4, 8, or 12 seconds and defaults to landscape 720p. Sora prices
 cover only 720p; higher-resolution results remain unpriced. Job cancellation is
@@ -291,8 +300,8 @@ Use `AudioFormat{Container:"mp3", SampleRate:44100, BitRate:64000}` for
 empty compressed bitrate uses 128000; uncompressed formats have no bitrate selector.
 `WithVoiceSettings` controls native voice settings. `WithSpeechTimestamps(true)`
 selects the JSON timestamp route and converts character timing to milliseconds;
-normalized alignment is retained in Metadata. StreamSpeech emits raw chunks and
-terminal errors; drain it or cancel its context. A full buffer loses one buffered
+normalized alignment is retained in Metadata. StreamSpeech emits raw chunks, then a
+terminal usage chunk (or an error); drain it or cancel its context. A full buffer loses one buffered
 audio chunk on the error path to guarantee terminal error delivery without blocking.
 Timestamps are unary only. `SynthesizeDialogue` accepts ordered
 `DialogueLine{Text, VoiceID}` values and retains voice settings and language. It
