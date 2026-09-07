@@ -204,11 +204,12 @@ version:
 	@echo "Commit:  $(COMMIT)"
 	@echo "Date:    $(DATE)"
 
-# Generate changelog
+# Preview the generated changelog. CHANGELOG.md is hand-written, so this prints
+# to stdout instead of overwriting it: git-cliff emits one line per commit and
+# would replace the curated entries. Copy anything useful in by hand.
 changelog:
-	@echo "Generating changelog..."
 	@if command -v git-cliff >/dev/null 2>&1; then \
-		git-cliff -o CHANGELOG.md; \
+		git-cliff --unreleased; \
 	else \
 		echo "git-cliff not installed. Run 'make install-tools' first."; \
 		exit 1; \
