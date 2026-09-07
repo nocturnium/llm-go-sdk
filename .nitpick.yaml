@@ -1,0 +1,66 @@
+# open-nitpick review configuration for llm-go-sdk.
+#
+# This file names both models, so LLM_PROVIDER and LLM_MODEL are not needed:
+#   OPENROUTER_API_KEY=... nitpick review -base main -head <branch> -dry-run
+#
+# The key comes from OPENROUTER_API_KEY in the environment. api_key_env is
+# deliberately omitted: nitpick ignores endpoint keys from a repository config
+# unless NITPICK_TRUST_CONFIG_ENDPOINTS=1, since a pull request must not be able
+# to redirect its own review.
+#
+# A change that edits THIS file is reviewed under the base revision's copy, so
+# the first run of a config change still needs LLM_PROVIDER/LLM_MODEL set.
+# See open-nitpick docs/configuration.md for every key.
+
+models:
+  # Reviewer: the model that reads each batch and writes findings.
+  default:
+    provider: openrouter
+    model: z-ai/glm-5.3
+    timeout: 15m
+
+  # Triage: merges, deduplicates and ranks findings. Cheaper than the reviewer
+  # and run at temperature 0 so the same findings rank the same way twice.
+  triage:
+    provider: openrouter
+    model: qwen/qwen3.8-27b
+    temperature: 0
+
+review:
+  # This module is one Go package tree; a media or provider packet routinely
+  # changes more than the shipped 60-file cap, which silently skips the rest.
+  max_files: 200
+  token_budget_per_request: 60000
+  # Advisory: findings are reported, nothing gates the merge.
+  fail_on: none
+  min_severity: info
+  related_context: true
+  slop: true
+  ignore:
+    - "**/vendor/**"
+    - "**/*.pb.go"
+    - "api/v6.txt"
+
+linters:
+  # golangci-lint fails when nitpick shells out to it from this checkout: the
+  # parent go.work pins a newer toolchain than the mise-installed go. CI already
+  # runs golangci-lint, staticcheck, gosec and CodeQL on every pull request.
+  mode: "off"
+
+instructions:
+  - path: "**/*.go"
+    prompt: >-
+      This is a provider SDK. Weigh correctness of provider wire mapping, usage
+      and cost accounting, error-sentinel mapping and context/goroutine handling
+      above style. Pricing and model metadata must never be invented: a rate
+      that is not verifiable against the provider's own page should be reported
+      as unpriced, not guessed.
+  - path: "pkg/providers/**"
+    prompt: >-
+      Check that credentials never travel to an asset or callback host, that
+      unmapped typed options are rejected rather than silently dropped, and that
+      Extra maps cannot overwrite reserved typed request fields.
+  - path: "**/*_test.go"
+    prompt: >-
+      Flag tests that mirror the implementation instead of asserting behavior,
+      and mock servers that encode an unverified belief about the provider API.
