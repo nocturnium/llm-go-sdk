@@ -77,7 +77,7 @@ full list):
 | `make check` | `fmt-check` + `vet` + `lint` + `test` |
 | `make ci` | `check` plus `vulncheck` (mirrors CI) |
 | `make tidy` | `go mod tidy` |
-| `make changelog` | Regenerate `CHANGELOG.md` via `git-cliff` |
+| `make changelog` | Print the unreleased `git-cliff` summary (CHANGELOG.md is hand-written; the target never overwrites it) |
 | `make setup-hooks` | Install the repo's git hooks |
 
 Running `make ci` locally before pushing is the fastest way to catch what GitHub

@@ -36,9 +36,6 @@ jobs:
   version:
     name: Compute next version
     runs-on: ubuntu-latest
-    # Fast-path skip for the changelog bot's own merges. Even if it runs, a
-    # docs-only delta yields no version bump, so this is an optimization only.
-    if: "!startsWith(github.event.head_commit.message, 'docs: update CHANGELOG.md')"
     outputs:
       release: ${{ steps.decide.outputs.release }}
       version: ${{ steps.decide.outputs.version }}
@@ -150,44 +147,7 @@ jobs:
           path: dist/*
           retention-days: 30
 
-  changelog:
-    name: Changelog
-    needs: [version, release]
-    if: needs.version.outputs.release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Generate changelog
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --verbose
-        env:
-          OUTPUT: CHANGELOG.md
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Open changelog PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          add-paths: CHANGELOG.md
-          branch: changelog/${{ needs.version.outputs.version }}
-          base: main
-          delete-branch: true
-          commit-message: "docs: update CHANGELOG.md for ${{ needs.version.outputs.version }}"
-          title: "docs: update CHANGELOG.md for ${{ needs.version.outputs.version }}"
-          body: |
-            Automated `CHANGELOG.md` regeneration for **${{ needs.version.outputs.version }}** via git-cliff.
-            The GitHub Release notes are generated separately by GoReleaser.
-          labels: |
-            changelog
-            automated
-          author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
-          committer: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+  # No changelog job: CHANGELOG.md is hand-written. A git-cliff regeneration
+  # would replace the curated [Unreleased] prose with one line per commit, and
+  # the release notes on the GitHub Release are produced by GoReleaser from the
+  # same commits anyway. Rename [Unreleased] to the version when cutting one.
