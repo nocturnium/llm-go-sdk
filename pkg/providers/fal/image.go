@@ -138,7 +138,9 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...llms.
 		out.Images = append(out.Images, asset)
 	}
 	if len(flagged) == len(res.Images) {
-		return nil, moderation(llms.ModerationOutput, "has_nsfw_concepts")
+		// Every image was generated and billed before the checker withheld it,
+		// matching the partial path, which counts flagged images in usage.
+		return nil, chargedModeration(llms.ModerationOutput, len(res.Images) > 0, "has_nsfw_concepts")
 	}
 	if len(flagged) > 0 {
 		out.Metadata["nsfw_indices"] = flagged

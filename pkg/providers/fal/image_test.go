@@ -109,7 +109,7 @@ func TestGenerateImageNSFW(t *testing.T) {
 	imageFixture(f, 2, []bool{true, true})
 	_, err := f.client().GenerateImage(context.Background(), "cat")
 	var m *llms.ModerationError
-	if !errors.As(err, &m) || m.Stage != llms.ModerationOutput || m.Reasons[0] != "has_nsfw_concepts" || m.Provider != "fal" || !errors.Is(err, llms.ErrContentFiltered) {
+	if !errors.As(err, &m) || m.Stage != llms.ModerationOutput || m.Reasons[0] != "has_nsfw_concepts" || m.Provider != "fal" || !errors.Is(err, llms.ErrContentFiltered) || !m.Charged {
 		t.Fatalf("all flagged: %v", err)
 	}
 	imageFixture(f, 3, []bool{true, false, true})

@@ -167,16 +167,49 @@ func TestTranscribeNoChunksAndErrors(t *testing.T) {
 }
 func TestTimestamp(t *testing.T) {
 	one, two := 1.0, 2.0
-	if s, e := timestamp(nil); s != 0 || e != 0 {
-		t.Fatal(s, e)
+	if s, e, known := timestamp(nil); s != 0 || e != 0 || known {
+		t.Fatal(s, e, known)
 	}
-	if s, e := timestamp([]*float64{&one}); s != 1 || e != 1 {
-		t.Fatal(s, e)
+	if s, e, known := timestamp([]*float64{&one}); s != 1 || e != 1 || known {
+		t.Fatal(s, e, known)
 	}
-	if s, e := timestamp([]*float64{&one, &two}); s != 1 || e != 2 {
-		t.Fatal(s, e)
+	if s, e, known := timestamp([]*float64{&one, &two}); s != 1 || e != 2 || !known {
+		t.Fatal(s, e, known)
 	}
-	if s, e := timestamp([]*float64{nil, &two}); s != 0 || e != 2 {
-		t.Fatal(s, e)
+	if s, e, known := timestamp([]*float64{nil, &two}); s != 0 || e != 2 || !known {
+		t.Fatal(s, e, known)
+	}
+	// A null end (whisper's final chunk) is not a measured zero-length chunk.
+	if s, e, known := timestamp([]*float64{&two, nil}); s != 2 || e != 2 || known {
+		t.Fatal(s, e, known)
+	}
+}
+
+func TestTranscribeUnknownFinalEnd(t *testing.T) {
+	// Whisper nulls the final chunk's end. The duration is then a flagged lower
+	// bound, and a response whose only chunk has a null end reports no usage
+	// rather than claiming zero minutes for billed audio.
+	f := newFakeQueue(t)
+	f.result = map[string]any{"text": "a b", "chunks": []map[string]any{
+		{"timestamp": []any{0.0, 4.0}, "text": "a"},
+		{"timestamp": []any{4.0, nil}, "text": "b"},
+	}}
+	out, err := f.client().Transcribe(context.Background(), llms.MediaInput{URL: "https://example.com/a.mp3"})
+	if err != nil || out.DurationSeconds != 4 || out.Usage.Unit != llms.MediaUnitMinute || out.Usage.Quantity != 4.0/60 {
+		t.Fatalf("lower bound: %v %+v", err, out.Usage)
+	}
+	if out.Metadata["duration_is_lower_bound"] != true || len(out.Segments) != 2 {
+		t.Fatalf("metadata: %v %+v", out.Metadata, out.Segments)
+	}
+	f.result = map[string]any{"text": "a", "chunks": []map[string]any{{"timestamp": []any{0.0, nil}, "text": "a"}}}
+	out, err = f.client().Transcribe(context.Background(), llms.MediaInput{URL: "https://example.com/a.mp3"})
+	if err != nil || out.Text != "a" || len(out.Segments) != 1 {
+		t.Fatalf("single chunk: %v %+v", err, out)
+	}
+	if out.Usage.Unit != "" || out.Usage.Quantity != 0 || out.DurationSeconds != 0 {
+		t.Fatalf("unmeasured duration must not be reported: %+v", out.Usage)
+	}
+	if _, ok := out.Metadata["duration_is_lower_bound"]; ok {
+		t.Fatal("no duration means no lower-bound flag")
 	}
 }

@@ -14,19 +14,19 @@ func videoFixture(f *fakeQueue) {
 	f.asset, f.assetType = []byte("mp4-bytes"), "video/mp4"
 }
 func TestVideoBody(t *testing.T) {
-	body, duration, err := videoBody("wave", &llms.VideoOptions{DurationSeconds: 10, Extra: map[string]any{"prompt_optimizer": false}})
+	body, duration, err := videoBody(DefaultVideoModel, "wave", &llms.VideoOptions{DurationSeconds: 10, Extra: map[string]any{"prompt_optimizer": false}})
 	if err != nil || duration != 10 || !reflect.DeepEqual(body, map[string]any{"prompt": "wave", "duration": "10", "prompt_optimizer": false}) {
 		t.Fatalf("body: %v %d %v", err, duration, body)
 	}
-	body, duration, err = videoBody("wave", &llms.VideoOptions{})
+	body, duration, err = videoBody(DefaultVideoModel, "wave", &llms.VideoOptions{})
 	if err != nil || duration != 6 || len(body) != 1 {
 		t.Fatalf("default: %v %d %v", err, duration, body)
 	}
-	body, duration, err = videoBody("wave", &llms.VideoOptions{DurationSeconds: 6})
+	body, duration, err = videoBody(DefaultVideoModel, "wave", &llms.VideoOptions{DurationSeconds: 6})
 	if err != nil || duration != 6 || body["duration"] != "6" {
 		t.Fatalf("six: %v %d %v", err, duration, body)
 	}
-	if _, _, err = videoBody("", &llms.VideoOptions{}); !errors.Is(err, llms.ErrEmptyPrompt) {
+	if _, _, err = videoBody(DefaultVideoModel, "", &llms.VideoOptions{}); !errors.Is(err, llms.ErrEmptyPrompt) {
 		t.Fatal(err)
 	}
 	audio, seed := true, int64(1)
@@ -46,7 +46,7 @@ func TestVideoBody(t *testing.T) {
 		"reserved p": {Extra: map[string]any{"prompt": "x"}},
 	}
 	for name, o := range invalidCases {
-		if _, _, err = videoBody("wave", o); !errors.Is(err, llms.ErrInvalidParameters) {
+		if _, _, err = videoBody(DefaultVideoModel, "wave", o); !errors.Is(err, llms.ErrInvalidParameters) {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
@@ -89,10 +89,29 @@ func TestGenerateVideoWait(t *testing.T) {
 		t.Fatalf("metadata: %v", out.Metadata)
 	}
 }
-func TestGenerateVideoDefaultDurationAndModel(t *testing.T) {
+func TestGenerateVideoDefaultDuration(t *testing.T) {
 	f := newFakeQueue(t)
 	videoFixture(f)
-	job, err := f.client(WithVideoModel("fal-ai/custom/video")).GenerateVideo(context.Background(), "wave")
+	job, err := f.client().GenerateVideo(context.Background(), "wave")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.lastSubmit().Body["duration"]; ok {
+		t.Fatal("duration must be omitted when the caller set none")
+	}
+	out, err := job.Wait(context.Background())
+	if err != nil || out.Usage.Unit != llms.MediaUnitSecond || out.Usage.Quantity != defaultVideoDurationSeconds {
+		t.Fatalf("wait: %v %+v", err, out.Usage)
+	}
+}
+func TestGenerateVideoCustomModelDuration(t *testing.T) {
+	// The 6/10 enum and the implicit 6 belong to the default Hailuo endpoint.
+	// Another endpoint takes any positive duration, and an omitted one leaves
+	// billed seconds unknown rather than assuming Hailuo's default.
+	f := newFakeQueue(t)
+	videoFixture(f)
+	c := f.client(WithVideoModel("fal-ai/custom/video"))
+	job, err := c.GenerateVideo(context.Background(), "wave")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,8 +120,20 @@ func TestGenerateVideoDefaultDurationAndModel(t *testing.T) {
 		t.Fatalf("submit: %+v", rec)
 	}
 	out, err := job.Wait(context.Background())
-	if err != nil || out.Usage.Quantity != 6 || out.Model != "fal-ai/custom/video" {
-		t.Fatalf("wait: %v %+v", err, out)
+	if err != nil || out.Usage.Unit != "" || out.Usage.Quantity != 0 || out.Model != "fal-ai/custom/video" {
+		t.Fatalf("unknown duration must not be invented: %v %+v", err, out.Usage)
+	}
+	if job, err = c.GenerateVideo(context.Background(), "wave", llms.WithVideoDuration(7)); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastSubmit().Body["duration"] != "7" {
+		t.Fatalf("submit: %+v", f.lastSubmit())
+	}
+	if out, err = job.Wait(context.Background()); err != nil || out.Usage.Quantity != 7 {
+		t.Fatalf("wait: %v %+v", err, out.Usage)
+	}
+	if _, err = c.GenerateVideo(context.Background(), "wave", llms.WithVideoDuration(-1)); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatal(err)
 	}
 }
 func TestGenerateVideoFailures(t *testing.T) {

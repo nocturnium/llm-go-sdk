@@ -89,9 +89,11 @@ func transcribeBody(audio llms.MediaInput, task string, o *llms.TranscribeOption
 // Transcribe queues Whisper speech-to-text. Inputs are HTTPS URLs or inline Data
 // (sent as a data URI, at most 25 MB); FileID is rejected. Language, Prompt,
 // Diarize (plus Extra num_speakers) and WordTimestamps (chunk_level word) map
-// directly. Usage is minutes from the last well-formed chunk end when any exist;
-// otherwise the unit is empty. Chunks with malformed timestamps are skipped and
-// counted in Metadata["skipped_chunks"]. Cost stays nil.
+// directly. Usage is minutes from the last well-formed chunk end when any chunk
+// reports one; whisper nulls the final chunk's end, so the figure is a lower
+// bound flagged by Metadata["duration_is_lower_bound"], and a response with no
+// measured end leaves the unit empty. Chunks with malformed timestamps are
+// skipped and counted in Metadata["skipped_chunks"]. Cost stays nil.
 func (c *Client) Transcribe(ctx context.Context, audio llms.MediaInput, opts ...llms.TranscribeOption) (*llms.Transcription, error) {
 	return c.transcribe(ctx, audio, "transcribe", opts...)
 }
@@ -131,14 +133,17 @@ func (c *Client) transcribe(ctx context.Context, audio llms.MediaInput, task str
 	}
 	billableUnits(header, out.Metadata)
 	var end float64
-	skipped := 0
+	skipped, ended := 0, false
 	for _, chunk := range res.Chunks {
-		start, stop := timestamp(chunk.Timestamp)
+		start, stop, known := timestamp(chunk.Timestamp)
 		if start < 0 || stop < start {
 			// A provider-side timing defect: keep the text and the well-formed chunks.
 			skipped++
 			continue
 		}
+		// An unknown end still proves the audio reached start, so it raises the
+		// lower bound without counting as a measured end.
+		ended = ended || known
 		end = math.Max(end, stop)
 		text := strings.TrimSpace(chunk.Text)
 		if words {
@@ -150,7 +155,7 @@ func (c *Client) transcribe(ctx context.Context, audio llms.MediaInput, task str
 	if len(res.DiarizationSegments) > 0 {
 		segments := make([]map[string]any, 0, len(res.DiarizationSegments))
 		for _, segment := range res.DiarizationSegments {
-			start, stop := timestamp(segment.Timestamp)
+			start, stop, _ := timestamp(segment.Timestamp)
 			segments = append(segments, map[string]any{"start": start, "end": stop, "speaker": segment.Speaker})
 		}
 		out.Metadata["diarization_segments"] = segments
@@ -158,22 +163,28 @@ func (c *Client) transcribe(ctx context.Context, audio llms.MediaInput, task str
 	if skipped > 0 {
 		out.Metadata["skipped_chunks"] = skipped
 	}
-	if len(res.Chunks) > skipped {
+	// Duration is reported only when at least one chunk carried a real end.
+	// Whisper nulls the final chunk's end, so the figure is a lower bound that
+	// omits the last segment; a response whose only chunk has a null end leaves
+	// usage unknown rather than claiming zero minutes for billed audio.
+	if len(res.Chunks) > skipped && ended {
 		out.DurationSeconds = end
 		out.Usage = llms.MediaUsage{Unit: llms.MediaUnitMinute, Quantity: end / 60}
+		out.Metadata["duration_is_lower_bound"] = true
 	}
 	return out, nil
 }
 
-// timestamp reads a [start, end] pair; a null end (whisper's final chunk) reuses start.
-func timestamp(pair []*float64) (float64, float64) {
-	var start, end float64
+// timestamp reads a [start, end] pair. Whisper leaves the final chunk's end
+// null; the returned end then reuses start and known is false, so callers can
+// tell a real zero-length chunk from an unknown end.
+func timestamp(pair []*float64) (start, end float64, known bool) {
 	if len(pair) > 0 && pair[0] != nil {
 		start = *pair[0]
 	}
 	end = start
 	if len(pair) > 1 && pair[1] != nil {
-		end = *pair[1]
+		end, known = *pair[1], true
 	}
-	return start, end
+	return start, end, known
 }

@@ -23,7 +23,7 @@ type videoResult struct {
 	} `json:"video"`
 }
 
-func videoBody(prompt string, o *llms.VideoOptions) (map[string]any, int, error) {
+func videoBody(model, prompt string, o *llms.VideoOptions) (map[string]any, int, error) {
 	if strings.TrimSpace(prompt) == "" {
 		return nil, 0, fmt.Errorf("fal: video: %w", llms.ErrEmptyPrompt)
 	}
@@ -34,14 +34,23 @@ func videoBody(prompt string, o *llms.VideoOptions) (map[string]any, int, error)
 		return nil, 0, invalid("Audio, Seed, NegativePrompt, frames, ReferenceImages and OutputFormat have no mapping on this video endpoint")
 	}
 	body := map[string]any{"prompt": prompt}
-	duration := defaultVideoDurationSeconds
-	switch o.DurationSeconds {
-	case 0:
-	case 6, 10:
+	// The 6/10 enum and the implicit 6 are Hailuo's contract. Another endpoint
+	// named through WithVideoModel takes any positive duration, and an omitted
+	// one leaves billed seconds unknown (0) rather than assuming Hailuo's.
+	standard := model == DefaultVideoModel
+	duration := 0
+	switch {
+	case o.DurationSeconds == 0:
+		if standard {
+			duration = defaultVideoDurationSeconds
+		}
+	case o.DurationSeconds < 0:
+		return nil, 0, invalid("DurationSeconds must be positive")
+	case standard && o.DurationSeconds != 6 && o.DurationSeconds != 10:
+		return nil, 0, invalid("DurationSeconds must be 6 or 10 on " + DefaultVideoModel)
+	default:
 		duration = o.DurationSeconds
 		body["duration"] = strconv.Itoa(duration)
-	default:
-		return nil, 0, invalid("DurationSeconds must be 6 or 10")
 	}
 	if err := mergeExtra(body, o.Extra, "prompt", "duration"); err != nil {
 		return nil, 0, err
@@ -50,7 +59,9 @@ func videoBody(prompt string, o *llms.VideoOptions) (map[string]any, int, error)
 }
 
 // GenerateVideo submits a text-to-video request and returns *llms.PollingVideoJob.
-// DurationSeconds accepts 6 or 10 (omitted bills 6). Wait downloads the MP4
+// DurationSeconds accepts 6 or 10 on the default Hailuo endpoint (omitted bills
+// 6); another endpoint named by WithVideoModel takes any positive duration and
+// reports no billed seconds when none was requested. Wait downloads the MP4
 // eagerly; Cancel issues the queue cancel route. Usage is billed seconds with
 // Cost nil because fal per-model pricing is not tabulated.
 func (c *Client) GenerateVideo(ctx context.Context, prompt string, opts ...llms.VideoOption) (job llms.VideoJob, err error) {
@@ -60,7 +71,7 @@ func (c *Client) GenerateVideo(ctx context.Context, prompt string, opts ...llms.
 	}
 	ctx, finish := c.startOperation(ctx, "generate video", o.Model)
 	defer func() { finish(err) }()
-	body, duration, err := videoBody(prompt, o)
+	body, duration, err := videoBody(o.Model, prompt, o)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +99,13 @@ func (c *Client) GenerateVideo(ctx context.Context, prompt string, opts ...llms.
 		if e != nil {
 			return nil, e
 		}
-		out := &llms.VideoResponse{Model: model, Videos: []llms.MediaAsset{asset}, Usage: llms.MediaUsage{Unit: llms.MediaUnitSecond, Quantity: float64(duration)}, Metadata: map[string]any{"request_id": q.RequestID}}
+		// An unknown duration (a custom endpoint with none requested) reports no
+		// unit rather than an invented second count.
+		usage := llms.MediaUsage{}
+		if duration > 0 {
+			usage = llms.MediaUsage{Unit: llms.MediaUnitSecond, Quantity: float64(duration)}
+		}
+		out := &llms.VideoResponse{Model: model, Videos: []llms.MediaAsset{asset}, Usage: usage, Metadata: map[string]any{"request_id": q.RequestID}}
 		if res.Video.FileName != "" {
 			out.Metadata["file_name"] = res.Video.FileName
 		}

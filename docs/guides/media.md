@@ -376,6 +376,9 @@ queue are used when they share the queue origin; otherwise
 first two segments of the model ID (`fal-ai/flux` for `fal-ai/flux/schnell`) —
 fal rejects request routes under the full model path. `WithQueuePriority("low")` sets `X-Fal-Queue-Priority`. Requests
 default to 120 seconds each; bound polling with a context or `fal.WithPollPolicy`.
+Canceling that context abandons the queued request without sending a cancel, and
+fal may still bill it. Only `GenerateVideo` returns a job with `Cancel`; image,
+speech and transcription poll inline with no cancel path.
 
 **Endpoints and defaults:** images `fal-ai/flux/schnell`, video
 `fal-ai/minimax/hailuo-02/standard/text-to-video`, speech
@@ -386,10 +389,17 @@ any fal application path is accepted, but option mapping and validation target
 the defaults.
 
 **Usage units, unpriced:** images report megapixels summed over every generated
-output (quantity zero when fal omits a dimension; the unit never changes), video
-billed seconds (6 or 10; omitted bills 6), speech Unicode runes / 1000 (KChar)
-and transcription minutes from the last well-formed chunk end (empty unit without
-chunks; malformed chunks are skipped and counted in `Metadata["skipped_chunks"]`). Cost is always nil: fal
+output (quantity zero when fal omits a dimension; the unit never changes, and a
+fully NSFW-flagged generation returns a `ModerationError` with `Charged` true
+because fal billed it). Video reports billed seconds: 6 or 10 on the default
+Hailuo endpoint (omitted bills 6), any positive duration on an endpoint named
+through `WithVideoModel`, and no unit at all when such an endpoint was given no
+duration. Speech reports Unicode runes / 1000 (KChar). Transcription reports
+minutes from the last chunk that carried a real end; whisper nulls the final
+chunk's end, so the figure is a lower bound flagged by
+`Metadata["duration_is_lower_bound"]`, and a response with no measured end
+leaves the unit empty. Malformed chunks are skipped and counted in
+`Metadata["skipped_chunks"]`. Cost is always nil: fal
 publishes per-model prices only on client-rendered pages that could not be
 verified, so `MediaPricing` carries no fal rates. `X-Fal-Billable-Units` on result
 responses is preserved as `Metadata["billable_units"]` without deriving cost.

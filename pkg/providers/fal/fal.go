@@ -240,7 +240,14 @@ func parseFalError(body string) falError {
 
 // moderation builds the input-stage ModerationError fal reports for rejected prompts.
 func moderation(stage llms.ModerationStage, reasons ...string) *llms.ModerationError {
-	return &llms.ModerationError{Provider: "fal", Stage: stage, Reasons: reasons, Charged: false}
+	return chargedModeration(stage, false, reasons...)
+}
+
+// chargedModeration is moderation with an explicit Charged: fal bills output it
+// generated and then withheld, so an output-stage filter is charged even though
+// the caller receives nothing.
+func chargedModeration(stage llms.ModerationStage, charged bool, reasons ...string) *llms.ModerationError {
+	return &llms.ModerationError{Provider: "fal", Stage: stage, Reasons: reasons, Charged: charged}
 }
 
 // classifyErrorType maps a fal error_type (from status bodies or error envelopes)

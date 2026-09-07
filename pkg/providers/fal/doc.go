@@ -48,7 +48,9 @@
 // Pricing is NOT tabulated: fal publishes per-model prices only on client-side
 // rendered pages that could not be verified. Usage reports Unit and Quantity
 // (megapixels, seconds, kchar, minutes) and leaves Cost nil; image quantity is
-// zero when fal omits a dimension so the unit never changes.
+// zero when fal omits a dimension so the unit never changes, video reports no
+// unit when a WithVideoModel endpoint was given no duration, and transcription
+// reports none when whisper measured no chunk end.
 //
 // # Images
 //
