@@ -48,7 +48,9 @@ type Client struct {
 	options   *options
 	transport *httpclient.Client
 	baseURL   *url.URL
-	headers   map[string]string
+	// betaURL is the base for endpoints published under /api/beta (batches).
+	betaURL *url.URL
+	headers map[string]string
 }
 
 // New constructs a client from options, returning ErrMissingAPIKey for missing
@@ -90,20 +92,48 @@ func New(opts ...Option) (*Client, error) {
 	for k, v := range headers {
 		nativeHeaders[k] = v
 	}
-	return &Client{BaseProvider: openaicompat.NewBaseProvider(compat, cfg), options: o, transport: transport, baseURL: u, headers: nativeHeaders}, nil
+	return &Client{BaseProvider: openaicompat.NewBaseProvider(compat, cfg), options: o, transport: transport, baseURL: u, betaURL: betaBaseURL(u), headers: nativeHeaders}, nil
+}
+
+// betaBaseURL maps the configured base onto OpenRouter's /api/beta tree, where
+// the Batch API lives. A base ending in the usual v1 segment has it swapped for
+// beta (https://openrouter.ai/api/v1 becomes https://openrouter.ai/api/beta);
+// any other base has beta joined onto it.
+func betaBaseURL(u *url.URL) *url.URL {
+	trimmed := strings.TrimSuffix(u.Path, "/")
+	if !strings.HasSuffix(trimmed, "/v1") {
+		return u.JoinPath("beta")
+	}
+	beta := *u
+	beta.Path = strings.TrimSuffix(trimmed, "v1") + "beta"
+	beta.RawPath = ""
+	return &beta
 }
 
 func (c *Client) endpoint(route string, query url.Values) string {
-	u := c.baseURL.JoinPath(route)
+	return endpointURL(c.baseURL, route, query)
+}
+
+func endpointURL(base *url.URL, route string, query url.Values) string {
+	u := base.JoinPath(route)
 	u.RawQuery = query.Encode()
 	return u.String()
 }
 
 func (c *Client) request(ctx context.Context, method, route string, query url.Values, body, out any) error {
+	return c.requestAt(ctx, c.baseURL, method, route, query, body, out)
+}
+
+// betaRequest calls a route under the /api/beta base.
+func (c *Client) betaRequest(ctx context.Context, method, route string, query url.Values, body, out any) error {
+	return c.requestAt(ctx, c.betaURL, method, route, query, body, out)
+}
+
+func (c *Client) requestAt(ctx context.Context, base *url.URL, method, route string, query url.Values, body, out any) error {
 	if err := ctx.Err(); err != nil {
 		return openaicompat.WrapError(c.Provider(), route, err)
 	}
-	err := c.transport.DoJSON(ctx, httpclient.Request{Method: method, URL: c.endpoint(route, query), Headers: c.headers, Body: body}, out)
+	err := c.transport.DoJSON(ctx, httpclient.Request{Method: method, URL: endpointURL(base, route, query), Headers: c.headers, Body: body}, out)
 	return openaicompat.WrapError(c.Provider(), route, err)
 }
 

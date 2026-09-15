@@ -197,6 +197,10 @@ type ChatCompletionResponse struct {
 	Model   string   `json:"model"`
 	Choices []Choice `json:"choices"`
 	Usage   *Usage   `json:"usage,omitempty"`
+	// ServiceTier names the capacity tier that served the request, when the
+	// provider reports one ("default", "flex", "priority" on OpenAI and
+	// OpenRouter). Empty when unreported.
+	ServiceTier string `json:"service_tier,omitempty"`
 }
 
 // Choice represents a response choice

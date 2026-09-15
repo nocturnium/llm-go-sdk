@@ -33,6 +33,18 @@ type Response struct {
 	Usage         Usage             `json:"usage"`
 	ToolCalls     []ToolCall        `json:"tool_calls,omitempty"`     // Tool calls requested by the model
 	SearchResults []SearchResult    `json:"search_results,omitempty"` // Web search results when WebSearch.IncludeResults is true
+
+	// ServiceTier names the capacity tier that served this request, for
+	// providers that sell more than one grade of capacity per model and report
+	// which one ran: "default", "flex" or "priority" (OpenAI, OpenRouter).
+	// Empty when the provider reports nothing, which includes every provider
+	// without tiers and every streamed response.
+	//
+	// It reports what served the request, not what was asked for: a priority
+	// request can fall back to another endpoint and is then billed at that
+	// endpoint's rate. Requesting a tier is provider-specific (see
+	// openrouter.WithServiceTier); pricing it is [WithPricingMode].
+	ServiceTier string `json:"service_tier,omitempty"`
 }
 
 // SetReasoning sets the canonical Reasoning field. Providers use this to

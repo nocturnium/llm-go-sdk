@@ -1123,3 +1123,24 @@ func TestConvertContentParts_SkipsNilImageAndUnknown(t *testing.T) {
 		t.Errorf("expected only the text part, got %+v", out)
 	}
 }
+
+// The served capacity tier is carried through with or without choices, since a
+// tiered request that produced none still reports which endpoint ran it.
+func TestConvertResponseServiceTier(t *testing.T) {
+	withChoices := ConvertResponse(&ChatCompletionResponse{
+		ServiceTier: "flex",
+		Choices:     []Choice{{Message: &ChatMessage{ContentValue: "hi"}, FinishReason: "stop"}},
+	})
+	if withChoices.ServiceTier != "flex" {
+		t.Errorf("service tier = %q, want flex", withChoices.ServiceTier)
+	}
+
+	empty := ConvertResponse(&ChatCompletionResponse{ID: "gen-1", ServiceTier: "priority"})
+	if empty.ServiceTier != "priority" {
+		t.Errorf("service tier = %q, want priority", empty.ServiceTier)
+	}
+
+	if untiered := ConvertResponse(&ChatCompletionResponse{Choices: []Choice{{Message: &ChatMessage{}}}}); untiered.ServiceTier != "" {
+		t.Errorf("service tier = %q, want empty", untiered.ServiceTier)
+	}
+}

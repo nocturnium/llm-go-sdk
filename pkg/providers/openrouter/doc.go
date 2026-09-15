@@ -65,6 +65,29 @@
 // video usage.cost is retained directly; no MediaPricing estimates are installed.
 // Audio discovery endpoints do not exist; use the public /models filters instead.
 //
+// # Service tiers
+//
+// WithServiceTier routes a call to a capacity tier (TierFlex, TierPriority, its
+// alias TierFast, or TierDefault) through the service_tier field, and the tier
+// that served the request comes back on llms.Response.ServiceTier. Flex never
+// falls back to a default-tier endpoint, so a capacity failure is returned
+// rather than silently upgraded; priority does fall back and bills at whatever
+// endpoint served. Requesting a tier routes only: pair it with
+// llms.WithPricingMode so cost accounting follows the lane. OpenRouter publishes
+// no :flex or :priority model variants; Nitro and Floor apply the :nitro and
+// :floor variants that admit those endpoints into a throughput or price sort.
+//
+// # Batch API
+//
+// SubmitBatch, GetBatch, ListBatches, DeleteBatch and WaitBatch cover the
+// asynchronous Batch API under /api/beta, which runs requests within a 24-hour
+// window at typically 50% of standard per-token pricing. Batches are text-only
+// and carry one endpoint shape and one model; results arrive inline on a
+// completed batch, which may still hold per-request failures. NewNativeBatcher
+// adapts it to llms.BatchProcessor by submitting and then blocking, so its
+// context must outlive the batch; llms.NewConcurrentBatcher remains the
+// concurrent live-call alternative at standard pricing.
+//
 // # Example
 //
 //	client, err := openrouter.New(openrouter.WithAppName("My app"))
