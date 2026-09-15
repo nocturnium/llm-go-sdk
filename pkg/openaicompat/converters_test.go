@@ -1142,3 +1142,34 @@ func TestConvertResponseServiceTier(t *testing.T) {
 		t.Errorf("service tier = %q, want empty", untiered.ServiceTier)
 	}
 }
+
+// The served capacity tier repeats on every chunk of a stream; the caller sees
+// it once, on the final chunk, alongside usage.
+func TestProcessStream_CarriesServiceTierAndCost(t *testing.T) {
+	cost := 5.15e-06
+	stream := testSSEStream(t,
+		StreamChunk{ServiceTier: "flex", Choices: []Choice{{Delta: &ChatMessage{ContentValue: "hi"}}}},
+		StreamChunk{
+			ServiceTier: "flex",
+			Choices:     []Choice{{FinishReason: "stop"}},
+			Usage:       &Usage{PromptTokens: 1, CompletionTokens: 4, TotalTokens: 5, Cost: &cost},
+		},
+	)
+	chunks := make(chan llms.StreamChunk, 8)
+	sender := llms.NewStreamSender(context.Background(), chunks, time.Second)
+
+	ProcessStream(context.Background(), stream, chunks, sender, "test", nil)
+
+	var final llms.StreamChunk
+	for chunk := range chunks {
+		if chunk.Done || chunk.Error != nil {
+			final = chunk
+		}
+	}
+	if final.ServiceTier != "flex" {
+		t.Errorf("final ServiceTier = %q, want flex", final.ServiceTier)
+	}
+	if final.Usage == nil || final.Usage.Cost == nil || *final.Usage.Cost != cost {
+		t.Errorf("final Usage = %+v, want the reported cost", final.Usage)
+	}
+}

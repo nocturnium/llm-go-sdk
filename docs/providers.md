@@ -181,16 +181,26 @@ that actually served the request:
 ```go
 resp, err := client.GenerateContent(ctx, msgs,
     openrouter.WithServiceTier(openrouter.TierFlex), // routing
-    llms.WithPricingMode(llms.PricingModeFlex),      // accounting
+    openrouter.WithUsageAccounting(),                // reported cost
 )
 fmt.Println(resp.ServiceTier) // "default", "flex", "priority", or ""
+if resp.Usage.Cost != nil {   // nil unless the provider reported a charge
+    fmt.Println(*resp.Usage.Cost)
+}
 ```
 
 `TierFlex` trades latency and availability for price and never falls back to a
 default-tier endpoint, so a capacity failure surfaces as an error; retry without
 the tier if standard pricing is acceptable. `TierPriority` (alias `TierFast`) does
-fall back, and then bills at whatever endpoint served. Requesting a tier routes
-only: pair it with `llms.WithPricingMode` so cost tracking follows the lane.
+fall back, and then bills at whatever endpoint served. A stream reports the served
+tier on its final chunk (`llms.StreamChunk.ServiceTier`).
+
+Requesting a tier routes only. For what it cost, add `openrouter.WithUsageAccounting()`
+and read `resp.Usage.Cost`, the charge OpenRouter reports for the endpoint that
+served; a `llms.CostTracker` banks that in preference to its own estimate. The
+estimate path (`openrouter.PricingModeFor(resp.ServiceTier)` fed to
+`llms.WithPricingMode`) resolves to unknown for OpenRouter models, which carry no
+static rate cards in this SDK.
 
 There are no `:flex` or `:priority` model variants. `openrouter.Nitro(model)` and
 `openrouter.Floor(model)` apply the `:nitro` (throughput sort) and `:floor` (price

@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- OpenRouter usage accounting (`WithUsageAccounting`) filling the new `llms.Usage.Cost` with the charge OpenRouter reports, `PricingModeFor` mapping a served service tier onto a billing lane, and the served tier on a stream's final chunk via the new `llms.StreamChunk.ServiceTier`. `CostTracker` now banks a provider-reported cost in preference to a rate-card estimate.
+
 - OpenRouter asynchronous Batch API (submit, get, list, delete and wait under /api/beta) with an opt-in `NativeBatcher` that satisfies `llms.BatchProcessor`, and typed service tiers (`WithServiceTier`, `:nitro`/`:floor` variant helpers) with the served tier surfaced on the new `llms.Response.ServiceTier`.
 
 - Together AI, Groq, Featherless, Mistral and Z.AI media routes, including native Together/Z.AI video jobs, vendor speech and transcription mappings, Together raw SSE, Featherless terminal character-usage callbacks, quota/moderation errors, sourced pricing, and gated integration tests. Together video preserves proxy prefixes and keeps unverified outputs.cost as metadata. Wire contracts are documentation-verified; live availability remains unverified.

@@ -225,6 +225,12 @@ type Usage struct {
 	// PromptCacheHitTokens is DeepSeek's cache-hit count (its alternative to
 	// prompt_tokens_details.cached_tokens).
 	PromptCacheHitTokens int `json:"prompt_cache_hit_tokens,omitempty"`
+	// Cost is the charge the provider reported for the request, in USD.
+	// OpenRouter fills it when the request asks for usage accounting.
+	Cost *float64 `json:"cost,omitempty"`
+	// IsByok reports that the request ran through the caller's own provider key,
+	// so the upstream provider billed the inference directly.
+	IsByok bool `json:"is_byok,omitempty"`
 }
 
 // cacheReadTokens returns the number of prompt tokens served from cache,
@@ -254,6 +260,9 @@ type StreamChunk struct {
 	Model   string   `json:"model"`
 	Choices []Choice `json:"choices"`
 	Usage   *Usage   `json:"usage,omitempty"`
+	// ServiceTier names the capacity tier serving the request, when the provider
+	// reports one. It repeats on every chunk rather than arriving once.
+	ServiceTier string `json:"service_tier,omitempty"`
 }
 
 // ToolChoiceFunction is used when specifying a specific function

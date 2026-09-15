@@ -79,6 +79,14 @@ type Usage struct {
 	CacheReadTokens     int `json:"cache_read_tokens"`
 	CacheCreationTokens int `json:"cache_creation_tokens"`
 	ReasoningTokens     int `json:"reasoning_tokens,omitempty"`
+
+	// Cost is the charge in USD the provider reported for this request, nil when
+	// it reported none. It is what was billed rather than what a rate card
+	// predicts, so [CostTracker] banks it in preference to its own estimate, and
+	// in preference to a card registered with SetPricing.
+	//
+	// Providers report it only on request: see openrouter.WithUsageAccounting.
+	Cost *float64 `json:"cost,omitempty"`
 }
 
 // StreamChunk represents a chunk of streamed content.
@@ -99,6 +107,11 @@ type StreamChunk struct {
 
 	// Usage is only populated on the final chunk (if available)
 	Usage *Usage `json:"usage,omitempty"`
+
+	// ServiceTier names the capacity tier that served the request, for providers
+	// that sell more than one grade of capacity per model and report which one
+	// ran. It is carried on the final chunk, matching [Response.ServiceTier].
+	ServiceTier string `json:"service_tier,omitempty"`
 
 	// Error is set if an error occurred during streaming
 	Error error `json:"-"`
