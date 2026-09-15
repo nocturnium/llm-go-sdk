@@ -476,6 +476,12 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) (floa
 // then standard rates with known=false. An unpriced model is (0, false)
 // whatever the mode, a mode discount on an unknown base is still unknown.
 func (t *CostTracker) costFor(provider Provider, model, key string, usage Usage, mode PricingMode) (float64, bool) {
+	// A provider-reported charge is what was billed, so it outranks every rate
+	// card, including one registered on this tracker: an estimate cannot be more
+	// accurate than the invoice.
+	if usage.Cost != nil {
+		return *usage.Cost, true
+	}
 	standard, standardKnown := t.pricing[key]
 	if !standardKnown && mode == PricingModeStandard {
 		return 0, false

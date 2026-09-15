@@ -681,3 +681,22 @@ func TestFormatCost(t *testing.T) {
 		})
 	}
 }
+
+// A charge the provider reported is what was billed, so it wins over a rate card
+// registered on the tracker and over the built-in cards.
+func TestCostTrackerPrefersReportedCost(t *testing.T) {
+	reported := 0.25
+	tracker := NewCostTracker()
+	tracker.SetPricing(ProviderOpenAI, "gpt-4o", Pricing{Input: 1000, Output: 1000})
+
+	usage := Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000, TotalTokens: 2_000_000, Cost: &reported}
+	cost, known := tracker.Record(ProviderOpenAI, "gpt-4o", usage)
+	if !known || cost != reported {
+		t.Fatalf("Record = (%v, %v), want (%v, true)", cost, known, reported)
+	}
+
+	modeCost, modeKnown := tracker.RecordMode(ProviderOpenAI, "gpt-4o", usage, PricingModeBatch)
+	if !modeKnown || modeCost != reported {
+		t.Fatalf("RecordMode = (%v, %v), want (%v, true)", modeCost, modeKnown, reported)
+	}
+}

@@ -42,24 +42,65 @@ const (
 // service_tier request field.
 //
 // The tier that served the request is reported back on
-// [llms.Response.ServiceTier] ("default", "flex", "priority", or empty when
+// [llms.Response.ServiceTier] and, for a stream, on the final
+// [llms.StreamChunk.ServiceTier] ("default", "flex", "priority", or empty when
 // upstream reports nothing). Because priority can fall back and flex can be
 // absent, the served tier is not always the tier requested.
 //
-// This routes only. Cost accounting is separate: pair it with
-// [llms.WithPricingMode] ([llms.PricingModeFlex] or [llms.PricingModeFast]) so
-// the recorded cost matches the lane.
+// This routes only. For what it cost, add [WithUsageAccounting] and read
+// Usage.Cost, the charge OpenRouter reports for the endpoint that served. The
+// estimate path, [llms.WithPricingMode] fed by [PricingModeFor], resolves to
+// unknown here: OpenRouter has no static rate cards in this SDK, since it prices
+// per model and per endpoint across its whole catalog.
 //
 // An empty tier is a no-op, so a configured-but-unset tier sends no field.
 //
 //	resp, err := client.GenerateContent(ctx, msgs,
 //	    openrouter.WithServiceTier(openrouter.TierFlex),
-//	    llms.WithPricingMode(llms.PricingModeFlex))
+//	    openrouter.WithUsageAccounting())
+//	// resp.Usage.Cost is the charge for the tier that served.
 func WithServiceTier(tier ServiceTier) llms.CallOption {
 	if tier == "" {
 		return func(*llms.CallOptions) {}
 	}
 	return llms.WithExtraBodyParam("service_tier", string(tier))
+}
+
+// WithUsageAccounting asks OpenRouter to report what the request cost, filling
+// [llms.Usage].Cost with the charge in USD for the endpoint that served it.
+//
+// It is off by default because the accounting adds a small amount of work
+// upstream. Cost arrives on the response, and on a stream's final chunk, so no
+// follow-up lookup is needed; [Client.GenerationCost] remains for retrieving a
+// cost after the fact from a generation id.
+//
+// A [llms.CostTracker] banks a reported cost in preference to its own estimate,
+// which matters most on a non-default service tier, where the tier that served
+// sets the rate.
+func WithUsageAccounting() llms.CallOption {
+	return llms.WithExtraBodyParam("usage", map[string]any{"include": true})
+}
+
+// PricingModeFor maps a served service tier onto the billing lane that prices
+// it, for [llms.WithPricingMode] and [llms.CostTracker.RecordMode].
+//
+// Feed it [llms.Response.ServiceTier], the tier that served, rather than the one
+// requested: priority falls back to other endpoints and bills at whichever one
+// ran. An unknown or empty tier maps to standard.
+//
+// OpenRouter models have no published rate cards in this SDK, so a mode resolved
+// this way prices at standard rates and reports known=false. It is here for a
+// caller who registered cards of their own with [llms.CostTracker.SetModePricing];
+// for the real charge use [WithUsageAccounting].
+func PricingModeFor(tier ServiceTier) llms.PricingMode {
+	switch tier {
+	case TierFlex:
+		return llms.PricingModeFlex
+	case TierPriority, TierFast:
+		return llms.PricingModeFast
+	default:
+		return llms.PricingModeStandard
+	}
 }
 
 // Model-id variants. OpenRouter publishes no ":flex" or ":priority" variant;

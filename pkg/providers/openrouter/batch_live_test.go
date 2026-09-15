@@ -29,6 +29,52 @@ func TestLiveOpenRouter_ServiceTier(t *testing.T) {
 	t.Logf("served tier: %q", resp.ServiceTier)
 }
 
+// TestLiveOpenRouter_UsageAccounting checks that the reported charge arrives on
+// the response rather than through a follow-up generation lookup.
+func TestLiveOpenRouter_UsageAccounting(t *testing.T) {
+	c := liveClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	resp, err := c.GenerateContent(ctx, []llms.Message{{Role: llms.RoleUser, Content: "Reply with hello."}},
+		llms.WithMaxTokens(32), WithServiceTier(TierFlex), WithUsageAccounting())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.Cost == nil {
+		t.Fatal("no cost reported with usage accounting enabled")
+	}
+	t.Logf("served tier %q cost $%g", resp.ServiceTier, *resp.Usage.Cost)
+}
+
+// TestLiveOpenRouter_StreamServiceTier checks the streamed readback: the tier and
+// the reported charge ride out on the final chunk.
+func TestLiveOpenRouter_StreamServiceTier(t *testing.T) {
+	c := liveClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	stream, err := c.Stream(ctx, []llms.Message{{Role: llms.RoleUser, Content: "Reply with hello."}},
+		llms.WithMaxTokens(32), WithServiceTier(TierFlex), WithUsageAccounting())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var final llms.StreamChunk
+	for chunk := range stream {
+		if chunk.Error != nil {
+			t.Fatal(chunk.Error)
+		}
+		if chunk.Done {
+			final = chunk
+		}
+	}
+	if final.ServiceTier == "" {
+		t.Fatal("no service tier on the final chunk")
+	}
+	if final.Usage == nil || final.Usage.Cost == nil {
+		t.Fatalf("no reported charge on the final chunk: %+v", final.Usage)
+	}
+	t.Logf("streamed tier %q cost $%g", final.ServiceTier, *final.Usage.Cost)
+}
+
 // TestLiveOpenRouter_Batch submits a one-request batch and waits for it. The
 // completion window is 24 hours, so the wait is bounded by LLM_BATCH_TIMEOUT
 // (default 15 minutes) and a batch still running at the deadline is skipped

@@ -292,6 +292,7 @@ func convertUsage(u *Usage) llms.Usage {
 		TotalTokens:      u.TotalTokens,
 		CacheReadTokens:  cacheRead,
 		ReasoningTokens:  u.reasoningTokens(),
+		Cost:             u.Cost,
 	}
 }
 
@@ -492,6 +493,9 @@ func ProcessStream(
 	var accumulatedContent string // Full content for token estimation
 	var finishReason llms.FinishReason
 	var usage *llms.Usage
+	// The served capacity tier repeats on every chunk; the last one seen rides
+	// out on the final chunk, where Response carries it on the unary path.
+	var serviceTier string
 	var bytesRead int64
 	var chunksRead int
 	var lastContent string
@@ -524,6 +528,7 @@ func ProcessStream(
 				ToolCalls:    accumulatedToolCalls,
 				FinishReason: finishReason,
 				Usage:        finalUsage,
+				ServiceTier:  serviceTier,
 			})
 			return
 		}
@@ -584,6 +589,9 @@ func ProcessStream(
 		if chunk.Usage != nil {
 			u := convertUsage(chunk.Usage)
 			usage = &u
+		}
+		if chunk.ServiceTier != "" {
+			serviceTier = chunk.ServiceTier
 		}
 	}
 }
