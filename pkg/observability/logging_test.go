@@ -806,3 +806,30 @@ func TestSanitizeLogValue(t *testing.T) {
 		})
 	}
 }
+
+// Redaction has to cover every field that can carry conversation content, not
+// just Messages and Content: InputJSON and OutputJSON are the serialized
+// messages, and tool-call arguments are built from the prompt.
+func TestJSONLoggerRedactsStructuredContent(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewJSONLogger(func(b []byte) error {
+		buf.Write(b)
+		return nil
+	})
+
+	logger.LogResponse(context.Background(), &LogEntry{
+		RequestID:  "redact-test",
+		Provider:   llms.ProviderOpenAI,
+		Model:      "gpt-4",
+		Operation:  "call",
+		Content:    "secret answer",
+		Messages:   []llms.Message{{Role: llms.RoleUser, Content: "secret question"}},
+		InputJSON:  `[{"role":"user","content":"secret question"}]`,
+		OutputJSON: `{"content":"secret answer"}`,
+		ToolCalls:  []llms.ToolCall{{ID: "1", Function: &llms.FunctionCall{Name: "lookup", Arguments: `{"q":"secret question"}`}}},
+	})
+
+	if logged := buf.String(); strings.Contains(logged, "secret") {
+		t.Fatalf("redacted entry leaked content: %s", logged)
+	}
+}

@@ -389,6 +389,10 @@ func (c *Client) call(ctx context.Context, method string, params, result any) er
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	var all []Tool
 	cursor := ""
+	// Tool names are unique per server, so a repeated name is a page served twice
+	// by a server whose cursor does not advance. Dropping the repeat keeps
+	// duplicates out of the registry and out of the tool list sent to a provider.
+	seen := map[string]struct{}{}
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -397,7 +401,13 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		if err := c.call(ctx, methodToolsList, listToolsParams{Cursor: cursor}, &res); err != nil {
 			return nil, fmt.Errorf("mcp: list tools: %w", err)
 		}
-		all = append(all, res.Tools...)
+		for _, tool := range res.Tools {
+			if _, dup := seen[tool.Name]; dup {
+				continue
+			}
+			seen[tool.Name] = struct{}{}
+			all = append(all, tool)
+		}
 		if res.NextCursor == "" || res.NextCursor == cursor {
 			// A server that returns the same non-empty cursor forever would loop
 			// until ctx cancellation; stop when the cursor fails to advance.

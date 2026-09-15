@@ -631,3 +631,13 @@ func TestRateLimiter_TokenBurst(t *testing.T) {
 		t.Errorf("token limiter burst not applied: %#v", rl2.tokenLimiter)
 	}
 }
+
+// A request count above the limiter's burst is refused outright by rate.WaitN,
+// a condition waiting can never clear. Clamping to the burst keeps the wait
+// meaningful instead of reporting a retryable timeout for a permanent refusal.
+func TestRateLimiter_WaitN_ClampsRequestsToBurst(t *testing.T) {
+	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithRequestBurst(2), WithBlocking(true), WithWaitTimeout(time.Second))
+	if err := rl.WaitN(context.Background(), 5, 0); err != nil {
+		t.Fatalf("WaitN with requests above the burst: %v", err)
+	}
+}

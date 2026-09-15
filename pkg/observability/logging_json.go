@@ -21,7 +21,8 @@ func NewJSONLogger(writeFn func([]byte) error, opts ...JSONLoggerOption) *JSONLo
 	l := &JSONLogger{
 		encode: json.Marshal,
 		write:  writeFn,
-		// Privacy-safe by default: messages/content are redacted unless the caller
+		// Privacy-safe by default: messages, content, structured input/output and
+		// tool calls are redacted unless the caller
 		// opts out via WithJSONRedaction(false).
 		redact:    true,
 		maxLength: 1000,
@@ -74,8 +75,14 @@ func (l *JSONLogger) prepareEntry(entry *LogEntry, _ bool) *LogEntry {
 	e := *entry
 
 	if l.redact {
+		// Every field that can carry conversation content goes, not just the two
+		// obvious ones: InputJSON and OutputJSON are the serialized messages, and
+		// tool-call arguments are model output built from the prompt.
 		e.Messages = nil
 		e.Content = ""
+		e.InputJSON = ""
+		e.OutputJSON = ""
+		e.ToolCalls = nil
 	} else {
 		e.Content = truncateString(e.Content, l.maxLength)
 	}
