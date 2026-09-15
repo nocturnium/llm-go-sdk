@@ -3,6 +3,7 @@ package openrouter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -333,6 +334,12 @@ func batchRoute(batchID string) (string, error) {
 const (
 	defaultBatchPollInterval = 15 * time.Second
 	maxBatchPollInterval     = 5 * time.Minute
+	// batchVisibilityGrace is how long WaitBatch keeps retrying a 404. A batch
+	// accepted with 202 is not immediately readable: submit returns before the
+	// id is queryable (a few seconds, observed live on 2026-09-14), and both the
+	// read and the listing 404 until it lands. Past this window a 404 is a
+	// missing or deleted batch and is returned.
+	batchVisibilityGrace = 90 * time.Second
 )
 
 // WaitOptions configures [Client.WaitBatch].
@@ -365,7 +372,9 @@ func WithPollCallback(fn func(*Batch)) WaitOption {
 //
 // It returns the batch for every terminal state, including failed, expired and
 // canceled, so the caller decides what a non-completed outcome means; only
-// transport and context errors come back as errors. Always pass a bounded
+// transport and context errors come back as errors. A 404 in the first 90
+// seconds is treated as a batch that is not queryable yet rather than a missing
+// one, since submission returns before the id lands. Always pass a bounded
 // context: the completion window is 24 hours.
 func (c *Client) WaitBatch(ctx context.Context, batchID string, opts ...WaitOption) (*Batch, error) {
 	options := WaitOptions{PollInterval: defaultBatchPollInterval}
@@ -376,10 +385,17 @@ func (c *Client) WaitBatch(ctx context.Context, batchID string, opts ...WaitOpti
 	if interval <= 0 {
 		interval = defaultBatchPollInterval
 	}
+	deadline := time.Now().Add(batchVisibilityGrace)
 	for {
 		batch, err := c.GetBatch(ctx, batchID)
 		if err != nil {
-			return nil, err
+			if !isBatchNotYetVisible(err, deadline) {
+				return nil, err
+			}
+			if err := sleepCtx(ctx, jitter(interval)); err != nil {
+				return nil, openaicompat.WrapError(c.Provider(), "wait batch", err)
+			}
+			continue
 		}
 		if options.OnPoll != nil {
 			options.OnPoll(batch)
@@ -394,6 +410,13 @@ func (c *Client) WaitBatch(ctx context.Context, batchID string, opts ...WaitOpti
 			interval = min(interval*2, maxBatchPollInterval)
 		}
 	}
+}
+
+// isBatchNotYetVisible reports whether a read failed with a 404 inside the
+// window where a just-submitted batch is not queryable yet.
+func isBatchNotYetVisible(err error, deadline time.Time) bool {
+	var apiErr *llms.APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound && time.Now().Before(deadline)
 }
 
 // jitter spreads concurrent waiters by up to 10% of the interval.

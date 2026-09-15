@@ -232,3 +232,38 @@ func TestWaitBatchTerminalFailure(t *testing.T) {
 		t.Fatalf("batch %+v", batch)
 	}
 }
+
+// A batch is not readable the instant submission returns, so WaitBatch keeps
+// polling through an early 404 instead of reporting a missing batch.
+func TestWaitBatchToleratesEarlyNotFound(t *testing.T) {
+	var reads atomic.Int32
+	c := mockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		if reads.Add(1) <= 2 {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"error":{"message":"Batch job not found.","code":404}}`)
+			return
+		}
+		fmt.Fprint(w, `{"id":"batch_1","status":"completed"}`)
+	})
+	batch, err := c.WaitBatch(context.Background(), "batch_1", WithPollInterval(time.Millisecond))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if batch.Status != BatchCompleted || reads.Load() != 3 {
+		t.Fatalf("status %s after %d reads", batch.Status, reads.Load())
+	}
+}
+
+// A 404 that never resolves ends the wait rather than looping forever; here the
+// context deadline is what bounds it, since it is shorter than the grace window.
+func TestWaitBatchPersistentNotFound(t *testing.T) {
+	c := mockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"error":{"message":"Batch job not found.","code":404}}`)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.WaitBatch(ctx, "batch_missing", WithPollInterval(time.Millisecond)); err == nil {
+		t.Fatal("expected an error")
+	}
+}
