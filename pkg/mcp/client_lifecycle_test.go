@@ -8,7 +8,7 @@ import (
 )
 
 // TestClient_ContextCancelStopsPump verifies that canceling the governing
-// context tears the client down — stopping the notification pump — even when the
+// context tears the client down (stopping the notification pump) even when the
 // caller never calls Close. Without this, an abandoned-but-canceled client
 // leaks its pump goroutine (the WS-5 transport-lifecycle TODO).
 func TestClient_ContextCancelStopsPump(t *testing.T) {
@@ -20,7 +20,7 @@ func TestClient_ContextCancelStopsPump(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHTTPClient: %v", err)
 	}
-	// Deliberately do NOT call Close: canceling the context must stop the pump.
+	// Close is deliberately left uncalled: canceling the context must stop the pump.
 
 	select {
 	case <-c.notifier.done:
@@ -38,7 +38,7 @@ func TestClient_ContextCancelStopsPump(t *testing.T) {
 	}
 }
 
-// TestClient_CloseIdempotent verifies Close is safe to call more than once — the
+// TestClient_CloseIdempotent verifies Close is safe to call more than once, the
 // property the context hook relies on, since cancel and an explicit Close can
 // both run.
 func TestClient_CloseIdempotent(t *testing.T) {
@@ -78,6 +78,6 @@ func TestClient_ExplicitCloseThenCancelIsSafe(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 	cancel() // must not panic or double-tear-down
-	// Give any (incorrectly re-fired) hook a moment; the test simply must not panic.
+	// Give any (incorrectly re-fired) hook a moment; the test must not panic.
 	time.Sleep(20 * time.Millisecond)
 }

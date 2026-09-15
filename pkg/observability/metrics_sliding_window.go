@@ -40,7 +40,7 @@ func (w *slidingWindow) Record(success bool) {
 
 	now := time.Now()
 
-	// CRITICAL: Clean BEFORE adding to prevent unbounded growth under high load.
+	// Clean ahead of the append to prevent unbounded growth under high load.
 	// If cleanup happens after append, the slice can grow faster than cleanup
 	// can remove entries during sustained high request rates.
 	w.cleanupLocked(now)
@@ -82,7 +82,7 @@ func (w *slidingWindow) Record(success bool) {
 func (w *slidingWindow) cleanupLocked(now time.Time) {
 	cutoff := now.Add(-w.window)
 	// Default to "all entries expired": if the loop never finds a live entry, the
-	// whole slice is dropped. Using 0 here was the bug — counters were decremented
+	// whole slice is dropped. Using 0 here was the bug, counters were decremented
 	// for every expired entry but the slice was never trimmed, so a later cleanup
 	// decremented the same entries again into negative counts.
 	newStart := len(w.entries)

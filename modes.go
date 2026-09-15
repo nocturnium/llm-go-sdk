@@ -4,7 +4,7 @@ package llms
 //
 // Providers publish separate rate cards for asynchronous and premium-latency
 // processing. The mode is a cost-accounting concept only: setting it does not
-// route the request. To actually send a request to a different lane, use the
+// route the request. To send a request to a different lane, use the
 // provider's own mechanism (for OpenAI, the service_tier field via
 // [WithExtraBodyParam]; for Anthropic, the Batches API).
 //
@@ -54,7 +54,7 @@ func modePricingKey(provider Provider, model string, mode PricingMode) string {
 // are the short-context tier; see the tier note on resolveModePricing.
 var modePricing = map[string]Pricing{
 	// OpenAI Batch (50% off standard for these models, but transcribed rather
-	// than derived — the discount is not uniform provider-wide).
+	// than derived, the discount is not uniform provider-wide).
 	"openai:gpt-5.6-sol:batch":   {Input: 2.50, Output: 15.00, CacheRead: 0.25, CacheWrite: 3.125},
 	"openai:gpt-5.6-terra:batch": {Input: 1.00, Output: 6.00, CacheRead: 0.10, CacheWrite: 1.25},
 	"openai:gpt-5.6-luna:batch":  {Input: 0.10, Output: 0.60, CacheRead: 0.01, CacheWrite: 0.125},
@@ -75,7 +75,7 @@ var modePricing = map[string]Pricing{
 	"openai:gpt-5.4-nano:flex":  {Input: 0.10, Output: 0.625, CacheRead: 0.01},
 
 	// OpenAI Fast mode (formerly Priority processing). Ratios to standard vary by
-	// model — 2x on gpt-5.6-sol, 2.5x on gpt-5.5, 2x on gpt-5.4-mini — which is
+	// model (2x on gpt-5.6-sol, 2.5x on gpt-5.5, 2x on gpt-5.4-mini), which is
 	// why these are transcribed individually. gpt-5.4-nano has no Fast row.
 	"openai:gpt-5.6-sol:fast":   {Input: 10.00, Output: 60.00, CacheRead: 1.00, CacheWrite: 12.50},
 	"openai:gpt-5.6-terra:fast": {Input: 4.00, Output: 24.00, CacheRead: 0.40, CacheWrite: 5.00},
@@ -93,8 +93,8 @@ var modePricing = map[string]Pricing{
 	"anthropic:claude-opus-4-8:fast": {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
 }
 
-// Anthropic publishes a single documented rule for its Batches API — a flat 50%
-// discount on input and output — and separately documents that prompt-caching
+// Anthropic publishes a single documented rule for its Batches API, a flat 50%
+// discount on input and output, and separately documents that prompt-caching
 // multipliers stack on top of other modifiers. Deriving the batch card from the
 // standard one therefore follows stated policy rather than inferring a pattern,
 // and keeps ~15 models correct without transcribing (and re-transcribing) four
@@ -134,7 +134,7 @@ func deriveAnthropicBatchPricing(base Pricing, known bool) (Pricing, bool) {
 // Tier caveat: a mode card replaces the standard card wholesale, and the cards
 // above carry the providers' short-context rates. OpenAI publishes separate
 // long-context columns for its Batch and Flex tiers, which are not transcribed
-// here — so a batch request above the long-context threshold is currently priced
+// here, so a batch request above the long-context threshold is currently priced
 // at short-context batch rates and will read low. This mirrors the existing
 // long-context caveat on standard pricing.
 func resolveModePricing(provider Provider, model string, mode PricingMode, standard Pricing, standardKnown bool) (Pricing, bool) {

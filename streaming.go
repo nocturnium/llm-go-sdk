@@ -62,7 +62,7 @@ func NewStreamSender(ctx context.Context, chunks chan<- StreamChunk, sendTimeout
 //   - SendContextCanceled: the context was canceled/expired before delivery.
 //   - SendTimeout: the consumer stopped reading and the send timed out.
 //
-// Send does NOT itself emit a terminal chunk on the non-OK paths; callers are
+// Send emits no terminal chunk of its own on the non-OK paths; callers are
 // expected to forward the appropriate terminal chunk via DeliverTerminal (or
 // SendFinal) so that exactly one terminal chunk is delivered on every exit path.
 func (s *StreamSender) Send(chunk StreamChunk) SendResult {
@@ -111,14 +111,14 @@ func (s *StreamSender) Send(chunk StreamChunk) SendResult {
 func (r SendResult) SendOK() bool { return r == SendOK }
 
 // EnsureTerminal guarantees a terminal chunk has been delivered to the consumer.
-// If a terminal chunk (Done or Error) was already sent — whether via SendFinal,
-// DeliverTerminal, or a terminal chunk that passed through Send — this is a no-op.
+// If a terminal chunk (Done or Error) was already sent, whether via SendFinal,
+// DeliverTerminal, or a terminal chunk that passed through Send, this is a no-op.
 // Otherwise it delivers a terminal chunk derived from the context: the context
 // error if the context was canceled/expired, or a Done chunk for a clean finish.
 //
 // Stream wrappers call this after their source channel drains so that a source
 // which closes without ever emitting a terminal chunk (e.g. an upstream producer
-// that reacts to context cancellation by simply closing) still results in the
+// that reacts to context cancellation by closing) still results in the
 // consumer observing a terminal chunk rather than a silent close.
 func (s *StreamSender) EnsureTerminal() {
 	if s.terminalSent.Load() {
@@ -174,7 +174,7 @@ func (s *StreamSender) SendFinal(chunk StreamChunk) {
 // terminal chunk is pushed into the buffered output channel, falling back to a
 // bounded wait so a slow consumer still observes it. If the consumer has fully
 // stopped reading and the buffer is saturated for the full timeout, delivery is
-// abandoned to avoid a goroutine leak — but in that case the consumer has
+// abandoned to avoid a goroutine leak, but in that case the consumer has
 // already abandoned the stream.
 func (s *StreamSender) DeliverTerminal(chunk StreamChunk) {
 	// Ensure the chunk is unambiguously terminal.

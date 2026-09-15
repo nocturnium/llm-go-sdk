@@ -14,7 +14,7 @@ import (
 
 // Rate limiting errors. ErrRateLimitExceeded wraps the canonical
 // llms.ErrRateLimited so a local rate-limiter rejection satisfies
-// errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429 —
+// errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429,
 // callers can match on the one sentinel regardless of which layer rate-limited.
 var (
 	ErrRateLimitExceeded = fmt.Errorf("rate limit exceeded: %w", llms.ErrRateLimited)
@@ -81,7 +81,7 @@ func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 // NOTE: a per-request token count larger than this burst would make
 // golang.org/x/time/rate's WaitN/AllowN reject every call (n > burst is never
 // satisfiable). Rather than override an explicit WithTokenBurst here, the Wait
-// paths cap the requested token count to the burst — see WaitN/tryAcquire — which
+// paths cap the requested token count to the burst (see WaitN/tryAcquire), which
 // preserves the caller's chosen burst while avoiding a self-inflicted outage.
 func (rl *RateLimiter) tokenBucketBurst() int {
 	if rl.tokenBurst > 0 {

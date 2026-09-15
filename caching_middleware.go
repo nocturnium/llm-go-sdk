@@ -20,14 +20,14 @@ type ResponseCache interface {
 
 // CachedClient is an LLM middleware that caches GenerateContent responses keyed
 // by the request (provider, model, messages, and output-affecting options). It
-// turns repeated identical requests into cache hits — useful for deterministic
+// turns repeated identical requests into cache hits, which suits deterministic
 // (temperature 0) calls, idempotent retries, test suites, and fan-out workloads
 // that repeat prompts.
 //
 // Stream is passed through uncached: streaming responses are not buffered.
 // Because cache keys include sampling parameters, requests with temperature > 0
-// that you expect to vary should either skip the cache or use a short TTL — a hit
-// returns the previously sampled response verbatim.
+// that you expect to vary should either skip the cache or use a short TTL: a hit
+// replays the sampled response verbatim.
 //
 // CachedClient implements LLM and Wrapper, so it composes with other middleware.
 type CachedClient struct {
@@ -48,7 +48,7 @@ func WithResponseCache(cache ResponseCache) CacheClientOption {
 // WithCacheKeyFunc overrides how a request is reduced to a cache key. The default
 // hashes the provider, effective model, messages, and all output-affecting
 // options (sampling parameters, tools, tool choice, response format, reasoning,
-// message-merging, ExtraBody, and WebSearch) — see cacheKeyShape.
+// message-merging, ExtraBody, and WebSearch), see cacheKeyShape.
 func WithCacheKeyFunc(fn func(provider Provider, model string, messages []Message, opts *CallOptions) string) CacheClientOption {
 	return func(c *CachedClient) {
 		if fn != nil {
@@ -112,7 +112,7 @@ var _ LLM = (*CachedClient)(nil)
 var _ Wrapper = (*CachedClient)(nil)
 
 // cacheKeyShape enumerates every request field that the default cache key
-// hashes. Each field here MUST change the model's output; fields that only
+// hashes. Every field here changes the model's output; fields that only
 // affect cost, latency, transport, or observability are intentionally excluded
 // (see defaultCacheKey). TestDefaultCacheKey_CoversAllOutputAffectingOptions
 // reflects over this type and CallOptions to fail if a new output-affecting
@@ -138,11 +138,11 @@ type cacheKeyShape struct {
 
 // defaultCacheKey hashes the output-affecting parts of a request, including
 // provider-specific ExtraBody (e.g. a LoRAX adapter_id) and WebSearch grounding,
-// both of which change the model output. Fields that do NOT change the output —
-// prompt-cache directives (cost/latency), token estimation, stream buffer sizing,
-// and trace context — are intentionally excluded. A request that fails to marshal
+// both of which change the model output. Fields that leave the output alone
+// (prompt-cache directives, token estimation, stream buffer sizing, and trace
+// context) are intentionally excluded. A request that fails to marshal
 // (e.g. an ExtraBody holding an unmarshalable value) falls back to a sentinel and
-// simply never caches, which is the correct fail-safe.
+// never caches, which is the correct fail-safe.
 func defaultCacheKey(provider Provider, model string, messages []Message, opts *CallOptions) string {
 	k := cacheKeyShape{
 		Provider: provider,
@@ -167,7 +167,7 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 	data, err := json.Marshal(k)
 	if err != nil {
 		// Fall back to a non-colliding-with-real-keys sentinel; an unhashable
-		// request simply never caches.
+		// request never caches.
 		return "llms:uncacheable"
 	}
 	sum := sha256.Sum256(data)
@@ -180,7 +180,7 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 // ToolCalls, SearchResults, or Reasoning can neither poison the cached entry nor
 // race another concurrent cache hit. Returns nil for a nil input.
 //
-// Reasoning.Metadata is copied one level deep — sufficient because providers
+// Reasoning.Metadata is copied one level deep, sufficient because providers
 // populate it with scalar values; nested reference values inside Metadata are
 // not independently cloned.
 func cloneResponse(resp *Response) *Response {
@@ -249,8 +249,8 @@ type MemoryResponseCache struct {
 
 // NewMemoryResponseCache returns an in-memory cache that expires entries after
 // ttl (a ttl of 0 means entries never expire) and, once it would exceed
-// maxEntries, evicts entries to stay bounded — first dropping expired entries,
-// then the earliest-expiring one — so memory stays bounded under
+// maxEntries, evicts entries to stay bounded, first dropping expired entries,
+// then the earliest-expiring one, so memory stays bounded under
 // high-cardinality traffic. Pass maxEntries <= 0 for an UNBOUNDED cache (use
 // with care: it can grow without limit).
 func NewMemoryResponseCache(ttl time.Duration, maxEntries int) *MemoryResponseCache {
@@ -311,7 +311,7 @@ func (m *MemoryResponseCache) evictLocked() {
 	for len(m.entries) >= m.maxEntries {
 		var evictKey string
 		var evictExp time.Time
-		found := false // NOT `evictKey == ""` — "" is a legitimate map key
+		found := false // not `evictKey == ""`, since "" is a legitimate map key
 		for k, e := range m.entries {
 			switch {
 			case !found:

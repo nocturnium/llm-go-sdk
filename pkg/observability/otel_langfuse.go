@@ -58,7 +58,7 @@ func NewLangfuseOTelMiddleware(llm llms.LLM, opts ...LangfuseOTelOption) (*Langf
 		llm:    llm,
 		tracer: otel.Tracer(LangfuseInstrumentationName),
 		meter:  otel.Meter(LangfuseInstrumentationName),
-		// Privacy-safe by default: prompts/responses are NOT captured unless the
+		// Privacy-safe by default: prompts and responses stay uncaptured unless the
 		// caller explicitly opts in via WithLangfuseInputCapture /
 		// WithLangfuseOutputCapture. This matches the generic OTel middleware
 		// (recordContent:false) and the metrics middleware.

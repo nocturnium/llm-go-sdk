@@ -181,10 +181,9 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 		// Only terminal failures that indicate the provider itself is unhealthy
 		// (retryable upstream errors: 429/5xx) count against the breaker.
-		// Client-side and terminal errors —
-		// context cancellation/deadline, 4xx other than 429, and circuit-open —
-		// must NOT trip the breaker, otherwise a burst of bad requests or canceled
-		// calls would needlessly open the circuit on an otherwise healthy provider.
+		// Client-side and terminal errors (context cancellation/deadline, 4xx other
+		// than 429, and circuit-open) must leave the breaker closed. Otherwise a burst
+		// of bad requests or canceled calls would open the circuit on a healthy provider.
 		// This classification is deliberately independent of rc.retry.ShouldRetry,
 		// which callers may override (e.g. to disable retries) without intending to
 		// change what counts as a provider-health failure.

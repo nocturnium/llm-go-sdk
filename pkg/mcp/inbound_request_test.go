@@ -10,7 +10,7 @@ import (
 
 // TestClassifyFrame pins the three-way classification that inbound routing
 // depends on. The frameRequest cases are the ones that regressed: a
-// server-initiated request carries BOTH a method and an id, so any classifier
+// server-initiated request carries a method and an id together, so any classifier
 // keyed only on the presence of an id treats it as a response.
 func TestClassifyFrame(t *testing.T) {
 	cases := []struct {
@@ -163,7 +163,7 @@ func nextFrame(t *testing.T, frames <-chan []byte) []byte {
 // Before the fix, dispatchOne routed on the id alone, so a server-initiated
 // request whose id collided with an in-flight client call was delivered to that
 // call's waiter. decodeResult then found neither a result nor an error and
-// returned a nil-result success — the caller got an empty answer with no error.
+// returned a nil-result success, the caller got an empty answer with no error.
 // Server ids are server-chosen and client ids start at 1, so collision is the
 // likely case rather than an exotic one.
 func TestStdioInboundRequestDoesNotResolvePendingCall(t *testing.T) {
@@ -188,7 +188,7 @@ func TestStdioInboundRequestDoesNotResolvePendingCall(t *testing.T) {
 	frames := drainFrames(t, serverReads)
 	nextFrame(t, frames)
 
-	// The server interleaves its OWN request carrying the SAME id, then the real
+	// The server interleaves a request of its own carrying that same id, then the real
 	// response. The request must not satisfy the pending call.
 	if _, err := serverWrites.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"sampling/createMessage","params":{}}` + "\n")); err != nil {
 		t.Fatalf("write inbound request: %v", err)
@@ -287,7 +287,7 @@ func TestStdioServesResponsesAfterInboundRequest(t *testing.T) {
 // TestEncodeResponseEmitsEmptyResultObject pins that a nil result serializes as
 // an explicit {} rather than being omitted. rpcResponse.Result is omitempty, and
 // a frame with neither result nor error is the malformed shape a peer cannot
-// interpret — the same shape that made the misrouting bug silent.
+// interpret, the same shape that made the misrouting bug silent.
 func TestEncodeResponseEmitsEmptyResultObject(t *testing.T) {
 	payload, err := encodeResponse(json.RawMessage("1"), nil)
 	if err != nil {

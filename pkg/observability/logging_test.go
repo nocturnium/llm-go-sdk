@@ -176,7 +176,7 @@ func TestSlogLogger_WithRedaction(t *testing.T) {
 func TestSlogLogger_WithMaxLength(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewJSONHandler(&buf, nil)
-	// Disable redaction (on by default) so content is actually logged and the
+	// Disable redaction (on by default) so content is logged and the
 	// truncation behavior under test can be observed.
 	logger := NewSlogLogger(slog.New(handler), WithRedaction(false), WithMaxLength(10))
 

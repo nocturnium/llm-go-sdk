@@ -10,10 +10,10 @@ import (
 )
 
 // Root is a filesystem location the host makes known to a server, so the server
-// can scope its work to directories the host actually intends it to touch.
+// can scope its work to the directories the host intends it to touch.
 //
 // A root is advisory: it tells the server where to look. This SDK serves no file
-// reads, so publishing a root grants a server no access it did not already have —
+// reads, so publishing a root grants a server no access it did not already have,
 // what it does grant is knowledge of a path, which is why registration validates
 // the URI rather than normalizing it silently.
 type Root struct {
@@ -39,7 +39,7 @@ type rootsListResult struct {
 //
 // Each URI is validated at construction: it must be an absolute `file://` URI
 // with no traversal segments. An invalid root fails client construction rather
-// than being silently normalized — a root that does not mean what the caller
+// than being silently normalized, a root that does not mean what the caller
 // wrote is worse than no root at all.
 //
 // Transport boundary: server-initiated requests are delivered over stdio only,
@@ -56,7 +56,7 @@ func WithRoots(roots ...Root) Option {
 // Unlike [WithRoots] the URIs cannot be validated up front, so they are
 // validated on each response; an invalid root is reported to the server as an
 // error rather than sent. Registering a dynamic handler also advertises the
-// listChanged capability, since the set can change — call [Client.RootsChanged]
+// listChanged capability, since the set can change, call [Client.RootsChanged]
 // to tell the server it has.
 func WithRootsHandler(h RootsHandler) Option {
 	return func(c *config) {
@@ -112,7 +112,7 @@ func validateRoots(roots []Root) error {
 //
 // This is advertisement hygiene, not sandboxing: the SDK serves no file reads,
 // so a root cannot itself leak content. What it prevents is publishing a path
-// that does not mean what the caller wrote — a relative or `..`-laden URI would
+// that does not mean what the caller wrote, a relative or `..`-laden URI would
 // be interpreted by the server against its own working directory, which is not
 // the host's.
 func validateRootURI(raw string) error {
@@ -127,7 +127,7 @@ func validateRootURI(raw string) error {
 		return fmt.Errorf("mcp: root URI %q must use the file:// scheme (got %q)", raw, u.Scheme)
 	}
 	// A file URI's authority must be empty or "localhost" (RFC 8089). Anything
-	// else names a remote host — "file://example.com/x" is not a local path, and
+	// else names a remote host, "file://example.com/x" is not a local path, and
 	// publishing it as a root would tell the server about a location this host
 	// does not have. It is also what a caller writing "file://relative/path"
 	// accidentally produces: the first segment becomes the authority, so the URI

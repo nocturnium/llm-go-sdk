@@ -200,7 +200,7 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 		// encrypted/signed thinking that round-trips across turns) is per-turn
 		// data that merging cannot combine, so don't fold such a message into a
 		// prior accumulator, and don't fold a following message into one. This
-		// keeps each reasoning-bearing turn — and its Reasoning — intact.
+		// keeps each reasoning-bearing turn (and its Reasoning) intact.
 		if msg.Reasoning != nil || (current != nil && current.Reasoning != nil) {
 			if current != nil {
 				result = append(result, *current)

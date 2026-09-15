@@ -100,7 +100,7 @@ type CallOptions struct {
 
 	// PricingMode selects the billing lane this request is priced under (batch,
 	// flex, fast). It is consumed by cost tracking only and is never sent to the
-	// provider — routing a request to a different lane uses the provider's own
+	// provider, routing a request to a different lane uses the provider's own
 	// mechanism. The zero value prices at standard rates.
 	PricingMode PricingMode
 

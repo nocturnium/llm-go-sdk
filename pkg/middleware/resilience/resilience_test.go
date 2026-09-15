@@ -107,7 +107,7 @@ func TestCircuitBreaker_HalfOpenToClosedOnSuccess(t *testing.T) {
 		WithHalfOpenMax(2),
 		// Large half-open timeout so the watchdog never fires between the two
 		// back-to-back probe Calls under -race slowdown; this test asserts
-		// half-open -> closed on success, not the watchdog (see
+		// half-open becomes closed on success, not the watchdog (see
 		// TestCircuitBreaker_HalfOpenWatchdogReopens).
 		WithHalfOpenTimeout(time.Minute),
 	)

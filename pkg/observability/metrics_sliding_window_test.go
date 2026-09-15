@@ -27,7 +27,7 @@ func TestSlidingWindow_AllExpiredResetsCleanly(t *testing.T) {
 		t.Errorf("after full expiry: %d entries remain, want 0", n)
 	}
 
-	// A second cleanup must NOT re-decrement into negative counts (the bug).
+	// A second cleanup must leave counts non-negative (the bug).
 	w.mu.Lock()
 	w.cleanupLocked(time.Now().Add(2 * time.Hour))
 	successes, failures = w.successes, w.failures

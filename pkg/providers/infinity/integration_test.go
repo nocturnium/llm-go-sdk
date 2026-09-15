@@ -507,7 +507,7 @@ func TestGetCapabilities_Integration(t *testing.T) {
 		t.Error("expected batch capability")
 	}
 
-	// Infinity is NOT an LLM, so these should be false
+	// Infinity is no LLM, so these should be false
 	if caps.Streaming {
 		t.Error("expected streaming to be false")
 	}

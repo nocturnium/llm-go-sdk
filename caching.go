@@ -34,7 +34,7 @@ type CacheConfig struct {
 }
 
 // WithCache enables the SDK's automatic prompt caching for a call. For providers
-// with explicit breakpoints (Anthropic) it caches the stable prefix — the system
+// with explicit breakpoints (Anthropic) it caches the stable prefix, the system
 // prompt and tool definitions. For providers that cache automatically (OpenAI,
 // DeepSeek, Gemini) it is a no-op; cache usage is still reported either way.
 func WithCache() CallOption {

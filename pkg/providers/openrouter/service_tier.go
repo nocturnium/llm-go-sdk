@@ -41,7 +41,7 @@ const (
 // WithServiceTier routes a request to a capacity tier by setting the
 // service_tier request field.
 //
-// The tier that actually served the request is reported back on
+// The tier that served the request is reported back on
 // [llms.Response.ServiceTier] ("default", "flex", "priority", or empty when
 // upstream reports nothing). Because priority can fall back and flex can be
 // absent, the served tier is not always the tier requested.

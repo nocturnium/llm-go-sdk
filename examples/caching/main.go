@@ -4,7 +4,7 @@
 // WithCache, marking explicit per-message breakpoints with Message.CacheControl,
 // and reading cache token usage. Caching a large, stable prefix (a long system
 // prompt, tool definitions, or a document) and reusing it across calls cuts both
-// latency and cost — cache reads are billed at a steep discount.
+// latency and cost, cache reads are billed at a steep discount.
 //
 // Run with: ANTHROPIC_API_KEY=... go run ./examples/caching
 package main

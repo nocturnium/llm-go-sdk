@@ -96,7 +96,7 @@ func TestCachedModelsTypes(t *testing.T) {
 }
 
 func TestListModels(t *testing.T) {
-	// Create a client for testing (we can't actually call the API without credentials)
+	// Create a client for testing (no API call is possible without credentials)
 	// But we can test the ListModels method which uses cached data
 	client := &Client{}
 

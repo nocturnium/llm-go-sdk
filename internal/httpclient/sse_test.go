@@ -254,7 +254,7 @@ func TestSSEReader_DataAtEOF(t *testing.T) {
 // bufio.Scanner's default 64KB token cap is parsed in full. SSE payloads such as
 // base64-encoded images or large JSON tool arguments routinely exceed 64KB.
 func TestSSEReader_LargeDataLine(t *testing.T) {
-	// 256KB payload on a single line — well beyond the 64KB scanner cap.
+	// 256KB payload on a single line, well beyond the 64KB scanner cap.
 	const payloadLen = 256 * 1024
 	payload := strings.Repeat("A", payloadLen)
 	data := "data: " + payload + "\n\n"

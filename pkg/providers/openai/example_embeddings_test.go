@@ -8,7 +8,7 @@ import (
 )
 
 // Example_embeddings is a compile guard for the embeddings snippet in the package
-// doc. EmbedDocuments is a package-level llms function — not a method on Embedder —
+// doc. EmbedDocuments is a package-level llms function, not a method on Embedder,
 // so a regression back to embedder.EmbedDocuments(...) would fail to build here.
 // It has no // Output: line, so it is compiled but never executed (no network).
 func Example_embeddings() {

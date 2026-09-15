@@ -114,7 +114,7 @@ func TestLiveResponses_Stream(t *testing.T) {
 
 // TestLiveResponses_Stateful verifies server-side conversation state: WithStore
 // persists a turn, and WithPreviousResponseID threads the prior turn so the model
-// can answer a follow-up that depends on it — without resending the history.
+// can answer a follow-up that depends on it, without resending the history.
 func TestLiveResponses_Stateful(t *testing.T) {
 	client := newLiveResponsesClient(t)
 
@@ -151,7 +151,7 @@ func TestLiveResponses_Stateful(t *testing.T) {
 // the STATELESS encrypted-reasoning round-trip for a reasoning model. Turn 1 asks
 // for encrypted reasoning items (WithReasoningRoundTrip, store disabled); turn 2
 // echoes them back on the assistant message and asks a dependent follow-up. The
-// point is to validate the wire format end to end — the API rejects malformed
+// point is to validate the wire format end to end, the API rejects malformed
 // reasoning items with a 400, so a passing second turn proves the round-trip.
 func TestLiveResponses_ReasoningRoundTrip(t *testing.T) {
 	apiKey := testutil.RequireEnvAPIKey(t, "OPENAI_API_KEY")

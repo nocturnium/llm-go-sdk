@@ -8,15 +8,15 @@ import (
 )
 
 // TestAllowHTTPIndependentOfAllowPrivateIPs asserts that plain-HTTP access is an
-// allowance independent of private-IP access — matching the llms.Config AllowHTTP
-// decoupling. Enabling WithAllowPrivateIPs must NOT implicitly permit plain HTTP;
-// reaching an http:// MCP server requires BOTH WithAllowPrivateIPs(true) and
+// allowance independent of private-IP access, matching the llms.Config AllowHTTP
+// decoupling. Enabling WithAllowPrivateIPs leaves plain HTTP refused; reaching an
+// http:// MCP server requires WithAllowPrivateIPs(true) together with
 // WithAllowHTTP(true).
 //
 // The first subtest is a load-bearing regression guard: before the decoupling the
 // MCP client's allowHTTP defaulted to following allowPrivateIPs, so with private
 // IPs allowed the plain-http request passed the scheme check and failed only on
-// connection — making the "HTTP not allowed" assertion fail on the pre-fix code.
+// connection, making the "HTTP not allowed" assertion fail on the pre-fix code.
 func TestAllowHTTPIndependentOfAllowPrivateIPs(t *testing.T) {
 	// A closed loopback port over plain HTTP. The scheme check runs before the
 	// private-IP check, so each subtest's error pinpoints which gate fired; the
@@ -42,7 +42,7 @@ func TestAllowHTTPIndependentOfAllowPrivateIPs(t *testing.T) {
 
 	t.Run("both_allowed_passes_validation", func(t *testing.T) {
 		// With both flags the scheme and IP checks pass; the handshake then fails
-		// only because nothing is listening on the closed port — not a scheme
+		// only because nothing is listening on the closed port, not a scheme
 		// rejection. This guards against the decouple over-rejecting local http.
 		_, err := NewHTTPClient(newCtx(t), httpURL, WithAllowPrivateIPs(true), WithAllowHTTP(true))
 		if err == nil {

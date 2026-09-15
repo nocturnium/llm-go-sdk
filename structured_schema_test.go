@@ -33,9 +33,9 @@ func TestSchemaFrom_RecursiveEmbeddedDoesNotOverflow(t *testing.T) {
 
 // TestSchemaFrom_EmbeddedMarshalerStructIsScalar documents that a struct
 // embedding a json.Marshaler type (e.g. time.Time) promotes MarshalJSON to the
-// outer struct, so json.Marshal produces a scalar — the schema must be that
+// outer struct, so json.Marshal produces a scalar, the schema must be that
 // scalar, and the embedded type must never be flattened into an object (which
-// would diverge from what the wire actually carries).
+// would diverge from what the wire carries).
 func TestSchemaFrom_EmbeddedMarshalerStructIsScalar(t *testing.T) {
 	type Doc struct {
 		time.Time

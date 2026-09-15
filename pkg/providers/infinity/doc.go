@@ -60,7 +60,7 @@
 //   - llms.Embedder for text embeddings
 //   - llms.Reranker for document reranking
 //
-// It does NOT implement llms.LLM as it doesn't support chat completions.
+// It leaves llms.LLM unimplemented, since it has no chat completions.
 //
 // # Thread Safety
 //

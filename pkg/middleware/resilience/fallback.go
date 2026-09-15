@@ -78,7 +78,7 @@ func (s NeverFallbackSelector) ShouldFallback(_ error) bool {
 
 // fallbackEntry pairs a client with a stable identity and its health state.
 // The id is assigned once when the client is added and never reused, so health
-// is bound to the client itself rather than to its shifting slice position —
+// is bound to the client itself rather than to its shifting slice position,
 // adding or removing a client mid-call can no longer misattribute a failure to
 // a different client. unhealthyUntil is zero when healthy, else the instant the
 // client becomes eligible for a half-open probe.

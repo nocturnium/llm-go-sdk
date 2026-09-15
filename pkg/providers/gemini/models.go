@@ -42,7 +42,7 @@ var knownModels = map[string]modelMetadata{
 	"gemini-2.5-pro-preview-tts":    {displayName: "gemini-2.5-pro-preview-tts", types: []llms.ModelType{llms.ModelTypeAudio}},
 	"gemini-3.5-transcribe":         {displayName: "gemini-3.5-transcribe", types: []llms.ModelType{llms.ModelTypeAudio}},
 
-	// Gemini 3.x — current family (ai.google.dev pricing, verified 2026-08-02).
+	// Gemini 3.x, current family (ai.google.dev pricing, verified 2026-08-02).
 	// Context follows the 2.5 family (1,048,576 in / 65,536 out).
 	"gemini-3.6-flash": {
 		displayName: "Gemini 3.6 Flash",
@@ -54,45 +54,45 @@ var knownModels = map[string]modelMetadata{
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3.5-flash"),
 	},
-	// Gemini 3.5 Flash-Lite — base text/image/video shown; audio input is higher.
+	// Gemini 3.5 Flash-Lite, base text/image/video shown; audio input is higher.
 	"gemini-3.5-flash-lite": {
 		displayName: "Gemini 3.5 Flash-Lite",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3.5-flash-lite"),
 	},
-	// Gemini 3.1 Pro — tiered: Input 2.00 (<=200k) / 4.00 (>200k); Output 12.00 / 18.00.
+	// Gemini 3.1 Pro, tiered: Input 2.00 (<=200k) / 4.00 (>200k); Output 12.00 / 18.00.
 	"gemini-3.1-pro-preview": {
 		displayName: "Gemini 3.1 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3.1-pro-preview"),
 	},
-	// Gemini 3.1 Flash-Lite — base text/image/video shown; audio input is higher.
+	// Gemini 3.1 Flash-Lite, base text/image/video shown; audio input is higher.
 	"gemini-3.1-flash-lite": {
 		displayName: "Gemini 3.1 Flash-Lite",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3.1-flash-lite"),
 	},
-	// Gemini 3 Flash — base text/image/video shown; audio input is higher.
+	// Gemini 3 Flash, base text/image/video shown; audio input is higher.
 	"gemini-3-flash-preview": {
 		displayName: "Gemini 3 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3-flash-preview"),
 	},
-	// Gemini 2.5 Pro — context 1,048,576 in / 65,536 out.
+	// Gemini 2.5 Pro, context 1,048,576 in / 65,536 out.
 	// Tiered: Input 1.25 (<=200k) / 2.50 (>200k); Output 10.00 (<=200k) / 15.00 (>200k).
 	"gemini-2.5-pro": {
 		displayName: "Gemini 2.5 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-2.5-pro"),
 	},
-	// Gemini 2.5 Flash — context 1,048,576 in / 65,536 out. No >200k tier.
+	// Gemini 2.5 Flash, context 1,048,576 in / 65,536 out. No >200k tier.
 	// (Audio input is priced higher at 1.00; base text/image/video shown here.)
 	"gemini-2.5-flash": {
 		displayName: "Gemini 2.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-2.5-flash"),
 	},
-	// Gemini 2.5 Flash-Lite — context 1,048,576 in / 65,536 out. No >200k tier.
+	// Gemini 2.5 Flash-Lite, context 1,048,576 in / 65,536 out. No >200k tier.
 	// (Audio input is priced higher at 0.30; base text/image/video shown here.)
 	"gemini-2.5-flash-lite": {
 		displayName: "Gemini 2.5 Flash-Lite",
@@ -104,7 +104,7 @@ var knownModels = map[string]modelMetadata{
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-2.0-flash-exp"),
 	},
-	// Gemini 1.5 family — no longer listed on the official Gemini API pricing
+	// Gemini 1.5 family, no longer listed on the official Gemini API pricing
 	// page (June 2026). Prices below are the last published rates and are kept
 	// unchanged for back-compat with any account still granted access.
 	// Gemini 1.5 Pro
@@ -182,7 +182,7 @@ var knownModels = map[string]modelMetadata{
 		pricing:     tokenPricing("gemini-pro-vision"),
 	},
 	// Embedding models
-	// Gemini Embedding 001 — current paid embedding model (0.15 per 1M input
+	// Gemini Embedding 001, current paid embedding model (0.15 per 1M input
 	// tokens per the official pricing page, June 2026).
 	"gemini-embedding-001": {
 		displayName: "Gemini Embedding 001",
@@ -298,7 +298,7 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 
 // convertGeminiModel converts a Gemini model response to unified ModelInfo
 func convertGeminiModel(m *geminiapi.ModelInfo) llms.ModelInfo {
-	// Extract model ID from resource name (e.g., "models/gemini-1.5-flash" -> "gemini-1.5-flash")
+	// Extract model ID from resource name (e.g., "models/gemini-1.5-flash" becomes "gemini-1.5-flash")
 	modelID := strings.TrimPrefix(m.Name, "models/")
 
 	info := llms.ModelInfo{
@@ -338,7 +338,7 @@ func formatGeminiModelName(id string) string {
 		name = "Gemini" + name[6:]
 	}
 
-	// Fix version numbers (e.g., "1 5" -> "1.5", "2 0" -> "2.0")
+	// Fix version numbers (e.g., "1 5" becomes "1.5", "2 0" becomes "2.0")
 	name = strings.ReplaceAll(name, " 5 ", ".5 ")
 	name = strings.ReplaceAll(name, " 0 ", ".0 ")
 	name = strings.ReplaceAll(name, " 1 ", ".1 ")

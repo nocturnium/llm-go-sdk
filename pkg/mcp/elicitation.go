@@ -45,7 +45,7 @@ type ElicitationResult struct {
 //
 // Unlike sampling, elicitation needs no separate approver: declining is
 // expressible in the result, and the handler IS the human-in-the-loop. Never
-// auto-accept a schema you did not render to a user — a server can ask for
+// auto-accept a schema you did not render to a user, a server can ask for
 // anything, including credentials.
 type ElicitationHandler func(ctx context.Context, req ElicitationRequest) (ElicitationResult, error)
 

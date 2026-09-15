@@ -123,7 +123,7 @@ func TestConvertMessages_ReEmitsThinkingBlock(t *testing.T) {
 }
 
 // TestConvertMessages_NoThinkingWithoutSignature pins that an unsigned reasoning
-// block (e.g. a summary) is NOT replayed as a thinking block, which Anthropic
+// block (e.g. a summary) stays out of the replayed thinking blocks, which Anthropic
 // would reject.
 func TestConvertMessages_NoThinkingWithoutSignature(t *testing.T) {
 	msgs := []llms.Message{{

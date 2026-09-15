@@ -47,7 +47,7 @@ func validSamplingParams() map[string]any {
 
 // TestContentBlockStaysComparable guards the image-support additions. Data and
 // MimeType are strings deliberately: a slice or map field would make
-// ContentBlock non-comparable and break any caller using == or a map key — the
+// ContentBlock non-comparable and break any caller using == or a map key, the
 // same class of change that forced the v6 major.
 func TestContentBlockStaysComparable(t *testing.T) {
 	a := ContentBlock{Type: "image", Data: "x", MimeType: "image/png"}
@@ -61,7 +61,7 @@ func TestContentBlockStaysComparable(t *testing.T) {
 // TestSamplingWithoutApproverFailsToConstruct is THE consent invariant.
 //
 // A client configured to serve sampling with no approver must not construct. The
-// alternative — constructing and denying at request time — hides the
+// alternative (constructing and denying at request time) hides the
 // misconfiguration until a server first asks, which is exactly when nobody is
 // watching. Failing at wire-up surfaces it immediately.
 func TestSamplingWithoutApproverFailsToConstruct(t *testing.T) {
@@ -103,7 +103,7 @@ func TestSamplingDenialDoesNotInvokeTheLLM(t *testing.T) {
 	_ = mustClient(t, m,
 		WithSamplingLLM(stub),
 		WithSamplingApprover(func(_ context.Context, req SamplingRequest) SamplingApproval {
-			// The approver must see the request BEFORE any model call.
+			// The approver must see the request ahead of any model call.
 			sawRequest = len(req.Messages) == 1
 			return SamplingApproval{Approved: false, Reason: "not today"}
 		}),
@@ -305,7 +305,7 @@ func TestSamplingIgnoresIncludeContext(t *testing.T) {
 	}
 	// Only the request's own single message reaches the model.
 	if len(stub.gotMessages) != 1 {
-		t.Errorf("got %d messages, want 1 — no extra context may be spliced in", len(stub.gotMessages))
+		t.Errorf("got %d messages, want 1, no extra context may be spliced in", len(stub.gotMessages))
 	}
 }
 
@@ -340,7 +340,7 @@ func TestSamplingImageContentMapsToAnImagePart(t *testing.T) {
 }
 
 // TestSamplingRejectsInvalidRequests pins that malformed requests are refused
-// with InvalidParams *before* the approver runs — a human must never be asked to
+// with InvalidParams *before* the approver runs, a human must never be asked to
 // approve a nonsensical request.
 func TestSamplingRejectsInvalidRequests(t *testing.T) {
 	cases := []struct {

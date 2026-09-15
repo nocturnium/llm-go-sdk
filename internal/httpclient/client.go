@@ -8,7 +8,7 @@
 // Retries are OFF by default: a client created with NewClient does not retry.
 // Retry behavior is opt-in via WithRetryPolicy. This keeps the HTTP layer from
 // silently multiplying upstream calls when a resilience wrapper
-// (resilience.NewResilientClient) is layered on top — that wrapper is the single retry
+// (resilience.NewResilientClient) is layered on top, that wrapper is the single retry
 // authority. When WithRetryPolicy is set, transient failures (429, 5xx) are
 // retried with exponential backoff. Streaming requests are never retried to
 // avoid duplicate content.
@@ -112,7 +112,7 @@ func NewClient(opts ...ClientOption) *Client {
 }
 
 // installSSRFDialer sets a dialer Control hook that rejects connections to
-// private/internal IPs based on the address actually resolved at dial time. It is
+// private/internal IPs based on the address resolved at dial time. It is
 // a no-op when private IPs are allowed, or when the client uses a non-standard
 // RoundTripper that cannot accept a dialer (the URL/redirect host checks still
 // apply in that case).
@@ -178,7 +178,7 @@ func validateConnRemoteAddr(conn net.Conn) error {
 
 // ssrfDialControl is a net.Dialer Control hook that rejects connections whose
 // resolved address is a private/internal IP. The dialer resolves the hostname
-// before invoking Control, so address is the concrete IP:port being dialed —
+// before invoking Control, so address is the concrete IP:port being dialed,
 // closing the DNS-rebinding / redirect-to-private gap that hostname checks miss.
 func ssrfDialControl(_, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
@@ -621,7 +621,7 @@ func parseRetryAfter(v string) time.Duration {
 
 // jitterDelay applies equal jitter to a backoff delay: half is fixed and half is
 // randomized, spreading retries across concurrent clients to avoid a synchronized
-// thundering herd on a recovering upstream. Uses math/rand/v2 — this is
+// thundering herd on a recovering upstream. math/rand/v2 is enough: this is
 // scheduling jitter, not a security-sensitive value.
 func jitterDelay(d time.Duration) time.Duration {
 	if d <= 0 {

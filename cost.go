@@ -34,7 +34,7 @@ type Pricing struct {
 	// Tiers optionally reprices the entire request once its total input token
 	// count reaches a threshold. Several providers bill long-context requests at a
 	// higher rate for the whole request rather than only for the tokens past the
-	// threshold — OpenAI's gpt-5 family above 272K input tokens (2x input,
+	// threshold, OpenAI's gpt-5 family above 272K input tokens (2x input,
 	// 1.5x output) and Gemini Pro above 200K are the current examples.
 	//
 	// A nil or empty Tiers means flat pricing, so this field is inert for every
@@ -48,7 +48,7 @@ type Pricing struct {
 // explicit at the type level.
 //
 // Rates are per 1M tokens in USD and follow the same zero-value fallback as
-// Pricing — an unset CacheRead or CacheWrite bills at the tier's own Input rate,
+// Pricing, an unset CacheRead or CacheWrite bills at the tier's own Input rate,
 // not at the base Pricing's rate.
 type PricingTier struct {
 	// MinInputTokens is the inclusive total-input-token threshold at which this
@@ -136,7 +136,7 @@ func (p Pricing) cost(usage Usage) float64 {
 
 // costForMode computes cost under a billing mode. A mode's rate card replaces
 // the standard card wholesale, and tiers then resolve against whichever card
-// applies — so a long-context batch request bills at the batch card's
+// applies, so a long-context batch request bills at the batch card's
 // long-context tier if it declares one, not at the standard card's tier scaled
 // by a discount.
 //
@@ -306,8 +306,8 @@ var DefaultPricing = map[string]Pricing{
 	"anthropic:claude-instant-1.2":         {Input: 0.80, Output: 2.40},
 
 	// Google Gemini (ai.google.dev pricing, verified 2026-08-02). Cache-read rates
-	// are the published per-model figures — Gemini bills cached input at ≈0.1× the
-	// prompt rate, not the 0.25× this table previously assumed. CacheRead here is the
+	// are the published per-model figures: Gemini bills cached input at ~0.1x the
+	// prompt rate. CacheRead here is the
 	// per-token read charge only; Gemini also bills context-cache *storage* per hour
 	// ($1.00/1M/hr on Flash tiers, $4.50/1M/hr on Pro), which is time-based and so
 	// cannot be modeled by this per-token table.
@@ -358,7 +358,7 @@ var DefaultPricing = map[string]Pricing{
 	// Cloud provider serverless/list pricing.
 	"groq:llama-3.3-70b-versatile":                                {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
 	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {Input: 0.90, Output: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
-	"perplexity:sonar":                                            {Input: 1.00, Output: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar) — excludes per-request search fee; verified 2026-06
+	"perplexity:sonar":                                            {Input: 1.00, Output: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
 	"zai:glm-5.2":                                                 {Input: 1.40, Output: 4.40}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-06
 	"zai:glm-5.1":                                                 {Input: 1.40, Output: 4.40}, // docs.z.ai, verified 2026-06
 	"zai:glm-5":                                                   {Input: 1.00, Output: 3.20}, // docs.z.ai, verified 2026-06
@@ -423,7 +423,7 @@ type CostTracker struct {
 	modePricing map[string]Pricing
 	// modeCost accumulates spend per billing mode, keyed by mode. It lives here
 	// rather than on ModelUsage because ModelUsage is a comparable struct and a
-	// map field would silently make it non-comparable — the same class of change
+	// map field would silently make it non-comparable, the same class of change
 	// that forced the v6 major.
 	modeCost map[PricingMode]float64
 }
@@ -474,7 +474,7 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) (floa
 // Resolution order for a non-standard mode: a rate card registered on this
 // tracker, then the built-in published cards (including provider-wide rules),
 // then standard rates with known=false. An unpriced model is (0, false)
-// whatever the mode — a mode discount on an unknown base is still unknown.
+// whatever the mode, a mode discount on an unknown base is still unknown.
 func (t *CostTracker) costFor(provider Provider, model, key string, usage Usage, mode PricingMode) (float64, bool) {
 	standard, standardKnown := t.pricing[key]
 	if !standardKnown && mode == PricingModeStandard {
@@ -563,7 +563,7 @@ func (t *CostTracker) SetModePricing(provider Provider, model string, mode Prici
 // returned map is a copy and is safe to retain.
 //
 // This lives on the tracker rather than on [ModelUsage] because ModelUsage is a
-// comparable struct, and adding a map field to it would make it non-comparable —
+// comparable struct, and adding a map field to it would make it non-comparable,
 // a breaking change for any caller comparing two values with ==.
 func (t *CostTracker) GetModeCosts() map[PricingMode]float64 {
 	t.mu.RLock()
@@ -773,7 +773,7 @@ var _ LLM = (*CostMiddleware)(nil)
 
 // EstimateCost calculates the estimated cost for a given usage using the
 // built-in DefaultPricing table. The boolean is false when no built-in pricing
-// exists for the provider/model — callers must not treat that as a real
+// exists for the provider/model, callers must not treat that as a real
 // zero-cost model. Register custom pricing on a CostTracker when the defaults do
 // not include a provider/model.
 func EstimateCost(provider Provider, model string, usage Usage) (float64, bool) {
@@ -787,7 +787,7 @@ func EstimateCost(provider Provider, model string, usage Usage) (float64, bool) 
 // specifically. A model priced at standard rates but with no published card for
 // the requested mode returns its standard cost with false, so a caller can tell
 // "this is the batch price" from "this is the standard price because no batch
-// price is published". Not every model has a card in every lane —
+// price is published". Not every model has a card in every lane,
 // gpt-5.4-nano, for example, has no Fast mode rate.
 func EstimateCostMode(provider Provider, model string, usage Usage, mode PricingMode) (float64, bool) {
 	standard, standardKnown := DefaultPricing[modelPricingKey(provider, model)]

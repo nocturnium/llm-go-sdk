@@ -43,8 +43,7 @@ func (m *streamMock) Provider() llms.Provider { return m.provider }
 func (m *streamMock) Model() string           { return m.model }
 
 // TestResilientClient_StreamRecordsFailure verifies a stream that fails via a
-// terminal error chunk trips the circuit breaker (previously it was recorded as a
-// false success).
+// terminal error chunk trips the circuit breaker rather than recording a success.
 func TestResilientClient_StreamRecordsFailure(t *testing.T) {
 	cb := NewCircuitBreaker(WithMaxFailures(1))
 	mock := &streamMock{streamChunks: []llms.StreamChunk{{Error: &llms.APIError{StatusCode: 503}}}}
@@ -82,8 +81,7 @@ func TestResilientClient_StreamRecordsSuccess(t *testing.T) {
 }
 
 // TestFallbackChain_StreamFailsOverOnError verifies the chain advances to the next
-// client when a stream errors before emitting any content (previously the failing
-// client was marked healthy and no failover occurred).
+// client when a stream errors before emitting any content.
 func TestFallbackChain_StreamFailsOverOnError(t *testing.T) {
 	bad := &streamMock{provider: "p0", streamChunks: []llms.StreamChunk{{Error: &llms.APIError{StatusCode: 503}}}}
 	good := &streamMock{provider: "p1", streamChunks: []llms.StreamChunk{{Content: "hello"}, {Done: true}}}

@@ -161,7 +161,7 @@ func (e *APIError) Is(target error) bool {
 // underlyingError maps status codes and error types to sentinel errors
 func (e *APIError) underlyingError() error {
 	// Quota exhaustion is a permanent billing failure even though providers return
-	// it with a 429 status. Classify it by code before the status map — otherwise
+	// it with a 429 status. Classify it by code before the status map, otherwise
 	// it masquerades as a retryable rate limit and the exported ErrQuotaExceeded
 	// sentinel is unreachable.
 	switch e.Code {

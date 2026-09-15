@@ -44,7 +44,7 @@ func TestWithHTTPClientOption(t *testing.T) {
 }
 
 // TestRegisteredFactory exercises the init() registration path via the root
-// llms.New constructor, covering the Config -> Option translation in register.go.
+// llms.New constructor, covering the Config to Option translation in register.go.
 func TestRegisteredFactory(t *testing.T) {
 	llm, err := llms.New("fireworks", llms.Config{
 		APIKey:          "test-key",

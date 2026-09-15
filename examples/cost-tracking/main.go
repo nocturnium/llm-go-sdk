@@ -159,7 +159,7 @@ func main() {
 }
 
 // demoPricingModes shows how billing lanes change the estimate. The mode is
-// accounting only — it does not route the request. Send the request to the lane
+// accounting only, it does not route the request. Send the request to the lane
 // with the provider's own mechanism (OpenAI's service_tier, Anthropic's Batches
 // API), then set the matching mode so the recorded cost is right.
 func demoPricingModes() {

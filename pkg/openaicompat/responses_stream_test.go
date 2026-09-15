@@ -126,7 +126,7 @@ func TestProcessResponsesStream_EOFWithoutCompleted(t *testing.T) {
 
 // TestFinalChunkFromResponse_CarriesReasoningMetadata pins that the streamed
 // Responses terminal chunk carries the reasoning metadata (encrypted reasoning
-// items for stateless replay) — previously dropped — without duplicating the
+// items for stateless replay), without duplicating the
 // already-streamed reasoning text.
 func TestFinalChunkFromResponse_CarriesReasoningMetadata(t *testing.T) {
 	resp := &ResponsesResponse{

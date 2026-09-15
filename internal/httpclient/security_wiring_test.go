@@ -74,7 +74,7 @@ func TestClientValidation_BlocksSSRFByDefault(t *testing.T) {
 }
 
 // TestClientValidation_AllowsPublicHTTPS proves a normal public HTTPS endpoint
-// passes validation and the request actually reaches the transport.
+// passes validation and the request reaches the transport.
 func TestClientValidation_AllowsPublicHTTPS(t *testing.T) {
 	st := &stubTransport{}
 	c := NewClient(WithHTTPClient(&http.Client{Transport: st}))

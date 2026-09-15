@@ -467,8 +467,8 @@ func TestClient_CallToolRPCError(t *testing.T) {
 // TestStdioTransport_RoundTrip exercises the stdio framing, background reader, and
 // id correlation using in-memory pipes in place of a real subprocess.
 func TestStdioTransport_RoundTrip(t *testing.T) {
-	clientReads, serverWrites := io.Pipe() // server -> client
-	serverReads, clientWrites := io.Pipe() // client -> server
+	clientReads, serverWrites := io.Pipe() // server writes, client reads
+	serverReads, clientWrites := io.Pipe() // client writes, server reads
 
 	tr := &stdioTransport{
 		cmd:     &exec.Cmd{},

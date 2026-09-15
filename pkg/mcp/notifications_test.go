@@ -157,7 +157,7 @@ func TestClient_CallToolWithProgress(t *testing.T) {
 	}
 
 	// After the call returns, its per-call handler is unregistered: a late
-	// notification with the same token must NOT reach it.
+	// notification with the same token must stay away from it.
 	c.notifier.mu.RLock()
 	_, stillRegistered := c.notifier.callProgress[p.Meta.ProgressToken]
 	c.notifier.mu.RUnlock()
@@ -182,7 +182,7 @@ func TestClient_PerCallProgressRouting(t *testing.T) {
 	cleanup := c.registerCallProgress("tok-1", func(pn ProgressNotification) { perCallCh <- pn })
 	defer cleanup()
 
-	// Token "tok-1" -> per-call handler.
+	// Token "tok-1" selects the per-call handler.
 	m.emit([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"tok-1","progress":1}}`))
 	select {
 	case pn := <-perCallCh:
@@ -204,7 +204,7 @@ func TestClient_PerCallProgressRouting(t *testing.T) {
 		t.Fatal("client-level handler did not receive the fall-through notification")
 	}
 
-	// The per-call token must NOT have reached the client-level handler. The pump is
+	// The per-call token must have left the client-level handler untouched. The pump is
 	// serial, so by the time the fall-through notification has been delivered above,
 	// any client-level delivery for "tok-1" would already be queued ahead of it.
 	select {

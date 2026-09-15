@@ -390,7 +390,7 @@ func formatClaudeModelName(id string) string {
 		name = "Claude" + name[6:]
 	}
 
-	// Fix version numbers (e.g., "3 5" -> "3.5")
+	// Fix version numbers (e.g., "3 5" becomes "3.5")
 	name = strings.ReplaceAll(name, " 5 ", ".5 ")
 	name = strings.ReplaceAll(name, " 0 ", ".0 ")
 	name = strings.ReplaceAll(name, " 1 ", ".1 ")

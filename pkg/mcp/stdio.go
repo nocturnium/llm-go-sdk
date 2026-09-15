@@ -103,7 +103,7 @@ func (t *stdioTransport) deliverNotification(raw []byte) {
 // override that minimal set.
 func newStdioTransport(ctx context.Context, command string, args, env []string, dir string) (*stdioTransport, error) {
 	// The command is the MCP server the application developer chose to launch (the
-	// whole point of a stdio MCP client), not untrusted input — analogous to a
+	// whole point of a stdio MCP client), not untrusted input, analogous to a
 	// configured binary path. Launching it from a variable is by design.
 	// #nosec G204 -- caller-specified MCP server command, not untrusted input
 	cmd := exec.CommandContext(ctx, command, args...)
@@ -244,7 +244,7 @@ func (t *stdioTransport) dispatchOne(line []byte) {
 //   - Exactly one request pending: the error is unambiguously the answer to it,
 //     so deliver it there.
 //   - Zero or more than one request pending: there is no safe correlation, so
-//     treat it as a transport-level protocol failure (fail/teardown) — the
+//     treat it as a transport-level protocol failure (fail/teardown), the
 //     transport closes cleanly and every caller observes one consistent error
 //     rather than a poisoned result.
 func (t *stdioTransport) dispatchNullIDError(line []byte) {
@@ -312,7 +312,7 @@ func (t *stdioTransport) request(ctx context.Context, id int64, payload []byte) 
 		// ch before EOF (a one-shot server answers, then closes stdout). Both cases
 		// can be ready at once and select picks pseudo-randomly, so prefer a
 		// delivered response: returning "transport closed" for a call the server
-		// actually completed would make a non-idempotent tool (e.g. send email,
+		// completed would make a non-idempotent tool (e.g. send email,
 		// create ticket) look failed and be retried, duplicating the side effect.
 		select {
 		case line, ok := <-ch:

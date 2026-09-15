@@ -14,7 +14,7 @@ import (
 // the real llms.New / llms.Config FACTORY path (distinct from ssrf_test.go, which
 // exercises the never-coupled Option layer). AllowPrivateIPs and AllowHTTP are
 // independent gates: the endpoint http://10.0.0.5 is simultaneously a private IP
-// AND plain HTTP, so each flag alone must still be rejected by the other gate.
+// and plain HTTP, so each flag alone must still be rejected by the other gate.
 //
 // The first subtest is the load-bearing regression: under the old coupled
 // register.go (`if cfg.AllowPrivateIPs { WithAllowPrivateIPs(), WithAllowHTTP() }`)

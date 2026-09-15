@@ -154,7 +154,7 @@ func TestEnforceCacheLimit(t *testing.T) {
 		Tools:  []anthropicapi.Tool{{CacheControl: cc()}},
 		Messages: []anthropicapi.Message{
 			{Content: []anthropicapi.ContentPart{{CacheControl: cc()}, {CacheControl: cc()}}},
-			{Content: []anthropicapi.ContentPart{{CacheControl: cc()}}}, // 5th — must be dropped
+			{Content: []anthropicapi.ContentPart{{CacheControl: cc()}}}, // 5th, must be dropped
 		},
 	}
 	enforceCacheLimit(req)

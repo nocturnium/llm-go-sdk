@@ -22,7 +22,7 @@ type ModelHint struct {
 
 // ModelPreferences is the server's advisory guidance on model selection.
 //
-// It is deliberately NOT honored: model choice belongs to the host, which is the
+// It is deliberately ignored: model choice belongs to the host, which is the
 // party paying for the tokens. A server that could steer the host onto an
 // arbitrary model could also steer it onto an expensive one. Override the model
 // per request with the llms.CallOption values passed to [WithSamplingLLM].
@@ -34,7 +34,7 @@ type ModelPreferences struct {
 }
 
 // SamplingRequest is a server's ask for the host to run an LLM completion.
-// Serving it spends the host's tokens, which is why it is gated on approval —
+// Serving it spends the host's tokens, which is why it is gated on approval,
 // see [SamplingApprover].
 type SamplingRequest struct {
 	Messages         []SamplingMessage `json:"messages"`
@@ -81,7 +81,7 @@ type SamplingApproval struct {
 // SamplingApprover decides whether a server's sampling request may spend the
 // host's tokens.
 //
-// It is called BEFORE any LLM invocation, on the inbound-request worker rather
+// It is called ahead of any LLM invocation, on the inbound-request worker rather
 // than the transport read path, so it may block on real human input without
 // stalling the connection. Its context is canceled when the client closes.
 //
@@ -93,7 +93,7 @@ type SamplingApprover func(ctx context.Context, req SamplingRequest) SamplingApp
 
 // ApproveAllSampling approves every sampling request.
 //
-// It exists so non-interactive hosts — tests, or servers you fully control — can
+// It exists so non-interactive hosts (tests, or servers you fully control) can
 // opt out of consent EXPLICITLY and greppably. Do not use it with a server you do
 // not control: it hands that server your token budget.
 func ApproveAllSampling() SamplingApprover {
@@ -131,9 +131,9 @@ func WithSamplingHandler(h SamplingHandler) Option {
 // This is the capability that makes an MCP host useful to a server: the server
 // asks for a completion and the host answers with a model it already owns,
 // under its own credentials and its own budget. Which is exactly why it is
-// gated — see [SamplingApprover].
+// gated, see [SamplingApprover].
 //
-// The opts are applied AFTER the server's requested parameters, so the host
+// The opts are applied on top of the server's requested parameters, so the host
 // always wins: pass llms.WithModel to force a cheaper model regardless of what
 // the server asked for.
 //
@@ -163,7 +163,7 @@ func buildSamplingHandler(cfg config) (requestHandler, error) {
 	if handler == nil {
 		if cfg.samplingApprover != nil {
 			// An approver with nothing to approve is a wiring mistake in the safe
-			// direction, so it is not fatal — but it means sampling is not served.
+			// direction, so it is not fatal, but it means sampling is not served.
 			return nil, nil
 		}
 		return nil, nil

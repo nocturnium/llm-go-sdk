@@ -120,8 +120,8 @@ func (c *Client) dispatchNotification(raw []byte) {
 		// A progress notification carrying a token registered by a CallTool option
 		// is routed to that call's handler; otherwise it falls through to the
 		// client-level handler. The handler is captured under the lock here (on the
-		// read path) but invoked off it by the pump, so a blocking handler — or one
-		// that calls back into the Client — cannot stall response delivery.
+		// read path) but invoked off it by the pump, so a blocking handler, or one
+		// that calls back into the Client, cannot stall response delivery.
 		c.notifier.mu.RLock()
 		perCall := c.notifier.callProgress[progressTokenKey(pn.ProgressToken)]
 		clientFn := c.notifier.progressFn
