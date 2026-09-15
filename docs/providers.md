@@ -38,7 +38,7 @@ code works regardless of which provider you picked.
 |----------|-------------|------------------------|-----------|--------------------|-------|
 | openai | `pkg/providers/openai` | `OPENAI_API_KEY` | OpenAI native | `gpt-4o` | Chat, vision, tools, embeddings (`text-embedding-3-small`) |
 | elevenlabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | n/a (no chat) | Speech, Scribe STT, SFX/music; Pro-plan Flows images/video; direct-construct |
-| openrouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` | Images, async video, speech, transcription; embeddings require a model option |
+| openrouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` | Images, async video, speech, transcription; async Batch API and service tiers; embeddings require a model option |
 | anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | Native (Messages) | `claude-sonnet-4-20250514` | Vision, tools, thinking, prompt caching |
 | gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-2.5-flash` | Vision, tools, embeddings (`text-embedding-004`) |
 | azure | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` (or `AZURE_OPENAI_KEY`) + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | deployment-dependent | Uses deployment + endpoint, not a model name |
@@ -171,6 +171,54 @@ alongside the error; avoid repeating the paid synthesis call. The speech default
 `ListSpeechModels` returns typed entries with reported character pricing.
 Unset voices are omitted; specify `WithSpeechVoice` for providers requiring one.
 See the [media guide](guides/media.md) for defaults and option mappings.
+
+#### Service tiers
+
+Providers sell more than one grade of capacity for the same model, and OpenRouter
+exposes each as its own endpoint. Ask for one per call, and read back the tier
+that actually served the request:
+
+```go
+resp, err := client.GenerateContent(ctx, msgs,
+    openrouter.WithServiceTier(openrouter.TierFlex), // routing
+    llms.WithPricingMode(llms.PricingModeFlex),      // accounting
+)
+fmt.Println(resp.ServiceTier) // "default", "flex", "priority", or ""
+```
+
+`TierFlex` trades latency and availability for price and never falls back to a
+default-tier endpoint, so a capacity failure surfaces as an error; retry without
+the tier if standard pricing is acceptable. `TierPriority` (alias `TierFast`) does
+fall back, and then bills at whatever endpoint served. Requesting a tier routes
+only: pair it with `llms.WithPricingMode` so cost tracking follows the lane.
+
+There are no `:flex` or `:priority` model variants. `openrouter.Nitro(model)` and
+`openrouter.Floor(model)` apply the `:nitro` (throughput sort) and `:floor` (price
+sort) variants, which admit priority and flex endpoints into the sort; setting
+`provider.order` disables that admission.
+
+#### Batch API
+
+`POST /api/beta/batches` runs requests asynchronously within a 24-hour window,
+typically billed at 50% of standard per-token pricing. Batches are text-only.
+
+```go
+batcher := openrouter.NewNativeBatcher(client)
+ctx, cancel := context.WithTimeout(ctx, 6*time.Hour)
+defer cancel()
+resp, err := batcher.ProcessBatch(ctx, requests) // llms.BatchProcessor
+```
+
+`NativeBatcher` submits one batch and blocks until it is terminal, so the context
+deadline has to cover the run; `MaxConcurrency`, `ContinueOnError` and
+`RequestTimeout` have no server-side meaning and are ignored. Every request in a
+batch runs on one model. Wrapping the client in `llms.NewConcurrentBatcher`
+instead keeps the old behavior: concurrent live calls at standard pricing.
+
+The batch lifecycle is also available directly: `SubmitBatch`, `GetBatch`,
+`ListBatches`, `DeleteBatch` and `WaitBatch`. Results arrive inline on a completed
+batch (there is no download route), a completed batch can still hold per-request
+failures, and artifacts are purged 30 days after creation.
 
 ### Azure OpenAI — deployments & endpoint
 

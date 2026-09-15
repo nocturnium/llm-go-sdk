@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- OpenRouter asynchronous Batch API (submit, get, list, delete and wait under /api/beta) with an opt-in `NativeBatcher` that satisfies `llms.BatchProcessor`, and typed service tiers (`WithServiceTier`, `:nitro`/`:floor` variant helpers) with the served tier surfaced on the new `llms.Response.ServiceTier`.
+
 - Together AI, Groq, Featherless, Mistral and Z.AI media routes, including native Together/Z.AI video jobs, vendor speech and transcription mappings, Together raw SSE, Featherless terminal character-usage callbacks, quota/moderation errors, sourced pricing, and gated integration tests. Together video preserves proxy prefixes and keeps unverified outputs.cost as metadata. Wire contracts are documentation-verified; live availability remains unverified.
 
 - Gemini native image generation/editing, Veo polling video jobs with authenticated downloads, PCM speech, and Interactions transcription with speaker labels and word timing; media model options, pricing, and quota-aware live tests.
