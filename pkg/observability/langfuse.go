@@ -22,7 +22,6 @@ var alphanumericRegex = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 // TraceContext holds Langfuse-compatible trace information that can be propagated
 // across the call hierarchy. This mirrors Langfuse's trace attributes.
 type TraceContext struct {
-	// Trace identity
 	TraceID  string `json:"trace_id,omitempty"`
 	SpanID   string `json:"span_id,omitempty"`
 	ParentID string `json:"parent_id,omitempty"`
@@ -42,7 +41,6 @@ type TraceContext struct {
 // GenerationMetadata holds LLM-specific metadata for Langfuse generations.
 // This captures all the information Langfuse expects for an LLM generation observation.
 type GenerationMetadata struct {
-	// Model info
 	RequestModel  string `json:"request_model,omitempty"`
 	ResponseModel string `json:"response_model,omitempty"`
 

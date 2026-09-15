@@ -170,7 +170,7 @@ type BatchList struct {
 }
 
 // BatchDeletion reports what a delete removed. Openrouter is always "deleted" on
-// success; Upstream is present only when a provider had been assigned, and its
+// success; Upstream is present only for a batch with a provider assigned, and its
 // Status is "deleted", "unsupported" or "not_applicable".
 type BatchDeletion struct {
 	ID       string `json:"id"`

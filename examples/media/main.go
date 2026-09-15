@@ -38,7 +38,6 @@ func main() {
 	tracker := llms.NewCostTracker()
 
 	// 1. Text-to-image. Every provider that supports images satisfies
-	// llms.ImageGenerator; check at runtime with llms.AsImageGenerator.
 	if gen, ok := llms.AsImageGenerator(oai); ok {
 		img, err := gen.GenerateImage(ctx, "a watercolor lighthouse at dawn",
 			llms.WithImageModel("gpt-image-1-mini"),

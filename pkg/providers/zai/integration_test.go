@@ -381,7 +381,6 @@ func TestClient_Stream_ContextCancellation(t *testing.T) {
 	var count int
 	for chunk := range chunks {
 		if chunk.Done {
-			// Error may be wrapped, so check for context deadline
 			if chunk.Error != nil && !errors.Is(chunk.Error, context.DeadlineExceeded) {
 				// Accept any context-related error
 				if !strings.Contains(chunk.Error.Error(), "context") {

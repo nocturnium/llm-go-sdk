@@ -68,7 +68,6 @@ func New(opts ...Option) (*Client, error) {
 
 	client := openaicompat.NewClient(clientConfig)
 
-	// Create native API client for model management
 	nativeConfig := ollamaapi.ClientConfig{
 		BaseURL: options.BaseURL,
 	}

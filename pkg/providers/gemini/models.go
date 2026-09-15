@@ -107,7 +107,6 @@ var knownModels = map[string]modelMetadata{
 	// Gemini 1.5 family, no longer listed on the official Gemini API pricing
 	// page (June 2026). Prices below are the last published rates and are kept
 	// unchanged for back-compat with any account still granted access.
-	// Gemini 1.5 Pro
 	"gemini-1.5-pro": {
 		displayName: "Gemini 1.5 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
@@ -391,7 +390,6 @@ func inferGeminiModelTypes(id string, methods []string) []llms.ModelType {
 		return []llms.ModelType{llms.ModelTypeChat}
 	}
 
-	// Unknown model type
 	return []llms.ModelType{llms.ModelTypeChat}
 }
 

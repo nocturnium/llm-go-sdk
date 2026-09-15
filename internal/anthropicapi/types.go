@@ -86,10 +86,7 @@ type Message struct {
 type ContentPart struct {
 	Type string `json:"type"`
 
-	// For text content
-	Text string `json:"text,omitempty"`
-
-	// For image content
+	Text   string       `json:"text,omitempty"`
 	Source *ImageSource `json:"source,omitempty"`
 
 	// For tool_use content

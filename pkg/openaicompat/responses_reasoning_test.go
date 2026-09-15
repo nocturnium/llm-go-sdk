@@ -142,7 +142,7 @@ func TestResponsesReasoning_SurvivesJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &restored); err != nil {
 		t.Fatalf("unmarshal history: %v", err)
 	}
-	// Sanity-check that the round trip actually changed the concrete type, so the test
+	// Sanity-check that the round trip changed the concrete type, so the test
 	// would fail without the tolerant decoder.
 	if _, ok := restored[1].Reasoning.Metadata[MetadataKeyResponsesReasoning].([]ResponsesReasoningItem); ok {
 		t.Fatal("expected metadata type to degrade after JSON round trip; test is not exercising the decoder")

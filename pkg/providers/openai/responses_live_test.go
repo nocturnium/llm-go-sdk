@@ -18,7 +18,7 @@ import (
 //	go test -tags=integration -run TestLiveResponses ./pkg/providers/openai/...
 //
 // They were added to smoke-test the Responses streaming SSE event grammar, which
-// had previously only been validated against mock fixtures (roadmap Track A.3).
+// is otherwise covered by mock fixtures alone (roadmap Track A.3).
 // All use gpt-4o-mini with tight token caps to keep cost negligible.
 
 func newLiveResponsesClient(t *testing.T) *Client {

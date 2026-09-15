@@ -55,7 +55,7 @@ var consumedExtraBodyKeys = map[string]bool{
 // MarshalJSON renders the typed fields and then merges any remaining
 // CallOptions.ExtraBody keys (the documented escape hatch) into the top-level
 // request body (e.g. service_tier, metadata, user, parallel_tool_calls), which
-// the chat path forwards but the Responses path previously dropped. Keys already
+// the chat path forwards and the Responses path now forwards too. Keys already
 // mapped to typed fields, and keys that would collide with a typed field, are
 // left to the typed value.
 func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
