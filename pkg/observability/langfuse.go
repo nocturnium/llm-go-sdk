@@ -126,7 +126,6 @@ func PropagateAttributes(ctx context.Context, overrides ...TraceContextOption) c
 		}
 	}
 
-	// Apply overrides
 	for _, opt := range overrides {
 		opt(child)
 	}

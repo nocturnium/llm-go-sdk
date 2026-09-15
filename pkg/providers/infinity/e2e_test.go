@@ -171,7 +171,6 @@ func TestE2E_SimilaritySearch(t *testing.T) {
 		"Neural networks are computing systems inspired by biological neural networks.",
 	}
 
-	// Query to search for
 	query := "What is artificial intelligence and machine learning?"
 
 	t.Log("Embedding documents...")
@@ -248,7 +247,6 @@ func sqrt(x float64) float64 {
 func TestE2E_EmbedderInterface(t *testing.T) {
 	client := getE2EClient(t)
 
-	// Verify the client implements Embedder
 	embedder, ok := llms.AsEmbedder(client)
 	if !ok {
 		t.Fatal("client does not implement Embedder interface")

@@ -135,7 +135,6 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 		// Parse the event data
 		var event StreamEvent
 
-		// First, determine the event type from the SSE event name
 		eventType := sseEvent.Event
 		if eventType == "" {
 			// Try to parse from data
@@ -152,7 +151,6 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 			return &StreamEvent{Type: eventMessageStop}, nil
 		}
 
-		// Parse based on event type
 		switch eventType {
 		case "error":
 			var raw struct {

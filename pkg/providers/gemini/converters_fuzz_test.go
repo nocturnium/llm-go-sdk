@@ -133,7 +133,6 @@ func FuzzConvertTools(f *testing.F) {
 		// Should not panic
 		result := convertTools(tools)
 
-		// Empty tools should return nil
 		if len(tools) == 0 && result != nil {
 			t.Error("expected nil for empty tools")
 		}

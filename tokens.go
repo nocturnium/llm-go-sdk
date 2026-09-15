@@ -123,7 +123,6 @@ func (e *TokenEstimator) EstimateMessages(messages []Message) int {
 		// Typical overhead is ~4 tokens per message for most formats
 		total += 4
 
-		// Estimate content
 		if msg.Content != "" {
 			total += e.EstimateTokens(msg.Content)
 		}

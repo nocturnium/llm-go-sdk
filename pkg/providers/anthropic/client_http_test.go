@@ -179,7 +179,6 @@ func TestClient_GenerateContent_WithTools(t *testing.T) {
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
 
-		// Verify tools
 		tools, ok := req["tools"].([]any)
 		if !ok || len(tools) == 0 {
 			t.Error("expected tools in request")

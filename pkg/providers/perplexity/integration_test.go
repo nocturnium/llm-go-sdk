@@ -536,7 +536,6 @@ func TestClient_EnvVarFallbacks(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear all API key env vars
 			t.Setenv("PERPLEXITY_API_KEY", "")
 			t.Setenv("PPLX_API_KEY", "")
 			t.Setenv("LLM_API_KEY", "")
@@ -586,7 +585,6 @@ func TestClient_SystemMessage(t *testing.T) {
 			t.Errorf("expected 2 messages, got %d", len(messages))
 		}
 
-		// First message should be system
 		firstMsg, ok := messages[0].(map[string]any)
 		if !ok {
 			t.Fatal("first message is not a map")

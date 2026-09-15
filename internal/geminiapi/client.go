@@ -301,7 +301,6 @@ func (c *Client) GetModel(ctx context.Context, modelName string) (*ModelInfo, er
 	headers := c.getHeaders()
 	var response ModelInfo
 
-	// Ensure model name has the correct format
 	if !strings.HasPrefix(modelName, "models/") {
 		modelName = "models/" + sanitizeModelName(modelName)
 	} else {

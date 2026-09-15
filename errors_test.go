@@ -481,7 +481,6 @@ func TestProviderError_Unwrap(t *testing.T) {
 }
 
 func TestWrapProviderError(t *testing.T) {
-	// nil error returns nil
 	if WrapProviderError(ProviderOpenAI, "test", nil) != nil {
 		t.Error("WrapProviderError should return nil for nil error")
 	}

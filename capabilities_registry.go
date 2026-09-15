@@ -91,7 +91,6 @@ func (r *CapabilityRegistry) Get(provider Provider, modelID string) ModelCapabil
 		return caps
 	}
 
-	// Fall back to provider defaults
 	if caps, ok := r.defaults[provider]; ok {
 		return caps
 	}
@@ -122,7 +121,6 @@ func (r *CapabilityRegistry) makeKey(provider Provider, modelID string) string {
 // registerDefaults populates the registry with known model capabilities.
 // This data should be periodically updated as models change.
 func (r *CapabilityRegistry) registerDefaults() {
-	// OpenAI defaults
 	r.defaults[ProviderOpenAI] = ModelCapabilities{
 		MaxContextTokens:  128000,
 		MaxOutputTokens:   16384,
@@ -247,7 +245,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		}
 	}
 
-	// Anthropic defaults
 	r.defaults[ProviderAnthropic] = ModelCapabilities{
 		MaxContextTokens:  200000,
 		MaxOutputTokens:   8192,
@@ -342,7 +339,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		}
 	}
 
-	// Gemini defaults
 	r.defaults[ProviderGemini] = ModelCapabilities{
 		MaxContextTokens:  1000000,
 		MaxOutputTokens:   8192,
@@ -403,7 +399,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		}
 	}
 
-	// Groq defaults (fast inference)
 	r.defaults[ProviderGroq] = ModelCapabilities{
 		MaxContextTokens:  131072,
 		MaxOutputTokens:   8192,
@@ -413,7 +408,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
-	// Together AI defaults
 	r.defaults[ProviderTogetherAI] = ModelCapabilities{
 		MaxContextTokens:  32768,
 		MaxOutputTokens:   4096,
@@ -423,7 +417,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
-	// DeepSeek defaults
 	r.defaults[ProviderDeepSeek] = ModelCapabilities{
 		MaxContextTokens:  128000,
 		MaxOutputTokens:   8192,
@@ -433,7 +426,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
-	// Mistral defaults
 	r.defaults[ProviderMistral] = ModelCapabilities{
 		MaxContextTokens:  128000,
 		MaxOutputTokens:   8192,

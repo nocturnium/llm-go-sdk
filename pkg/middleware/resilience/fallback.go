@@ -203,12 +203,10 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llm
 			fc.markUnhealthyID(cand.id)
 		}
 
-		// Check if we should fallback
 		if !fc.selector.ShouldFallback(err) {
 			return "", err
 		}
 
-		// Callback for fallback
 		fc.fireFallback(pos, candidates, err)
 	}
 
@@ -241,12 +239,10 @@ func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LL
 			fc.markUnhealthyID(cand.id)
 		}
 
-		// Check if we should fallback
 		if !fc.selector.ShouldFallback(err) {
 			return zero, err
 		}
 
-		// Callback for fallback
 		fc.fireFallback(pos, candidates, err)
 	}
 

@@ -68,7 +68,6 @@ func TestCachedModelsOrganizations(t *testing.T) {
 }
 
 func TestCachedModelsTypes(t *testing.T) {
-	// Test that coder models have code type
 	coderModels := []string{
 		"Qwen/Qwen2.5-Coder-7B-Instruct",
 		"Qwen/Qwen2.5-Coder-32B-Instruct",
@@ -222,7 +221,6 @@ func TestModelInfo(t *testing.T) {
 		info1, _ := client.ModelInfo(ctx, "meta-llama/Llama-3.3-70B-Instruct")
 		info2, _ := client.ModelInfo(ctx, "meta-llama/Llama-3.3-70B-Instruct")
 
-		// Modify info1
 		info1.DisplayName = testModified
 
 		// info2 should not be affected
@@ -367,7 +365,6 @@ func TestModelInfoReturnsCopy(t *testing.T) {
 		t.Fatal("expected to find model")
 	}
 
-	// Modify info1
 	info1.DisplayName = testModified
 	info1.Types = append(info1.Types, llms.ModelTypeEmbedding)
 
@@ -402,7 +399,6 @@ func TestPaginationEdgeCases(t *testing.T) {
 		if len(result.Models) != 3 {
 			t.Errorf("expected 3 models, got %d", len(result.Models))
 		}
-		// First model should be the first cached model
 		if result.Models[0].ID != cachedModels[0].ID {
 			t.Errorf("expected first model to be %s, got %s", cachedModels[0].ID, result.Models[0].ID)
 		}
@@ -464,7 +460,6 @@ func TestPaginationEdgeCases(t *testing.T) {
 	})
 
 	t.Run("combined cursor and type filter", func(t *testing.T) {
-		// Get all code models first
 		allCode, err := client.ListModels(ctx, llms.WithModelTypes(llms.ModelTypeCode))
 		if err != nil {
 			t.Fatalf("ListModels() error = %v", err)

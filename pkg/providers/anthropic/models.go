@@ -60,7 +60,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-opus-4-8"),
 	},
-	// Claude Opus 4.7
 	"claude-opus-4-7": {
 		displayName:   "Claude Opus 4.7",
 		contextLength: 1000000,
@@ -68,7 +67,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-opus-4-7"),
 	},
-	// Claude Opus 4.6
 	"claude-opus-4-6": {
 		displayName:   "Claude Opus 4.6",
 		contextLength: 1000000,
@@ -76,7 +74,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-opus-4-6"),
 	},
-	// Claude Opus 4.5
 	"claude-opus-4-5": {
 		displayName:   "Claude Opus 4.5",
 		contextLength: 200000,
@@ -114,7 +111,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-sonnet-4-6"),
 	},
-	// Claude Sonnet 4.5
 	"claude-sonnet-4-5": {
 		displayName:   "Claude Sonnet 4.5",
 		contextLength: 200000,
@@ -166,7 +162,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-3-5-sonnet-20240620"),
 	},
-	// Claude 3.5 Haiku
 	"claude-3-5-haiku-latest": {
 		displayName:   "Claude 3.5 Haiku",
 		contextLength: 200000,
@@ -181,7 +176,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-3-5-haiku-20241022"),
 	},
-	// Claude 3 Opus
 	"claude-3-opus-latest": {
 		displayName:   "Claude 3 Opus",
 		contextLength: 200000,
@@ -196,7 +190,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-3-opus-20240229"),
 	},
-	// Claude 3 Sonnet
 	"claude-3-sonnet-20240229": {
 		displayName:   "Claude 3 Sonnet (2024-02-29)",
 		contextLength: 200000,
@@ -204,7 +197,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-3-sonnet-20240229"),
 	},
-	// Claude 3 Haiku
 	"claude-3-haiku-20240307": {
 		displayName:   "Claude 3 Haiku (2024-03-07)",
 		contextLength: 200000,
@@ -227,7 +219,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat},
 		pricing:       tokenPricing("claude-2.0"),
 	},
-	// Claude Instant
 	"claude-instant-1.2": {
 		displayName:   "Claude Instant 1.2",
 		contextLength: 100000,
@@ -348,7 +339,6 @@ func convertAnthropicModel(m *anthropicapi.ModelInfo) llms.ModelInfo {
 		}
 	}
 
-	// Check if we have known metadata for this model
 	if metadata, ok := knownModels[m.ID]; ok {
 		if info.DisplayName == "" {
 			info.DisplayName = metadata.displayName
@@ -385,7 +375,6 @@ func formatClaudeModelName(id string) string {
 	// Replace dashes with spaces and fix casing
 	name = strings.ReplaceAll(name, "-", " ")
 
-	// Capitalize "claude"
 	if strings.HasPrefix(strings.ToLower(name), "claude") {
 		name = "Claude" + name[6:]
 	}
@@ -424,7 +413,6 @@ func inferClaudeModelTypes(id string) []llms.ModelType {
 		return []llms.ModelType{llms.ModelTypeChat}
 	}
 
-	// Default: chat
 	return []llms.ModelType{llms.ModelTypeChat}
 }
 

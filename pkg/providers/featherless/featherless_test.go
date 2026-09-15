@@ -113,7 +113,6 @@ func TestNewClientPreservesBaseURL(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify the default base URL is preserved in options
 	if client.options.BaseURL != "https://api.featherless.ai/v1" {
 		t.Errorf("expected BaseURL to be https://api.featherless.ai/v1, got %s", client.options.BaseURL)
 	}

@@ -138,7 +138,6 @@ func (m *MetricsMiddleware) recordUsage(ctx context.Context, span trace.Span, pr
 		span.SetAttributes(attribute.Float64("llm.tokens_per_second", tps))
 	}
 
-	// Track and record cost
 	if m.recordCost {
 		cost, known := m.costTracker.Record(provider, model, usage)
 		if known {

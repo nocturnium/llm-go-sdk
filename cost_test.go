@@ -123,7 +123,6 @@ func TestNewCostTracker_CustomPricing(t *testing.T) {
 
 	tracker := NewCostTracker(customPricing)
 
-	// Custom model should be available
 	pricing, ok := tracker.GetPricing(ProviderOpenAI, "custom-model")
 	if !ok {
 		t.Error("expected custom pricing for openai:custom-model")
@@ -247,7 +246,6 @@ func TestCostTracker_GetUsage_NotFound(t *testing.T) {
 func TestCostTracker_GetTotalCost(t *testing.T) {
 	tracker := NewCostTracker()
 
-	// Record usage for multiple models
 	tracker.Record(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: 1000000})                    // $2.50
 	tracker.Record(ProviderAnthropic, "claude-3-opus-20240229", Usage{PromptTokens: 1000000}) // $15.00
 

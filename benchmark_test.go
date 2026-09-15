@@ -17,7 +17,6 @@ func BenchmarkMessageConversion(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// Simulate message conversion (JSON marshal/unmarshal)
 		data, _ := json.Marshal(messages)
 		var result []Message
 		_ = json.Unmarshal(data, &result)

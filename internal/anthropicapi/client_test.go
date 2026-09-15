@@ -82,7 +82,6 @@ func TestClient_CreateMessage(t *testing.T) {
 			t.Errorf("expected model=claude-sonnet-4-20250514, got %s", req.Model)
 		}
 
-		// Send response
 		resp := MessagesResponse{
 			ID:   "msg_123",
 			Type: "message",

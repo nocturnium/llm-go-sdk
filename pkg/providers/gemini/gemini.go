@@ -75,7 +75,6 @@ func (c *Client) Call(ctx context.Context, prompt string, options ...llms.CallOp
 func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
 	opts := llms.ApplyOptions(options...)
 
-	// Validate options
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -145,7 +144,6 @@ func (c *Client) Capabilities() llms.Capabilities {
 func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	opts := llms.ApplyOptions(options...)
 
-	// Validate options
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -313,7 +311,6 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 						}
 					}
 
-					// Extract text content
 					text := geminiapi.ExtractTextContent(candidate.Content.Parts)
 					if text != "" {
 						lastContent = text

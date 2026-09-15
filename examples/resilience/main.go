@@ -30,7 +30,6 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n\n", baseClient.Provider(), baseClient.Model())
 
-	// Example 1: Basic resilient client with defaults
 	fmt.Println("=== Basic Resilient Client ===")
 	resilientClient := resilience.NewResilientClient(baseClient)
 
@@ -41,7 +40,6 @@ func main() {
 		fmt.Printf("Response: %s\n\n", resp)
 	}
 
-	// Example 2: Custom retry configuration
 	fmt.Println("=== Custom Retry Configuration ===")
 	customRetry := &resilience.RetryConfig{
 		MaxAttempts:   5,                      // Try up to 5 times
@@ -93,10 +91,8 @@ func main() {
 		}
 	}
 
-	// Check circuit breaker state
 	fmt.Printf("\nCircuit state: %s\n\n", cb.State())
 
-	// Example 4: Rate limiting with resilience
 	fmt.Println("=== Combined Rate Limiting + Resilience ===")
 
 	// First wrap with rate limiting
@@ -106,7 +102,6 @@ func main() {
 		resilience.WithWaitTimeout(5*time.Second),
 	)
 
-	// Then wrap with resilience
 	fullClient := resilience.NewResilientClient(rateLimitedClient,
 		resilience.WithMaxRetries(3),
 	)
@@ -118,7 +113,6 @@ func main() {
 		fmt.Printf("Response: %s\n\n", resp)
 	}
 
-	// Example 5: Quick retry settings
 	fmt.Println("=== Quick Retry Settings ===")
 	quickClient := resilience.NewResilientClient(baseClient,
 		resilience.WithMaxRetries(2),             // Shorthand for MaxAttempts=3

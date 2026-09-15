@@ -128,7 +128,6 @@ var knownModels = map[string]modelMetadata{
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-1.5-pro-002"),
 	},
-	// Gemini 1.5 Flash
 	"gemini-1.5-flash": {
 		displayName: "Gemini 1.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
@@ -154,7 +153,6 @@ var knownModels = map[string]modelMetadata{
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-1.5-flash-8b"),
 	},
-	// Gemini 1.0 Pro
 	"gemini-1.0-pro": {
 		displayName: "Gemini 1.0 Pro",
 		types:       []llms.ModelType{llms.ModelTypeChat},
@@ -170,7 +168,6 @@ var knownModels = map[string]modelMetadata{
 		types:       []llms.ModelType{llms.ModelTypeChat},
 		pricing:     tokenPricing("gemini-pro"),
 	},
-	// Gemini 1.0 Pro Vision
 	"gemini-1.0-pro-vision": {
 		displayName: "Gemini 1.0 Pro Vision",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
@@ -310,7 +307,6 @@ func convertGeminiModel(m *geminiapi.ModelInfo) llms.ModelInfo {
 		MaxOutput:     m.OutputTokenLimit,
 	}
 
-	// Check if we have known metadata for this model
 	if metadata, ok := knownModels[modelID]; ok {
 		if info.DisplayName == "" {
 			info.DisplayName = metadata.displayName
@@ -333,7 +329,6 @@ func formatGeminiModelName(id string) string {
 	// Replace dashes with spaces
 	name := strings.ReplaceAll(id, "-", " ")
 
-	// Capitalize "gemini"
 	if strings.HasPrefix(strings.ToLower(name), "gemini") {
 		name = "Gemini" + name[6:]
 	}

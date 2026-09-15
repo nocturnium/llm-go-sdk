@@ -603,7 +603,6 @@ func TestLogEntry_ToLangfuseGeneration(t *testing.T) {
 		t.Errorf("session_id = %v, want session-def", gen["session_id"])
 	}
 
-	// Check usage
 	usage, ok := gen["usage"].(map[string]any)
 	if !ok {
 		t.Fatal("usage is not a map")
@@ -757,7 +756,6 @@ func TestLogEntry_PopulateFromCallOptions(t *testing.T) {
 		t.Errorf("Metadata[opt_count] = %v, want 2", entry.Metadata["opt_count"])
 	}
 
-	// Check request parameters
 	if entry.RequestParameters["temperature"] != 0.7 {
 		t.Errorf("temperature = %v, want 0.7", entry.RequestParameters["temperature"])
 	}

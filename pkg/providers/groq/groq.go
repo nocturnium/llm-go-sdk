@@ -44,7 +44,6 @@ type Client struct {
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 
-	// Resolve API key from options or environment
 	apiKey, err := llms.RequireAPIKey("groq", options.APIKey, llms.EnvGroqAPIKey)
 	if err != nil {
 		return nil, err

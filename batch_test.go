@@ -166,7 +166,6 @@ func (m *mockBatchLLM) GenerateContent(ctx context.Context, messages []Message, 
 		}
 	}
 
-	// Return predetermined responses
 	if len(messages) > 0 && m.responses != nil {
 		content := messages[len(messages)-1].Content
 		if resp, ok := m.responses[content]; ok {

@@ -220,7 +220,6 @@ func TestValidateMetadataValue(t *testing.T) {
 		t.Error("201 char value should be invalid")
 	}
 
-	// Empty value should be valid
 	if !ValidateMetadataValue("") {
 		t.Error("empty value should be valid")
 	}

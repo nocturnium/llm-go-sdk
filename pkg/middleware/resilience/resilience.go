@@ -189,7 +189,6 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		// change what counts as a provider-health failure.
 		providerUnhealthy := isProviderUnhealthy(err)
 
-		// Check if we should retry
 		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) {
 			if providerUnhealthy {
 				rc.breaker.RecordFailure()
@@ -209,7 +208,6 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 			break
 		}
 
-		// Calculate delay with jitter
 		jitteredDelay := calculateDelay(delay, rc.retry.Jitter)
 		retryDelay := retryDelayForError(err, jitteredDelay, rc.retry.MaxDelay)
 

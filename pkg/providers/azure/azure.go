@@ -60,7 +60,6 @@ func New(opts ...Option) (*Client, error) {
 	}
 	options.APIKey = apiKey
 
-	// Resolve endpoint from options or environment
 	if options.Endpoint == "" {
 		options.Endpoint = os.Getenv(EnvAzureEndpoint)
 	}
@@ -68,7 +67,6 @@ func New(opts ...Option) (*Client, error) {
 		return nil, ErrMissingEndpoint
 	}
 
-	// Resolve deployment name from options or environment
 	if options.DeploymentName == "" {
 		options.DeploymentName = os.Getenv(EnvAzureDeployment)
 	}

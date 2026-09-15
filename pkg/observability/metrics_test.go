@@ -152,7 +152,6 @@ func TestMetricsMiddleware_Call_Success(t *testing.T) {
 		t.Errorf("result = %s, want 'Hello!'", result)
 	}
 
-	// Check spans
 	spans := spanRecorder.Ended()
 	if len(spans) != 1 {
 		t.Fatalf("expected 1 span, got %d", len(spans))
@@ -433,7 +432,6 @@ func TestMetricsMiddleware_Error(t *testing.T) {
 		t.Error("expected error status on span")
 	}
 
-	// Success rate should decrease
 	if middleware.SuccessRate() != 0.0 {
 		t.Errorf("success rate = %f, want 0.0", middleware.SuccessRate())
 	}
@@ -447,7 +445,6 @@ func TestMetricsMiddleware_SuccessRate(t *testing.T) {
 
 	middleware, _ := NewMetricsMiddleware(llm, WithSuccessRateWindow(1*time.Minute))
 
-	// Initial success rate should be 1.0
 	if middleware.SuccessRate() != 1.0 {
 		t.Errorf("initial success rate = %f, want 1.0", middleware.SuccessRate())
 	}
@@ -654,7 +651,6 @@ func TestMetricsMiddleware_Unwrap(t *testing.T) {
 func TestSlidingWindow(t *testing.T) {
 	window := newSlidingWindow(100 * time.Millisecond)
 
-	// Initial rate is 1.0
 	if window.SuccessRate() != 1.0 {
 		t.Errorf("initial rate = %f, want 1.0", window.SuccessRate())
 	}
@@ -666,7 +662,6 @@ func TestSlidingWindow(t *testing.T) {
 		t.Errorf("after 2 successes = %f, want 1.0", window.SuccessRate())
 	}
 
-	// Record a failure
 	window.Record(false)
 	// 2 success, 1 failure = 0.666...
 	rate := window.SuccessRate()

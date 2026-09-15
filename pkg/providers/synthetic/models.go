@@ -271,7 +271,6 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	// Start with all cached models
 	models := make([]llms.ModelInfo, len(cachedModels))
 	copy(models, cachedModels)
 
@@ -292,7 +291,6 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		}
 	}
 
-	// Slice from start
 	if start >= len(models) {
 		return &llms.ListModelsResult{
 			Models:  []llms.ModelInfo{},
@@ -336,7 +334,6 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 		return copyModelInfo(&info), nil
 	}
 
-	// Model not found in cache
 	return nil, llms.ErrModelNotFound
 }
 

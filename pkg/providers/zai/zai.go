@@ -58,7 +58,6 @@ func resolveBaseURL(options *options) string {
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 
-	// Resolve API key from options or environment
 	apiKey, err := llms.RequireAPIKey("zai", options.APIKey, llms.EnvZAIAPIKey)
 	if err != nil {
 		return nil, err

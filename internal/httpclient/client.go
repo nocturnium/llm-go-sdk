@@ -565,7 +565,6 @@ func (c *Client) doWithRetry(ctx context.Context, req *http.Request) (*http.Resp
 			continue
 		}
 
-		// Check if we should retry based on status code
 		if IsRetryable(resp.StatusCode, nil) && c.retryPolicy.ShouldRetry(resp.StatusCode) {
 			// On the final attempt, return the response so the caller can parse the
 			// provider's *APIError (status, Retry-After, request id) instead of
@@ -800,7 +799,6 @@ func (e *APIError) Error() string {
 	var sb strings.Builder
 	sb.WriteString("API error")
 
-	// Add status code
 	sb.WriteString(fmt.Sprintf(" (status %d", e.StatusCode))
 
 	// Add type and code if present

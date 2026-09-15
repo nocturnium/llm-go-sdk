@@ -118,7 +118,6 @@ func TestNewClientPreservesBaseURL(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify the default base URL is preserved in options
 	if client.options.BaseURL != "https://api.synthetic.new/openai/v1" {
 		t.Errorf("expected BaseURL to be https://api.synthetic.new/openai/v1, got %s", client.options.BaseURL)
 	}
@@ -221,7 +220,6 @@ func TestEmbedWithExplicitModel(t *testing.T) {
 		t.Fatalf("unexpected error creating client: %v", err)
 	}
 
-	// Verify the embedding model is set
 	if client.options.EmbeddingModel != "hf:BAAI/bge-large-en-v1.5" {
 		t.Errorf("expected embedding model to be set, got %s", client.options.EmbeddingModel)
 	}

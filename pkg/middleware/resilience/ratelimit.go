@@ -25,12 +25,10 @@ var (
 type RateLimiter struct {
 	mu sync.RWMutex
 
-	// Request rate limiting
 	requestLimiter *rate.Limiter
 	requestsPerMin int
 	requestBurst   int
 
-	// Token rate limiting (optional)
 	tokenLimiter  *rate.Limiter
 	tokensPerMin  int
 	tokenBurst    int // Max tokens allowed to burst at once (0 = a full minute's budget)
@@ -186,7 +184,6 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		return rl.tryAcquire(requests, tokens)
 	}
 
-	// Create timeout context
 	waitCtx, cancel := context.WithTimeout(ctx, rl.waitTimeout)
 	defer cancel()
 
@@ -214,7 +211,6 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		return ErrRateLimitTimeout
 	}
 
-	// Wait for token limit if configured
 	if tokenLimiter != nil && tokens > 0 {
 		// Never request more than the bucket can hold, or WaitN rejects it forever.
 		if b := tokenLimiter.Burst(); tokens > b {

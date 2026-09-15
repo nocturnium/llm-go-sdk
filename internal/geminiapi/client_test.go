@@ -63,7 +63,6 @@ func TestNewClient_WithCustomHTTPClient(t *testing.T) {
 
 func TestClient_GenerateContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request path contains model and action
 		if !strings.Contains(r.URL.Path, "/models/gemini-pro:generateContent") {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
@@ -84,7 +83,6 @@ func TestClient_GenerateContent(t *testing.T) {
 			t.Errorf("expected 1 content, got %d", len(req.Contents))
 		}
 
-		// Send response
 		resp := GenerateContentResponse{
 			Candidates: []Candidate{
 				{
@@ -387,7 +385,6 @@ data: {"candidates":[{"content":{"role":"model","parts":[{"text":"!"}]},"finishR
 	}
 	defer func() { _ = stream.Close() }()
 
-	// Read first chunk
 	chunk, err := stream.Read()
 	if err != nil {
 		t.Fatalf("unexpected error reading chunk: %v", err)
@@ -396,7 +393,6 @@ data: {"candidates":[{"content":{"role":"model","parts":[{"text":"!"}]},"finishR
 		t.Errorf("expected text=Hello, got %s", chunk.Candidates[0].Content.Parts[0].Text)
 	}
 
-	// Read second chunk
 	chunk, err = stream.Read()
 	if err != nil {
 		t.Fatalf("unexpected error reading chunk: %v", err)

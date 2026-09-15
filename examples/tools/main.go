@@ -78,15 +78,12 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n\n", client.Provider(), client.Model())
 
-	// Example 1: Weather tool
 	fmt.Println("=== Weather Tool Example ===")
 	runToolExample(ctx, client, "What's the weather like in Tokyo?", []llms.Tool{weatherTool})
 
-	// Example 2: Calculator tool
 	fmt.Println("\n=== Calculator Tool Example ===")
 	runToolExample(ctx, client, "What is 42 multiplied by 17?", []llms.Tool{calculatorTool})
 
-	// Example 3: Multiple tools available
 	fmt.Println("\n=== Multiple Tools Example ===")
 	runToolExample(ctx, client,
 		"I'm planning a trip to Paris. What's the weather there? Also, if a hotel costs 150 euros per night for 5 nights, what's the total?",
@@ -120,11 +117,9 @@ func runToolExample(ctx context.Context, client llms.LLM, prompt string, tools [
 				ToolCalls: resp.ToolCalls,
 			})
 
-			// Process each tool call
 			for _, tc := range resp.ToolCalls {
 				fmt.Printf("  - %s(%s)\n", tc.Function.Name, tc.Function.Arguments)
 
-				// Execute the tool and get result
 				result := executeTool(tc.Function.Name, tc.Function.Arguments)
 				fmt.Printf("    Result: %s\n", result)
 

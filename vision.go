@@ -287,7 +287,6 @@ func ValidateImageContent(img *ImageContent) error {
 			return fmt.Errorf("media type is required for base64 images")
 		}
 
-		// Validate media type
 		switch img.MediaType {
 		case MediaTypePNG, MediaTypeJPEG, MediaTypeGIF, MediaTypeWebP:
 			// Valid

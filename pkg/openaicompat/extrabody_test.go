@@ -52,7 +52,6 @@ func TestChatCompletionRequest_ExtraBody(t *testing.T) {
 				ExtraBody: tt.extraBody,
 			}
 
-			// Marshal to JSON
 			data, err := json.Marshal(req)
 			if err != nil {
 				t.Fatalf("Failed to marshal request: %v", err)

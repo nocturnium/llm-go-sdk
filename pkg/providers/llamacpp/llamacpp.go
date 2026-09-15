@@ -53,7 +53,6 @@ func New(opts ...Option) (*Client, error) {
 		}
 	}
 
-	// Resolve API key from environment (optional)
 	options.APIKey = llms.ResolveAPIKey(options.APIKey, "LLAMA_CPP_API_KEY")
 
 	// Create OpenAI-compatible client (uses /v1 prefix)

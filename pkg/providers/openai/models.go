@@ -88,7 +88,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("gpt-5.4-pro"),
 	},
-	// GPT-5 family
 	"gpt-5": {
 		displayName:   "GPT-5",
 		contextLength: 400000,
@@ -110,7 +109,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("gpt-5-nano"),
 	},
-	// GPT-4.1 family
 	"gpt-4.1": {
 		displayName:   "GPT-4.1",
 		contextLength: 1047576,
@@ -132,7 +130,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("gpt-4.1-nano"),
 	},
-	// GPT-4o models
 	"gpt-4o": {
 		displayName:   "GPT-4o",
 		contextLength: 128000,
@@ -168,7 +165,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("gpt-4o-mini-2024-07-18"),
 	},
-	// GPT-4 Turbo
 	"gpt-4-turbo": {
 		displayName:   "GPT-4 Turbo",
 		contextLength: 128000,
@@ -256,7 +252,6 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat},
 		pricing:       tokenPricing("o1-mini"),
 	},
-	// Embedding models
 	"text-embedding-3-large": {
 		displayName:   "Text Embedding 3 Large",
 		contextLength: 8191,
@@ -411,7 +406,6 @@ func convertOpenAIModel(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.CreatedAt = time.Unix(m.Created, 0)
 	}
 
-	// Check if we have known metadata for this model
 	if metadata, ok := knownModels[m.ID]; ok {
 		info.DisplayName = metadata.displayName
 		info.ContextLength = metadata.contextLength
@@ -419,7 +413,6 @@ func convertOpenAIModel(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.Types = metadata.types
 		info.Pricing = metadata.pricing
 	} else {
-		// Infer from model ID
 		info.DisplayName = formatModelName(m.ID)
 		info.Types = inferModelTypes(m.ID)
 	}
@@ -448,18 +441,15 @@ func formatModelName(id string) string {
 		// GPT-4o variants (must come before gpt-4)
 		{"gpt-4o-mini", "GPT-4o Mini"},
 		{"gpt-4o", "GPT-4o"},
-		// GPT-4 variants
 		{"gpt-4-turbo", "GPT-4 Turbo"},
 		{"gpt-4-32k", "GPT-4 32K"},
 		{"gpt-4", "GPT-4"},
-		// GPT-3.5 variants
 		{"gpt-3.5-turbo-16k", "GPT-3.5 Turbo 16K"},
 		{"gpt-3.5-turbo", "GPT-3.5 Turbo"},
 		// o1 models
 		{"o1-preview", "o1 Preview"},
 		{"o1-mini", "o1 Mini"},
 		{"o1", "o1"},
-		// Embedding models
 		{"text-embedding-3-large", "Text Embedding 3 Large"},
 		{"text-embedding-3-small", "Text Embedding 3 Small"},
 		{"text-embedding-3", "Text Embedding 3"},
@@ -532,7 +522,6 @@ func inferModelTypes(id string) []llms.ModelType {
 		return []llms.ModelType{llms.ModelTypeChat}
 	}
 
-	// Embedding models
 	if strings.Contains(idLower, "embedding") {
 		return []llms.ModelType{llms.ModelTypeEmbedding}
 	}
@@ -548,7 +537,6 @@ func inferModelTypes(id string) []llms.ModelType {
 		return []llms.ModelType{llms.ModelTypeAudio}
 	}
 
-	// Moderation models
 	if strings.Contains(idLower, "moderation") {
 		return []llms.ModelType{llms.ModelTypeModeration}
 	}

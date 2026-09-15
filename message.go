@@ -212,7 +212,6 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 
 		// Check if we can merge with current
 		if current != nil && current.Role == msg.Role {
-			// Merge content
 			if msg.Content != "" {
 				if current.Content != "" {
 					current.Content += "\n" + msg.Content
@@ -221,12 +220,10 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 				}
 			}
 
-			// Merge parts
 			if len(msg.Parts) > 0 {
 				current.Parts = append(current.Parts, msg.Parts...)
 			}
 
-			// Merge tool calls
 			if len(msg.ToolCalls) > 0 {
 				current.ToolCalls = append(current.ToolCalls, msg.ToolCalls...)
 			}
@@ -282,7 +279,6 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 		return messages
 	}
 
-	// Build result with consolidated system message at front
 	result := make([]Message, 0, len(nonSystemMessages)+1)
 	result = append(result, Message{
 		Role:    RoleSystem,
@@ -330,7 +326,6 @@ func PrepareMessages(messages []Message, opts *CallOptions) ([]Message, error) {
 		processed = MergeConsecutiveMessages(messages)
 	}
 
-	// Validate the processed messages
 	if err := ValidateMessages(processed); err != nil {
 		return nil, err
 	}

@@ -440,7 +440,6 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 		t.Fatalf("expected 2 tool calls, got %d", len(calls))
 	}
 
-	// Arguments for first tool call
 	calls = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(0),
 		Function: &FunctionCall{
@@ -448,7 +447,6 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 		},
 	})
 
-	// Arguments for second tool call
 	calls = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(1),
 		Function: &FunctionCall{

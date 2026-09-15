@@ -163,11 +163,9 @@ const (
 
 // Attribute key helpers for OTel
 var (
-	// GenAI System
 	keyGenAISystem        = attribute.Key(AttrGenAISystem)
 	keyGenAIOperationName = attribute.Key(AttrGenAIOperationName)
 
-	// GenAI Request
 	keyGenAIRequestModel            = attribute.Key(AttrGenAIRequestModel)
 	keyGenAIRequestTemperature      = attribute.Key(AttrGenAIRequestTemperature)
 	keyGenAIRequestMaxTokens        = attribute.Key(AttrGenAIRequestMaxTokens)
@@ -175,21 +173,17 @@ var (
 	keyGenAIRequestFrequencyPenalty = attribute.Key(AttrGenAIRequestFrequencyPenalty)
 	keyGenAIRequestPresencePenalty  = attribute.Key(AttrGenAIRequestPresencePenalty)
 
-	// GenAI Response
 	keyGenAIResponseModel        = attribute.Key(AttrGenAIResponseModel)
 	keyGenAIResponseFinishReason = attribute.Key(AttrGenAIResponseFinishReason)
 
-	// GenAI Content
 	keyGenAIPrompt     = attribute.Key(AttrGenAIPrompt)
 	keyGenAICompletion = attribute.Key(AttrGenAICompletion)
 
-	// GenAI Usage
 	keyGenAIUsagePromptTokens     = attribute.Key(AttrGenAIUsagePromptTokens)
 	keyGenAIUsageCompletionTokens = attribute.Key(AttrGenAIUsageCompletionTokens)
 	keyGenAIUsageTotalTokens      = attribute.Key(AttrGenAIUsageTotalTokens)
 	keyGenAIUsageCost             = attribute.Key(AttrGenAIUsageCost)
 
-	// Langfuse-specific
 	keyLangfuseUserID              = attribute.Key(AttrLangfuseUserID)
 	keyLangfuseSessionID           = attribute.Key(AttrLangfuseSessionID)
 	keyLangfuseTags                = attribute.Key(AttrLangfuseTags)

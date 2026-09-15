@@ -40,17 +40,14 @@ func TestClient_GenerateContent_Integration(t *testing.T) {
 			t.Errorf("expected /chat/completions, got %s", r.URL.Path)
 		}
 
-		// Verify Authorization header
 		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 			t.Error("missing or invalid Authorization header")
 		}
 
-		// Verify Accept-Language header (required by Z.AI)
 		if r.Header.Get("Accept-Language") != "en-US,en" {
 			t.Errorf("expected Accept-Language 'en-US,en', got %s", r.Header.Get("Accept-Language"))
 		}
 
-		// Verify Content-Type
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
 		}
@@ -291,7 +288,6 @@ func TestClient_Stream_Integration(t *testing.T) {
 			t.Error("expected stream=true in request")
 		}
 
-		// Verify Accept-Language header
 		if r.Header.Get("Accept-Language") != "en-US,en" {
 			t.Errorf("expected Accept-Language 'en-US,en', got %s", r.Header.Get("Accept-Language"))
 		}

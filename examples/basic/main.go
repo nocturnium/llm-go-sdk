@@ -68,7 +68,6 @@ func main() {
 	}
 	fmt.Printf("Response: %s\n", resp.Content)
 
-	// Example 4: Multi-turn conversation
 	fmt.Println("\n=== Multi-turn Conversation ===")
 	conversation := []llms.Message{
 		{Role: llms.RoleSystem, Content: "You are a helpful math tutor."},
@@ -106,7 +105,6 @@ func createClient() (llms.LLM, string) {
 		}
 	}
 
-	// Try Anthropic
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		client, err := anthropic.New()
 		if err == nil {
@@ -114,7 +112,6 @@ func createClient() (llms.LLM, string) {
 		}
 	}
 
-	// Try Gemini
 	if os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("GOOGLE_API_KEY") != "" {
 		client, err := gemini.New()
 		if err == nil {

@@ -66,7 +66,6 @@ func TestCachedModelsOrganizations(t *testing.T) {
 }
 
 func TestCachedModelsCodeType(t *testing.T) {
-	// Test that coder models have code type
 	coderModels := []string{
 		"hf:Qwen/Qwen3-Coder-480B-A35B-Instruct",
 		"hf:deepseek-ai/DeepSeek-R1-0528",
@@ -182,7 +181,6 @@ func TestListModels(t *testing.T) {
 	})
 
 	t.Run("cursor at end returns empty", func(t *testing.T) {
-		// Get last model ID
 		lastModelID := cachedModels[len(cachedModels)-1].ID
 
 		result, err := client.ListModels(ctx, llms.WithModelCursor(lastModelID))
@@ -242,7 +240,6 @@ func TestModelInfo(t *testing.T) {
 		info1, _ := client.ModelInfo(ctx, "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct")
 		info2, _ := client.ModelInfo(ctx, "hf:Qwen/Qwen3-Coder-480B-A35B-Instruct")
 
-		// Modify info1
 		info1.DisplayName = testModified
 
 		// info2 should not be affected
@@ -410,7 +407,6 @@ func TestModelInfoReturnsCopy(t *testing.T) {
 		t.Fatal("expected to find model")
 	}
 
-	// Modify info1
 	info1.DisplayName = testModified
 	info1.Types = append(info1.Types, llms.ModelTypeEmbedding)
 

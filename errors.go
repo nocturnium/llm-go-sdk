@@ -169,7 +169,6 @@ func (e *APIError) underlyingError() error {
 		return ErrQuotaExceeded
 	}
 
-	// Check by status code first
 	if classification, ok := apiStatusClassifications[e.StatusCode]; ok {
 		return classification.err
 	}
@@ -449,7 +448,6 @@ func GetErrorDetails(err error) ErrorDetails {
 		}
 	}
 
-	// Extract provider
 	details.Provider = ProviderFromError(err)
 
 	// Extract API error details

@@ -112,7 +112,6 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.Organization = parts[0]
 	}
 
-	// Convert model type
 	info.Types = convertModelType(m.Type)
 
 	// Convert pricing if available

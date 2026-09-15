@@ -82,7 +82,6 @@ func TestClient_CreateChatCompletion(t *testing.T) {
 			t.Errorf("expected model=gpt-4, got %s", req.Model)
 		}
 
-		// Send response
 		resp := ChatCompletionResponse{
 			ID:    "chatcmpl-123",
 			Model: "gpt-4",
@@ -210,7 +209,6 @@ data: [DONE]
 	}
 	defer func() { _ = stream.Close() }()
 
-	// Read first chunk
 	chunk, err := stream.Read()
 	if err != nil {
 		t.Fatalf("unexpected error reading chunk: %v", err)
@@ -219,7 +217,6 @@ data: [DONE]
 		t.Errorf("expected content=Hello, got %s", chunk.Choices[0].Delta.ContentValue)
 	}
 
-	// Read second chunk
 	chunk, err = stream.Read()
 	if err != nil {
 		t.Fatalf("unexpected error reading chunk: %v", err)
@@ -228,7 +225,6 @@ data: [DONE]
 		t.Errorf("expected content=' world', got %s", chunk.Choices[0].Delta.ContentValue)
 	}
 
-	// Read third chunk
 	chunk, err = stream.Read()
 	if err != nil {
 		t.Fatalf("unexpected error reading chunk: %v", err)

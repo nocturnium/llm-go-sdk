@@ -424,7 +424,6 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	// Validate tools
 	for i, tool := range o.Tools {
 		if tool.Type == "" {
 			errs = append(errs, ValidationError{
