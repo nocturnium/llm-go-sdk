@@ -195,20 +195,22 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	requestLimiter := rl.requestLim()
 	tokenLimiter := rl.tokenLim()
 
-	// Wait for request limit
+	// Never request more than the bucket can hold: WaitN rejects that outright
+	// with a permanent error, which the classification below would otherwise
+	// report as a timeout a caller could retry forever.
+	if b := requestLimiter.Burst(); b > 0 && requests > b {
+		requests = b
+	}
 	if err := requestLimiter.WaitN(waitCtx, requests); err != nil {
-		// rate.Limiter returns context.DeadlineExceeded or a wrapped error
-		// when the wait would exceed the deadline
 		if errors.Is(err, context.DeadlineExceeded) ||
 			errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
 			return ErrRateLimitTimeout
 		}
-		// Check for context cancellation
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
-		// For rate package specific errors (e.g., "would exceed context deadline")
-		// treat as timeout
+		// What is left is rate's own "would exceed context deadline", which is the
+		// wait running out of time rather than a permanent refusal.
 		return ErrRateLimitTimeout
 	}
 
@@ -434,7 +436,10 @@ var ProviderRateLimits = map[llms.Provider]struct {
 		TokensPerMinute:   100000, // Conservative default
 	},
 	llms.ProviderSynthetic: {
-		RequestsPerMinute: 25,    // 125 requests per 5 hours = 25/hour = ~0.4/min, use burst
+		// Synthetic allows 125 requests per 5 hours, about 0.4/min. The field is a
+		// whole number of requests per minute, so 1 is the closest it can express and
+		// still pace; it remains above the published allowance.
+		RequestsPerMinute: 1,
 		TokensPerMinute:   50000, // Conservative default (no per-token pricing)
 	},
 }

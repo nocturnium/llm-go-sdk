@@ -305,10 +305,10 @@ func TestClient_ListToolsCursorCycleGuard(t *testing.T) {
 	if ctx.Err() != nil {
 		t.Fatal("ListTools looped until context timeout instead of breaking on a repeated cursor")
 	}
-	// Two requests are made (page, then the repeated cursor that trips the guard), so
-	// the single page's tools appear twice before termination.
-	if len(tools) == 0 {
-		t.Fatalf("expected at least one tool, got %+v", tools)
+	// Two requests are made (the page, then the repeated cursor that trips the
+	// guard), and the page served twice contributes its tools once.
+	if len(tools) != 1 || tools[0].Name != "a" {
+		t.Fatalf("expected the repeated page collected once, got %+v", tools)
 	}
 	if calls := m.callCount(methodToolsList); calls != 2 {
 		t.Errorf("expected exactly 2 list calls before the guard trips, got %d", calls)
