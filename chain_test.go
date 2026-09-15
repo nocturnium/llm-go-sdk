@@ -39,7 +39,7 @@ func TestChain_OrderAndNilSkip(t *testing.T) {
 	// First listed is innermost, last listed is outermost; nil is skipped.
 	out := Chain(base, labelMiddleware("inner"), nil, labelMiddleware("outer"))
 
-	mws := GetMiddleware(out) // outermost -> innermost
+	mws := GetMiddleware(out) // outermost first, innermost last
 	if len(mws) != 2 {
 		t.Fatalf("expected 2 wrappers (nil skipped), got %d", len(mws))
 	}

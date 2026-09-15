@@ -151,7 +151,7 @@ func (t *httpTransport) captureSessionID(headers http.Header) {
 // HTTP DELETE to the endpoint to let the server release the session's
 // resources. It is best-effort: a server that does not support explicit
 // termination may respond 405 Method Not Allowed, and any transport error on
-// teardown is not worth surfacing — so the result is ignored and close never
+// teardown is not worth surfacing, so the result is ignored and close never
 // fails on this account. With no session there is nothing to terminate.
 func (t *httpTransport) close() error {
 	// Idempotent: close may be invoked both by an explicit Client.Close and by the

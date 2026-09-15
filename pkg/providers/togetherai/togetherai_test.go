@@ -117,7 +117,6 @@ func TestNewClientPreservesBaseURL(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify the default base URL is preserved in options
 	if client.options.BaseURL != "https://api.together.xyz/v1" {
 		t.Errorf("expected BaseURL to be https://api.together.xyz/v1, got %s", client.options.BaseURL)
 	}

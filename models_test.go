@@ -772,7 +772,6 @@ func TestFilterModelsByTypeReturnsCopy(t *testing.T) {
 
 	result := FilterModelsByType(testModels)
 
-	// Modify the result
 	if len(result) > 0 {
 		result[0].ID = "MODIFIED"
 	}
@@ -790,7 +789,6 @@ func TestApplyModelFiltersReturnsCopy(t *testing.T) {
 
 	result := ApplyModelFilters(testModels, nil)
 
-	// Modify the result
 	if len(result) > 0 {
 		result[0].ID = "MODIFIED"
 	}

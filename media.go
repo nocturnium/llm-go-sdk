@@ -50,7 +50,7 @@ type MediaAsset struct {
 	MIMEType string
 	// RevisedPrompt is the prompt used after provider revision.
 	RevisedPrompt string
-	// Data contains inline or previously fetched bytes.
+	// Data contains inline or already fetched bytes.
 	Data []byte
 	// ExpiresAt is the URL expiry; zero means unknown.
 	ExpiresAt time.Time

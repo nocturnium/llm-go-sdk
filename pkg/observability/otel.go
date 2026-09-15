@@ -21,7 +21,6 @@ const (
 	// InstrumentationName is the name used for OTel instrumentation
 	InstrumentationName = "github.com/nocturnium/llm-go-sdk/v6"
 
-	// Metric names.
 	metricRequests         = "llm.requests"
 	metricTokensPrompt     = "llm.tokens.prompt"
 	metricTokensCompletion = "llm.tokens.completion"
@@ -214,7 +213,6 @@ func (m *OTelMiddleware) Call(ctx context.Context, prompt string, options ...llm
 	provider := m.llm.Provider()
 	model := m.llm.Model()
 
-	// Set common attributes
 	span.SetAttributes(
 		attrProvider.String(string(provider)),
 		attrModel.String(model),
@@ -263,7 +261,6 @@ func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []llms.Me
 	provider := m.llm.Provider()
 	model := m.llm.Model()
 
-	// Set common attributes
 	span.SetAttributes(
 		attrProvider.String(string(provider)),
 		attrModel.String(model),
@@ -295,11 +292,9 @@ func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []llms.Me
 		return nil, err
 	}
 
-	// Record token usage
 	m.promptTokens.Add(ctx, int64(resp.Usage.PromptTokens), metric.WithAttributes(attrs...))
 	m.completionTokens.Add(ctx, int64(resp.Usage.CompletionTokens), metric.WithAttributes(attrs...))
 
-	// Set response attributes
 	span.SetAttributes(
 		attrFinishReason.String(string(resp.FinishReason)),
 		attribute.Int("llm.tokens.prompt", resp.Usage.PromptTokens),
@@ -326,7 +321,6 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 	provider := m.llm.Provider()
 	model := m.llm.Model()
 
-	// Set common attributes
 	span.SetAttributes(
 		attrProvider.String(string(provider)),
 		attrModel.String(model),
@@ -377,7 +371,6 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 		// before the span ends.
 		defer func() {
 			if r := recover(); r != nil {
-				// Record panic as error
 				panicErr := fmt.Errorf("panic in stream processing: %v", r)
 				m.recordError(ctx, span, panicErr, attrs)
 				hadError = true

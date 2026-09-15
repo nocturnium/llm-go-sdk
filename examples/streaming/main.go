@@ -31,7 +31,6 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n\n", client.Provider(), client.Model())
 
-	// Example 1: Basic streaming
 	fmt.Println("=== Basic Streaming ===")
 	messages := []llms.Message{
 		{Role: llms.RoleUser, Content: "Write a haiku about programming."},
@@ -55,7 +54,6 @@ func main() {
 		fmt.Print(chunk.Content)
 	}
 
-	// Example 2: Streaming with options
 	fmt.Println("\n=== Streaming with Options ===")
 	messages = []llms.Message{
 		{Role: llms.RoleSystem, Content: "You are a creative storyteller."},
@@ -84,7 +82,6 @@ func main() {
 		}
 	}
 
-	// Example 3: Handling stream with timeout
 	fmt.Println("\n=== Streaming with Custom Timeout ===")
 	shortCtx, shortCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer shortCancel()

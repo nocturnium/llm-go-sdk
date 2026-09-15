@@ -112,7 +112,7 @@ func (in *inbound) stop() {
 // RefusedRequests returns the cumulative number of server-initiated requests
 // refused because the bounded inbound-request concurrency limit was reached.
 //
-// Refused requests are answered with a JSON-RPC error, never silently dropped —
+// Refused requests are answered with a JSON-RPC error, never silently dropped,
 // contrast [Client.DroppedNotifications], where dropping is safe because no
 // reply is expected. A non-zero count means a server asked this client to do
 // more concurrent work than it will accept.
@@ -188,7 +188,7 @@ func (c *Client) serveRequest(id json.RawMessage, handler requestHandler, params
 // response.
 //
 // A panicking handler must neither take down the client nor leave the server
-// waiting for a reply. The panic value is deliberately NOT put on the wire: it
+// waiting for a reply. The panic value is deliberately kept off the wire: it
 // can carry host internals (file paths, addresses, credentials in a formatted
 // struct) and the peer is not necessarily trusted.
 func invokeGuarded(ctx context.Context, handler requestHandler, params json.RawMessage) (result any, rpcErr *RPCError) {
@@ -221,7 +221,7 @@ func (c *Client) respondError(id json.RawMessage, code int, message string) {
 
 // writeRaw sends an already-encoded response frame. Failures are intentionally
 // swallowed: the transport may be closed (a race with Close is normal), and
-// there is no caller to surface the error to — the read loop must keep serving
+// there is no caller to surface the error to, the read loop must keep serving
 // regardless.
 func (c *Client) writeRaw(payload []byte) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.baseCtx), inboundShutdownTimeout)

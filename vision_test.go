@@ -78,7 +78,6 @@ func TestNewImageFromBytes(t *testing.T) {
 		t.Errorf("expected source=%s, got %s", contentTypeBase64, part.Image.Source)
 	}
 
-	// Verify the data can be decoded
 	decoded, err := base64.StdEncoding.DecodeString(part.Image.Data)
 	if err != nil {
 		t.Fatalf("failed to decode base64: %v", err)

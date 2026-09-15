@@ -392,7 +392,6 @@ func TestKnownModelsCategories(t *testing.T) {
 		})
 	}
 
-	// Test embedding models
 	embeddingModels := []string{
 		"text-embedding-004",
 		"embedding-001",

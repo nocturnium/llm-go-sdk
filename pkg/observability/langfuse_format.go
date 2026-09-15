@@ -71,7 +71,6 @@ func FormatInput(messages []llms.Message, format InputFormat) string {
 		return messages[len(messages)-1].Content
 
 	case InputFormatMessages:
-		// Full message array as JSON
 		data, err := json.Marshal(messages)
 		if err != nil {
 			return ""

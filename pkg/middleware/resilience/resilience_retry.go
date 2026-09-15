@@ -39,14 +39,14 @@ func DefaultRetryConfig() *RetryConfig {
 // DefaultShouldRetry returns true for errors that are typically transient and
 // worth retrying. It shares a single classification with isProviderUnhealthy (see
 // isTransientProviderError), so the retry decision and the circuit-breaker health
-// decision can never disagree — a transient error is always both retried and
+// decision can never disagree, a transient error is always both retried and
 // counted, and a terminal/client-side error is neither.
 func DefaultShouldRetry(err error) bool {
 	return isTransientProviderError(err)
 }
 
 // isProviderUnhealthy reports whether an error indicates the upstream provider is
-// unhealthy — the kind of transient failure the circuit breaker exists to protect
+// unhealthy, the kind of transient failure the circuit breaker exists to protect
 // against. It shares one classification with DefaultShouldRetry.
 func isProviderUnhealthy(err error) bool {
 	return isTransientProviderError(err)
@@ -57,8 +57,8 @@ func isProviderUnhealthy(err error) bool {
 // for retryable HTTP statuses (408, 429, and 5xx including 529, plus streaming
 // Type/Code equivalents) and transient transport errors (EOF, connection
 // reset/refused, socket timeouts). It is deliberately false for caller-side
-// signals — context cancellation/deadline, circuit-open, terminal 4xx (including
-// quota), and client-side configuration errors such as DNS failures — so a burst
+// signals, context cancellation/deadline, circuit-open, terminal 4xx (including
+// quota), and client-side configuration errors such as DNS failures, so a burst
 // of bad requests or a mistyped host neither retries pointlessly nor trips the
 // breaker on an otherwise healthy provider.
 func isTransientProviderError(err error) bool {

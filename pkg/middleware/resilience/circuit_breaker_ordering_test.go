@@ -24,7 +24,7 @@ func TestCircuitBreaker_CallbackOrdering(t *testing.T) {
 		WithMaxFailures(1),
 		WithResetTimeout(time.Millisecond), // let Open->HalfOpen fire promptly
 		WithOnStateChange(func(from, to CircuitState) {
-			// Delay ONLY the causally-first transition. Under the old
+			// Delay the causally-first transition alone. Under the old
 			// per-transition-goroutine design the later (undelayed) callback
 			// wins the race and is recorded first; ordered delivery must record
 			// Open before HalfOpen regardless of per-callback latency.
@@ -35,10 +35,10 @@ func TestCircuitBreaker_CallbackOrdering(t *testing.T) {
 		}),
 	)
 
-	cb.RecordFailure() // Closed -> Open (callback enqueued first, then sleeps)
+	cb.RecordFailure() // Closed becomes Open (callback enqueued first, then sleeps)
 	// Let the reset timeout elapse so the next Allow transitions to half-open.
 	time.Sleep(5 * time.Millisecond)
-	if !cb.Allow() { // Open -> HalfOpen (callback enqueued behind the first)
+	if !cb.Allow() { // Open becomes HalfOpen (callback enqueued behind the first)
 		t.Fatal("Allow should transition Open->HalfOpen and return true")
 	}
 

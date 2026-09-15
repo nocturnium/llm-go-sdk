@@ -21,12 +21,12 @@ func TestBaseProvider_Capabilities_StaticWinsOverRegistry(t *testing.T) {
 	)
 
 	// Registry entry intentionally contradicts the static config: Vision:false,
-	// and Tools:true (which the static config does NOT set, so it should be
+	// and Tools:true (which the static config leaves unset, so it should be
 	// filled from the registry).
 	llms.RegisterModelCapabilities(provider, model, llms.ModelCapabilities{
 		MaxContextTokens:  64000,
 		SupportsVision:    false, // contradicts static Vision:true
-		SupportsTools:     true,  // static leaves Tools unset -> registry fills it
+		SupportsTools:     true,  // static leaves Tools unset, so the registry fills it
 		SupportsStreaming: true,
 	})
 

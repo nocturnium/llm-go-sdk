@@ -139,8 +139,8 @@ func TestConvertContentPartsWithNilImage(t *testing.T) {
 
 	result := convertContentParts(parts)
 
-	// A nil image produces NO content part — previously it left a zero-value
-	// {"type":""} entry that OpenAI rejects with a 400 on the whole request.
+	// A nil image produces no content part. A zero-value {"type":""} entry would
+	// draw a 400 from OpenAI on the whole request.
 	if len(result) != 0 {
 		t.Fatalf("expected 0 parts for a nil image, got %d: %+v", len(result), result)
 	}
@@ -440,7 +440,6 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 		t.Fatalf("expected 2 tool calls, got %d", len(calls))
 	}
 
-	// Arguments for first tool call
 	calls = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(0),
 		Function: &FunctionCall{
@@ -448,7 +447,6 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 		},
 	})
 
-	// Arguments for second tool call
 	calls = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(1),
 		Function: &FunctionCall{
@@ -518,7 +516,7 @@ func TestAppendOrMergeToolCallIndexWithNilFunction(t *testing.T) {
 
 func TestAppendOrMergeToolCall_NegativeIndexNoPanic(t *testing.T) {
 	neg := -1
-	// A negative index must NOT panic on calls[-1]; it falls through to ID-based
+	// A negative index must leave calls[-1] unindexed rather than panic; it falls through to ID-based
 	// matching and is appended as a new call.
 	calls := appendOrMergeToolCall(nil, ToolCall{Index: &neg, ID: "x", Function: &FunctionCall{Name: "a"}})
 	if len(calls) != 1 || calls[0].ID != "x" {
@@ -1110,8 +1108,8 @@ func TestProcessStream_ReasoningContentDelta(t *testing.T) {
 func TestConvertContentParts_SkipsNilImageAndUnknown(t *testing.T) {
 	parts := []llms.ContentPart{
 		{Type: llms.PartTypeText, Text: "hello"},
-		{Type: llms.PartTypeImage, Image: nil}, // nil image → skip, not {"type":""}
-		{Type: llms.PartType("audio")},         // unknown part type → skip
+		{Type: llms.PartTypeImage, Image: nil}, // a nil image is skipped, not emitted as {"type":""}
+		{Type: llms.PartType("audio")},         // an unknown part type is skipped
 	}
 	out := convertContentParts(parts)
 	for _, c := range out {

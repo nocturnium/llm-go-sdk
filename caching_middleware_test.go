@@ -15,12 +15,12 @@ func TestCachedClient_HitAndMiss(t *testing.T) {
 
 	msgs := []Message{{Role: RoleUser, Content: "hello"}}
 
-	// First call: miss → wrapped LLM invoked.
+	// First call: a miss invokes the wrapped LLM.
 	r1, err := client.GenerateContent(context.Background(), msgs)
 	if err != nil || r1.Content != "cached" {
 		t.Fatalf("first call: resp=%v err=%v", r1, err)
 	}
-	// Second identical call: hit → wrapped LLM NOT invoked again.
+	// Second identical call: a hit leaves the wrapped LLM uninvoked.
 	r2, err := client.GenerateContent(context.Background(), msgs)
 	if err != nil || r2.Content != "cached" {
 		t.Fatalf("second call: resp=%v err=%v", r2, err)
@@ -29,7 +29,7 @@ func TestCachedClient_HitAndMiss(t *testing.T) {
 		t.Errorf("wrapped callCount = %d, want 1 (second call should hit cache)", mock.callCount)
 	}
 
-	// Different message content → different key → miss.
+	// Different message content gives a different key, so a miss.
 	_, err = client.GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "different"}})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestCachedClient_ReturnsCopy(t *testing.T) {
 	r1.Reasoning.Content = "POISON"
 	r1.Reasoning.Metadata["k"] = "POISON"
 
-	// A fresh hit must be pristine — the mutation above must not have poisoned the
+	// A fresh hit must be pristine, the mutation above must not have poisoned the
 	// cached entry (which a shallow copy would allow via shared backing arrays).
 	r2, _ := client.GenerateContent(context.Background(), msgs)
 	if r2.Content != "orig" {
@@ -156,7 +156,7 @@ func TestDefaultCacheKey_CoversAllOutputAffectingOptions(t *testing.T) {
 		keyed[kt.Field(i).Name] = true
 	}
 	// CallOptions fields intentionally excluded from the key: they change cost,
-	// latency, transport, or observability — never the model's output.
+	// latency, transport, or observability, never the model's output.
 	excluded := map[string]bool{
 		"Cache":             true, // prompt-cache directive: same output, cheaper/faster
 		"EstimateTokens":    true, // post-hoc token counting
@@ -313,6 +313,6 @@ func TestMemoryResponseCache_EmptyStringKeyDoesNotDefeatEviction(t *testing.T) {
 		cache.Set(ctx, fmt.Sprintf("k%d", i), &Response{})
 	}
 	if cache.Len() > 1 {
-		t.Errorf("cap=1 exceeded — empty-string key defeated eviction: Len=%d", cache.Len())
+		t.Errorf("cap=1 exceeded, empty-string key defeated eviction: Len=%d", cache.Len())
 	}
 }

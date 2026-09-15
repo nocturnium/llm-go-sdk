@@ -42,7 +42,7 @@ func TestEmbedQuery(t *testing.T) {
 		t.Errorf("embedder received %v, want [hello]", e.gotTexts)
 	}
 
-	// Empty response → ErrEmptyInput.
+	// An empty response gives ErrEmptyInput.
 	empty := &stubEmbedder{resp: &EmbeddingResponse{}}
 	if _, err := EmbedQuery(ctx, empty, "x"); !errors.Is(err, ErrEmptyInput) {
 		t.Errorf("empty response error = %v, want ErrEmptyInput", err)

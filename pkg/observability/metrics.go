@@ -28,7 +28,6 @@ type MetricsMiddleware struct {
 	tracer trace.Tracer
 	meter  metric.Meter
 
-	// Cost tracking
 	costTracker *llms.CostTracker
 
 	// Standard metrics (from OTel)

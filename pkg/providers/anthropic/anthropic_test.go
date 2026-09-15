@@ -180,7 +180,7 @@ func assertValidationField(t *testing.T, err error, field string) {
 
 // TestBuildRequest_PartsBasedSystemMessage verifies that a system message built
 // from Parts (rather than the simple Content field) still reaches the request's
-// System block. Previously buildRequest read msg.Content only, silently dropping
+// System block. buildRequest reads msg.Parts as well as msg.Content, rather than dropping
 // a Parts-based system prompt. This is the FIX 5 acceptance test.
 func TestBuildRequest_PartsBasedSystemMessage(t *testing.T) {
 	client, err := New(WithAPIKey("test-key"), WithModel("claude-3-5-sonnet-20241022"))

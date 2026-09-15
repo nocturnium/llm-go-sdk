@@ -59,7 +59,6 @@ func main() {
 		fmt.Println("      With one provider, requests go directly to it")
 	}
 
-	// Example 1: Basic fallback chain
 	fmt.Println("=== Basic Fallback Chain ===")
 	chain := resilience.NewFallbackChain(clients)
 
@@ -90,7 +89,6 @@ func main() {
 		fmt.Printf("Response: %s\n\n", resp)
 	}
 
-	// Example 3: Different fallback selectors
 	fmt.Println("=== Fallback Selectors ===")
 
 	// Default: Falls back on rate limits, server errors, circuit open
@@ -111,7 +109,6 @@ func main() {
 	)
 	fmt.Println("NeverFallbackSelector: No fallback, fail immediately")
 
-	// Use the default chain for demonstration
 	resp, err = defaultChain.Call(ctx, "Quick test")
 	if err == nil {
 		fmt.Printf("\nTest response: %s\n\n", resp)
@@ -150,7 +147,6 @@ func main() {
 		}
 	}
 
-	// Example 5: Health management
 	fmt.Println("=== Health Management ===")
 	healthChain := resilience.NewFallbackChain(clients)
 
@@ -170,12 +166,10 @@ func main() {
 			fmt.Printf("Response (should skip unhealthy): %s\n", resp)
 		}
 
-		// Reset health
 		healthChain.ResetHealth()
 		fmt.Println("Health reset - all providers marked healthy again")
 	}
 
-	// Example 6: Dynamic client management
 	fmt.Println("\n=== Dynamic Client Management ===")
 	dynamicChain := resilience.NewFallbackChain(clients[:1]) // Start with one client
 

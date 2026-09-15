@@ -251,7 +251,6 @@ func testConvertModel(input anthropicModelInput) llms.ModelInfo {
 		Organization: "Anthropic",
 	}
 
-	// Check if we have known metadata for this model
 	if metadata, ok := knownModels[input.ID]; ok {
 		if info.DisplayName == "" {
 			info.DisplayName = metadata.displayName

@@ -58,9 +58,9 @@ type initializeParams struct {
 
 // ClientCapabilities is what this client advertises during initialize.
 //
-// A nil sub-capability means the feature is NOT offered. Capabilities are
+// A nil sub-capability means the feature is withheld. Capabilities are
 // derived from the request handlers registered at construction, so a client can
-// never advertise a capability it would then refuse — a server that is told this
+// never advertise a capability it would then refuse, a server that is told this
 // client samples, and then gets MethodNotFound, has no way to recover.
 //
 // Fields mirror the MCP 2025-06-18 capability shape; see [ServerCapabilities]

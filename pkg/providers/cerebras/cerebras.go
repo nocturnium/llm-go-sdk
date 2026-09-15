@@ -35,7 +35,6 @@ type Client struct {
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 
-	// Resolve API key from options or environment
 	apiKey, err := llms.RequireAPIKey("cerebras", options.APIKey, llms.EnvCerebrasAPIKey)
 	if err != nil {
 		return nil, err

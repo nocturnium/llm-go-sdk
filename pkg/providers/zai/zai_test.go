@@ -178,7 +178,6 @@ func TestModelInfo(t *testing.T) {
 		t.Errorf("expected provider ZAI, got %s", info.Provider)
 	}
 
-	// Test non-existent model
 	info = ModelInfo("non-existent-model")
 	if info != nil {
 		t.Error("expected nil for non-existent model")

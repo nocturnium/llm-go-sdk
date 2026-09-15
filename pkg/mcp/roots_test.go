@@ -128,7 +128,7 @@ func TestRootsDynamicHandlerIsConsultedPerRequest(t *testing.T) {
 }
 
 // TestRootsDynamicHandlerErrorSurfacesToServer pins that a failure is reported
-// rather than answered with an empty list — a server must be able to tell "no
+// rather than answered with an empty list, a server must be able to tell "no
 // roots" from "could not determine roots".
 func TestRootsDynamicHandlerErrorSurfacesToServer(t *testing.T) {
 	m := newMockTransport()

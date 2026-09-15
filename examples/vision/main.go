@@ -31,7 +31,6 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n\n", client.Provider(), client.Model())
 
-	// Example 1: Analyze an image from URL
 	fmt.Println("=== Image from URL ===")
 	imageURL := "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png"
 
@@ -43,7 +42,6 @@ func main() {
 	}
 	fmt.Printf("Response: %s\n\n", resp.Content)
 
-	// Example 2: Multi-part message with text and image
 	fmt.Println("=== Multi-part Message ===")
 	multiPartMsg := llms.NewMultiPartMessage(llms.RoleUser,
 		llms.NewTextPart("Look at this image and tell me:"),
@@ -58,7 +56,6 @@ func main() {
 	}
 	fmt.Printf("Response: %s\n\n", resp.Content)
 
-	// Example 3: Multiple images comparison
 	fmt.Println("=== Multiple Images ===")
 	// Using the same image twice for demo (in practice, use different images)
 	comparisonMsg := llms.NewMultiPartMessage(llms.RoleUser,
@@ -77,7 +74,6 @@ func main() {
 	fmt.Println("=== Image from File (demo) ===")
 	testImagePath := "test_image.png"
 
-	// Check if a test image exists
 	if _, err := os.Stat(testImagePath); err == nil {
 		msg, err := llms.NewImageFileMessage("Describe this image.", testImagePath)
 		if err != nil {

@@ -527,12 +527,10 @@ func TestEmbed(t *testing.T) {
 }
 
 func TestWrapError(t *testing.T) {
-	// Test nil error
 	if WrapError("test", nil) != nil {
 		t.Error("expected nil for nil error")
 	}
 
-	// Test regular error
 	err := WrapError("test", context.Canceled)
 	if err == nil {
 		t.Error("expected non-nil error")

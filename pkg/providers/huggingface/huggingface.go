@@ -2,17 +2,17 @@
 // single per-deployment endpoint serves one model, which HuggingFace exposes
 // behind an OpenAI-compatible route depending on the container:
 //
-//   - Text Generation Inference (TGI) — chat/text-generation at
+//   - Text Generation Inference (TGI), chat/text-generation at
 //     POST <endpoint>/v1/chat/completions. The client implements llms.LLM
 //     (GenerateContent / Stream).
-//   - Text Embeddings Inference (TEI) — embeddings at POST <endpoint>/v1/embeddings.
+//   - Text Embeddings Inference (TEI), embeddings at POST <endpoint>/v1/embeddings.
 //     The client implements llms.Embedder.
 //
 // Both reuse the SDK's OpenAI-compatible HTTP client (SSRF protection, retries,
 // error mapping). Because Inference Endpoints are per-deployment URLs, an endpoint
 // is required (WithEndpoint); the token is the Bearer credential, taken from
 // WithAPIKey or the HF_TOKEN / HUGGINGFACE_API_KEY environment variables. The
-// provider is not in the by-name registry (it needs an endpoint) — construct it
+// provider is not in the by-name registry (it needs an endpoint), construct it
 // directly with New.
 package huggingface
 
@@ -27,7 +27,7 @@ import (
 
 // providerConfig is the HuggingFace Inference Endpoints provider configuration.
 // Capabilities here is the full superset (the OpenAI-compatible chat surface a TGI
-// endpoint exposes plus embeddings); whether a given endpoint actually answers
+// endpoint exposes plus embeddings); whether a given endpoint answers
 // chat or embeddings depends on the model it has deployed, so (*Client).Capabilities
 // narrows this superset to the endpoint's deployment mode at runtime.
 var providerConfig = openaicompat.ProviderConfig{
@@ -95,7 +95,7 @@ func New(opts ...Option) (*Client, error) {
 	}, nil
 }
 
-// Capabilities reports the feature surface for THIS endpoint's deployment mode.
+// Capabilities reports the feature surface for this one endpoint's deployment mode.
 //
 // An HF Inference Endpoint serves a single deployment: a TGI chat endpoint will
 // not answer embeddings and a TEI embeddings endpoint will not answer chat, so a
@@ -136,8 +136,8 @@ func (c *Client) Capabilities() llms.Capabilities {
 }
 
 // Embed generates embeddings for one or more texts via the endpoint's TEI route.
-// It overrides the embedded BaseProvider's Embed to tolerate an unset model — TEI
-// endpoints serve a fixed model and ignore the field — and to wrap errors with the
+// It overrides the embedded BaseProvider's Embed to tolerate an unset model, TEI
+// endpoints serve a fixed model and ignore the field, and to wrap errors with the
 // huggingface provider.
 func (c *Client) Embed(ctx context.Context, texts []string, options ...llms.EmbedOption) (*llms.EmbeddingResponse, error) {
 	if err := llms.ValidateEmbedInput(texts); err != nil {

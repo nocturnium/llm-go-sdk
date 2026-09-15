@@ -433,7 +433,6 @@ func toolDemoAction(c commandContext) error {
 	fmt.Println("Demonstrating tool calling with a weather tool...")
 	fmt.Println()
 
-	// Define the weather tool.
 	weatherTool := llms.NewFunctionTool(
 		"get_current_weather",
 		"Get the current weather in a given location",

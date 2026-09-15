@@ -13,7 +13,7 @@ import (
 // GLM 4.x, Kimi K2, and Llama models. Updated from https://dev.synthetic.new/docs/api/models
 var cachedModels = []llms.ModelInfo{
 	// === Always-On Models (Synthetic Provider) ===
-	// NOTE: hf:moonshotai/Kimi-K2-Thinking was removed 2026-05-20 — the
+	// NOTE: hf:moonshotai/Kimi-K2-Thinking was removed 2026-05-20, the
 	// Synthetic API now returns 404 for it ("no longer supported. Try
 	// using a different model, like hf:zai-org/GLM-5.1"). Keeping it in
 	// the cached list caused the capability-aware selector to route to
@@ -271,7 +271,6 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	// Start with all cached models
 	models := make([]llms.ModelInfo, len(cachedModels))
 	copy(models, cachedModels)
 
@@ -292,7 +291,6 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		}
 	}
 
-	// Slice from start
 	if start >= len(models) {
 		return &llms.ListModelsResult{
 			Models:  []llms.ModelInfo{},
@@ -336,7 +334,6 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 		return copyModelInfo(&info), nil
 	}
 
-	// Model not found in cache
 	return nil, llms.ErrModelNotFound
 }
 

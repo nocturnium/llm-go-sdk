@@ -342,7 +342,7 @@ func TestBuildResponsesRequest_MergesExtraBody(t *testing.T) {
 	opts := llms.ApplyOptions(llms.WithExtraBody(map[string]any{
 		"service_tier": "flex",
 		"metadata":     map[string]any{"user_id": "u1"},
-		"store":        true,                  // consumed -> typed Store field
+		"store":        true,                  // consumed into the typed Store field
 		"model":        "SHOULD_NOT_OVERRIDE", // collides with typed Model field
 	}))
 	req := BuildResponsesRequest("gpt-4o", nil, opts, false)

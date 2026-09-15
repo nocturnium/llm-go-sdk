@@ -7,7 +7,7 @@ import (
 )
 
 // The openaicompat converter is the widest-blast-radius converter in the SDK
-// (~17 providers route through it) and was previously the only major converter
+// (~17 providers route through it), so the converter
 // without fuzz coverage. These targets assert the convert functions never panic
 // on arbitrary input, and that content-part conversion never emits a malformed
 // empty-type part (the WS-4a bug class).

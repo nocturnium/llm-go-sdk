@@ -43,14 +43,12 @@ type Client struct {
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 
-	// Resolve API key from options or environment
 	apiKey, err := llms.RequireAPIKey("runpod", options.APIKey, llms.EnvRunPodAPIKey)
 	if err != nil {
 		return nil, err
 	}
 	options.APIKey = apiKey
 
-	// Endpoint ID is required
 	if options.EndpointID == "" {
 		return nil, ErrMissingEndpointID
 	}

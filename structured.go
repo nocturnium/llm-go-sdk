@@ -57,8 +57,8 @@ type RepairOptions struct {
 // retries on persistent failures, use GenerateTypedWithRepair.
 //
 // The auto-generated schema is emitted in OpenAI strict mode. Fields whose Go type
-// has no closed JSON Schema shape — json.RawMessage, interface{}, and maps with
-// arbitrary values — are mapped to an unconstrained schema ({}), which some strict
+// has no closed JSON Schema shape, json.RawMessage, interface{}, and maps with
+// arbitrary values, are mapped to an unconstrained schema ({}), which some strict
 // validators reject. For structs containing such fields, supply a hand-authored
 // schema via WithJSONSchema instead of relying on the auto-strict path.
 func GenerateTyped[T any](ctx context.Context, llm LLM, messages []Message, opts ...CallOption) (T, *Response, error) {
@@ -143,7 +143,7 @@ func parseTyped[T any](content string) (T, error) {
 // repairPrompt is the correction instruction sent to the model on a repair turn.
 func repairPrompt(parseErr error) string {
 	return "Your previous reply could not be parsed as JSON matching the required schema (" +
-		parseErr.Error() + "). Reply again with ONLY the corrected JSON object — no prose, " +
+		parseErr.Error() + "). Reply again with ONLY the corrected JSON object, no prose, " +
 		"no markdown code fences, no explanation."
 }
 
@@ -220,8 +220,8 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 	case reflect.Map:
 		// A map has arbitrary string keys, which OpenAI strict mode cannot express
 		// (it requires additionalProperties:false on every object). Emit an
-		// unconstrained schema — matching json.RawMessage/interface{} and the
-		// documented GenerateTyped behavior — rather than an additionalProperties
+		// unconstrained schema, matching json.RawMessage/interface{} and the
+		// documented GenerateTyped behavior, rather than an additionalProperties
 		// subschema that strict validators reject with a 400.
 		return map[string]any{}, nil
 	case reflect.Struct:
@@ -289,8 +289,8 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 // mergeEmbeddedSchema flattens an anonymous embedded struct field into the
 // parent's properties, mirroring encoding/json promotion, and returns the
 // promoted field names for the required list. ok is false when the field is not a
-// promotable embedded struct — it has an explicit json name (then it is a normal
-// named field) or its underlying type is not a struct — in which case the caller
+// promotable embedded struct, it has an explicit json name (then it is a normal
+// named field) or its underlying type is not a struct, in which case the caller
 // handles it as a normal field. Outer fields already present shadow promoted ones
 // (shallower wins), matching encoding/json.
 func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, seen map[reflect.Type]bool) (promoted []string, ok bool, err error) {
@@ -299,7 +299,7 @@ func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, s
 		return nil, true, nil // embedded but explicitly skipped
 	}
 	if tag != "" && strings.Split(tag, ",")[0] != "" {
-		return nil, false, nil // has an explicit json name → normal named field
+		return nil, false, nil // has an explicit json name, so a normal named field
 	}
 
 	ft := field.Type
@@ -307,11 +307,11 @@ func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, s
 		ft = ft.Elem()
 	}
 	if ft.Kind() != reflect.Struct {
-		return nil, false, nil // embedded interface or named non-struct → normal field
+		return nil, false, nil // embedded interface or named non-struct, so a normal field
 	}
-	// An embedded type with a special (non-object) schema — time.Time,
-	// json.Marshaler/TextMarshaler, json.RawMessage — marshals as a scalar and
-	// must NOT be flattened into its internal fields; treat it as a normal named
+	// An embedded type with a special (non-object) schema, time.Time,
+	// json.Marshaler/TextMarshaler, json.RawMessage, marshals as a scalar and
+	// must stay unflattened rather than expand into its internal fields; treat it as a normal named
 	// field so schemaForType applies the special schema.
 	if _, special := specialSchemaForType(ft); special {
 		return nil, false, nil

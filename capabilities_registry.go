@@ -91,7 +91,6 @@ func (r *CapabilityRegistry) Get(provider Provider, modelID string) ModelCapabil
 		return caps
 	}
 
-	// Fall back to provider defaults
 	if caps, ok := r.defaults[provider]; ok {
 		return caps
 	}
@@ -122,7 +121,6 @@ func (r *CapabilityRegistry) makeKey(provider Provider, modelID string) string {
 // registerDefaults populates the registry with known model capabilities.
 // This data should be periodically updated as models change.
 func (r *CapabilityRegistry) registerDefaults() {
-	// OpenAI defaults
 	r.defaults[ProviderOpenAI] = ModelCapabilities{
 		MaxContextTokens:  128000,
 		MaxOutputTokens:   16384,
@@ -213,7 +211,7 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-	// GPT-5 family — current flagship reasoning lineup. Limits mirror
+	// GPT-5 family, current flagship reasoning lineup. Limits mirror
 	// pkg/providers/openai/models.go knownModels (400k context / 128k output, all
 	// Chat+Vision). Reasoning is flagged in registerReasoningAndCaching below, which
 	// matches openaicompat.isOpenAIReasoningModel (any "gpt-5" prefix reasons).
@@ -231,7 +229,7 @@ func (r *CapabilityRegistry) registerDefaults() {
 			SupportsJSON:      true,
 		}
 	}
-	// GPT-5.6 (sol/terra/luna) — identical limits across the three; they differ only
+	// GPT-5.6 (sol/terra/luna), identical limits across the three; they differ only
 	// in price. MaxContextTokens is the maximum *input* window (922,000), not the
 	// 1,050,000 total context window, since this field is what a caller sizes a
 	// prompt against; knownModels carries the total as ContextLength. See the note
@@ -247,7 +245,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		}
 	}
 
-	// Anthropic defaults
 	r.defaults[ProviderAnthropic] = ModelCapabilities{
 		MaxContextTokens:  200000,
 		MaxOutputTokens:   8192,
@@ -316,7 +313,7 @@ func (r *CapabilityRegistry) registerDefaults() {
 	}
 	// Current Anthropic flagships. Limits mirror pkg/providers/anthropic/models.go
 	// knownModels. SupportsJSON stays false (Anthropic uses tool_choice for
-	// structured output, like every entry above). Reasoning is flagged below — the
+	// structured output, like every entry above). Reasoning is flagged below, the
 	// same extended-thinking generation as claude-sonnet-4, which is already flagged.
 	for _, id := range []string{
 		"claude-fable-5", "claude-opus-5", "claude-sonnet-5",
@@ -342,7 +339,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		}
 	}
 
-	// Gemini defaults
 	r.defaults[ProviderGemini] = ModelCapabilities{
 		MaxContextTokens:  1000000,
 		MaxOutputTokens:   8192,
@@ -403,7 +399,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		}
 	}
 
-	// Groq defaults (fast inference)
 	r.defaults[ProviderGroq] = ModelCapabilities{
 		MaxContextTokens:  131072,
 		MaxOutputTokens:   8192,
@@ -413,7 +408,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
-	// Together AI defaults
 	r.defaults[ProviderTogetherAI] = ModelCapabilities{
 		MaxContextTokens:  32768,
 		MaxOutputTokens:   4096,
@@ -423,7 +417,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
-	// DeepSeek defaults
 	r.defaults[ProviderDeepSeek] = ModelCapabilities{
 		MaxContextTokens:  128000,
 		MaxOutputTokens:   8192,
@@ -433,7 +426,6 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
-	// Mistral defaults
 	r.defaults[ProviderMistral] = ModelCapabilities{
 		MaxContextTokens:  128000,
 		MaxOutputTokens:   8192,
@@ -581,7 +573,7 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 	// Reasoning ("thinking") is model-specific. Mark known reasoning models...
 	reasoningModels := []string{
 		"openai:o1", "openai:o1-mini", "openai:o3", "openai:o4-mini",
-		// GPT-5 family — every "gpt-5" prefix reasons per isOpenAIReasoningModel.
+		// GPT-5 family, every "gpt-5" prefix reasons per isOpenAIReasoningModel.
 		"openai:gpt-5", "openai:gpt-5-mini", "openai:gpt-5-nano",
 		"openai:gpt-5.4", "openai:gpt-5.4-mini", "openai:gpt-5.4-nano", "openai:gpt-5.4-pro",
 		"openai:gpt-5.5", "openai:gpt-5.5-pro",
@@ -606,8 +598,8 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 	// ZAI qualifies: its GLM-4.x chat models broadly expose a thinking toggle, and
 	// it is represented solely by a default. Reasoning is otherwise model-specific,
 	// so flagging a provider default that also has exact model entries (Anthropic,
-	// Gemini, OpenAI) would disagree with those entries. DeepSeek is mixed —
-	// deepseek-reasoner reasons but the default deepseek-chat does not — so it is
+	// Gemini, OpenAI) would disagree with those entries. DeepSeek is mixed
+	// (deepseek-reasoner reasons but the default deepseek-chat does not), so it is
 	// handled as a per-model entry below rather than a provider default.
 	if caps, ok := r.defaults[ProviderZAI]; ok {
 		caps.SupportsReasoning = true

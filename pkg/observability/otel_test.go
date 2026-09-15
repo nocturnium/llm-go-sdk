@@ -88,7 +88,6 @@ func TestNewOTelMiddleware(t *testing.T) {
 }
 
 func TestOTelMiddleware_Call_Success(t *testing.T) {
-	// Setup span recorder
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
 	tracer := tracerProvider.Tracer(InstrumentationName)
@@ -112,7 +111,6 @@ func TestOTelMiddleware_Call_Success(t *testing.T) {
 		t.Errorf("result = %s, want 'Hello, world!'", result)
 	}
 
-	// Check spans
 	spans := spanRecorder.Ended()
 	if len(spans) != 1 {
 		t.Fatalf("expected 1 span, got %d", len(spans))
@@ -126,7 +124,6 @@ func TestOTelMiddleware_Call_Success(t *testing.T) {
 		t.Errorf("span status = %v, want Ok", span.Status().Code)
 	}
 
-	// Check attributes
 	attrs := span.Attributes()
 	assertAttribute(t, attrs, "llm.provider", "openai")
 	assertAttribute(t, attrs, "llm.model", "gpt-4")
@@ -432,7 +429,6 @@ func TestOTelMiddleware_Metrics(t *testing.T) {
 		t.Fatal("expected metrics to be recorded")
 	}
 
-	// Check for expected metric names
 	metricNames := make(map[string]bool)
 	for _, m := range metrics {
 		metricNames[m.Name] = true

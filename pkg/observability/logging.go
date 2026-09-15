@@ -135,7 +135,6 @@ func (e *LogEntry) ToLangfuseGeneration() map[string]any {
 		gen["parent_observation_id"] = e.ParentSpanID
 	}
 
-	// Input/Output
 	if e.InputJSON != "" {
 		gen["input"] = e.InputJSON
 	} else if len(e.Messages) > 0 {
@@ -211,7 +210,6 @@ func (e *LogEntry) PopulateFromTraceContext(tc *TraceContext) {
 		copy(e.Tags, tc.Tags)
 	}
 
-	// Merge propagated metadata into Metadata
 	if len(tc.Metadata) > 0 {
 		if e.Metadata == nil {
 			e.Metadata = make(map[string]any)
@@ -252,7 +250,6 @@ func (e *LogEntry) PopulateFromCallOptions(opts *llms.CallOptions) {
 			e.Tags = append(e.Tags, opts.Trace.Tags...)
 		}
 
-		// Merge trace metadata
 		if len(opts.Trace.Metadata) > 0 {
 			if e.Metadata == nil {
 				e.Metadata = make(map[string]any)

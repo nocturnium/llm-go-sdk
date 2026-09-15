@@ -2,9 +2,9 @@ package llms
 
 // This file defines the cross-provider reasoning ("thinking") surface: the
 // effort/budget controls a caller sets on a request and the ReasoningContent a
-// model returns. Providers map ReasoningConfig onto their own knobs — OpenAI's
+// model returns. Providers map ReasoningConfig onto their own knobs, OpenAI's
 // reasoning_effort, Anthropic/Gemini thinking-token budgets, or the Z.AI/Qwen
-// "thinking" toggle — and normalize their output back into ReasoningContent.
+// "thinking" toggle, and normalize their output back into ReasoningContent.
 
 // ReasoningEffort controls how much effort a reasoning-capable model spends on
 // its internal chain-of-thought before answering. Providers translate it to

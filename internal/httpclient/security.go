@@ -79,7 +79,6 @@ func ValidateURL(rawURL string, opts *URLValidationOptions) error {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
 
-	// Check scheme
 	if u.Scheme == "" {
 		return errors.New("URL must have a scheme (https://)")
 	}
@@ -93,13 +92,11 @@ func ValidateURL(rawURL string, opts *URLValidationOptions) error {
 		}
 	}
 
-	// Check host
 	host := u.Hostname()
 	if host == "" {
 		return errors.New("URL must have a host")
 	}
 
-	// Check port
 	if !opts.AllowCustomPorts {
 		port := u.Port()
 		if port != "" {
@@ -121,7 +118,6 @@ func ValidateURL(rawURL string, opts *URLValidationOptions) error {
 				allowed = true
 				break
 			}
-			// Allow subdomains of allowed hosts
 			if strings.HasSuffix(strings.ToLower(host), "."+strings.ToLower(allowedHost)) {
 				allowed = true
 				break
@@ -132,7 +128,6 @@ func ValidateURL(rawURL string, opts *URLValidationOptions) error {
 		}
 	}
 
-	// Check for private/internal IPs
 	if !opts.AllowPrivateIPs {
 		if err := validateNotPrivateHost(host); err != nil {
 			return err

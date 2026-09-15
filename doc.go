@@ -9,7 +9,7 @@
 // The package surface is large; this map groups the exported API by role so you
 // can find the right entry point quickly. (As of v3 the observability and
 // resilience middleware live in the pkg/observability and
-// pkg/middleware/resilience subpackages — see docs/v3-package-taxonomy.md.)
+// pkg/middleware/resilience subpackages, see docs/v3-package-taxonomy.md.)
 //
 //   - Core types: [Message], [Role], [Response], [StreamChunk], [Usage],
 //     [ToolCall], [FunctionCall], [ContentPart], [FinishReason].

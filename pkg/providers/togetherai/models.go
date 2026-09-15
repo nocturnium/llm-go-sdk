@@ -97,7 +97,7 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 
 	// Set display name to ID if not provided
 	if info.DisplayName == "" {
-		// Extract readable name from ID (e.g., "meta-llama/Llama-3.3-70B" -> "Llama-3.3-70B")
+		// Extract readable name from ID (e.g., "meta-llama/Llama-3.3-70B" becomes "Llama-3.3-70B")
 		parts := strings.Split(m.ID, "/")
 		if len(parts) > 1 {
 			info.DisplayName = parts[len(parts)-1]
@@ -112,7 +112,6 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.Organization = parts[0]
 	}
 
-	// Convert model type
 	info.Types = convertModelType(m.Type)
 
 	// Convert pricing if available

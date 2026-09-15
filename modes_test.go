@@ -15,7 +15,7 @@ var oneMillionEach = Usage{
 
 // TestModelUsageStaysComparable is a compile-time guard, not a behavioral test.
 // ModelUsage is comparable today; adding a slice or map field would silently
-// make it non-comparable and break any caller using == — the exact class of
+// make it non-comparable and break any caller using ==, the exact class of
 // change that forced the v6 major. Per-mode cost lives on CostTracker for this
 // reason.
 func TestModelUsageStaysComparable(t *testing.T) {
@@ -113,7 +113,7 @@ func TestFlexIsUnknownOnAnthropic(t *testing.T) {
 
 // TestAnthropicBatchDerivesFromStatedPolicy pins the derived-card path. Anthropic
 // documents a flat 50% batch discount on input and output, and documents that
-// prompt-caching multipliers stack on top of other modifiers — so the cache rates
+// prompt-caching multipliers stack on top of other modifiers, so the cache rates
 // must derive from the *batch* input rate, not from the standard one.
 func TestAnthropicBatchDerivesFromStatedPolicy(t *testing.T) {
 	// Claude Opus 5 standard: $5 in / $25 out. Batch halves both.
@@ -131,7 +131,7 @@ func TestAnthropicBatchDerivesFromStatedPolicy(t *testing.T) {
 	}
 
 	// The derivation must not be a blanket halving of the standard card: halving
-	// the standard cache-read (0.50 -> 0.25) coincides here, but halving the
+	// the standard cache-read (0.50 becomes 0.25) coincides here, but halving the
 	// standard cache-write would give 3.125 only because 6.25/2 == 3.125. Assert
 	// the ratio to the batch input rate explicitly instead.
 	if !approxEqual(wantCacheRead, wantInput*anthropicCacheReadRatio) {
@@ -166,7 +166,7 @@ func TestAnthropicFastIsPublishedNotDerived(t *testing.T) {
 }
 
 // TestModeCardResolvesItsOwnTiers pins the composition order. A mode replaces the
-// rate card wholesale, so tiers resolve against whichever card applies — a mode
+// rate card wholesale, so tiers resolve against whichever card applies, a mode
 // card's own tier, not the standard card's tier scaled by a discount.
 func TestModeCardResolvesItsOwnTiers(t *testing.T) {
 	tracker := NewCostTracker()
@@ -200,7 +200,7 @@ func TestModeCardResolvesItsOwnTiers(t *testing.T) {
 // priced at short-context batch rates and reads low, while the same request at
 // standard rates correctly tiers up. Encoding a guessed long-context batch rate
 // would be worse than reading low, so the gap stands until the numbers are
-// transcribed. If they are, this test should start failing — that is the signal
+// transcribed. If they are, this test should start failing, that is the signal
 // to delete it.
 func TestBuiltInModeCardsCarryNoLongContextTier(t *testing.T) {
 	longRequest := Usage{PromptTokens: openAILongContextThreshold, CompletionTokens: 1_000_000}
@@ -216,7 +216,7 @@ func TestBuiltInModeCardsCarryNoLongContextTier(t *testing.T) {
 	if !approxEqual(standard, wantStandard) {
 		t.Errorf("standard cost = %v, want %v (long-context tier)", standard, wantStandard)
 	}
-	// Batch stays on the short-context card (2.50/15.00) — the documented gap.
+	// Batch stays on the short-context card (2.50/15.00), the documented gap.
 	wantBatch := float64(openAILongContextThreshold)/1e6*2.50 + 15.00
 	if !approxEqual(batch, wantBatch) {
 		t.Errorf("batch cost = %v, want %v (short-context batch card)", batch, wantBatch)
@@ -224,7 +224,7 @@ func TestBuiltInModeCardsCarryNoLongContextTier(t *testing.T) {
 }
 
 // TestUnpricedModelStaysUnknownUnderEveryMode pins that a mode discount on an
-// unknown base is still unknown — a mode must never conjure a price for a model
+// unknown base is still unknown, a mode must never conjure a price for a model
 // the SDK has no rates for.
 func TestUnpricedModelStaysUnknownUnderEveryMode(t *testing.T) {
 	for _, mode := range []PricingMode{PricingModeStandard, PricingModeBatch, PricingModeFlex, PricingModeFast} {
@@ -260,7 +260,7 @@ func TestSetModePricingStandardDelegatesToSetPricing(t *testing.T) {
 	usage := Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000}
 	cost, known := tracker.Record(ProviderOpenAI, "custom", usage)
 	if !known || !approxEqual(cost, 3.00) {
-		t.Errorf("Record = (%v,%v), want (3,true) — standard mode must land in the standard table", cost, known)
+		t.Errorf("Record = (%v,%v), want (3,true), standard mode must land in the standard table", cost, known)
 	}
 }
 
@@ -323,9 +323,8 @@ func TestWithPricingModeRoundTrips(t *testing.T) {
 	}
 }
 
-// TestCostMiddlewareHonorsPricingMode pins that the option actually reaches the
-// tracker on both the unary and streaming paths. GenerateContent did not parse
-// CallOptions at all before this change.
+// TestCostMiddlewareHonorsPricingMode pins that the option reaches the tracker on
+// both the unary and streaming paths.
 func TestCostMiddlewareHonorsPricingMode(t *testing.T) {
 	usage := Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000}
 	wantBatch, _ := EstimateCostMode(ProviderOpenAI, "gpt-5.6-sol", usage, PricingModeBatch)

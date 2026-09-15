@@ -41,7 +41,6 @@ func TestEstimateTokens_Punctuation(t *testing.T) {
 }
 
 func TestEstimateTokens_Code(t *testing.T) {
-	// Code with symbols
 	code := `func main() { fmt.Println("Hello") }`
 	result := EstimateTokens(code)
 

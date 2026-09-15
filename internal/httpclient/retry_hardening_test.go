@@ -12,10 +12,10 @@ import (
 )
 
 // TestDoWithRetry_RetriesTransientStatuses asserts END-TO-END (not just policy
-// list membership) that every transient status actually triggers retries through
+// list membership) that every transient status triggers retries through
 // doWithRetry. This matters because retries are co-gated by IsRetryable(status)
-// AND the policy list: 529 (Anthropic "Site Overloaded") has no net/http constant
-// and must be present in BOTH, or a real 529 is returned with zero retries.
+// and the policy list: 529 (Anthropic "Site Overloaded") has no net/http constant
+// and must be present in each one, or a real 529 is returned with zero retries.
 func TestDoWithRetry_RetriesTransientStatuses(t *testing.T) {
 	for _, status := range []int{408, 429, 500, 502, 503, 504, 529} {
 		t.Run(fmt.Sprintf("status_%d", status), func(t *testing.T) {

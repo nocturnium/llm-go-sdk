@@ -23,7 +23,7 @@ type Config struct {
 	Timeout time.Duration
 	// AllowPrivateIPs permits requests to private, loopback, and link-local
 	// addresses (e.g. a self-hosted model on a private network). It relaxes only
-	// the destination-host SSRF check and does NOT permit plain HTTP — set
+	// the destination-host SSRF check and leaves plain HTTP refused; set
 	// AllowHTTP for that. Default false (secure).
 	AllowPrivateIPs bool
 	// AllowHTTP permits plain-HTTP (non-TLS) request URLs. It is independent of

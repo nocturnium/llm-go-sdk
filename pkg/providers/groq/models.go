@@ -87,7 +87,6 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.Organization = inferOrganization(m.ID)
 	}
 
-	// Infer model types from ID
 	info.Types = inferModelTypes(m.ID)
 
 	// Convert created timestamp

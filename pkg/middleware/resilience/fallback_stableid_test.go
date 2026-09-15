@@ -57,7 +57,7 @@ func (g *gatedLLM) Model() string           { return "gated" }
 // TestFallbackChain_RemoveDuringCallDoesNotMisattributeHealth is the core
 // stable-id guarantee: if a client is removed from the chain while a call is
 // mid-flight through it, that client's subsequent failure must be recorded
-// against the removed client (a no-op) — never against whichever survivor now
+// against the removed client (a no-op), never against whichever survivor now
 // occupies its old slice position.
 //
 // Under the prior positional design, marking used the loop index into a slice
@@ -69,7 +69,7 @@ func TestFallbackChain_RemoveDuringCallDoesNotMisattributeHealth(t *testing.T) {
 	primary := &gatedLLM{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
-		err:     syscall.ECONNREFUSED, // both provider-unhealthy AND fall-through
+		err:     syscall.ECONNREFUSED, // provider-unhealthy and fall-through at once
 	}
 	survivor := &mockFallbackLLM{provider: "survivor", callResp: "ok"}
 
@@ -85,8 +85,8 @@ func TestFallbackChain_RemoveDuringCallDoesNotMisattributeHealth(t *testing.T) {
 		resp, callErr = fc.GenerateContent(context.Background(), nil)
 	}()
 
-	// Wait until the call is inside primary.GenerateContent — the per-call
-	// snapshot has been taken and released — then remove the primary (index 0).
+	// Wait until the call is inside primary.GenerateContent, the per-call
+	// snapshot has been taken and released, then remove the primary (index 0).
 	<-primary.started
 	if !fc.RemoveClient(0) {
 		t.Fatal("RemoveClient(0) should succeed")

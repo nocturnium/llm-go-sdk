@@ -17,7 +17,7 @@ type MediaRate struct {
 // has no usage and remains unpriced (CreateSpeechStream exposes the usage).
 // gpt-transcribe is intentionally absent because its price is unverified.
 var MediaPricing = map[string]MediaRate{
-	// https://www.together.ai/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	// https://www.together.ai/pricing, supplied first-party verification 2026-09-05; not live-tested.
 	// Speech enum: https://docs.together.ai/reference/audio-speech (cartesia/sonic).
 	// Video rows use an empty unit for a flat job price (no core video unit).
 	// The native job converts these to explicit Cost and retains seconds as quantity.
@@ -32,13 +32,13 @@ var MediaPricing = map[string]MediaRate{
 	"togetherai:openai/gpt-image-1.5":             {Unit: MediaUnitImage, USD: 0.034},
 	"togetherai:openai/sora-2":                    {Unit: "", USD: 0.8},
 
-	// https://groq.com/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	// https://groq.com/pricing, supplied first-party verification 2026-09-05; not live-tested.
 	"groq:canopylabs/orpheus-v1-english":   {Unit: MediaUnitKChar, USD: 0.022},
 	"groq:canopylabs/orpheus-arabic-saudi": {Unit: MediaUnitKChar, USD: 0.04},
 	"groq:whisper-large-v3":                {Unit: MediaUnitMinute, USD: 0.00185},
 	"groq:whisper-large-v3-turbo":          {Unit: MediaUnitMinute, USD: 0.000667},
 
-	// https://mistral.ai/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	// https://mistral.ai/pricing, supplied first-party verification 2026-09-05; not live-tested.
 	"mistral:voxtral-mini-latest":   {Unit: MediaUnitMinute, USD: 0.003},
 	"mistral:voxtral-mini-tts-2603": {Unit: MediaUnitKChar, USD: 0.016},
 
@@ -47,7 +47,7 @@ var MediaPricing = map[string]MediaRate{
 	"featherless:canopylabs/orpheus-3b-0.1-ft": {Unit: MediaUnitKChar, USD: 0.015},
 	"featherless:ResembleAI/chatterbox":        {Unit: MediaUnitKChar, USD: 0.025},
 
-	// Z.AI: https://docs.z.ai/guides/overview/pricing — supplied first-party verification 2026-09-05; not live-tested.
+	// Z.AI: https://docs.z.ai/guides/overview/pricing, supplied first-party verification 2026-09-05; not live-tested.
 	"zai:cogvideox-3":      {Unit: "", USD: 0.20},
 	"zai:glm-image":        {Unit: MediaUnitImage, USD: 0.015},
 	"zai:cogview-4-250304": {Unit: MediaUnitImage, USD: 0.01},

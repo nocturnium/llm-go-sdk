@@ -114,7 +114,7 @@ func blockedPromptFeedback(candidates int, feedback *geminiapi.PromptFeedback, u
 // separately, and while the Gemini API is documented to fold thoughts into
 // candidates it frequently does not in practice. So we detect the
 // separate-accounting case via the reported total and fold thoughts in only
-// then — counting reasoning tokens exactly once and keeping
+// then, counting reasoning tokens exactly once and keeping
 // PromptTokens + CompletionTokens + CacheReadTokens == TotalTokenCount.
 func convertUsageMetadata(um *geminiapi.UsageMetadata) llms.Usage {
 	prompt := um.PromptTokenCount - um.CachedContentTokenCount

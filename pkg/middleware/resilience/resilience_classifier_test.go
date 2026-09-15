@@ -19,8 +19,8 @@ func (m mockNetError) Temporary() bool { return false }
 
 // TestClassifierAgreement is the guardrail that keeps the retry decision and the
 // circuit-breaker health decision from ever diverging: DefaultShouldRetry and
-// isProviderUnhealthy must return the SAME verdict for every error, and that
-// verdict must match the single source of truth — transient upstream failures
+// isProviderUnhealthy must return one verdict for every error, and that
+// verdict must match the single source of truth, transient upstream failures
 // (408/429/5xx/529, streaming Type equivalents, transport blips, socket timeouts)
 // are both retried and counted; terminal and client-side errors are neither.
 func TestClassifierAgreement(t *testing.T) {

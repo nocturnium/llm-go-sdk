@@ -268,7 +268,7 @@ func TestAPIError_QuotaClassification(t *testing.T) {
 
 // TestAPIError_IsRetryable_TypeFallback pins that when StatusCode is absent
 // (e.g. a streaming error carrying only Type/Code, StatusCode 0), IsRetryable
-// falls back to the sentinel classification — so a mid-stream rate limit or
+// falls back to the sentinel classification, so a mid-stream rate limit or
 // server error is still recognized as retryable instead of defaulting to false.
 func TestAPIError_IsRetryable_TypeFallback(t *testing.T) {
 	tests := []struct {
@@ -481,7 +481,6 @@ func TestProviderError_Unwrap(t *testing.T) {
 }
 
 func TestWrapProviderError(t *testing.T) {
-	// nil error returns nil
 	if WrapProviderError(ProviderOpenAI, "test", nil) != nil {
 		t.Error("WrapProviderError should return nil for nil error")
 	}

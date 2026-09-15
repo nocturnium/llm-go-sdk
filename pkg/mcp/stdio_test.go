@@ -89,10 +89,10 @@ func TestStdioTransport_NullIDErrorDoesNotPoisonConcurrentRequests(t *testing.T)
 // TestStdioTransport_DeliveredResponseWinsOverClose reproduces the answer-then-EOF
 // race: a response is delivered to the pending channel at the same instant the
 // transport's done channel closes, so request()'s select has both cases ready.
-// The delivered response must win — returning "transport closed" for a call the
-// server actually completed would make a non-idempotent tool look failed and be
+// The delivered response must win, returning "transport closed" for a call the
+// server completed would make a non-idempotent tool look failed and be
 // retried, duplicating its side effect. An io.Pipe stdin makes write() block
-// until BOTH conditions are set up, so the both-ready state is deterministic
+// until each condition is set up, so the both-ready state is deterministic
 // rather than timing-dependent; pre-fix, select's pseudo-random pick fails ~half
 // the iterations.
 func TestStdioTransport_DeliveredResponseWinsOverClose(t *testing.T) {
@@ -129,7 +129,7 @@ func TestStdioTransport_DeliveredResponseWinsOverClose(t *testing.T) {
 			}
 		}
 
-		// Make BOTH select cases ready before request() selects: buffer a delivered
+		// Make each select case ready before request() selects: buffer a delivered
 		// response, then close done.
 		ch <- []byte(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
 		close(tr.done)
@@ -160,8 +160,8 @@ func TestStdioTransport_DeliveredResponseWinsOverClose(t *testing.T) {
 // notification is interleaved before the response and its handler blocks; the
 // request must still resolve promptly.
 func TestStdioClient_BlockingProgressHandlerDoesNotStallResponse(t *testing.T) {
-	clientReads, serverWrites := io.Pipe() // server -> client
-	serverReads, clientWrites := io.Pipe() // client -> server
+	clientReads, serverWrites := io.Pipe() // server writes, client reads
+	serverReads, clientWrites := io.Pipe() // client writes, server reads
 
 	tr := &stdioTransport{
 		cmd:     &exec.Cmd{},
@@ -199,7 +199,7 @@ func TestStdioClient_BlockingProgressHandlerDoesNotStallResponse(t *testing.T) {
 					// notification, no response
 				case methodToolsCall:
 					// Echo the client's progress token so the per-call handler (keyed by
-					// that token) actually receives the notification.
+					// that token) receives the notification.
 					tok, _ := json.Marshal(probe.Params.Meta.ProgressToken)
 					_, _ = serverWrites.Write([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":` + string(tok) + `,"progress":1}}` + "\n"))
 					writeStdioResult(serverWrites, probe.ID, CallToolResult{Content: []ContentBlock{{Type: "text", Text: "done"}}})
@@ -239,7 +239,7 @@ func TestStdioClient_BlockingProgressHandlerDoesNotStallResponse(t *testing.T) {
 		t.Errorf("result text = %q, want done", res.Text())
 	}
 
-	// The blocking handler must actually have been invoked (proving the off-path
+	// The blocking handler must have been invoked (proving the off-path
 	// dispatch ran it), yet the call above still returned.
 	select {
 	case <-entered:

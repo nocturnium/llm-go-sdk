@@ -179,7 +179,6 @@ func TestClient_GenerateContent_WithTools(t *testing.T) {
 		var req map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&req)
 
-		// Verify tools
 		tools, ok := req["tools"].([]any)
 		if !ok || len(tools) == 0 {
 			t.Error("expected tools in request")
@@ -623,7 +622,7 @@ func TestClient_MaxTokensDefault(t *testing.T) {
 // TestClient_Stream_ThinkingSignature is the end-to-end guard for the streamed
 // extended-thinking round-trip: a stream that emits thinking_delta then
 // signature_delta must deliver the signature to the caller. It is load-bearing
-// for BOTH fixes — the terminal-signature emit (anthropic.go) and CollectStream's
+// for two fixes: the terminal-signature emit (anthropic.go) and CollectStream's
 // signature preservation (streaming.go).
 func TestClient_Stream_ThinkingSignature(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

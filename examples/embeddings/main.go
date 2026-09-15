@@ -31,7 +31,6 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n\n", client.Provider(), client.Model())
 
-	// Example 1: Embed a single query
 	fmt.Println("=== Single Query Embedding ===")
 	query := "What is machine learning?"
 
@@ -62,7 +61,6 @@ func main() {
 
 	fmt.Printf("Embedded %d documents\n\n", len(vectors))
 
-	// Example 3: Semantic similarity search
 	fmt.Println("=== Semantic Similarity Search ===")
 	searchQuery := "How do computers understand pictures?"
 

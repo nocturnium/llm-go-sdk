@@ -18,7 +18,6 @@ const (
 	// LangfuseInstrumentationName is the instrumentation scope name for Langfuse-compatible spans
 	LangfuseInstrumentationName = "github.com/nocturnium/llm-go-sdk/v6/langfuse"
 
-	// Default content capture limits
 	defaultMaxInputCapture  = 100_000
 	defaultMaxOutputCapture = 100_000
 )
@@ -58,7 +57,7 @@ func NewLangfuseOTelMiddleware(llm llms.LLM, opts ...LangfuseOTelOption) (*Langf
 		llm:    llm,
 		tracer: otel.Tracer(LangfuseInstrumentationName),
 		meter:  otel.Meter(LangfuseInstrumentationName),
-		// Privacy-safe by default: prompts/responses are NOT captured unless the
+		// Privacy-safe by default: prompts and responses stay uncaptured unless the
 		// caller explicitly opts in via WithLangfuseInputCapture /
 		// WithLangfuseOutputCapture. This matches the generic OTel middleware
 		// (recordContent:false) and the metrics middleware.
@@ -219,11 +218,9 @@ func (m *LangfuseOTelMiddleware) Call(ctx context.Context, prompt string, option
 
 	start := time.Now()
 
-	// Set Langfuse and GenAI attributes
 	m.setLangfuseAttributes(span, tc)
 	m.setGenAIRequestAttributes(span, opts)
 
-	// Capture input
 	if m.captureInput {
 		inputStr := truncateForSpan(prompt, m.maxInputLen)
 		span.SetAttributes(
@@ -246,7 +243,6 @@ func (m *LangfuseOTelMiddleware) Call(ctx context.Context, prompt string, option
 		return "", err
 	}
 
-	// Capture output
 	if m.captureOutput {
 		outputStr := truncateForSpan(result, m.maxOutputLen)
 		span.SetAttributes(
@@ -271,11 +267,9 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 
 	start := time.Now()
 
-	// Set Langfuse and GenAI attributes
 	m.setLangfuseAttributes(span, tc)
 	m.setGenAIRequestAttributes(span, opts)
 
-	// Capture input
 	if m.captureInput {
 		inputStr := FormatInput(messages, m.inputFormat)
 		span.SetAttributes(
@@ -298,7 +292,6 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 		return nil, err
 	}
 
-	// Set response attributes
 	m.setGenAIResponseAttributes(span, resp, duration)
 
 	// Record token metrics
@@ -307,7 +300,6 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 		m.completionTokens.Add(ctx, int64(resp.Usage.CompletionTokens), metric.WithAttributes(attrs...))
 	}
 
-	// Record cost if tracker available
 	if m.costTracker != nil {
 		cost, known := m.costTracker.Record(m.llm.Provider(), m.resolveModel(opts), resp.Usage)
 		if known {
@@ -316,7 +308,6 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 		}
 	}
 
-	// Capture output
 	if m.captureOutput {
 		outputStr := FormatOutput(resp, m.outputFormat)
 		span.SetAttributes(
@@ -340,12 +331,10 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 
 	start := time.Now()
 
-	// Set Langfuse and GenAI attributes
 	m.setLangfuseAttributes(span, tc)
 	m.setGenAIRequestAttributes(span, opts)
 	span.SetAttributes(attribute.Bool("gen_ai.streaming", true))
 
-	// Capture input
 	if m.captureInput {
 		inputStr := FormatInput(messages, m.inputFormat)
 		span.SetAttributes(
@@ -631,7 +620,6 @@ func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, res
 			keyGenAIUsageTotalTokens.Int(resp.Usage.TotalTokens),
 		)
 
-		// Calculate tokens per second
 		if duration.Seconds() > 0 && resp.Usage.CompletionTokens > 0 {
 			tps := float64(resp.Usage.CompletionTokens) / duration.Seconds()
 			span.SetAttributes(keyGenAITokensPerSecond.Float64(tps))

@@ -1,6 +1,6 @@
 package openaicompat
 
-// This file implements the OpenAI Responses API (POST /responses) — the stateful
+// This file implements the OpenAI Responses API (POST /responses), the stateful
 // successor to /chat/completions. It defines the Responses wire types, the client
 // method, and the converters between llms types and the Responses request/response
 // shape. Streaming and full server-side conversation chaining are intentionally
@@ -54,8 +54,8 @@ var consumedExtraBodyKeys = map[string]bool{
 
 // MarshalJSON renders the typed fields and then merges any remaining
 // CallOptions.ExtraBody keys (the documented escape hatch) into the top-level
-// request body — e.g. service_tier, metadata, user, parallel_tool_calls — which
-// the chat path forwards but the Responses path previously dropped. Keys already
+// request body (e.g. service_tier, metadata, user, parallel_tool_calls), which
+// the chat path forwards and the Responses path now forwards too. Keys already
 // mapped to typed fields, and keys that would collide with a typed field, are
 // left to the typed value.
 func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
@@ -112,8 +112,8 @@ const (
 )
 
 // MarshalJSON renders a "reasoning" input item with an always-present "summary"
-// array — the Responses API rejects a replayed reasoning item that omits it, even
-// when empty — and emits only the reasoning fields. Other item kinds keep their
+// array, the Responses API rejects a replayed reasoning item that omits it, even
+// when empty, and emits only the reasoning fields. Other item kinds keep their
 // omitempty semantics.
 func (i ResponsesInputItem) MarshalJSON() ([]byte, error) {
 	if i.Type == itemTypeReasoning {
@@ -386,7 +386,7 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 				items = append(items, item)
 			}
 
-		default: // user (and any other role) → input message
+		default: // user (and any other role) becomes an input message
 			items = append(items, ResponsesInputItem{
 				Type:    itemTypeMessage,
 				Role:    string(msg.Role),
@@ -572,7 +572,7 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 }
 
 // responsesResponseError returns a non-nil error when a Responses API response
-// reports failure — status "failed" or a populated top-level error object — so a
+// reports failure (status "failed" or a populated top-level error object), so a
 // 200 body carrying {"status":"failed","error":{...},"output":[]} surfaces to the
 // caller as an error instead of a silent empty completion (which would suppress
 // retry and fallback). The failure DETECTION mirrors the streaming path's

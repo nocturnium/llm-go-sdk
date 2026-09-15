@@ -147,7 +147,6 @@ func TestListModels_WithTypeFilter(t *testing.T) {
 		_, _ = w.Write([]byte(mockModelsResponse))
 	})
 
-	// Filter to embedding models only
 	result, err := client.ListModels(context.Background(), llms.WithModelTypes(llms.ModelTypeEmbedding))
 	if err != nil {
 		t.Fatalf("ListModels failed: %v", err)
@@ -357,7 +356,6 @@ func TestConvertModelResponse(t *testing.T) {
 		if info.ID != "some-org/some-model" {
 			t.Errorf("ID mismatch: %s", info.ID)
 		}
-		// Should extract display name from ID
 		if info.DisplayName != "some-model" {
 			t.Errorf("expected display name 'some-model', got %s", info.DisplayName)
 		}
@@ -461,7 +459,6 @@ func TestParseRealWorldResponse(t *testing.T) {
 		t.Errorf("unexpected input price: %f", m.Pricing.Input)
 	}
 
-	// Convert and verify
 	info := convertModelResponse(&m)
 	if info.Provider != llms.ProviderTogetherAI {
 		t.Errorf("expected ProviderTogetherAI, got %s", info.Provider)

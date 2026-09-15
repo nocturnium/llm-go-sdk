@@ -1,12 +1,12 @@
 // Package mcp is a Model Context Protocol (MCP) client (protocol revision
 // 2025-06-18). It connects to an MCP server over stdio (a subprocess) or
-// Streamable HTTP and covers tools (tools/list, tools/call — registerable into an
+// Streamable HTTP and covers tools (tools/list, tools/call, registerable into an
 // *llms.ToolRegistry so they drive llms.RunTools), resources (resources/list,
-// resources/read), prompts (prompts/list, prompts/get — bridgeable into
+// resources/read), prompts (prompts/list, prompts/get, bridgeable into
 // []llms.Message), the server's advertised capabilities, and server-initiated
 // progress and log notifications.
 //
-// One-call mount (the common case — connect and register tools):
+// One-call mount (the common case, connect and register tools):
 //
 //	reg := llms.NewToolRegistry()
 //	closer, err := mcp.MountStdio(ctx, reg, "npx",
@@ -169,7 +169,7 @@ func buildRequestHandlers(cfg config) (map[string]requestHandler, error) {
 	return handlers, nil
 }
 
-// capabilitiesFor derives what to advertise from the handlers actually
+// capabilitiesFor derives what to advertise from the handlers
 // registered. Advertising is never independent of capability: if no handler
 // serves a method, the capability is nil and the server is told this client does
 // not offer it.
@@ -233,7 +233,7 @@ func WithTimeout(d time.Duration) Option {
 
 // WithAllowPrivateIPs permits an HTTP client to reach private/loopback addresses.
 // It is off by default (SSRF protection); enable it for local HTTP MCP servers
-// such as http://localhost. This does NOT relax the TLS requirement on its own —
+// such as http://localhost. On its own it leaves the TLS requirement in place:
 // plain (non-TLS) HTTP is a separate, independent allowance (see WithAllowHTTP).
 func WithAllowPrivateIPs(allow bool) Option {
 	return func(c *config) { c.allowPrivateIPs = allow }
@@ -241,7 +241,7 @@ func WithAllowPrivateIPs(allow bool) Option {
 
 // WithAllowHTTP permits plain (non-TLS) HTTP requests. It is off by default and
 // is independent of WithAllowPrivateIPs: reaching an http://localhost MCP server
-// requires BOTH WithAllowPrivateIPs(true) and WithAllowHTTP(true). Leaving it off
+// requires WithAllowPrivateIPs(true) together with WithAllowHTTP(true). Leaving it off
 // keeps TLS enforced, so credentials in WithHTTPHeaders are never sent in
 // cleartext to a downgraded endpoint.
 func WithAllowHTTP(allow bool) Option {
@@ -263,7 +263,7 @@ func buildConfig(opts []Option) config {
 }
 
 // NewStdioClient launches an MCP server subprocess and completes the MCP
-// handshake. The context governs the subprocess lifetime — pass a long-lived
+// handshake. The context governs the subprocess lifetime, pass a long-lived
 // context (canceling it terminates the server). args is the server's argument
 // list. Remember to Close the returned client.
 func NewStdioClient(ctx context.Context, command string, args []string, opts ...Option) (*Client, error) {
@@ -303,7 +303,7 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 		notifier:   newNotifier(),
 		inbound:    newInbound(),
 	}
-	// Handlers are installed BEFORE initialize so the advertised capabilities can
+	// Handlers are installed ahead of initialize so the advertised capabilities can
 	// be derived from them. Registering a handler after the handshake would mean
 	// either advertising a capability the client did not yet have, or serving one
 	// the server was never told about.
@@ -334,8 +334,8 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 	}
 	// If the caller cancels the governing context without ever calling Close, tear
 	// the client down anyway so the notification pump (and the server session /
-	// subprocess) are released. The hook runs closeInternal — never the public
-	// Close — so it never reads ctxStop, which is why storing ctxStop below needs
+	// subprocess) are released. The hook runs closeInternal, never the public
+	// Close, so it never reads ctxStop, which is why storing ctxStop below needs
 	// no lock: it is written here (before c is returned) and read only by Close.
 	// The stop function is retained so Close can deregister the hook and avoid
 	// pinning the client under a long-lived context.
@@ -361,7 +361,7 @@ func (c *Client) initialize(ctx context.Context) error {
 	c.serverInfo = result.ServerInfo
 	if len(result.Capabilities) > 0 {
 		// Capabilities are advisory; a malformed map should not fail the handshake,
-		// so an unmarshal error simply leaves the typed view zero-valued.
+		// so an unmarshal error leaves the typed view zero-valued.
 		_ = json.Unmarshal(result.Capabilities, &c.serverCaps)
 	}
 

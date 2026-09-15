@@ -14,7 +14,7 @@ import (
 
 // Rate limiting errors. ErrRateLimitExceeded wraps the canonical
 // llms.ErrRateLimited so a local rate-limiter rejection satisfies
-// errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429 —
+// errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429,
 // callers can match on the one sentinel regardless of which layer rate-limited.
 var (
 	ErrRateLimitExceeded = fmt.Errorf("rate limit exceeded: %w", llms.ErrRateLimited)
@@ -25,12 +25,10 @@ var (
 type RateLimiter struct {
 	mu sync.RWMutex
 
-	// Request rate limiting
 	requestLimiter *rate.Limiter
 	requestsPerMin int
 	requestBurst   int
 
-	// Token rate limiting (optional)
 	tokenLimiter  *rate.Limiter
 	tokensPerMin  int
 	tokenBurst    int // Max tokens allowed to burst at once (0 = a full minute's budget)
@@ -81,7 +79,7 @@ func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 // NOTE: a per-request token count larger than this burst would make
 // golang.org/x/time/rate's WaitN/AllowN reject every call (n > burst is never
 // satisfiable). Rather than override an explicit WithTokenBurst here, the Wait
-// paths cap the requested token count to the burst — see WaitN/tryAcquire — which
+// paths cap the requested token count to the burst (see WaitN/tryAcquire), which
 // preserves the caller's chosen burst while avoiding a self-inflicted outage.
 func (rl *RateLimiter) tokenBucketBurst() int {
 	if rl.tokenBurst > 0 {
@@ -186,7 +184,6 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		return rl.tryAcquire(requests, tokens)
 	}
 
-	// Create timeout context
 	waitCtx, cancel := context.WithTimeout(ctx, rl.waitTimeout)
 	defer cancel()
 
@@ -214,7 +211,6 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		return ErrRateLimitTimeout
 	}
 
-	// Wait for token limit if configured
 	if tokenLimiter != nil && tokens > 0 {
 		// Never request more than the bucket can hold, or WaitN rejects it forever.
 		if b := tokenLimiter.Burst(); tokens > b {

@@ -181,7 +181,7 @@ func TestListModels(t *testing.T) {
 		t.Error("expected large model to have chat type")
 	}
 
-	// codestral-latest has no display_name -> falls back to ID, and is code-typed.
+	// codestral-latest has no display_name, so it falls back to ID, and is code-typed.
 	codestral := result.Models[1]
 	if codestral.DisplayName != "codestral-latest" {
 		t.Errorf("expected display name to fall back to ID, got %s", codestral.DisplayName)
@@ -347,7 +347,7 @@ func TestConvertModelResponse(t *testing.T) {
 		if info.DisplayName != "mistral-small-latest" {
 			t.Errorf("expected display name to fall back to ID, got %s", info.DisplayName)
 		}
-		// Created == 0 -> CreatedAt should remain zero.
+		// Created == 0 leaves CreatedAt zero.
 		if !info.CreatedAt.IsZero() {
 			t.Error("expected CreatedAt to be zero when Created is unset")
 		}

@@ -35,13 +35,10 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n\n", baseClient.Provider(), baseClient.Model())
 
-	// Example 1: Basic cost tracking
 	fmt.Println("=== Basic Cost Tracking ===")
 
-	// Create a cost tracker
 	tracker := llms.NewCostTracker()
 
-	// Wrap the client with cost middleware
 	client := llms.NewCostMiddleware(baseClient, tracker)
 
 	// Make some requests
@@ -69,7 +66,6 @@ func main() {
 	fmt.Printf("Total requests: %d\n", tracker.GetTotalRequests())
 	fmt.Printf("Estimated total cost: %s\n\n", llms.FormatCost(tracker.GetTotalCost()))
 
-	// Example 2: Per-model breakdown
 	fmt.Println("=== Per-Model Breakdown ===")
 	for _, usage := range tracker.Report() {
 		fmt.Printf("%s/%s:\n", usage.Provider, usage.Model)
@@ -81,7 +77,6 @@ func main() {
 		fmt.Printf("  Last used: %s\n\n", usage.LastUsed.Format(time.RFC3339))
 	}
 
-	// Example 3: Get specific model usage
 	fmt.Println("=== Specific Model Usage ===")
 	modelUsage := tracker.GetUsage(baseClient.Provider(), baseClient.Model())
 	if modelUsage != nil {
@@ -89,7 +84,6 @@ func main() {
 		fmt.Printf("  Total tokens: %d\n\n", modelUsage.PromptTokens+modelUsage.CompletionTokens)
 	}
 
-	// Example 4: Streaming with cost tracking
 	fmt.Println("=== Streaming with Cost Tracking ===")
 	messages := []llms.Message{
 		{Role: llms.RoleUser, Content: "Count from 1 to 5, one number per line."},
@@ -115,7 +109,6 @@ func main() {
 	// Check updated costs after streaming
 	fmt.Printf("\nUpdated total cost: %s\n\n", llms.FormatCost(tracker.GetTotalCost()))
 
-	// Example 5: Custom pricing
 	fmt.Println("=== Custom Pricing ===")
 	customPricing := map[string]llms.Pricing{
 		"custom:my-model": {
@@ -132,7 +125,6 @@ func main() {
 		Output: 0.80,
 	})
 
-	// Check if pricing exists
 	pricing, exists := customTracker.GetPricing(llms.ProviderOpenAI, "gpt-4o-mini")
 	if exists {
 		fmt.Printf("Custom pricing for gpt-4o-mini:\n")
@@ -151,7 +143,6 @@ func main() {
 	fmt.Printf("Estimated cost for 1000 prompt + 500 completion tokens on GPT-4o:\n")
 	fmt.Printf("  %s\n\n", llms.FormatCost(estimatedCost))
 
-	// Example 7: Reset tracking
 	fmt.Println("=== Reset Tracking ===")
 	fmt.Printf("Before reset - Total requests: %d\n", tracker.GetTotalRequests())
 	tracker.Reset()
@@ -159,7 +150,7 @@ func main() {
 }
 
 // demoPricingModes shows how billing lanes change the estimate. The mode is
-// accounting only — it does not route the request. Send the request to the lane
+// accounting only, it does not route the request. Send the request to the lane
 // with the provider's own mechanism (OpenAI's service_tier, Anthropic's Batches
 // API), then set the matching mode so the recorded cost is right.
 func demoPricingModes() {

@@ -78,7 +78,7 @@ func (s NeverFallbackSelector) ShouldFallback(_ error) bool {
 
 // fallbackEntry pairs a client with a stable identity and its health state.
 // The id is assigned once when the client is added and never reused, so health
-// is bound to the client itself rather than to its shifting slice position —
+// is bound to the client itself rather than to its shifting slice position,
 // adding or removing a client mid-call can no longer misattribute a failure to
 // a different client. unhealthyUntil is zero when healthy, else the instant the
 // client becomes eligible for a half-open probe.
@@ -203,12 +203,10 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llm
 			fc.markUnhealthyID(cand.id)
 		}
 
-		// Check if we should fallback
 		if !fc.selector.ShouldFallback(err) {
 			return "", err
 		}
 
-		// Callback for fallback
 		fc.fireFallback(pos, candidates, err)
 	}
 
@@ -241,12 +239,10 @@ func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LL
 			fc.markUnhealthyID(cand.id)
 		}
 
-		// Check if we should fallback
 		if !fc.selector.ShouldFallback(err) {
 			return zero, err
 		}
 
-		// Callback for fallback
 		fc.fireFallback(pos, candidates, err)
 	}
 

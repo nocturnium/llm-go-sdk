@@ -821,7 +821,7 @@ func TestLangfuseOTelMiddleware_DisabledCapture(t *testing.T) {
 
 // TestLangfuseOTelMiddleware_CaptureOffByDefault verifies that prompt/response
 // capture is privacy-safe by default: a middleware constructed without any
-// capture options must NOT capture input or output.
+// capture options must leave input and output uncaptured.
 func TestLangfuseOTelMiddleware_CaptureOffByDefault(t *testing.T) {
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,

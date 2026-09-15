@@ -60,7 +60,6 @@ func TestNewClientMissingAPIKey(t *testing.T) {
 }
 
 func TestNewClientWithGeminiEnvAPIKey(t *testing.T) {
-	// Set GEMINI_API_KEY env var
 	originalGemini := os.Getenv("GEMINI_API_KEY")
 	originalGoogle := os.Getenv("GOOGLE_API_KEY")
 	_ = os.Setenv("GEMINI_API_KEY", "gemini-env-key")

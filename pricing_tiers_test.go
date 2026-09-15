@@ -48,7 +48,7 @@ func TestPricing_TierRepricesWholeRequest(t *testing.T) {
 	}
 
 	// Exactly at the threshold: MinInputTokens is inclusive, so the tier applies
-	// and all 1M input tokens bill at 2.00 — not 1M at 1.00 plus an increment.
+	// and all 1M input tokens bill at 2.00, not 1M at 1.00 plus an increment.
 	at := Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000}
 	wantAt := 2.00 + 15.00
 	if got := p.cost(at); !approxEqual(got, wantAt) {
@@ -83,7 +83,7 @@ func TestPricing_TierThresholdCountsCacheTokens(t *testing.T) {
 }
 
 // TestPricing_TierCacheRateFallsBackToTierInput pins that an unset cache rate on
-// a tier falls back to that *tier's* Input rate, not the base Pricing's — the
+// a tier falls back to that *tier's* Input rate, not the base Pricing's, the
 // alternative would silently bill long-context cache reads at short-context rates.
 func TestPricing_TierCacheRateFallsBackToTierInput(t *testing.T) {
 	p := Pricing{
@@ -116,7 +116,7 @@ func TestPricing_HighestMatchingTierWins(t *testing.T) {
 		total int
 		want  float64
 	}{
-		{total: 100, want: 1.00},       // below all tiers -> base
+		{total: 100, want: 1.00},       // below all tiers, so the base rate
 		{total: 500_000, want: 2.00},   // lower tier
 		{total: 1_999_999, want: 2.00}, // still lower tier
 		{total: 2_000_000, want: 4.00}, // higher tier

@@ -32,13 +32,8 @@ type Part struct {
 	Thought          bool   `json:"thought,omitempty"`
 	ThoughtSignature string `json:"thoughtSignature,omitempty"`
 
-	// Inline data for images
-	InlineData *InlineData `json:"inlineData,omitempty"`
-
-	// Function call from model
-	FunctionCall *FunctionCall `json:"functionCall,omitempty"`
-
-	// Function response from user
+	InlineData       *InlineData       `json:"inlineData,omitempty"`
+	FunctionCall     *FunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *FunctionResponse `json:"functionResponse,omitempty"`
 }
 

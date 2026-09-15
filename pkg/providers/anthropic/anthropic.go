@@ -517,7 +517,7 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 		Stream:        stream,
 	}
 	// Opus 4.7/4.8, the 5-family and Fable/Mythos REJECT the sampling parameters
-	// `temperature` AND `top_p` with HTTP 400. Only send them for models that
+	// `temperature` together with `top_p` with HTTP 400. Only send them for models that
 	// still accept them; a nil pointer is omitted from the wire request so a
 	// caller that never set the value lets the API apply its own default, while
 	// an explicit value (including 0) is forwarded. FrequencyPenalty and
@@ -612,8 +612,8 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 	}
 
 	// Add tool choice if specified. Budget-based extended thinking (pre-4.6
-	// models) rejects a forcing tool_choice (type "any" or "tool") — only
-	// "auto"/"none" are allowed — and Fable 5.1 / Mythos reject forcing choices
+	// models) rejects a forcing tool_choice (type "any" or "tool"), only
+	// "auto"/"none" are allowed, and Fable 5.1 / Mythos reject forcing choices
 	// outright, so soften a forcing choice to "auto" in those cases, keeping the
 	// request valid rather than failing with HTTP 400. Adaptive thinking (4.6+)
 	// and Fable 5 accept a forcing choice, verified live.
@@ -700,8 +700,8 @@ func applyThinking(req *anthropicapi.MessagesRequest, gen modelGeneration, rc *l
 }
 
 // enforceCacheLimit caps the number of cache_control breakpoints at Anthropic's
-// maximum of four. Breakpoints are kept in priority order — system block, tool
-// definitions, then message content top-to-bottom — and any beyond the limit are
+// maximum of four. Breakpoints are kept in priority order, system block, tool
+// definitions, then message content top-to-bottom, and any beyond the limit are
 // dropped so the request never fails with "too many cache breakpoints".
 func enforceCacheLimit(req *anthropicapi.MessagesRequest) {
 	const maxBreakpoints = 4

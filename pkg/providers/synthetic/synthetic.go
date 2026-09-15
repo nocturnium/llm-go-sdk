@@ -37,7 +37,6 @@ type Client struct {
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 
-	// Resolve API key from options or environment
 	apiKey, err := llms.RequireAPIKey("synthetic", options.APIKey, llms.EnvSyntheticAPIKey)
 	if err != nil {
 		return nil, err

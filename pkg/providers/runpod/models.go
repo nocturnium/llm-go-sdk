@@ -7,7 +7,6 @@ import llms "github.com/nocturnium/llm-go-sdk/v6"
 // what you have deployed on your RunPod serverless endpoint. The IDs match
 // the Hugging Face repository identifiers commonly served via vLLM.
 const (
-	// Llama models
 	ModelLlama31_8B  = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 	ModelLlama31_70B = "meta-llama/Meta-Llama-3.1-70B-Instruct"
 	ModelLlama32_1B  = "meta-llama/Llama-3.2-1B-Instruct"
@@ -18,18 +17,15 @@ const (
 	ModelLlama4Scout    = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 	ModelLlama4Maverick = "meta-llama/Llama-4-Maverick-17B-128E-Instruct"
 
-	// Mistral models
 	ModelMistral7B     = "mistralai/Mistral-7B-Instruct-v0.3"
 	ModelMistralSmall3 = "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
 
-	// Qwen models
 	ModelQwen25_7B      = "Qwen/Qwen2.5-7B-Instruct"
 	ModelQwen25_72B     = "Qwen/Qwen2.5-72B-Instruct"
 	ModelQwen25Coder32B = "Qwen/Qwen2.5-Coder-32B-Instruct"
 	ModelQwen3_32B      = "Qwen/Qwen3-32B"
 	ModelQwen3_30BA3B   = "Qwen/Qwen3-30B-A3B"
 
-	// DeepSeek models
 	ModelDeepSeekR1 = "deepseek-ai/DeepSeek-R1"
 	ModelDeepSeekV3 = "deepseek-ai/DeepSeek-V3"
 )

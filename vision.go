@@ -287,7 +287,6 @@ func ValidateImageContent(img *ImageContent) error {
 			return fmt.Errorf("media type is required for base64 images")
 		}
 
-		// Validate media type
 		switch img.MediaType {
 		case MediaTypePNG, MediaTypeJPEG, MediaTypeGIF, MediaTypeWebP:
 			// Valid
@@ -295,7 +294,7 @@ func ValidateImageContent(img *ImageContent) error {
 			return fmt.Errorf("unsupported media type: %q", img.MediaType)
 		}
 
-		// Check approximate decoded size before actually decoding to prevent OOM.
+		// Check approximate decoded size before decoding to prevent OOM.
 		// Base64 encoding increases size by ~33%, so decoded size ≈ encoded size * 3/4.
 		approxDecodedSize := len(img.Data) * 3 / 4
 		if approxDecodedSize > MaxImageSize {

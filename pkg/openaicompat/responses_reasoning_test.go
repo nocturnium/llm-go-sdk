@@ -142,7 +142,7 @@ func TestResponsesReasoning_SurvivesJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &restored); err != nil {
 		t.Fatalf("unmarshal history: %v", err)
 	}
-	// Sanity-check that the round trip actually changed the concrete type, so the test
+	// Sanity-check that the round trip changed the concrete type, so the test
 	// would fail without the tolerant decoder.
 	if _, ok := restored[1].Reasoning.Metadata[MetadataKeyResponsesReasoning].([]ResponsesReasoningItem); ok {
 		t.Fatal("expected metadata type to degrade after JSON round trip; test is not exercising the decoder")
@@ -174,7 +174,7 @@ func TestBuildResponsesRequest_NilOpts(t *testing.T) {
 }
 
 // TestReasoningInputItems_OrphanSuppressed guards FIX #8: an assistant message that
-// carries reasoning but has no content and no tool calls must NOT emit an orphaned
+// carries reasoning but has no content and no tool calls must leave out an orphaned
 // "reasoning" input item (the API rejects one with no following item).
 func TestReasoningInputItems_OrphanSuppressed(t *testing.T) {
 	reasoning := &llms.ReasoningContent{
@@ -195,7 +195,7 @@ func TestReasoningInputItems_OrphanSuppressed(t *testing.T) {
 		}
 	}
 
-	// But the same reasoning DOES replay when the turn also carries a tool call.
+	// The same reasoning does replay when the turn also carries a tool call.
 	msgsWithCall := []llms.Message{
 		{Role: llms.RoleUser, Content: "hi"},
 		{Role: llms.RoleAssistant, Reasoning: reasoning, ToolCalls: []llms.ToolCall{

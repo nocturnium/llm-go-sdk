@@ -58,7 +58,7 @@ type rpcResponse struct {
 //	    // the server does not implement the method
 //	}
 //
-// A server-side tool that runs but reports failure is NOT an RPCError; see [ToolError].
+// A server-side tool that runs but reports failure is no RPCError; see [ToolError].
 type RPCError struct {
 	Code    int             `json:"code"`
 	Message string          `json:"message"`
@@ -241,7 +241,7 @@ const (
 	frameResponse frameKind = iota
 	// frameNotification carries a method but no id: fire-and-forget, no reply.
 	frameNotification
-	// frameRequest carries BOTH a method and an id: the server is asking this
+	// frameRequest carries a method and an id together: the server is asking this
 	// client to do something and is waiting for a response carrying that id.
 	frameRequest
 )
@@ -250,7 +250,7 @@ const (
 // the raw id that must be echoed back.
 //
 // The id is returned raw and un-parsed on purpose. JSON-RPC permits an id to be a
-// string or a number, and requires a response to echo it back unchanged — so
+// string or a number, and requires a response to echo it back unchanged, so
 // re-serializing a parsed id risks answering "1" with 1 (or failing outright on a
 // non-numeric string id, which [messageID] does).
 //

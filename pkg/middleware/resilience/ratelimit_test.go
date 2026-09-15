@@ -473,7 +473,6 @@ func TestNewProviderRateLimitedClient_Override(t *testing.T) {
 func TestSharedRateLimiter(t *testing.T) {
 	shared := NewSharedRateLimiter()
 
-	// Get limiter for a key
 	limiter1 := shared.GetLimiter("test-key", WithRequestsPerMinute(100))
 	limiter2 := shared.GetLimiter("test-key")
 
@@ -526,7 +525,6 @@ func TestSharedRateLimiter_ResetAll(t *testing.T) {
 		t.Fatal("should be rate limited")
 	}
 
-	// Reset all
 	shared.ResetAll()
 
 	// Should work again

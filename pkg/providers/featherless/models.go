@@ -10,7 +10,7 @@ import (
 // cachedModels is a curated, ILLUSTRATIVE subset of the open-weight models
 // Featherless AI serves via its OpenAI-compatible API. Featherless hosts tens of
 // thousands of Hugging Face models, so this is intentionally a small, representative
-// sample of popular models, NOT the full catalog (use ListModels against the live
+// sample of popular models rather than the full catalog (use ListModels against the live
 // API for that). Model IDs are the underlying Hugging Face repo IDs.
 //
 // ContextLength here reflects the context window Featherless SERVES the model at
@@ -24,7 +24,7 @@ import (
 // retained as illustrative even though they are no longer in the live serverless
 // catalog; their context windows are left at the base model's native values.
 var cachedModels = []llms.ModelInfo{
-	// Llama 4 family — not served under canonical meta-llama/ IDs on Featherless as of
+	// Llama 4 family, not served under canonical meta-llama/ IDs on Featherless as of
 	// June 2026, so intentionally omitted rather than guessed. See notes in the PR.
 
 	// Llama 3.x Models (Meta)
@@ -224,7 +224,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// Legacy Mistral entry — retained as illustrative; no longer in the live serverless
+	// Legacy Mistral entry, retained as illustrative; no longer in the live serverless
 	// catalog under this exact ID. Context window left at the model's native 32K.
 	{
 		ID:            "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -289,7 +289,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// DeepSeek legacy entry — retained as illustrative; no longer in the live serverless
+	// DeepSeek legacy entry, retained as illustrative; no longer in the live serverless
 	// catalog under this exact ID. Context window left at the model's native 32K.
 	{
 		ID:            "deepseek-ai/DeepSeek-V2.5",
@@ -301,7 +301,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// DeepSeek legacy coder entry — retained as illustrative.
+	// DeepSeek legacy coder entry, retained as illustrative.
 	{
 		ID:            "deepseek-ai/DeepSeek-Coder-V2-Instruct",
 		DisplayName:   "DeepSeek Coder V2 Instruct",
@@ -312,7 +312,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeCode},
 		FromCache:     true,
 	},
-	// Phi legacy entry — retained as illustrative; context left at the model's native 128K.
+	// Phi legacy entry, retained as illustrative; context left at the model's native 128K.
 	{
 		ID:            "microsoft/Phi-3-medium-128k-instruct",
 		DisplayName:   "Phi 3 Medium 128K Instruct",
@@ -334,7 +334,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// Gemma 2 legacy entry — retained as illustrative; context left at the model's native 8K.
+	// Gemma 2 legacy entry, retained as illustrative; context left at the model's native 8K.
 	{
 		ID:            "google/gemma-2-9b-it",
 		DisplayName:   "Gemma 2 9B Instruct",
@@ -345,7 +345,7 @@ var cachedModels = []llms.ModelInfo{
 		Types:         []llms.ModelType{llms.ModelTypeChat},
 		FromCache:     true,
 	},
-	// Command R+ legacy entry — retained as illustrative; no longer in the live
+	// Command R+ legacy entry, retained as illustrative; no longer in the live
 	// serverless catalog under this exact ID. Context left at the model's native 128K.
 	{
 		ID:            "CohereForAI/c4ai-command-r-plus",
@@ -389,7 +389,6 @@ func init() {
 func (c *Client) ListModels(_ context.Context, opts ...llms.ListModelsOption) (*llms.ListModelsResult, error) {
 	options := llms.ApplyListModelsOptions(opts...)
 
-	// Start with all cached models
 	models := make([]llms.ModelInfo, len(cachedModels))
 	copy(models, cachedModels)
 
@@ -410,7 +409,6 @@ func (c *Client) ListModels(_ context.Context, opts ...llms.ListModelsOption) (*
 		}
 	}
 
-	// Slice from start
 	if start >= len(models) {
 		return &llms.ListModelsResult{
 			Models:  []llms.ModelInfo{},
@@ -448,7 +446,6 @@ func (c *Client) ModelInfo(_ context.Context, modelID string) (*llms.ModelInfo, 
 		return copyModelInfo(&info), nil
 	}
 
-	// Model not found in cache
 	return nil, llms.ErrModelNotFound
 }
 
