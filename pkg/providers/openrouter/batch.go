@@ -421,7 +421,7 @@ func isBatchNotYetVisible(err error, deadline time.Time) bool {
 
 // jitter spreads concurrent waiters by up to 10% of the interval.
 func jitter(d time.Duration) time.Duration {
-	return d + time.Duration(rand.Int64N(int64(d)/10+1)) //nolint:gosec // spreads pollers; not security-sensitive
+	return d + time.Duration(rand.Int64N(int64(d)/10+1)) // #nosec G404 -- polling jitter for thundering-herd spread, not cryptography
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {
