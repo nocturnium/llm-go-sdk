@@ -862,3 +862,20 @@ func TestLoggingMiddleware_StreamErrorChunkReachesConsumer(t *testing.T) {
 		t.Error("the stream error was not logged")
 	}
 }
+
+// A logger has nowhere to log its own failure, so a failing sink reaches the
+// caller through the error callback rather than vanishing.
+func TestJSONLoggerReportsWriteFailures(t *testing.T) {
+	sinkErr := errors.New("disk full")
+	var got []error
+	logger := NewJSONLogger(
+		func([]byte) error { return sinkErr },
+		WithJSONWriteError(func(err error) { got = append(got, err) }),
+	)
+
+	logger.LogRequest(context.Background(), &LogEntry{RequestID: "write-fail"})
+
+	if len(got) != 1 || !errors.Is(got[0], sinkErr) {
+		t.Fatalf("callback received %v, want the sink error", got)
+	}
+}

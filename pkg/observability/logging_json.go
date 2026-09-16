@@ -9,6 +9,7 @@ import (
 type JSONLogger struct {
 	encode    func(any) ([]byte, error)
 	write     func([]byte) error
+	onError   func(error)
 	redact    bool
 	maxLength int
 }
@@ -33,6 +34,15 @@ func NewJSONLogger(writeFn func([]byte) error, opts ...JSONLoggerOption) *JSONLo
 	}
 
 	return l
+}
+
+// WithJSONWriteError installs a callback for a failing sink. A logger has
+// nowhere to log its own failure, so without one a closed file or a full disk
+// drops every line in silence; the callback is how an operator hears about it.
+func WithJSONWriteError(fn func(error)) JSONLoggerOption {
+	return func(l *JSONLogger) {
+		l.onError = fn
+	}
 }
 
 // WithJSONRedaction enables or disables redaction for the JSON logger.
@@ -96,11 +106,22 @@ func (l *JSONLogger) writeEntry(entryType string, entry *LogEntry) {
 		"entry": entry,
 	}
 
-	bytes, err := l.encode(data)
+	encoded, err := l.encode(data)
 	if err != nil {
+		l.reportError(err)
 		return
 	}
 
-	bytes = append(bytes, '\n')
-	_ = l.write(bytes)
+	encoded = append(encoded, '\n')
+	if err := l.write(encoded); err != nil {
+		l.reportError(err)
+	}
+}
+
+// reportError hands a sink or encoding failure to the caller's callback, if one
+// was installed.
+func (l *JSONLogger) reportError(err error) {
+	if l.onError != nil {
+		l.onError(err)
+	}
 }
