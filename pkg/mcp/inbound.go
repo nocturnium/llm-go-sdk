@@ -90,13 +90,30 @@ func (in *inbound) acquire() bool {
 
 func (in *inbound) release() { <-in.sem }
 
+// track registers an in-flight handler, reporting false once stop has begun.
+// The check and the Add happen under the same lock stop takes before it waits,
+// so a handler can never be added to the WaitGroup after the wait starts.
+func (in *inbound) track() bool {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	select {
+	case <-in.done:
+		return false
+	default:
+	}
+	in.wg.Add(1)
+	return true
+}
+
 // stop waits for in-flight handlers to finish, bounded by
 // inboundShutdownTimeout so a wedged handler cannot hang Close. Goroutines still
 // running past the deadline are abandoned; their responses are written to a
 // closed transport and discarded.
 func (in *inbound) stop() {
 	in.closeOnce.Do(func() {
+		in.mu.Lock()
 		close(in.done)
+		in.mu.Unlock()
 		finished := make(chan struct{})
 		go func() {
 			in.wg.Wait()
@@ -156,7 +173,11 @@ func (c *Client) dispatchRequest(raw []byte, id json.RawMessage) {
 		return
 	}
 
-	c.inbound.wg.Add(1)
+	if !c.inbound.track() {
+		c.inbound.release()
+		c.respondError(id, CodeInternalError, "mcp: client is shutting down")
+		return
+	}
 	go func() {
 		defer c.inbound.wg.Done()
 		defer c.inbound.release()

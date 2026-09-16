@@ -411,3 +411,36 @@ func TestResponseFormat_JSON(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, string(data))
 	}
 }
+
+// ExtraBody is the escape hatch for provider-specific keys, but the keys that
+// define the request's shape stay typed: a replaced messages array or stream
+// flag desynchronizes the request from the response parser.
+func TestChatCompletionRequest_ExtraBodyCannotReshapeRequest(t *testing.T) {
+	req := &ChatCompletionRequest{
+		Model:    "gpt-4o",
+		Messages: []ChatMessage{{Role: "user", ContentValue: "hi"}},
+		Stream:   true,
+		ExtraBody: map[string]any{
+			"messages":     []any{},
+			"stream":       false,
+			"service_tier": "flex",
+		},
+	}
+	data, err := req.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["stream"] != true {
+		t.Errorf("stream overridden: %s", data)
+	}
+	if msgs, _ := out["messages"].([]any); len(msgs) != 1 {
+		t.Errorf("messages overridden: %s", data)
+	}
+	if out["service_tier"] != "flex" {
+		t.Errorf("extra key dropped: %s", data)
+	}
+}

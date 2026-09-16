@@ -223,7 +223,15 @@ func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCal
 	// Fall back to ID-based matching (for non-OpenAI providers or edge cases)
 	for i := range calls {
 		if calls[i].ID != "" && calls[i].ID == delta.ID {
-			if delta.Function != nil && calls[i].Function != nil {
+			if delta.Function != nil {
+				// A first delta that carried only the id leaves Function nil, so
+				// the arguments that follow would otherwise be dropped.
+				if calls[i].Function == nil {
+					calls[i].Function = &llms.FunctionCall{}
+				}
+				if calls[i].Function.Name == "" {
+					calls[i].Function.Name = delta.Function.Name
+				}
 				calls[i].Function.Arguments += delta.Function.Arguments
 			}
 			return calls
