@@ -143,3 +143,16 @@ func TestInferModelTypes(t *testing.T) {
 		})
 	}
 }
+
+// OLLAMA_HOST is commonly set as host:port; without a scheme the base URL is
+// not something the transport can dial.
+func TestOllamaHostWithoutScheme(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "127.0.0.1:11500")
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.options.BaseURL; got != "http://127.0.0.1:11500/v1" {
+		t.Fatalf("BaseURL = %q", got)
+	}
+}

@@ -74,3 +74,17 @@ func TestTranscribe_ExtraCannotOverrideTypedFields(t *testing.T) {
 		}
 	}
 }
+
+// Groq's speech route accepts neither Instructions nor Speed, so a caller that
+// sets one is told rather than having it dropped.
+func TestSynthesize_RejectsUnsupportedTypedOptions(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
+	for name, opt := range map[string]llms.SpeechOption{
+		"instructions": llms.WithSpeechInstructions("read slowly"),
+		"speed":        llms.WithSpeechSpeed(1.5),
+	} {
+		if _, err := c.Synthesize(context.Background(), "hi", llms.WithSpeechVoice("autumn"), opt); !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}

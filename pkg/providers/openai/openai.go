@@ -79,7 +79,11 @@ func New(opts ...Option) (*Client, error) {
 		options.ProviderConfig = &defaultProviderConfig
 	}
 	providerConfig := *options.ProviderConfig
-	providerConfig.DefaultModel = options.Model
+	// WithModel wins; without it a custom ProviderConfig keeps its own default
+	// rather than being overwritten with this package's gpt-4o.
+	if options.modelSet || providerConfig.DefaultModel == "" {
+		providerConfig.DefaultModel = options.Model
+	}
 	if options.EmbeddingModel != "" {
 		providerConfig.DefaultEmbeddingModel = options.EmbeddingModel
 	}

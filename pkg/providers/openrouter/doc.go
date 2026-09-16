@@ -42,7 +42,8 @@
 // and token limits vary by model. Images support synchronous generation; edits
 // and speech SSE are disabled. GenerateImage forwards AspectRatio and Seed as
 // aspect_ratio and seed; WithImageExtra supplies resolution, input_references,
-// and other native parameters, merged last. NegativePrompt and SafetyTolerance
+// and other native parameters; aspect_ratio and seed are reserved for their
+// typed options and refused. NegativePrompt and SafetyTolerance
 // have no verified wire mapping and are ignored. Video accepts first/last frames
 // as URLs or inline images; pass native input_references and callback_url via
 // WithVideoExtra. ReferenceImages is rejected because its wire schema is unverified.

@@ -27,6 +27,9 @@ type options struct {
 	ProviderConfig *openaicompat.ProviderConfig
 	// responsesAPI routes non-streaming GenerateContent through the Responses API.
 	responsesAPI bool
+	// modelSet records an explicit WithModel, so a custom ProviderConfig's own
+	// DefaultModel is not overwritten by this package's default.
+	modelSet bool
 }
 
 // defaultOptions returns the default options for OpenAI.
@@ -65,6 +68,7 @@ func WithAPIKey(key string) Option {
 func WithModel(model string) Option {
 	return func(o *options) {
 		o.Model = model
+		o.modelSet = true
 	}
 }
 

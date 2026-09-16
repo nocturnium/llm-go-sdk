@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 const (
@@ -163,4 +164,25 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 // TestClientImplementsInterface verifies that Client implements llms.LLM
 func TestClientImplementsInterface(_ *testing.T) {
 	var _ llms.LLM = (*Client)(nil)
+}
+
+// A custom ProviderConfig carries its own default model; only an explicit
+// WithModel replaces it.
+func TestNew_CustomProviderConfigKeepsItsDefaultModel(t *testing.T) {
+	cfg := openaicompat.ProviderConfig{Provider: llms.ProviderOpenAI, DefaultModel: "custom-model"}
+	c, err := New(WithAPIKey("k"), WithProviderConfig(&cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Model() != "custom-model" {
+		t.Errorf("Model() = %q, want custom-model", c.Model())
+	}
+
+	overridden, err := New(WithAPIKey("k"), WithProviderConfig(&cfg), WithModel("gpt-4o-mini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overridden.Model() != "gpt-4o-mini" {
+		t.Errorf("WithModel ignored: %q", overridden.Model())
+	}
 }

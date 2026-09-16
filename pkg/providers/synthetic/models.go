@@ -2,6 +2,7 @@ package synthetic
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -282,12 +283,18 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	// apply pagination
 	start := 0
 	if options.Cursor != "" {
-		// Find the index after the cursor
+		found := false
 		for i, m := range models {
 			if m.ID == options.Cursor {
 				start = i + 1
+				found = true
 				break
 			}
+		}
+		// A cursor naming no model would otherwise restart from the first page,
+		// so a paginating caller would loop over the same models forever.
+		if !found {
+			return nil, fmt.Errorf("synthetic: unknown cursor %q: %w", options.Cursor, llms.ErrInvalidParameters)
 		}
 	}
 

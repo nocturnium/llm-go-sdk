@@ -129,14 +129,14 @@ func TestClient_ChatAndHeaders(t *testing.T) {
 	}
 }
 func TestClient_GenerateImage(t *testing.T) {
-	extra := map[string]any{"resolution": "1K", "aspect_ratio": "16:9", "input_references": []any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/image"}}}}
+	extra := map[string]any{"resolution": "1K", "input_references": []any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/image"}}}}
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/images" {
 			t.Error(r.URL)
 		}
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		if body["aspect_ratio"] != "16:9" || body["seed"] != float64(0) || body["resolution"] != "1K" || body["input_references"] == nil || body["model"] != DefaultImageModel {
+		if body["aspect_ratio"] != "1:1" || body["seed"] != float64(0) || body["resolution"] != "1K" || body["input_references"] == nil || body["model"] != DefaultImageModel {
 			t.Error(body)
 		}
 		fmt.Fprint(w, `{"data":[{"b64_json":"aGk=","media_type":"image/jpeg"}],"usage":{"completion_tokens":4175,"cost":0.04,"prompt_tokens":0,"total_tokens":4175}}`)
@@ -608,6 +608,18 @@ func TestTranscriptionMIMERequired(t *testing.T) {
 		_, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("audio"), MIMEType: mime})
 		if !errors.Is(err, llms.ErrInvalidParameters) || !strings.Contains(err.Error(), "audio/mpeg") {
 			t.Fatal(err)
+		}
+	}
+}
+
+// aspect_ratio and seed have typed options, so an Extra entry for either is
+// refused rather than replacing what the caller asked for.
+func TestGenerateImage_ExtraCannotOverrideTypedFields(t *testing.T) {
+	c := mockClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
+	for _, key := range []string{"aspect_ratio", "seed"} {
+		_, err := c.GenerateImage(context.Background(), "moon", llms.WithImageExtra(map[string]any{key: "x"}))
+		if !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Errorf("Extra %q: err = %v", key, err)
 		}
 	}
 }

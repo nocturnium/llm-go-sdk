@@ -33,8 +33,11 @@ func speechRequest(text string, o *llms.SpeechOptions) (*openaicompat.SpeechRequ
 		}
 		req.Voice = "autumn"
 	}
-	req.Instructions = ""
-	req.Speed = nil
+	// Groq's speech route accepts neither, and silently dropping a typed option
+	// would send a request that ignores what the caller asked for.
+	if o.Instructions != "" || o.Speed != nil {
+		return nil, fmt.Errorf("groq: speech Instructions and Speed are unsupported: %w", llms.ErrInvalidParameters)
+	}
 	return req, nil
 }
 

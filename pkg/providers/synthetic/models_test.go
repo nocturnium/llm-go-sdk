@@ -427,3 +427,12 @@ func TestModelInfoReturnsCopy(t *testing.T) {
 		t.Error("ModelInfo returns reference instead of copy (Types slice)")
 	}
 }
+
+// A cursor naming no model is an error: restarting from the first page would
+// have a paginating caller loop over the same models forever.
+func TestListModels_UnknownCursorIsRejected(t *testing.T) {
+	c := &Client{}
+	if _, err := c.ListModels(context.Background(), llms.WithModelCursor("no-such-model")); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("err = %v", err)
+	}
+}
