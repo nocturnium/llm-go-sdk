@@ -99,8 +99,8 @@ func TestApplyEmbedOptions_Defaults(t *testing.T) {
 	}
 }
 
-// An embedding response is consumed through the helpers, so those are what this
-// pins: the vectors come back in index order and the usage totals add up.
+// An embedding response is consumed through EmbedDocuments, so that is what this
+// pins: every vector comes back, in the order the provider returned them.
 func TestEmbeddingResponse_Structure(t *testing.T) {
 	resp := &EmbeddingResponse{
 		Embeddings: []Embedding{

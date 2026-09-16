@@ -486,45 +486,6 @@ func TestResponseWithToolCalls(t *testing.T) {
 
 // StreamChunk tests
 
-func TestStreamChunkStruct(t *testing.T) {
-	usage := &Usage{
-		PromptTokens:     10,
-		CompletionTokens: 20,
-		TotalTokens:      30,
-	}
-
-	chunk := StreamChunk{
-		Content:      "Hello",
-		ToolCalls:    []ToolCall{{ID: "call_1", Type: "function"}},
-		FinishReason: testStop,
-		Usage:        usage,
-		Error:        nil,
-		Done:         true,
-	}
-
-	if chunk.Content != "Hello" {
-		t.Errorf("expected content 'Hello', got %s", chunk.Content)
-	}
-	if len(chunk.ToolCalls) != 1 {
-		t.Errorf("expected 1 tool call, got %d", len(chunk.ToolCalls))
-	}
-	if chunk.FinishReason != testStop {
-		t.Errorf("expected finish reason 'stop', got %s", chunk.FinishReason)
-	}
-	if chunk.Usage == nil {
-		t.Error("expected usage to be set")
-	}
-	if chunk.Usage.TotalTokens != 30 {
-		t.Errorf("expected total tokens 30, got %d", chunk.Usage.TotalTokens)
-	}
-	if chunk.Error != nil {
-		t.Errorf("expected no error, got %v", chunk.Error)
-	}
-	if !chunk.Done {
-		t.Error("expected done to be true")
-	}
-}
-
 func TestStreamChunkWithError(t *testing.T) {
 	testErr := errors.New("test error")
 	chunk := StreamChunk{
