@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/anthropicapi"
 	"github.com/nocturnium/llm-go-sdk/v6/internal/testutil"
 )
 
@@ -189,8 +190,11 @@ func TestConvertAnthropicModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock anthropicapi.ModelInfo
-			result := testConvertModel(tt.input)
+			result := convertAnthropicModel(&anthropicapi.ModelInfo{
+				ID:          tt.input.ID,
+				DisplayName: tt.input.DisplayName,
+				CreatedAt:   tt.input.CreatedAt,
+			})
 
 			if result.ID != tt.expected.ID {
 				t.Errorf("ID = %q, want %q", result.ID, tt.expected.ID)
@@ -240,43 +244,6 @@ type anthropicModelInput struct {
 	ID          string
 	DisplayName string
 	CreatedAt   string
-}
-
-// testConvertModel is a test helper that mimics convertAnthropicModel.
-func testConvertModel(input anthropicModelInput) llms.ModelInfo {
-	info := llms.ModelInfo{
-		ID:           input.ID,
-		DisplayName:  input.DisplayName,
-		Provider:     llms.ProviderAnthropic,
-		Organization: "Anthropic",
-	}
-
-	if metadata, ok := knownModels[input.ID]; ok {
-		if info.DisplayName == "" {
-			info.DisplayName = metadata.displayName
-		}
-		info.ContextLength = metadata.contextLength
-		info.MaxOutput = metadata.maxOutput
-		info.Types = metadata.types
-		info.Pricing = metadata.pricing
-	} else {
-		// Infer from model ID
-		if info.DisplayName == "" {
-			info.DisplayName = formatClaudeModelName(input.ID)
-		}
-		info.Types = inferClaudeModelTypes(input.ID)
-		// apply default context length for Claude models
-		switch {
-		case len(input.ID) >= 8 && input.ID[:8] == "claude-3":
-			info.ContextLength = 200000
-		case len(input.ID) >= 8 && input.ID[:8] == "claude-2":
-			info.ContextLength = 200000
-		case len(input.ID) >= 14 && input.ID[:14] == "claude-instant":
-			info.ContextLength = 100000
-		}
-	}
-
-	return info
 }
 
 func TestFormatClaudeModelName(t *testing.T) {

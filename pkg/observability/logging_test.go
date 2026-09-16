@@ -831,3 +831,35 @@ func TestJSONLoggerRedactsStructuredContent(t *testing.T) {
 		t.Fatalf("redacted entry leaked content: %s", logged)
 	}
 }
+
+// The Stream path has branching the happy-path test does not reach: an error
+// chunk logs an error and still reaches the consumer, and content past the cap
+// is truncated rather than accumulated without bound.
+func TestLoggingMiddleware_StreamErrorChunkReachesConsumer(t *testing.T) {
+	var loggedErrors int
+	logger := &testLogger{onError: func(*LogEntry, error) { loggedErrors++ }}
+	llm := &mockLLM{streamFn: func(context.Context, []llms.Message, ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+		ch := make(chan llms.StreamChunk, 2)
+		ch <- llms.StreamChunk{Content: "partial"}
+		ch <- llms.StreamChunk{Error: llms.ErrServiceUnavailable}
+		close(ch)
+		return ch, nil
+	}}
+
+	stream, err := NewLoggingMiddleware(llm, logger).Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawError bool
+	for chunk := range stream {
+		if chunk.Error != nil {
+			sawError = true
+		}
+	}
+	if !sawError {
+		t.Error("the consumer never saw the error chunk")
+	}
+	if loggedErrors == 0 {
+		t.Error("the stream error was not logged")
+	}
+}
