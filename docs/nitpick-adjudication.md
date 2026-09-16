@@ -25,6 +25,20 @@ remaining nit-level classes are a standing floor, described at the end.
 | `include_encrypted_reasoning` is not a Responses parameter | It is consumed into the `include` list and never forwarded. |
 | `LoggingMiddleware.Stream` drops error chunks | The chunk is forwarded before the error branch returns; a test now pins it. |
 
+## Round-by-round
+
+| Pass | Errors | Warnings | Info | Nit |
+| --- | --- | --- | --- | --- |
+| Pedantic review, first run | 10 | 93 | 116 | 338 |
+| After the error and warning batches | 1 | 30 | 44 | 222 |
+| After the verification batch | 0 | 33 | 41 | 210 |
+
+The warning count stops falling because what remains is the adjudicated set
+above (model tables the reviewer's cutoff predates, ExtraBody's documented
+escape hatch, the Responses reasoning parameter this SDK consumes itself) plus
+the nit-level floor below. The model slop pass went 12 findings to 4 to 2 over
+the same rounds, and the last two are fixed in the final batch.
+
 ## Standing floor
 
 `nitpick slop` reports these on a clean tree, deliberately:
