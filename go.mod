@@ -1,8 +1,6 @@
 module github.com/nocturnium/llm-go-sdk/v6
 
-go 1.25.0
-
-toolchain go1.25.12
+go 1.26.0
 
 require (
 	github.com/pkoukk/tiktoken-go v0.1.8
@@ -12,7 +10,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.16.0
 )
 
 require (
