@@ -332,8 +332,10 @@ func (c *Client) GetModel(ctx context.Context, modelID string) (*ModelInfo, erro
 	var response ModelInfo
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method:  http.MethodGet,
-		URL:     c.baseURL + "/models/" + modelID,
+		Method: http.MethodGet,
+		// Escaped: a model id with a slash or a query character would otherwise
+		// change the path this request hits.
+		URL:     c.baseURL + "/models/" + neturl.PathEscape(modelID),
 		Headers: headers,
 	}, &response)
 

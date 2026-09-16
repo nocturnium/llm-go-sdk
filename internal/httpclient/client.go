@@ -859,10 +859,9 @@ func sanitizeRequestURL(rawURL string) string {
 }
 
 // IsRetryable returns true if the error is likely transient and can be retried.
+// The status set matches the package-level IsRetryable and the retry policy's
+// own list, so a 408 or Anthropic's 529 is not retried by one path and refused
+// by another.
 func (e *APIError) IsRetryable() bool {
-	switch e.StatusCode {
-	case 429, 500, 502, 503, 504:
-		return true
-	}
-	return false
+	return IsRetryable(e.StatusCode, nil)
 }

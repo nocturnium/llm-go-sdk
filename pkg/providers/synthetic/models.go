@@ -272,8 +272,14 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
+	// Copied one level deeper than the slice: Types and Pricing would otherwise
+	// alias the package cache, so a caller mutating a returned model would
+	// change what every later call reports.
 	models := make([]llms.ModelInfo, len(cachedModels))
-	copy(models, cachedModels)
+	for i, m := range cachedModels {
+		m.Types = append([]llms.ModelType(nil), m.Types...)
+		models[i] = m
+	}
 
 	// apply type filter if specified
 	if len(options.Types) > 0 {

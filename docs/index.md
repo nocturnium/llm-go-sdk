@@ -109,7 +109,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience, across **2
 | anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity |
 
 !!! tip "Construct by name"
-    Blank-import `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` to register the 17
+    Blank-import `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` to register the 18
     auto-registered chat providers, then build one with `llms.New(name, llms.Config{...})`. Call
     `llms.RegisteredProviders()` for the live list. HuggingFace and Infinity are built directly
     (`huggingface.New(...)` / `infinity.New(...)`).
@@ -194,7 +194,7 @@ fmt.Println(client.Provider(), client.Model())
 
     ---
 
-    Per-provider setup, models, and configuration for all 19.
+    Per-provider setup, models, and configuration for all 21.
 
 -   :material-tools:{ .lg .middle } __[Tool calling & agents](guides/tools.md)__
 

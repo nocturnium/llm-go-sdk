@@ -45,8 +45,8 @@ func TestApplyOptions(t *testing.T) {
 func TestNewClientMissingAPIKey(t *testing.T) {
 	// Ensure env var is not set
 	originalKey := os.Getenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("LLM_API_KEY", "")
 	defer func() {
 		if originalKey != "" {
 			t.Setenv("ANTHROPIC_API_KEY", originalKey)
@@ -63,12 +63,12 @@ func TestNewClientWithEnvAPIKey(t *testing.T) {
 	// Set env var
 	originalKey := os.Getenv("ANTHROPIC_API_KEY")
 	t.Setenv("ANTHROPIC_API_KEY", "env-test-key")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("LLM_API_KEY", "")
 	defer func() {
 		if originalKey != "" {
 			t.Setenv("ANTHROPIC_API_KEY", originalKey)
 		} else {
-			_ = os.Unsetenv("ANTHROPIC_API_KEY")
+			t.Setenv("ANTHROPIC_API_KEY", "")
 		}
 	}()
 
@@ -114,8 +114,8 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 	// Ensure provider-specific env var is not set but LLM_API_KEY is
 	originalAnthropic := os.Getenv("ANTHROPIC_API_KEY")
 	originalLLM := os.Getenv("LLM_API_KEY")
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("LLM_API_KEY", "")
 	t.Setenv("LLM_API_KEY", "llm-fallback-key")
 	defer func() {
 		if originalAnthropic != "" {
@@ -124,7 +124,7 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 		if originalLLM != "" {
 			t.Setenv("LLM_API_KEY", originalLLM)
 		} else {
-			_ = os.Unsetenv("LLM_API_KEY")
+			t.Setenv("LLM_API_KEY", "")
 		}
 	}()
 

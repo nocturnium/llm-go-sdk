@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -101,7 +102,12 @@ func marshalFunctionParameters(parameters any) json.RawMessage {
 	default:
 		data, err := json.Marshal(parameters)
 		if err != nil {
-			return nil
+			// A schema that cannot be marshaled (a channel, a NaN) would
+			// otherwise ship as a tool with no parameters, which the model then
+			// calls with nothing. Encode the failure so the provider rejects the
+			// request and the caller sees why.
+			return json.RawMessage(`{"type":"object","x-llm-go-sdk-error":` +
+				strconv.Quote("parameters could not be marshaled: "+err.Error()) + `}`)
 		}
 		return data
 	}
@@ -271,12 +277,13 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 	r.tools = append(r.tools, tool)
 }
 
-// RegisterFunc is a convenience method to register a tool with a typed handler.
-// The handler function receives parsed arguments and returns a result.
+// RegisterFunc registers a tool with a typed handler. It is a package-level
+// generic function, not a method, because a method cannot introduce a type
+// parameter; the registry is its first argument.
 //
 // Example:
 //
-//	registry.RegisterFunc(weatherTool, func(ctx context.Context, args WeatherArgs) (any, error) {
+//	llms.RegisterFunc(registry, weatherTool, func(ctx context.Context, args WeatherArgs) (any, error) {
 //	    return map[string]any{"temperature": 72}, nil
 //	})
 func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Context, T) (any, error)) {

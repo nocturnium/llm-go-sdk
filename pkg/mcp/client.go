@@ -310,6 +310,10 @@ func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
 	handlers, err := buildRequestHandlers(cfg)
 	if err != nil {
 		_ = t.close()
+		// Same teardown as the handshake-failure path below: the pumps are
+		// already attached to this client.
+		c.notifier.stop()
+		c.inbound.stop()
 		return nil, err
 	}
 	// A transport that cannot deliver server-initiated requests must not have

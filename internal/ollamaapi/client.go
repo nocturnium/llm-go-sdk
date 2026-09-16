@@ -139,7 +139,9 @@ func (c *Client) PullModel(ctx context.Context, name string, callback func(PullR
 
 		var progress PullResponse
 		if err := json.Unmarshal([]byte(line), &progress); err != nil {
-			continue
+			// A line that does not parse may be the error line that explains the
+			// failure, so dropping it would leave the caller with no reason.
+			return WrapError("pull model", fmt.Errorf("decode progress line: %w", err))
 		}
 
 		if callback != nil {

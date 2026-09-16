@@ -26,7 +26,7 @@ client, err := llms.New("openai", llms.Config{Model: "gpt-4o"})
 !!! important "You must register providers before `llms.New` can find them"
     `llms.New` only knows about providers that have registered themselves. The
     simplest way is the blank import `_ ".../pkg/providers/all"`, which registers
-    the 17 auto-registered chat providers. See [Registering providers](#registering-providers).
+    the 18 auto-registered chat providers. See [Registering providers](#registering-providers).
 
 ## When to use the registry
 
@@ -54,7 +54,7 @@ can construct it. Each provider package does this in its `init()` function, so a
 import _ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all"
 ```
 
-This registers the **17 auto-registered chat providers**:
+This registers the **18 auto-registered chat providers**:
 
 `anthropic`, `azure`, `cerebras`, `deepseek`, `featherless`, `fireworks`,
 `gemini`, `groq`, `llamacpp`, `mistral`, `ollama`, `openai`, `perplexity`,

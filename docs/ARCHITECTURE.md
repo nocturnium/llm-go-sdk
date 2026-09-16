@@ -104,7 +104,7 @@ Providers can also be constructed by name through the package-level registry:
 `Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus an `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 Each provider package registers its factory in `init()`; blank-importing
-`pkg/providers/all` wires up the 17 auto-registered chat providers at once
+`pkg/providers/all` wires up the 18 auto-registered chat providers at once
 (HuggingFace and Infinity are constructed directly).
 
 ### Provider model
