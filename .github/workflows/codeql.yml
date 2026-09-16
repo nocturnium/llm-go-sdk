@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run gosec
-        uses: securego/gosec@master
+        uses: securego/gosec@v2.29.0
         with:
           # G101 (hardcoded credentials) and G104 (unhandled errors) are excluded
           # to mirror .golangci.yml: G101 only fires on env-var-name and OTel
@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: '.'

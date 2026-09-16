@@ -9,7 +9,7 @@ hide:
 # One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
 
 <p class="noct-hero__tagline" markdown>
-Streaming, tool calling, vision, embeddings, and built-in resilience — across **19 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
+Streaming, tool calling, vision, embeddings, and built-in resilience — across **21 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
 </p>
 
 <div class="noct-hero__cta" markdown>
@@ -20,7 +20,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 </div>
 
 !!! info "At a glance"
-    **Module** `github.com/nocturnium/llm-go-sdk/v6` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v6"` · **Version** v5.0.0 · **License** Apache-2.0 · **Go** 1.25+
+    **Module** `github.com/nocturnium/llm-go-sdk/v6` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v6"` · **Version** v6.9.0 · **License** Apache-2.0 · **Go** 1.25+
 
 ## Why this SDK
 
@@ -102,7 +102,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
 ## Supported providers
 
-**19 providers** — 17 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct) and Infinity (embeddings and reranking).
+**21 providers** — 18 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct), ElevenLabs (media only) and Infinity (embeddings and reranking).
 
 | Native | OpenAI-compatible | Local / self-hosted | Direct-construct |
 | --- | --- | --- | --- |

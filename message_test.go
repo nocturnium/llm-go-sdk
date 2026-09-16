@@ -350,10 +350,13 @@ func TestMergeConsecutiveMessages_MultipleConsecutive(t *testing.T) {
 	}
 }
 
+// Providers read Parts and ignore Content when a message has both, so merging
+// text into a multi-part message has to move that text into a part. Leaving it
+// in Content would drop it from the request.
 func TestMergeConsecutiveMessages_MixedContentAndParts(t *testing.T) {
 	messages := []Message{
 		{Role: RoleUser, Content: "Hello"},
-		{Role: RoleUser, Parts: []ContentPart{{Type: "text", Text: "World"}}},
+		{Role: RoleUser, Parts: []ContentPart{{Type: PartTypeText, Text: "World"}}},
 	}
 
 	result := MergeConsecutiveMessages(messages)
@@ -361,11 +364,26 @@ func TestMergeConsecutiveMessages_MixedContentAndParts(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(result))
 	}
-	if result[0].Content != "Hello" {
-		t.Errorf("expected content 'Hello', got %s", result[0].Content)
+	if result[0].Content != "" {
+		t.Errorf("expected the text folded into Parts, Content = %q", result[0].Content)
 	}
-	if len(result[0].Parts) != 1 {
-		t.Errorf("expected 1 part, got %d", len(result[0].Parts))
+	if len(result[0].Parts) != 2 || result[0].Parts[0].Text != "Hello" || result[0].Parts[1].Text != "World" {
+		t.Errorf("parts = %+v, want Hello then World", result[0].Parts)
+	}
+}
+
+// The same holds in the other order: a multi-part message followed by plain text.
+func TestMergeConsecutiveMessages_PartsThenContent(t *testing.T) {
+	result := MergeConsecutiveMessages([]Message{
+		{Role: RoleUser, Parts: []ContentPart{{Type: PartTypeImage, Image: &ImageContent{Source: ImageSourceURL, MediaType: MediaTypePNG, Data: "https://example.com/a.png"}}}},
+		{Role: RoleUser, Content: "what is this?"},
+	})
+
+	if len(result) != 1 || len(result[0].Parts) != 2 || result[0].Content != "" {
+		t.Fatalf("merged = %+v", result)
+	}
+	if result[0].Parts[1].Type != PartTypeText || result[0].Parts[1].Text != "what is this?" {
+		t.Errorf("trailing text part = %+v", result[0].Parts[1])
 	}
 }
 

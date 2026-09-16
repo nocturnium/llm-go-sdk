@@ -78,9 +78,11 @@ jobs:
       - name: Verify checksums
         run: |
           cd dist
-          if [ -f checksums.txt ]; then
-            sha256sum -c checksums.txt
+          if [ ! -f checksums.txt ]; then
+            echo "checksums.txt missing from the release artifacts" >&2
+            exit 1
           fi
+          sha256sum -c checksums.txt
 
   # No changelog job: CHANGELOG.md is hand-written. See the note in
   # auto-release.yml; GoReleaser writes the GitHub Release notes.

@@ -212,10 +212,20 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 
 		// Check if we can merge with current
 		if current != nil && current.Role == msg.Role {
+			// Providers read Parts and ignore Content when a message carries both,
+			// so text merged into a multi-part message becomes a text part rather
+			// than sitting in Content unread.
+			if len(msg.Parts) > 0 && current.Content != "" {
+				current.Parts = append([]ContentPart{{Type: PartTypeText, Text: current.Content}}, current.Parts...)
+				current.Content = ""
+			}
 			if msg.Content != "" {
-				if current.Content != "" {
+				switch {
+				case len(current.Parts) > 0:
+					current.Parts = append(current.Parts, ContentPart{Type: PartTypeText, Text: msg.Content})
+				case current.Content != "":
 					current.Content += "\n" + msg.Content
-				} else {
+				default:
 					current.Content = msg.Content
 				}
 			}

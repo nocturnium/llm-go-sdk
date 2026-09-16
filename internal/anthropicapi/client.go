@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -292,26 +294,28 @@ func (c *Client) ListModels(ctx context.Context, params *ModelsListParams) (*Mod
 	var response ModelsListResponse
 
 	// Build URL with query parameters
-	url := c.baseURL + "/models"
+	requestURL := c.baseURL + "/models"
 	if params != nil {
-		queryParts := []string{}
+		// Escaped rather than concatenated: a cursor carrying & or = would
+		// otherwise truncate the query and page to the wrong place.
+		query := neturl.Values{}
 		if params.Limit > 0 {
-			queryParts = append(queryParts, fmt.Sprintf("limit=%d", params.Limit))
+			query.Set("limit", strconv.Itoa(params.Limit))
 		}
 		if params.AfterID != "" {
-			queryParts = append(queryParts, "after_id="+params.AfterID)
+			query.Set("after_id", params.AfterID)
 		}
 		if params.BeforeID != "" {
-			queryParts = append(queryParts, "before_id="+params.BeforeID)
+			query.Set("before_id", params.BeforeID)
 		}
-		if len(queryParts) > 0 {
-			url += "?" + strings.Join(queryParts, "&")
+		if len(query) > 0 {
+			requestURL += "?" + query.Encode()
 		}
 	}
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodGet,
-		URL:     url,
+		URL:     requestURL,
 		Headers: headers,
 	}, &response)
 

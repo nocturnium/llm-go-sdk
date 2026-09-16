@@ -448,6 +448,26 @@ func (o *CallOptions) Validate() error {
 		}
 	}
 
+	if o.ResponseFormat != nil {
+		switch o.ResponseFormat.Type {
+		case ResponseFormatText, ResponseFormatJSONObject:
+		case ResponseFormatJSONSchema:
+			if o.ResponseFormat.JSONSchema == nil || o.ResponseFormat.JSONSchema.Name == "" || len(o.ResponseFormat.JSONSchema.Schema) == 0 {
+				errs = append(errs, ValidationError{
+					Field:   "response_format.json_schema",
+					Value:   o.ResponseFormat.JSONSchema,
+					Message: "json_schema requires a name and a schema",
+				})
+			}
+		default:
+			errs = append(errs, ValidationError{
+				Field:   "response_format.type",
+				Value:   o.ResponseFormat.Type,
+				Message: "must be text, json_object or json_schema",
+			})
+		}
+	}
+
 	if len(errs) > 0 {
 		return errs
 	}

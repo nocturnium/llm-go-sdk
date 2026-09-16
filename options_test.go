@@ -366,3 +366,23 @@ func TestWithWebSearchEnabled(t *testing.T) {
 		t.Error("expected enabled")
 	}
 }
+
+// ResponseFormat is exported and built by hand in places, so Validate checks it
+// like every other option rather than letting a malformed one reach a provider.
+func TestCallOptions_ValidateResponseFormat(t *testing.T) {
+	valid := ApplyOptions(func(o *CallOptions) {
+		o.ResponseFormat = &ResponseFormat{Type: ResponseFormatJSONSchema, JSONSchema: &JSONSchema{Name: "x", Schema: []byte(`{}`)}}
+	})
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid schema rejected: %v", err)
+	}
+	for name, format := range map[string]*ResponseFormat{
+		"schema without a name": {Type: ResponseFormatJSONSchema, JSONSchema: &JSONSchema{Schema: []byte(`{}`)}},
+		"schema without a body": {Type: ResponseFormatJSONSchema, JSONSchema: &JSONSchema{Name: "x"}},
+		"unknown type":          {Type: ResponseFormatType("yaml")},
+	} {
+		if err := ApplyOptions(func(o *CallOptions) { o.ResponseFormat = format }).Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
