@@ -316,3 +316,23 @@ func TestSpeechStreamUsage(t *testing.T) {
 		}
 	}
 }
+
+// A reserved key names a typed option, so an Extra entry for it is refused
+// rather than silently changing the request.
+func TestApplyMultipartExtra(t *testing.T) {
+	fields := map[string]string{"model": "typed"}
+	files, err := ApplyMultipartExtra(fields, map[string]any{"temperature": 0.5, "hotwords": []string{"a", "b"}}, "model", "file")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fields["temperature"] != "0.5" || len(files) != 2 {
+		t.Fatalf("fields %v files %+v", fields, files)
+	}
+
+	if _, err := ApplyMultipartExtra(map[string]string{}, map[string]any{"model": "hijacked"}, "model", "file"); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("reserved key err = %v", err)
+	}
+	if _, err := ApplyMultipartExtra(map[string]string{}, map[string]any{"weird": struct{}{}}); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("unsupported type err = %v", err)
+	}
+}

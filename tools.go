@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -101,7 +102,12 @@ func marshalFunctionParameters(parameters any) json.RawMessage {
 	default:
 		data, err := json.Marshal(parameters)
 		if err != nil {
-			return nil
+			// A schema that cannot be marshaled (a channel, a NaN) would
+			// otherwise ship as a tool with no parameters, which the model then
+			// calls with nothing. Encode the failure so the provider rejects the
+			// request and the caller sees why.
+			return json.RawMessage(`{"type":"object","x-llm-go-sdk-error":` +
+				strconv.Quote("parameters could not be marshaled: "+err.Error()) + `}`)
 		}
 		return data
 	}
@@ -257,7 +263,9 @@ func NewToolRegistry() *ToolRegistry {
 	}
 }
 
-// Register adds a tool and its handler to the registry.
+// Register adds a tool and its handler to the registry. A tool with no Function
+// is ignored: there is no name to dispatch on, and the model is never told about
+// it, so registering one is a caller mistake rather than a runtime condition.
 func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 	if tool.Function == nil {
 		return
@@ -269,12 +277,13 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 	r.tools = append(r.tools, tool)
 }
 
-// RegisterFunc is a convenience method to register a tool with a typed handler.
-// The handler function receives parsed arguments and returns a result.
+// RegisterFunc registers a tool with a typed handler. It is a package-level
+// generic function, not a method, because a method cannot introduce a type
+// parameter; the registry is its first argument.
 //
 // Example:
 //
-//	registry.RegisterFunc(weatherTool, func(ctx context.Context, args WeatherArgs) (any, error) {
+//	llms.RegisterFunc(registry, weatherTool, func(ctx context.Context, args WeatherArgs) (any, error) {
 //	    return map[string]any{"temperature": 72}, nil
 //	})
 func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Context, T) (any, error)) {
@@ -296,13 +305,23 @@ func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Contex
 	r.tools = append(r.tools, tool)
 }
 
-// Tools returns a copy of all registered tools for use with WithTools.
-// A copy is returned to prevent external modification.
+// Tools returns the registered tools for use with WithTools.
+//
+// Each Tool is copied along with its FunctionDefinition, so a caller editing a
+// returned tool's schema or description changes only its own copy, not what the
+// registry hands the next caller.
 func (r *ToolRegistry) Tools() []Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make([]Tool, len(r.tools))
-	copy(result, r.tools)
+	for i, tool := range r.tools {
+		if tool.Function != nil {
+			fn := *tool.Function
+			fn.Parameters = append(json.RawMessage(nil), fn.Parameters...)
+			tool.Function = &fn
+		}
+		result[i] = tool
+	}
 	return result
 }
 

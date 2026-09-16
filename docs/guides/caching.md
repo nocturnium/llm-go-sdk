@@ -1,7 +1,7 @@
 # Prompt Caching
 
-Caching a large, stable prompt prefix — a long system prompt, tool definitions,
-or a document — lets the provider reuse it across requests instead of
+Caching a large, stable prompt prefix, a long system prompt, tool definitions,
+or a document, lets the provider reuse it across requests instead of
 reprocessing it every time. Cache reads are billed at a steep discount, so
 caching cuts both latency and cost for repeated or multi-turn calls.
 
@@ -54,10 +54,10 @@ so the request never fails.
 
 Token usage is normalized so cost is computed consistently across providers:
 
-- `Usage.PromptTokens` — input tokens billed at the standard rate (**excludes**
+- `Usage.PromptTokens`, input tokens billed at the standard rate (**excludes**
   cached tokens).
-- `Usage.CacheReadTokens` — tokens served from cache (discounted).
-- `Usage.CacheCreationTokens` — tokens written to cache (Anthropic).
+- `Usage.CacheReadTokens`, tokens served from cache (discounted).
+- `Usage.CacheCreationTokens`, tokens written to cache (Anthropic).
 
 `Usage.PromptTokens` always excludes cached tokens and `Usage.TotalTokens` always
 includes them, on every provider, so the two are comparable across backends.

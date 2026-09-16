@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// Reasoning reaches callers through Response, which is nil-safe and reports the
+// text a provider produced.
 func TestReasoningContent_Basic(t *testing.T) {
 	rc := &ReasoningContent{
 		Content: "Let me think about this...",
@@ -15,8 +17,17 @@ func TestReasoningContent_Basic(t *testing.T) {
 		},
 	}
 
-	if rc.Content != "Let me think about this..." {
-		t.Errorf("expected content, got %s", rc.Content)
+	var resp *Response
+	if resp.ReasoningText() != "" {
+		t.Error("ReasoningText on a nil Response is not empty")
+	}
+	resp = &Response{}
+	if resp.ReasoningText() != "" {
+		t.Error("ReasoningText without reasoning is not empty")
+	}
+	resp.SetReasoning(rc)
+	if resp.ReasoningText() != rc.Content {
+		t.Errorf("ReasoningText = %q, want %q", resp.ReasoningText(), rc.Content)
 	}
 	if rc.Tokens != 50 {
 		t.Errorf("expected 50 tokens, got %d", rc.Tokens)
@@ -26,14 +37,23 @@ func TestReasoningContent_Basic(t *testing.T) {
 	}
 }
 
+// CollectStream is how a caller turns chunks into a Response, so reasoning is
+// pinned through it rather than through a literal.
 func TestResponse_WithReasoning(t *testing.T) {
-	resp := &Response{
-		Content: "The answer is 42.",
-		Reasoning: &ReasoningContent{
-			Content: "I need to calculate...",
-			Tokens:  25,
-		},
-		FinishReason: "stop",
+	ch := make(chan StreamChunk, 3)
+	ch <- StreamChunk{Content: "The answer is 42."}
+	ch <- StreamChunk{Reasoning: &ReasoningContent{Content: "I need to calculate...", Tokens: 25}}
+	ch <- StreamChunk{FinishReason: "stop", Done: true}
+	close(ch)
+
+	var recv <-chan StreamChunk = ch
+	collected, err := CollectStream(recv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := &Response{Content: collected.Content, Reasoning: collected.Reasoning, FinishReason: collected.FinishReason}
+	if resp.Content != "The answer is 42." || resp.FinishReason != "stop" {
+		t.Fatalf("response = %+v", resp)
 	}
 
 	if resp.Reasoning == nil {
@@ -41,47 +61,6 @@ func TestResponse_WithReasoning(t *testing.T) {
 	}
 	if resp.Reasoning.Content != "I need to calculate..." {
 		t.Errorf("unexpected reasoning content: %s", resp.Reasoning.Content)
-	}
-}
-
-func TestResponse_NilReasoning(t *testing.T) {
-	resp := &Response{
-		Content:      "Simple answer",
-		FinishReason: "stop",
-	}
-
-	if resp.Reasoning != nil {
-		t.Error("expected nil reasoning for providers without reasoning")
-	}
-}
-
-func TestStreamChunk_WithReasoning(t *testing.T) {
-	chunk := StreamChunk{
-		Content: "partial answer",
-		Reasoning: &ReasoningContent{
-			Content: "reasoning step 1",
-		},
-	}
-
-	if chunk.Reasoning == nil {
-		t.Fatal("expected reasoning in chunk")
-	}
-	if chunk.Reasoning.Content != "reasoning step 1" {
-		t.Errorf("unexpected reasoning: %s", chunk.Reasoning.Content)
-	}
-}
-
-func TestResponse_WithSearchResults(t *testing.T) {
-	resp := &Response{
-		Content: "Based on my search...",
-		SearchResults: []SearchResult{
-			{Title: "Result 1", URL: "https://example.com/1"},
-			{Title: "Result 2", URL: "https://example.com/2"},
-		},
-	}
-
-	if len(resp.SearchResults) != 2 {
-		t.Errorf("expected 2 search results, got %d", len(resp.SearchResults))
 	}
 }
 

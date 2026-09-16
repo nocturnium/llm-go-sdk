@@ -374,6 +374,12 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	if response != nil {
 		// Bound the body so a hostile server can't exhaust memory.
 		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(response); err != nil {
+			// A 204, or a 200 with no payload, leaves the target at its zero
+			// value rather than failing: the request succeeded and the endpoint
+			// returned no payload.
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
 	}
@@ -853,10 +859,9 @@ func sanitizeRequestURL(rawURL string) string {
 }
 
 // IsRetryable returns true if the error is likely transient and can be retried.
+// The status set matches the package-level IsRetryable and the retry policy's
+// own list, so a 408 or Anthropic's 529 is not retried by one path and refused
+// by another.
 func (e *APIError) IsRetryable() bool {
-	switch e.StatusCode {
-	case 429, 500, 502, 503, 504:
-		return true
-	}
-	return false
+	return IsRetryable(e.StatusCode, nil)
 }

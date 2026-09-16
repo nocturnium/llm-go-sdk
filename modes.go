@@ -40,9 +40,8 @@ func modePricingKey(provider Provider, model string, mode PricingMode) string {
 //
 // Rates are absolute, not multipliers, because that is how providers publish
 // them and the ratios are not uniform: OpenAI's Fast mode ranges from about 1.7x
-// to 2.5x depending on the model, its Batch tier drops cached-input pricing
-// entirely for some older models, and not every model appears in every tier's
-// table. Storing a per-provider multiplier would invent precision that the
+// to 2.5x depending on the model, the cache-write column is absent from some
+// tier rows, and not every model appears in every tier's table. Storing a per-provider multiplier would invent precision that the
 // published data does not have.
 //
 // Coverage is intentionally partial, matching DefaultPricing's contract: a model

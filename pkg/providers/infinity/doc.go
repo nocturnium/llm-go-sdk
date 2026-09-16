@@ -5,9 +5,9 @@
 //
 // # Configuration
 //
-// By default, the client connects to http://localhost:7997.
-// Override with INFINITY_API_KEY environment variable or WithBaseURL option.
-// No API key is required for local deployments.
+// By default, the client connects to http://localhost:7997; override it with
+// the WithBaseURL option. INFINITY_API_KEY supplies the key when the deployment
+// requires one; a local deployment needs none.
 //
 // # Quick Start
 //

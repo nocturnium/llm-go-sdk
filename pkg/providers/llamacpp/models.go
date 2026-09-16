@@ -26,10 +26,11 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		return nil, llms.WrapProviderError(llms.ProviderLlamaCpp, "list models", err)
 	}
 
-	// Try to get additional info from /props
+	// /props carries the server's context length. A server that does not serve
+	// it (or fails the call) leaves the length unknown, which ModelInfo reports
+	// as zero; anything else would invent a number for a local build.
 	var contextLength int
-	props, propsErr := c.nativeClient.GetProps(ctx)
-	if propsErr == nil {
+	if props, propsErr := c.nativeClient.GetProps(ctx); propsErr == nil {
 		contextLength = props.DefaultGenerationSettings.NCtx
 	}
 
@@ -44,14 +45,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		models = llms.FilterModelsByType(models, options.Types...)
 	}
 
-	// apply limit if specified
+	hasMore := false
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		hasMore = true
 	}
 
 	return &llms.ListModelsResult{
 		Models:  models,
-		HasMore: false,
+		HasMore: hasMore,
 	}, nil
 }
 

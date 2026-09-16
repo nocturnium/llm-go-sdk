@@ -4,10 +4,9 @@
 // The root package (llms) re-exports all common types, so you only need
 // to import the root package and the provider you want to use.
 //
-// Both old and new provider import paths work identically:
+// Provider packages live under pkg/providers:
 //
-//	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"     // old
-//	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"  // new
+//	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 package main
 
 import (

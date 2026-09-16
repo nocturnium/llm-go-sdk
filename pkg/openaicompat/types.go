@@ -112,8 +112,15 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 		m["reasoning_effort"] = r.ReasoningEffort
 	}
 
-	// Merge ExtraBody fields at the top level
+	// Merge ExtraBody fields at the top level. The keys that define the shape of
+	// the request are not overridable: replacing messages or the stream flag
+	// desynchronizes the request from the path that parses the response, which
+	// surfaces as a hang or a decode error rather than as a rejected option.
 	for k, v := range r.ExtraBody {
+		switch k {
+		case "messages", "stream", "stream_options":
+			continue
+		}
 		m[k] = v
 	}
 

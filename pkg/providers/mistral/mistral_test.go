@@ -2,6 +2,7 @@ package mistral
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -107,8 +108,8 @@ func TestInferModelTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.modelID, func(t *testing.T) {
 			result := inferModelTypes(tt.modelID)
-			if len(result) != len(tt.expectedTypes) {
-				t.Errorf("inferModelTypes(%s) returned %d types, want %d", tt.modelID, len(result), len(tt.expectedTypes))
+			if !reflect.DeepEqual(result, tt.expectedTypes) {
+				t.Errorf("inferModelTypes(%s) = %v, want %v", tt.modelID, result, tt.expectedTypes)
 			}
 		})
 	}

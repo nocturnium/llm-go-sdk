@@ -3,6 +3,7 @@ package featherless
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -237,9 +238,10 @@ func TestModelIndex(t *testing.T) {
 			if _, ok := modelIndex[model.ID]; !ok {
 				t.Errorf("model %q not found in index", model.ID)
 			}
-			// Also check lowercase
-			if _, ok := modelIndex[model.ID]; !ok {
-				t.Errorf("model %q not found in index (lowercase)", model.ID)
+			if lower := strings.ToLower(model.ID); lower != model.ID {
+				if _, ok := modelIndex[lower]; !ok {
+					t.Errorf("model %q not found in index under its lowercase key", model.ID)
+				}
 			}
 		})
 	}
@@ -404,15 +406,11 @@ func TestPaginationEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown cursor returns from start", func(t *testing.T) {
-		// If cursor not found, pagination starts from beginning
-		result, err := client.ListModels(ctx, llms.WithModelCursor("unknown/cursor"))
-		if err != nil {
-			t.Fatalf("ListModels() error = %v", err)
-		}
-		// Should return all models since cursor wasn't found
-		if len(result.Models) != len(cachedModels) {
-			t.Errorf("expected %d models, got %d", len(cachedModels), len(result.Models))
+	t.Run("unknown cursor is rejected", func(t *testing.T) {
+		// Starting over from the first page would have a paginating caller loop
+		// through the same models forever.
+		if _, err := client.ListModels(ctx, llms.WithModelCursor("unknown/cursor")); !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Fatalf("ListModels() error = %v, want ErrInvalidParameters", err)
 		}
 	})
 

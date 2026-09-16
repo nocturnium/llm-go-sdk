@@ -248,9 +248,9 @@ func WithStreamBufferSize(size int) CallOption {
 // WithStreamSendTimeout sets the timeout for sending chunks to the stream channel.
 // If the consumer stops reading and the buffer fills, chunks will be dropped after
 // this timeout so the producing goroutine can exit instead of leaking.
-// A value of 0 (or negative) leaves the default in effect (DefaultStreamSendTimeout,
-// 30s) rather than disabling the timeout, to avoid goroutine leaks.
-// Default is 30 seconds.
+// The option stores what it is given; a stored 0 or negative value is read back
+// as DefaultStreamSendTimeout (30s) by the senders, so the timeout cannot be
+// disabled and a stalled consumer can never leak the producing goroutine.
 func WithStreamSendTimeout(d time.Duration) CallOption {
 	return func(o *CallOptions) {
 		o.StreamSendTimeout = d
@@ -444,6 +444,26 @@ func (o *CallOptions) Validate() error {
 				Field:   fmt.Sprintf("tools[%d].function.name", i),
 				Value:   "",
 				Message: "function name is required",
+			})
+		}
+	}
+
+	if o.ResponseFormat != nil {
+		switch o.ResponseFormat.Type {
+		case ResponseFormatText, ResponseFormatJSONObject:
+		case ResponseFormatJSONSchema:
+			if o.ResponseFormat.JSONSchema == nil || o.ResponseFormat.JSONSchema.Name == "" || len(o.ResponseFormat.JSONSchema.Schema) == 0 {
+				errs = append(errs, ValidationError{
+					Field:   "response_format.json_schema",
+					Value:   o.ResponseFormat.JSONSchema,
+					Message: "json_schema requires a name and a schema",
+				})
+			}
+		default:
+			errs = append(errs, ValidationError{
+				Field:   "response_format.type",
+				Value:   o.ResponseFormat.Type,
+				Message: "must be text, json_object or json_schema",
 			})
 		}
 	}

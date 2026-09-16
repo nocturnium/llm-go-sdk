@@ -3,6 +3,7 @@ package llamacpp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -471,5 +472,20 @@ func TestListModels(t *testing.T) {
 
 	if model.Organization != "Meta" {
 		t.Errorf("Model Organization = %v, want Meta", model.Organization)
+	}
+}
+
+// A truncated list has more: reporting HasMore false would tell a paginating
+// caller it saw every model.
+func TestListModels_LimitSetsHasMore(t *testing.T) {
+	c := setupMockServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"data":[{"id":"a"},{"id":"b"},{"id":"c"}]}`)
+	})
+	result, err := c.ListModels(context.Background(), llms.WithModelLimit(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Models) != 2 || !result.HasMore {
+		t.Fatalf("models %d HasMore %v", len(result.Models), result.HasMore)
 	}
 }

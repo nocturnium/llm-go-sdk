@@ -114,14 +114,17 @@ func TestGetProps_HTTPError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error on 500")
 	}
+	// Unguarded, a regression that stops returning *llms.APIError would leave
+	// this test asserting nothing but err != nil.
 	var apiErr *llms.APIError
-	if errors.As(err, &apiErr) {
-		if apiErr.StatusCode != http.StatusInternalServerError {
-			t.Errorf("StatusCode = %d, want 500", apiErr.StatusCode)
-		}
-		if apiErr.Provider != llms.ProviderLlamaCpp {
-			t.Errorf("Provider = %q, want %q", apiErr.Provider, llms.ProviderLlamaCpp)
-		}
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error is %T, want *llms.APIError: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusInternalServerError {
+		t.Errorf("StatusCode = %d, want 500", apiErr.StatusCode)
+	}
+	if apiErr.Provider != llms.ProviderLlamaCpp {
+		t.Errorf("Provider = %q, want %q", apiErr.Provider, llms.ProviderLlamaCpp)
 	}
 }
 

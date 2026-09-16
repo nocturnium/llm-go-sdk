@@ -119,7 +119,8 @@ func convertMessages(messages []llms.Message) ([]anthropicapi.Message, error) {
 	seenToolResults := make(map[string]bool)
 
 	for _, msg := range messages {
-		// Skip system messages - they're handled separately
+		// System messages become the request's system block, which
+		// ValidateInlineSystem has already reduced to at most one at index 0.
 		if msg.Role == llms.RoleSystem {
 			continue
 		}

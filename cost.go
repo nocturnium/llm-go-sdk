@@ -660,6 +660,7 @@ func (t *CostTracker) Reset() {
 	defer t.mu.Unlock()
 	t.usage = make(map[string]*ModelUsage)
 	t.media = nil
+	t.modeCost = make(map[PricingMode]float64)
 }
 
 // SetPricing sets or updates pricing for a model.

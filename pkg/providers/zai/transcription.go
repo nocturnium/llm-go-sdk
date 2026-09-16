@@ -14,7 +14,9 @@ import (
 
 // Transcribe uploads audio using the provider's multipart route. Options map to
 // native fields; unsupported formats and streaming return ErrInvalidParameters.
-// Timing is retained when reported; missing duration leaves usage unpriced.
+// Word timings and speaker labels are retained when reported. Usage is left
+// empty: Z.AI reports none, and a duration-derived estimate would read as
+// provider-reported.
 func (c *Client) Transcribe(ctx context.Context, audio llms.MediaInput, opts ...llms.TranscribeOption) (*llms.Transcription, error) {
 	return c.transcribe(ctx, "audio/transcriptions", audio, llms.ApplyTranscribeOptions(opts...))
 }
@@ -51,18 +53,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		files = append(files, httpclient.MultipartFile{Field: "hotwords[]", Data: []byte(term)})
 	}
 
-	for k, v := range o.Extra {
-		switch value := v.(type) {
-		case string, bool, int, float64:
-			fields[k] = fmt.Sprint(value)
-		case []string:
-			for _, item := range value {
-				files = append(files, httpclient.MultipartFile{Field: k, Data: []byte(item)})
-			}
-		default:
-			return nil, c.mediaError(fmt.Errorf("invalid multipart extra %q: %w", k, llms.ErrInvalidParameters))
-		}
+	extraFiles, err := openaicompat.ApplyMultipartExtra(fields, o.Extra, "model", "file", "language", "prompt")
+	if err != nil {
+		return nil, c.mediaError(err)
 	}
+	files = append(files, extraFiles...)
 	if f, ok := fields["response_format"]; ok {
 		format = f
 	}
@@ -71,7 +66,7 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	}
 	delete(fields, "response_format")
 	var raw []byte
-	err := c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)
+	err = c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)
 	if err != nil {
 		return nil, c.mediaError(err)
 	}
@@ -103,6 +98,8 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		}
 		out.Words = append(out.Words, llms.TranscriptWord{Word: w.Word, Start: w.Start, End: w.End, Speaker: speaker})
 	}
+	// Z.AI reports no transcription usage of its own; the shared converter's
+	// duration-derived estimate would read as provider-reported, so it is cleared.
 	out.Usage = llms.MediaUsage{}
 	return out, nil
 }

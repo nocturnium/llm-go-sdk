@@ -152,7 +152,7 @@
 .md-typeset a { transition: color 120ms ease; }
 .md-typeset a:hover { color: var(--noct-flame); }
 
-/* Inline code — authored Nocturnium treatment (not default Material). */
+/* Inline code: authored Nocturnium treatment (not default Material). */
 .md-typeset :not(pre) > code {
   border-radius: 0.3rem;
   padding: 0.12em 0.36em;
@@ -165,7 +165,7 @@
   background: color-mix(in srgb, var(--noct-foam) 34%, transparent);
   color: var(--noct-deep);
 }
-/* Code blocks — rounded, bordered, with room for the copy button. */
+/* Code blocks: rounded, bordered, with room for the copy button. */
 .md-typeset pre > code {
   border-radius: 0.6rem;
   box-shadow: var(--noct-shadow, 0 4px 14px rgba(0, 0, 0, 0.25));

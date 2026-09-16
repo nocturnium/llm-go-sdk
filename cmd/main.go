@@ -25,6 +25,7 @@ import (
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/mistral"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/ollama"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openrouter"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/perplexity"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/runpod"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/synthetic"
@@ -37,6 +38,9 @@ func main() {
 }
 
 type commandContext struct {
+	// out is the writer the runner was given, so a caller that redirects output
+	// (the tests do) sees everything these actions print.
+	out         io.Writer
 	args        []string
 	provider    string
 	model       string
@@ -127,6 +131,7 @@ func parseCommand(fs *flag.FlagSet, args []string) (bool, error) {
 
 func runChat(args []string, stdout io.Writer) error {
 	ctx := commandContext{
+		out:         stdout,
 		provider:    envString("LLM_PROVIDER", ""),
 		model:       envString("LLM_MODEL", ""),
 		system:      envString("LLM_SYSTEM", "You are a helpful assistant."),
@@ -157,6 +162,7 @@ func runChat(args []string, stdout io.Writer) error {
 
 func runComplete(args []string, stdout io.Writer) error {
 	ctx := commandContext{
+		out:         stdout,
 		temperature: 0.7,
 		maxTokens:   1024,
 	}
@@ -189,11 +195,12 @@ func runProviders(args []string, stdout io.Writer) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("providers does not accept arguments")
 	}
-	return providersAction()
+	return providersAction(stdout)
 }
 
 func runToolDemo(args []string, stdout io.Writer) error {
 	ctx := commandContext{
+		out:      stdout,
 		provider: envString("LLM_PROVIDER", ""),
 		model:    envString("LLM_MODEL", ""),
 	}
@@ -251,7 +258,7 @@ func envInt(name string, fallback int) int {
 	return value
 }
 
-func providersAction() error {
+func providersAction(out io.Writer) error {
 	type row struct{ name, model, env string }
 	chat := []row{
 		{"openai", "gpt-4o", "OPENAI_API_KEY"},
@@ -266,22 +273,25 @@ func providersAction() error {
 		{"llamacpp", "(from server /props)", "LLAMA_CPP_HOST"},
 		{"mistral", "mistral-large-latest", "MISTRAL_API_KEY"},
 		{"ollama", "llama3.2", "OLLAMA_HOST"},
+		{"openrouter", "google/gemini-3.5-flash-lite", "OPENROUTER_API_KEY"},
 		{"perplexity", "sonar", "PERPLEXITY_API_KEY / PPLX_API_KEY"},
 		{"runpod", "(endpoint deployment)", "RUNPOD_API_KEY"},
 		{"synthetic", "Qwen3-Coder-480B", "SYNTHETIC_API_KEY"},
 		{"togetherai", "Llama-3.3-70B-Instruct-Turbo", "TOGETHER_API_KEY"},
 		{"zai", "glm-4.7", "ZAI_API_KEY"},
 	}
-	fmt.Println("Available chat providers:")
-	fmt.Println()
-	fmt.Printf("  %-12s %-32s %s\n", "PROVIDER", "DEFAULT MODEL", "ENV VAR(S)")
-	fmt.Printf("  %-12s %-32s %s\n", "--------", "-------------", "----------")
+	_, _ = fmt.Fprintln(out, "Available chat providers:")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "  %-12s %-32s %s\n", "PROVIDER", "DEFAULT MODEL", "ENV VAR(S)")
+	_, _ = fmt.Fprintf(out, "  %-12s %-32s %s\n", "--------", "-------------", "----------")
 	for _, r := range chat {
-		fmt.Printf("  %-12s %-32s %s\n", r.name, r.model, r.env)
+		_, _ = fmt.Fprintf(out, "  %-12s %-32s %s\n", r.name, r.model, r.env)
 	}
-	fmt.Println()
-	fmt.Println("Embeddings/reranking only (not a chat provider): infinity (INFINITY_API_KEY)")
-	fmt.Println("All chat providers also fall back to LLM_API_KEY.")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Embeddings/reranking only (not a chat provider): infinity (INFINITY_API_KEY)")
+	_, _ = fmt.Fprintln(out, "Media only (not a chat provider): elevenlabs (ELEVENLABS_API_KEY)")
+	_, _ = fmt.Fprintln(out, "Direct-construct (needs an endpoint): huggingface (HF_TOKEN)")
+	_, _ = fmt.Fprintln(out, "All chat providers also fall back to LLM_API_KEY.")
 	return nil
 }
 
@@ -320,6 +330,8 @@ func createClient(provider, model string) (llms.LLM, error) {
 		return synthetic.New(modelOpts(model, synthetic.WithModel)...)
 	case "togetherai":
 		return togetherai.New(modelOpts(model, togetherai.WithModel)...)
+	case "openrouter":
+		return openrouter.New(modelOpts(model, openrouter.WithModel)...)
 	case "zai":
 		return zai.New(modelOpts(model, zai.WithModel)...)
 	default:
@@ -354,9 +366,9 @@ func chatAction(c commandContext) error {
 		return err
 	}
 
-	fmt.Printf("Provider: %s\n", client.Provider())
-	fmt.Printf("Model: %s\n", client.Model())
-	fmt.Println("---")
+	_, _ = fmt.Fprintf(c.out, "Provider: %s\n", client.Provider())
+	_, _ = fmt.Fprintf(c.out, "Model: %s\n", client.Model())
+	_, _ = fmt.Fprintln(c.out, "---")
 
 	messages := []llms.Message{
 		{Role: llms.RoleSystem, Content: systemPrompt},
@@ -373,10 +385,10 @@ func chatAction(c commandContext) error {
 		return fmt.Errorf("generation failed: %w", err)
 	}
 
-	fmt.Println(resp.Content)
-	fmt.Println("---")
-	fmt.Printf("Finish Reason: %s\n", resp.FinishReason)
-	fmt.Printf("Usage: prompt=%d, completion=%d, total=%d\n",
+	_, _ = fmt.Fprintln(c.out, resp.Content)
+	_, _ = fmt.Fprintln(c.out, "---")
+	_, _ = fmt.Fprintf(c.out, "Finish Reason: %s\n", resp.FinishReason)
+	_, _ = fmt.Fprintf(c.out, "Usage: prompt=%d, completion=%d, total=%d\n",
 		resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
 
 	return nil
@@ -398,9 +410,9 @@ func completeAction(c commandContext) error {
 		return err
 	}
 
-	fmt.Printf("Provider: %s\n", client.Provider())
-	fmt.Printf("Model: %s\n", client.Model())
-	fmt.Println("---")
+	_, _ = fmt.Fprintf(c.out, "Provider: %s\n", client.Provider())
+	_, _ = fmt.Fprintf(c.out, "Model: %s\n", client.Model())
+	_, _ = fmt.Fprintln(c.out, "---")
 
 	resp, err := llms.Call(
 		context.Background(),
@@ -413,7 +425,7 @@ func completeAction(c commandContext) error {
 		return fmt.Errorf("completion failed: %w", err)
 	}
 
-	fmt.Println(resp)
+	_, _ = fmt.Fprintln(c.out, resp)
 
 	return nil
 }
@@ -427,11 +439,11 @@ func toolDemoAction(c commandContext) error {
 		return err
 	}
 
-	fmt.Printf("Provider: %s\n", client.Provider())
-	fmt.Printf("Model: %s\n", client.Model())
-	fmt.Println("---")
-	fmt.Println("Demonstrating tool calling with a weather tool...")
-	fmt.Println()
+	_, _ = fmt.Fprintf(c.out, "Provider: %s\n", client.Provider())
+	_, _ = fmt.Fprintf(c.out, "Model: %s\n", client.Model())
+	_, _ = fmt.Fprintln(c.out, "---")
+	_, _ = fmt.Fprintln(c.out, "Demonstrating tool calling with a weather tool...")
+	_, _ = fmt.Fprintln(c.out)
 
 	weatherTool := llms.NewFunctionTool(
 		"get_current_weather",
@@ -458,8 +470,8 @@ func toolDemoAction(c commandContext) error {
 		{Role: llms.RoleUser, Content: "What's the weather like in San Francisco?"},
 	}
 
-	fmt.Println("User: What's the weather like in San Francisco?")
-	fmt.Println()
+	_, _ = fmt.Fprintln(c.out, "User: What's the weather like in San Francisco?")
+	_, _ = fmt.Fprintln(c.out)
 
 	// First call - model should request tool call.
 	resp, err := client.GenerateContent(
@@ -474,13 +486,13 @@ func toolDemoAction(c commandContext) error {
 
 	// Check if the model requested a tool call.
 	if len(resp.ToolCalls) == 0 {
-		fmt.Println("Model response (no tool call):", resp.Content)
+		_, _ = fmt.Fprintln(c.out, "Model response (no tool call):", resp.Content)
 		return nil
 	}
 
-	fmt.Printf("Model requested tool call: %s\n", resp.ToolCalls[0].Function.Name)
-	fmt.Printf("Arguments: %s\n", resp.ToolCalls[0].Function.Arguments)
-	fmt.Println()
+	_, _ = fmt.Fprintf(c.out, "Model requested tool call: %s\n", resp.ToolCalls[0].Function.Name)
+	_, _ = fmt.Fprintf(c.out, "Arguments: %s\n", resp.ToolCalls[0].Function.Arguments)
+	_, _ = fmt.Fprintln(c.out)
 
 	// Parse arguments.
 	var args struct {
@@ -498,8 +510,8 @@ func toolDemoAction(c commandContext) error {
 	}
 	weatherResult := fmt.Sprintf(`{"location": "%s", "temperature": 72, "unit": "%s", "condition": "sunny", "humidity": 45}`, args.Location, unit)
 
-	fmt.Printf("Tool response: %s\n", weatherResult)
-	fmt.Println()
+	_, _ = fmt.Fprintf(c.out, "Tool response: %s\n", weatherResult)
+	_, _ = fmt.Fprintln(c.out)
 
 	// Add assistant message with tool calls and tool response.
 	messages = append(messages,
@@ -527,10 +539,10 @@ func toolDemoAction(c commandContext) error {
 		return fmt.Errorf("generation failed: %w", err)
 	}
 
-	fmt.Println("Assistant:", resp.Content)
-	fmt.Println("---")
-	fmt.Printf("Finish Reason: %s\n", resp.FinishReason)
-	fmt.Printf("Usage: prompt=%d, completion=%d, total=%d\n",
+	_, _ = fmt.Fprintln(c.out, "Assistant:", resp.Content)
+	_, _ = fmt.Fprintln(c.out, "---")
+	_, _ = fmt.Fprintf(c.out, "Finish Reason: %s\n", resp.FinishReason)
+	_, _ = fmt.Fprintf(c.out, "Usage: prompt=%d, completion=%d, total=%d\n",
 		resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
 
 	return nil

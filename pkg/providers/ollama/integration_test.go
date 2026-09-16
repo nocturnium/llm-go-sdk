@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -713,6 +714,9 @@ func TestPullModelIntegration(t *testing.T) {
 
 // TestDeleteModel tests model deletion.
 func TestDeleteModel(t *testing.T) {
+	// The handler runs on the server's goroutine, so the flag it sets is
+	// published under a mutex rather than read straight from the test.
+	var mu sync.Mutex
 	deleted := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/delete" && r.Method == http.MethodDelete {
@@ -720,7 +724,9 @@ func TestDeleteModel(t *testing.T) {
 			json.NewDecoder(r.Body).Decode(&req)
 
 			if req.Name == "test-model" {
+				mu.Lock()
 				deleted = true
+				mu.Unlock()
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -742,7 +748,10 @@ func TestDeleteModel(t *testing.T) {
 		t.Fatalf("DeleteModel failed: %v", err)
 	}
 
-	if !deleted {
+	mu.Lock()
+	gotDeleted := deleted
+	mu.Unlock()
+	if !gotDeleted {
 		t.Error("expected model to be deleted")
 	}
 }
@@ -884,12 +893,20 @@ func TestGetModel(t *testing.T) {
 
 // TestSystemMessage tests system message handling.
 func TestSystemMessage(t *testing.T) {
+	// The handler runs on the server's goroutine, so the messages it captures
+	// are published under a mutex rather than read straight from the test.
+	var mu sync.Mutex
 	var receivedMessages []any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
 			var req map[string]any
-			json.NewDecoder(r.Body).Decode(&req)
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Errorf("decode request: %v", err)
+				return
+			}
+			mu.Lock()
 			receivedMessages, _ = req["messages"].([]any)
+			mu.Unlock()
 
 			resp := map[string]any{
 				"id":      "test-123",
@@ -936,8 +953,10 @@ func TestSystemMessage(t *testing.T) {
 		t.Fatalf("GenerateContent failed: %v", err)
 	}
 
-	// Verify system message was included
-	if len(receivedMessages) < 2 {
+	mu.Lock()
+	sent := receivedMessages
+	mu.Unlock()
+	if len(sent) < 2 {
 		t.Error("expected at least 2 messages including system")
 	}
 }

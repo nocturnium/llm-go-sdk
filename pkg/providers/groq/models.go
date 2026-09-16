@@ -82,7 +82,11 @@ func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.DisplayName = m.ID
 	}
 
-	// Set organization based on model name patterns
+	// owned_by is what the API reports; the id-substring guess is the fallback
+	// for a response that carries neither field.
+	if info.Organization == "" {
+		info.Organization = m.OwnedBy
+	}
 	if info.Organization == "" {
 		info.Organization = inferOrganization(m.ID)
 	}

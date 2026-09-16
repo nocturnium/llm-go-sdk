@@ -305,6 +305,17 @@ func (t *stdioTransport) request(ctx context.Context, id int64, payload []byte) 
 
 	select {
 	case <-ctx.Done():
+		// A response already buffered into ch wins over the expiry: reporting a
+		// call the server completed as failed would have the caller retry a
+		// non-idempotent tool.
+		select {
+		case line, ok := <-ch:
+			if ok {
+				t.removePending(id)
+				return line, nil
+			}
+		default:
+		}
 		t.removePending(id)
 		return nil, ctx.Err()
 	case <-t.done:

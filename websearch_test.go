@@ -3,7 +3,6 @@ package llms
 import (
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 func TestWebSearchProvider_Constants(t *testing.T) {
@@ -23,10 +22,10 @@ func TestWebSearchProvider_Constants(t *testing.T) {
 	}
 }
 
+// WithWebSearchEnabled is the documented one-liner, so what it builds is what
+// this pins rather than a struct literal read back.
 func TestWebSearchConfig_Defaults(t *testing.T) {
-	config := WebSearchConfig{
-		Enabled: true,
-	}
+	config := *ApplyOptions(WithWebSearchEnabled()).WebSearch
 
 	if !config.Enabled {
 		t.Error("expected enabled")
@@ -42,8 +41,10 @@ func TestWebSearchConfig_Defaults(t *testing.T) {
 	}
 }
 
+// A fully specified config reaches the call options the providers read, which is
+// the only path it travels.
 func TestWebSearchConfig_Full(t *testing.T) {
-	config := WebSearchConfig{
+	config := *ApplyOptions(WithWebSearch(WebSearchConfig{
 		Enabled:        true,
 		Provider:       WebSearchBrave,
 		APIKey:         "test-api-key",
@@ -52,7 +53,7 @@ func TestWebSearchConfig_Full(t *testing.T) {
 		DomainExclude:  []string{"spam.com"},
 		RecencyFilter:  "week",
 		IncludeResults: true,
-	}
+	})).WebSearch
 
 	if config.Provider != WebSearchBrave {
 		t.Errorf("expected brave, got %s", config.Provider)
@@ -65,26 +66,6 @@ func TestWebSearchConfig_Full(t *testing.T) {
 	}
 	if !config.IncludeResults {
 		t.Error("expected IncludeResults true")
-	}
-}
-
-func TestSearchResult_Basic(t *testing.T) {
-	now := time.Now()
-	result := SearchResult{
-		Title:   "Example Page",
-		URL:     "https://example.com/page",
-		Snippet: "This is an example snippet...",
-		Date:    &now,
-	}
-
-	if result.Title != "Example Page" {
-		t.Errorf("expected title, got %s", result.Title)
-	}
-	if result.URL != "https://example.com/page" {
-		t.Errorf("expected URL, got %s", result.URL)
-	}
-	if result.Date == nil {
-		t.Error("expected date")
 	}
 }
 

@@ -133,6 +133,9 @@ func imageBody(prompt string, images []llms.MediaInput, o *llms.ImageOptions) (m
 	if !ok || model == "" {
 		return nil, invalid("model_id must be a nonempty string")
 	}
+	if text, ok := body["prompt"].(string); !ok || strings.TrimSpace(text) == "" {
+		return nil, WrapError("image", llms.ErrEmptyPrompt)
+	}
 	if _, ok = body["seed"]; ok && !strings.HasPrefix(model, "bytedance-seedream") {
 		return nil, invalid("image seed requires Seedream")
 	}
@@ -240,6 +243,16 @@ func validateVideoBody(body map[string]any) error {
 	model, ok := body["model_id"].(string)
 	if !ok || model == "" {
 		return invalid("model_id must be a nonempty string")
+	}
+	if text, ok := body["prompt"].(string); !ok || strings.TrimSpace(text) == "" {
+		return WrapError("video", llms.ErrEmptyPrompt)
+	}
+	for _, key := range []string{"start_frame", "end_frame"} {
+		if value, exists := body[key]; exists {
+			if _, ok := value.(map[string]any); !ok {
+				return invalid(key + " must be an inline reference object")
+			}
+		}
 	}
 	if err := validateBools(body, "generate_audio", "enhance_prompt"); err != nil {
 		return err

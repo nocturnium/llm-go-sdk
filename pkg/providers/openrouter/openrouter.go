@@ -138,9 +138,11 @@ func (c *Client) requestAt(ctx context.Context, base *url.URL, method, route str
 }
 
 // GenerateImage maps AspectRatio and Seed to native body keys and delegates to
-// BaseProvider. Extra (including resolution and input_references) merges last,
-// overriding typed options without mutating the caller's map. Returns validation
-// or provider errors, and preserves reported MIME types and costs.
+// BaseProvider. Extra carries native parameters with no typed option (resolution,
+// input_references) and is merged without mutating the caller's map; aspect_ratio
+// and seed are reserved for their typed options and refused, matching the video
+// path. Returns validation or provider errors, and preserves reported MIME types
+// and costs.
 func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...llms.ImageOption) (*llms.ImageResponse, error) {
 	o := llms.ApplyImageOptions(opts...)
 	extra := map[string]any{}
@@ -151,6 +153,12 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...llms.
 		extra["seed"] = *o.Seed
 	}
 	for k, v := range o.Extra {
+		// aspect_ratio and seed have typed options; letting an extra replace one
+		// would send a request the caller did not ask for.
+		switch k {
+		case "aspect_ratio", "seed":
+			return nil, fmt.Errorf("openrouter: image Extra key %q is reserved for the typed option: %w", k, llms.ErrInvalidParameters)
+		}
 		extra[k] = v
 	}
 	o.Extra = extra

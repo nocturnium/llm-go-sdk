@@ -241,9 +241,9 @@ func BenchmarkStreamSender_SendTimeout(b *testing.B) {
 }
 
 // TestCollectStream_PreservesReasoningSignature pins that CollectStream keeps the
-// reasoning signature/metadata delivered on a terminal chunk (previously it
-// rebuilt reasoning from text only, dropping the signature that authenticates
-// the thinking block for a streamed multi-turn round-trip).
+// reasoning signature and metadata delivered on a terminal chunk. The signature
+// authenticates the thinking block on a streamed multi-turn round trip, so
+// rebuilding reasoning from text alone would break the next turn.
 func TestCollectStream_PreservesReasoningSignature(t *testing.T) {
 	ch := make(chan StreamChunk, 5)
 	ch <- StreamChunk{Reasoning: &ReasoningContent{Content: "think"}}

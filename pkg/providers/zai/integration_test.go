@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -267,12 +268,14 @@ func TestClient_GenerateContent_ErrorResponses(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 
-			// Verify the error contains status code information
+			// Unguarded, a regression that stops returning *llms.APIError would
+			// leave the status assertion unreached.
 			var apiErr *llms.APIError
-			if errors.As(err, &apiErr) {
-				if apiErr.StatusCode != tc.statusCode {
-					t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
-				}
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error is %T, want *llms.APIError: %v", err, err)
+			}
+			if apiErr.StatusCode != tc.statusCode {
+				t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
 			}
 		})
 	}
@@ -299,7 +302,9 @@ func TestClient_Stream_Integration(t *testing.T) {
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("expected http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("expected http.Flusher")
+			return
 		}
 
 		chunks := []string{
@@ -353,7 +358,9 @@ func TestClient_Stream_ContextCancellation(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("ResponseWriter does not implement http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("ResponseWriter does not implement http.Flusher")
+			return
 		}
 
 		// Send chunks slowly to allow cancellation
@@ -392,8 +399,10 @@ func TestClient_Stream_ContextCancellation(t *testing.T) {
 		count++
 	}
 
-	if count >= 100 {
-		t.Error("expected stream to be canceled before all chunks")
+	// The cancel fires after the first chunk, so the stream has to stop well
+	// short of the hundred the handler would otherwise send.
+	if count == 0 || count >= 100 {
+		t.Errorf("read %d chunks, want a cancellation partway through", count)
 	}
 }
 
@@ -497,10 +506,15 @@ func TestClient_Call_Convenience(t *testing.T) {
 }
 
 func TestClient_AcceptLanguageHeader(t *testing.T) {
+	// The handler runs on the server's goroutine, so what it captures is
+	// published under a mutex rather than read straight from the test.
+	var mu sync.Mutex
 	headerReceived := ""
 
 	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		headerReceived = r.Header.Get("Accept-Language")
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -529,8 +543,11 @@ func TestClient_AcceptLanguageHeader(t *testing.T) {
 		t.Fatalf("Call failed: %v", err)
 	}
 
-	if headerReceived != "en-US,en" {
-		t.Errorf("expected Accept-Language 'en-US,en', got '%s'", headerReceived)
+	mu.Lock()
+	got := headerReceived
+	mu.Unlock()
+	if got != "en-US,en" {
+		t.Errorf("expected Accept-Language 'en-US,en', got '%s'", got)
 	}
 }
 

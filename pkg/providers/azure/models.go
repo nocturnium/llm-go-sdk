@@ -2,9 +2,12 @@ package azure
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
@@ -21,8 +24,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	resp, err := c.Client().ListModels(ctx)
 	if err != nil {
-		// Azure might not support this endpoint; return the current deployment
-		return c.getCurrentDeploymentAsModel(*options)
+		// A deployment that does not serve /models answers 404; that is the only
+		// case worth substituting the configured deployment for. Credential,
+		// network and throttling failures are returned, since a fabricated
+		// one-entry catalog would read as a successful listing.
+		var apiErr *httpclient.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			return c.getCurrentDeploymentAsModel(*options)
+		}
+		return nil, err
 	}
 
 	models := make([]llms.ModelInfo, 0, len(resp.Data))

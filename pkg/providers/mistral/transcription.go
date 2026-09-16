@@ -44,7 +44,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	if o.Language != "" {
 		fields["language"] = o.Language
 	}
-	// Prompt has no verified native mapping.
+	// Prompt has no verified native mapping, and dropping a typed option the
+	// caller set would send a request that ignores it.
+	if o.Prompt != "" {
+		return nil, c.mediaError(fmt.Errorf("transcription Prompt is unsupported: %w", llms.ErrInvalidParameters))
+	}
 	format := "json"
 	if o.Diarize {
 		fields["diarize"] = "true"
@@ -56,18 +60,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		files = append(files, httpclient.MultipartFile{Field: "context_bias", Data: []byte(term)})
 	}
 
-	for k, v := range o.Extra {
-		switch value := v.(type) {
-		case string, bool, int, float64:
-			fields[k] = fmt.Sprint(value)
-		case []string:
-			for _, item := range value {
-				files = append(files, httpclient.MultipartFile{Field: k, Data: []byte(item)})
-			}
-		default:
-			return nil, c.mediaError(fmt.Errorf("invalid multipart extra %q: %w", k, llms.ErrInvalidParameters))
-		}
+	extraFiles, err := openaicompat.ApplyMultipartExtra(fields, o.Extra, "model", "file", "file_url", "language", "prompt", "diarize")
+	if err != nil {
+		return nil, c.mediaError(err)
 	}
+	files = append(files, extraFiles...)
 	if f, ok := fields["response_format"]; ok {
 		format = f
 	}
@@ -76,7 +73,7 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	}
 	delete(fields, "response_format")
 	var raw []byte
-	err := c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)
+	err = c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)
 	if err != nil {
 		return nil, c.mediaError(err)
 	}

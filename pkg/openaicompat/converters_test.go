@@ -1173,3 +1173,18 @@ func TestProcessStream_CarriesServiceTierAndCost(t *testing.T) {
 		t.Errorf("final Usage = %+v, want the reported cost", final.Usage)
 	}
 }
+
+// A first delta carrying only the id leaves Function nil; the arguments that
+// follow must still land instead of being dropped.
+func TestAppendOrMergeToolCall_IDMatchWithNilFunction(t *testing.T) {
+	calls := []llms.ToolCall{{ID: "call_1", Type: "function"}}
+	calls = appendOrMergeToolCall(calls, ToolCall{ID: "call_1", Function: &FunctionCall{Name: "lookup", Arguments: `{"q":`}})
+	calls = appendOrMergeToolCall(calls, ToolCall{ID: "call_1", Function: &FunctionCall{Arguments: `"x"}`}})
+
+	if len(calls) != 1 || calls[0].Function == nil {
+		t.Fatalf("calls = %+v", calls)
+	}
+	if calls[0].Function.Name != "lookup" || calls[0].Function.Arguments != `{"q":"x"}` {
+		t.Fatalf("function = %+v", calls[0].Function)
+	}
+}

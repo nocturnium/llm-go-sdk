@@ -6,8 +6,8 @@ registry, and the `pkg/openaicompat` provider-author extension point, see
 
 Most of the SDK constructs a client through a provider package, e.g.
 `openai.New(openai.WithModel("gpt-4o"))`. That is the right approach when the
-provider is known at compile time. When the provider is chosen at **runtime** —
-from a config file, an environment variable, a CLI flag, or a database — use the
+provider is known at compile time. When the provider is chosen at **runtime** , 
+from a config file, an environment variable, a CLI flag, or a database, use the
 **registry** instead.
 
 The registry maps a provider **name** (a string) to a factory that builds a
@@ -26,7 +26,7 @@ client, err := llms.New("openai", llms.Config{Model: "gpt-4o"})
 !!! important "You must register providers before `llms.New` can find them"
     `llms.New` only knows about providers that have registered themselves. The
     simplest way is the blank import `_ ".../pkg/providers/all"`, which registers
-    the 17 auto-registered chat providers. See [Registering providers](#registering-providers).
+    the 18 auto-registered chat providers. See [Registering providers](#registering-providers).
 
 ## When to use the registry
 
@@ -54,14 +54,14 @@ can construct it. Each provider package does this in its `init()` function, so a
 import _ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all"
 ```
 
-This registers the **17 auto-registered chat providers**:
+This registers the **18 auto-registered chat providers**:
 
 `anthropic`, `azure`, `cerebras`, `deepseek`, `featherless`, `fireworks`,
-`gemini`, `groq`, `llamacpp`, `mistral`, `ollama`, `openai`, `perplexity`,
-`runpod`, `synthetic`, `togetherai`, `zai`.
+`gemini`, `groq`, `llamacpp`, `mistral`, `ollama`, `openai`, `openrouter`,
+`perplexity`, `runpod`, `synthetic`, `togetherai`, `zai`.
 
 HuggingFace (chat or embeddings) and Infinity (embeddings only) are **not**
-auto-registered — they need explicit construction — so build them directly with
+auto-registered, they need explicit construction, so build them directly with
 `huggingface.New(...)` / `infinity.New(...)`.
 
 !!! note "Infinity is not in the chat registry"
@@ -107,7 +107,7 @@ Constructs a registered provider by name and returns an `llms.LLM`.
   `"  OPENAI "` all resolve to the same provider; surrounding whitespace is
   trimmed).
 - If the provider name is not registered, `New` returns an error that includes
-  the list of currently registered providers — a useful hint when a blank import
+  the list of currently registered providers, a useful hint when a blank import
   is missing.
 
 ```go
@@ -259,8 +259,8 @@ default:
 ## Registering a custom provider
 
 You can add your own provider to the registry so it is constructible by name
-alongside the built-ins. Register a `ProviderFactory` — a function that builds an
-`llms.LLM` from a `Config` — using `llms.RegisterProvider`:
+alongside the built-ins. Register a `ProviderFactory`, a function that builds an
+`llms.LLM` from a `Config`, using `llms.RegisterProvider`:
 
 ```go
 func RegisterProvider(name string, factory ProviderFactory)
@@ -375,7 +375,7 @@ func main() {
 
 ## See also
 
-- [Custom providers](custom-providers.md) — build a new provider on
+- [Custom providers](custom-providers.md), build a new provider on
   `pkg/openaicompat` and register it.
-- [Configuration & security](../index.md) — `AllowPrivateIPs`, SSRF protection,
+- [Configuration & security](../index.md), `AllowPrivateIPs`, SSRF protection,
   and environment variables.

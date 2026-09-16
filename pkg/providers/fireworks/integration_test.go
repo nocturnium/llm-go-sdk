@@ -241,7 +241,9 @@ func TestClient_Stream_Integration(t *testing.T) {
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("expected http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("expected http.Flusher")
+			return
 		}
 
 		chunks := []string{
@@ -587,11 +589,14 @@ func TestClient_ErrorResponses(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 
+			// Unguarded, a regression that stops returning *llms.APIError would
+			// leave the status assertion unreached.
 			var apiErr *llms.APIError
-			if errors.As(err, &apiErr) {
-				if apiErr.StatusCode != tc.statusCode {
-					t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
-				}
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error is %T, want *llms.APIError: %v", err, err)
+			}
+			if apiErr.StatusCode != tc.statusCode {
+				t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
 			}
 		})
 	}
@@ -711,8 +716,9 @@ func TestClient_EnvVarFallbacks(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if client.Provider() != llms.ProviderFireworks {
-				t.Errorf("expected provider fireworks, got %s", client.Provider())
+			// The point of the case is which env var supplied the key.
+			if client.options.APIKey != "test-key-from-env" {
+				t.Errorf("APIKey = %q, want the key from %s", client.options.APIKey, tc.envVar)
 			}
 		})
 	}
@@ -744,13 +750,13 @@ func TestClient_WithEmbeddingModel(t *testing.T) {
 }
 
 func TestClient_WithHTTPClient(t *testing.T) {
-	// Just verify the option can be applied without error
+	custom := &http.Client{Timeout: 3 * time.Second}
 	opts := apply(
 		WithAPIKey("test-key"),
-		WithHTTPClient(nil),
+		WithHTTPClient(custom),
 	)
 
-	if opts.APIKey != "test-key" {
-		t.Errorf("unexpected API key: %s", opts.APIKey)
+	if opts.HTTPClient != custom {
+		t.Errorf("HTTPClient = %v, want the client passed in", opts.HTTPClient)
 	}
 }

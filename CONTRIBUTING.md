@@ -1,6 +1,6 @@
 # Contributing to llm-go-sdk
 
-Thanks for your interest in improving **llm-go-sdk** — a unified Go SDK for many
+Thanks for your interest in improving **llm-go-sdk**, a unified Go SDK for many
 LLM providers, built on plain `net/http` with zero external LLM dependencies.
 Contributions of all kinds are welcome: bug fixes, new providers, docs, tests,
 and ideas.
@@ -120,7 +120,7 @@ for breaking changes. A scope (the provider or area you touched) is encouraged.
 
 ### Before opening a PR
 
-Run the local checks — ideally just `make ci` — and make sure they pass:
+Run the local checks, ideally just `make ci`, and make sure they pass:
 
 ```bash
 make fmt          # or: gofmt -w . && goimports -w -local github.com/nocturnium/llm-go-sdk/v6 .
@@ -130,7 +130,7 @@ make test         # go test -race ./...
 ```
 
 CI additionally runs `gofmt`, `goimports`, `go mod tidy`, `go vet`,
-`golangci-lint`, `staticcheck`, `govulncheck`, and CodeQL — so format your
+`golangci-lint`, `staticcheck`, `govulncheck`, and CodeQL, so format your
 imports with the `-local github.com/nocturnium/llm-go-sdk/v6` prefix and keep
 `go.mod`/`go.sum` tidy.
 
@@ -147,7 +147,7 @@ import llms "github.com/nocturnium/llm-go-sdk/v6"
 
 The root package is the single source of truth for the core types (`Message`,
 `Response`, `CallOption`, the error sentinels, and the streaming helpers). There
-are no separate re-export "alias" packages — import the root directly.
+are no separate re-export "alias" packages, import the root directly.
 
 **Providers** live under their canonical path:
 
@@ -159,21 +159,21 @@ import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 
 ## Adding a New Provider
 
-[`AGENTS.md`](./AGENTS.md) is the **deep reference** for provider work — it
+[`AGENTS.md`](./AGENTS.md) is the **deep reference** for provider work, it
 documents the required interfaces, error-handling rules, thread-safety,
 observability, and the full step-by-step guide. Read it before starting. The
 short version:
 
 1. **Pick an implementation strategy.** If the provider has an OpenAI-compatible
    API, build on `openaicompat.BaseProvider` (see
-   [`pkg/openaicompat`](./pkg/openaicompat)) — do **not** hand-roll
+   [`pkg/openaicompat`](./pkg/openaicompat)), do **not** hand-roll
    `Call`/`GenerateContent`/`Stream`. Native implementations (like Anthropic and
    Gemini) require explicit justification in the package doc.
 2. **Create the package** at `pkg/providers/<name>/` with the standard files:
    `<name>.go`, `<name>-options.go`, `models.go`, plus `_test.go` files and an
    `integration_test.go` (build tag `integration`).
-3. **Resolve the API key** with the precedence: explicit `WithAPIKey` →
-   provider-specific env var (`<PROVIDER>_API_KEY`) → generic `LLM_API_KEY`.
+3. **Resolve the API key** with the precedence: explicit `WithAPIKey`, then
+   provider-specific env var (`<PROVIDER>_API_KEY`), then generic `LLM_API_KEY`.
 4. **Register the provider constant** in the root package and implement the
    required interfaces (`llms.LLM`, `llms.CapableProvider`, `llms.ModelLister`,
    and `llms.Embedder` if supported). Add compile-time checks:
@@ -217,7 +217,7 @@ Use the GitHub issue templates:
 - **Feature request:** [`.github/ISSUE_TEMPLATE/feature_request.md`](./.github/ISSUE_TEMPLATE/feature_request.md)
 
 For open-ended questions and ideas, prefer **GitHub Discussions** over issues.
-Again, for anything security-sensitive, do not file a public issue — email
+Again, for anything security-sensitive, do not file a public issue, email
 **hello@nocturnium.ai**.
 
 Thank you for contributing!

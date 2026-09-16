@@ -25,10 +25,13 @@ func newMediaHTTP(o *options) *httpclient.Client {
 	return httpclient.NewClient(opts...)
 }
 
+// mediaEndpoint joins a route onto the configured base. A join failure returns
+// an empty string, which the transport refuses: posting a media request to the
+// bare base URL would hit the wrong endpoint rather than fail.
 func (c *Client) mediaEndpoint(route string) string {
 	endpoint, err := url.JoinPath(c.options.BaseURL, route)
 	if err != nil {
-		return c.options.BaseURL
+		return ""
 	}
 	return endpoint
 }

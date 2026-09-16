@@ -22,11 +22,11 @@ the `llms.LLM` interface, so the same `GenerateContent` / `Stream` / typed-outpu
 code works regardless of which provider you picked.
 
 !!! note "API styles"
-    Two providers — **anthropic** and **gemini** — talk to their vendors'
+    Two providers, **anthropic** and **gemini**, talk to their vendors'
     native HTTP APIs (Anthropic Messages, Gemini `generateContent`). The other
     chat providers are **OpenAI-compatible**: they build on
     [`pkg/openaicompat`](guides/custom-providers.md) and speak the OpenAI
-    chat-completions wire format. **infinity** is not a chat provider at all —
+    chat-completions wire format. **infinity** is not a chat provider at all , 
     it serves embeddings and reranking only. **elevenlabs** uses native media APIs
     for speech, transcription, images and video, without chat.
 
@@ -121,8 +121,8 @@ type Config struct {
 `Config.Extra` carries provider-specific construction parameters with no common
 field. Recognized keys:
 
-- **runpod** — `"endpoint_id"` sets the required serverless endpoint ID.
-- **zai** — `"coding"` set to `"true"`, `"1"`, or `"yes"` enables the Coding API.
+- **runpod**, `"endpoint_id"` sets the required serverless endpoint ID.
+- **zai**, `"coding"` set to `"true"`, `"1"`, or `"yes"` enables the Coding API.
 
 Other helpers:
 
@@ -135,7 +135,7 @@ Other helpers:
     implement chat generation (embeddings and
     reranking only). HuggingFace *does* serve chat (and embeddings), but it needs
     an explicit Inference-Endpoint URL and a chat-vs-embeddings mode, so it cannot
-    be built from a name alone. Construct these directly —
+    be built from a name alone. Construct these directly , 
     `infinity.New(...)` / `huggingface.New(...)` / `elevenlabs.New(...)`.
     The auto-registered set is:
     anthropic, azure, cerebras, deepseek, featherless, fireworks, gemini, groq,
@@ -146,7 +146,7 @@ Other helpers:
 
 ## Per-provider notes
 
-### OpenRouter — chat and native media
+### OpenRouter, chat and native media
 
 ```go
 import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openrouter"
@@ -176,7 +176,7 @@ See the [media guide](guides/media.md) for defaults and option mappings.
 
 Providers sell more than one grade of capacity for the same model, and OpenRouter
 exposes each as its own endpoint. Ask for one per call, and read back the tier
-that actually served the request:
+that served the request:
 
 ```go
 resp, err := client.GenerateContent(ctx, msgs,
@@ -230,7 +230,7 @@ The batch lifecycle is also available directly: `SubmitBatch`, `GetBatch`,
 batch (there is no download route), a completed batch can still hold per-request
 failures, and artifacts are purged 30 days after creation.
 
-### Azure OpenAI — deployments & endpoint
+### Azure OpenAI, deployments & endpoint
 
 Azure is keyed on a **resource endpoint** and a **deployment name** rather than
 a model id. The API key is read from `AZURE_OPENAI_API_KEY` or
@@ -252,7 +252,7 @@ client, err := azure.New(
 When constructing by name, `Config.Model` maps to the deployment and
 `Config.BaseURL` maps to the endpoint.
 
-### Ollama & llama.cpp — local hosts
+### Ollama & llama.cpp, local hosts
 
 Both target a local server over plain HTTP by default, so SSRF restrictions are
 relaxed automatically (no need for `WithAllowPrivateIPs`/`WithAllowHTTP`).
@@ -274,7 +274,7 @@ client, err := ollama.New(
 )
 ```
 
-### Infinity — embeddings & reranking only
+### Infinity, embeddings & reranking only
 
 infinity is an embeddings/reranking server, not a chat provider. It implements
 `llms.Embedder` and `llms.Reranker`, and defaults to a local host
@@ -306,7 +306,7 @@ res, err := client.Rerank(context.Background(), "best pizza", []string{
 })
 ```
 
-### RunPod — serverless endpoint ID
+### RunPod, serverless endpoint ID
 
 RunPod targets serverless **vLLM** endpoints. The endpoint ID is **required**;
 construction returns `runpod.ErrMissingEndpointID` without it. The client builds
@@ -330,7 +330,7 @@ llm, err := llms.New("runpod", llms.Config{
 })
 ```
 
-### Z.AI — Coding API
+### Z.AI, Coding API
 
 Z.AI defaults to the general endpoint `https://api.z.ai/api/paas/v4` with the
 flagship `glm-4.7` model. Opt into the coding-specific endpoint
@@ -355,7 +355,7 @@ llm, err := llms.New("zai", llms.Config{
 })
 ```
 
-### Perplexity — search-augmented generation
+### Perplexity, search-augmented generation
 
 Perplexity uses an OpenAI-compatible API with built-in search augmentation. The
 default model is `sonar`. The key is read from `PERPLEXITY_API_KEY` or
@@ -379,5 +379,5 @@ SSRF protection is **on by default** for hosted providers: requests to
 private/loopback/link-local addresses and cloud-metadata endpoints are blocked,
 HTTPS is required, and redirects are re-validated. For self-hosted or local
 endpoints, opt out with `WithAllowPrivateIPs()` and `WithAllowHTTP()`. The
-local-first providers — **ollama**, **llamacpp**, and **infinity** — relax these
+local-first providers, **ollama**, **llamacpp**, and **infinity**, relax these
 restrictions automatically.

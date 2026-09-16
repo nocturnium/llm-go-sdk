@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -269,23 +270,25 @@ func (c *Client) ListModels(ctx context.Context, params *ModelsListParams) (*Mod
 	var response ModelsListResponse
 
 	// Build URL with query parameters
-	url := c.baseURL + "/models"
+	requestURL := c.baseURL + "/models"
 	if params != nil {
-		queryParts := []string{}
+		// Escaped rather than concatenated: page tokens are base64-ish and carry
+		// = and + , which break a hand-built query string.
+		query := url.Values{}
 		if params.PageSize > 0 {
-			queryParts = append(queryParts, fmt.Sprintf("pageSize=%d", params.PageSize))
+			query.Set("pageSize", strconv.Itoa(params.PageSize))
 		}
 		if params.PageToken != "" {
-			queryParts = append(queryParts, "pageToken="+params.PageToken)
+			query.Set("pageToken", params.PageToken)
 		}
-		if len(queryParts) > 0 {
-			url += "?" + strings.Join(queryParts, "&")
+		if len(query) > 0 {
+			requestURL += "?" + query.Encode()
 		}
 	}
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodGet,
-		URL:     url,
+		URL:     requestURL,
 		Headers: headers,
 	}, &response)
 

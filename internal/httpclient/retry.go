@@ -84,9 +84,10 @@ func (p *RetryPolicy) GetDelay(attempt int) time.Duration {
 		delay = float64(p.MaxDelay)
 	}
 
-	// Ensure we don't return a negative duration
+	// Ensure we don't return a negative duration. Falling back to InitialDelay
+	// would return the negative value again when InitialDelay is itself negative.
 	if delay < 0 {
-		delay = float64(p.InitialDelay)
+		delay = 0
 	}
 
 	return time.Duration(delay)

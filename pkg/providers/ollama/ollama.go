@@ -43,6 +43,11 @@ func New(opts ...Option) (*Client, error) {
 	// Check for OLLAMA_HOST environment variable
 	if options.BaseURL == "http://localhost:11434/v1" {
 		if host := os.Getenv("OLLAMA_HOST"); host != "" {
+			// OLLAMA_HOST is commonly set as host:port; without a scheme the
+			// result is not a URL the transport can dial.
+			if !strings.Contains(host, "://") {
+				host = "http://" + host
+			}
 			// Ensure the URL ends with /v1 for OpenAI compatibility
 			if !strings.HasSuffix(host, "/v1") {
 				host = strings.TrimSuffix(host, "/") + "/v1"

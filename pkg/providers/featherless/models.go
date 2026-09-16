@@ -2,6 +2,7 @@ package featherless
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -389,8 +390,18 @@ func init() {
 func (c *Client) ListModels(_ context.Context, opts ...llms.ListModelsOption) (*llms.ListModelsResult, error) {
 	options := llms.ApplyListModelsOptions(opts...)
 
+	// Copied one level deeper than the slice: Types and the Pricing pointer would
+	// otherwise alias the package cache, so a caller mutating a returned model
+	// would change what every later call reports.
 	models := make([]llms.ModelInfo, len(cachedModels))
-	copy(models, cachedModels)
+	for i, m := range cachedModels {
+		m.Types = append([]llms.ModelType(nil), m.Types...)
+		if m.Pricing != nil {
+			pricing := *m.Pricing
+			m.Pricing = &pricing
+		}
+		models[i] = m
+	}
 
 	// apply type filter if specified
 	if len(options.Types) > 0 {
@@ -400,12 +411,17 @@ func (c *Client) ListModels(_ context.Context, opts ...llms.ListModelsOption) (*
 	// apply pagination
 	start := 0
 	if options.Cursor != "" {
-		// Find the index after the cursor
+		found := false
 		for i, m := range models {
 			if m.ID == options.Cursor {
 				start = i + 1
+				found = true
 				break
 			}
+		}
+		// Restarting from the first page would have a paginating caller loop.
+		if !found {
+			return nil, fmt.Errorf("featherless: unknown cursor %q: %w", options.Cursor, llms.ErrInvalidParameters)
 		}
 	}
 

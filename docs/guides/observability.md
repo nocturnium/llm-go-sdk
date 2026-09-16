@@ -1,6 +1,6 @@
 # Observability & Cost Tracking
 
-Every observability feature in this SDK is implemented as **middleware** — a thin
+Every observability feature in this SDK is implemented as **middleware**, a thin
 wrapper that satisfies the `llms.LLM` interface and forwards to the client it
 wraps. You compose them by nesting: each layer adds tracing, metrics, logging, or
 cost accounting without touching your call sites. Because the wrappers implement
@@ -68,7 +68,7 @@ func main() {
 }
 ```
 
-`NewOTelMiddleware` returns `(*OTelMiddleware, error)` — the error surfaces if a
+`NewOTelMiddleware` returns `(*OTelMiddleware, error)`, the error surfaces if a
 metric instrument fails to initialize. The returned value implements `llms.LLM`,
 so it exposes `GenerateContent`, `Stream`, `Provider()`, `Model()`, and
 `Unwrap()` (to retrieve the wrapped client).
@@ -86,7 +86,7 @@ The instrumentation scope name is exported as `observability.InstrumentationName
 
 !!! warning "Content recording exposes data in traces"
     `WithContentRecording(true)` writes (truncated) prompt and completion text to
-    span attributes. Only enable it in trusted environments — span data is often
+    span attributes. Only enable it in trusted environments, span data is often
     shipped to third-party backends.
 
 ### Spans
@@ -129,7 +129,7 @@ type.
 ### Streaming
 
 `Stream` keeps its span open for the lifetime of the stream and finalizes
-token/chunk metrics and the span status when the channel closes — even on panic
+token/chunk metrics and the span status when the channel closes, even on panic
 or early consumer exit. Captured streaming content is bounded (100 KB) to prevent
 unbounded memory growth.
 
@@ -156,7 +156,7 @@ for chunk := range chunks {
 [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/)
 that [Langfuse](https://langfuse.com/integrations/native/opentelemetry)
 recognizes natively. Point your OTLP exporter at the Langfuse OTel endpoint and
-the spans appear as generations — no Langfuse-specific transport code needed.
+the spans appear as generations, no Langfuse-specific transport code needed.
 
 ```go
 base, err := openai.New(openai.WithModel("gpt-4o"))
@@ -272,7 +272,7 @@ resp, err := client.GenerateContent(ctx, messages,
 
 `observability.NewLoggingMiddleware(llm, logger)` wraps a client and calls a `Logger`
 implementation on every request, response, and error. The SDK ships two
-loggers — both **redact prompt/response content by default**.
+loggers, both **redact prompt/response content by default**.
 
 ### slog logger
 
@@ -329,7 +329,7 @@ When redaction is on, `messages` and `content` are stripped from the serialized
 
 ### Custom loggers
 
-`Logger` is a small interface — implement it to forward entries anywhere (a
+`Logger` is a small interface, implement it to forward entries anywhere (a
 metrics pipeline, a Langfuse ingestion API, etc.):
 
 ```go
@@ -407,14 +407,14 @@ internally so it is tracked too.
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `Record(provider Provider, model string, usage Usage)` | `(cost float64, known bool)` | Add one request's usage; returns the computed cost and `known=false` when no pricing is registered for the provider/model (distinguishes unknown pricing from a real $0 model). |
-| `RecordEmbedding(provider, model, usage EmbeddingUsage)` | — | Convenience for embedding usage. |
+| `RecordEmbedding(provider, model, usage EmbeddingUsage)` |, | Convenience for embedding usage. |
 | `Report()` | `[]ModelUsage` | Per-model usage snapshots (copies). |
 | `GetTotalCost()` | `float64` | Sum of estimated cost across models. |
 | `GetTotalTokens()` | `(prompt, completion int64)` | Aggregate token totals. |
 | `GetTotalRequests()` | `int64` | Total requests recorded. |
 | `GetUsage(provider, model)` | `*ModelUsage` | Usage for one model (`nil` if untracked). |
-| `Reset()` | — | Clear all accumulated usage. |
-| `SetPricing(provider, model, Pricing)` | — | Override or add pricing for a model. |
+| `Reset()` |, | Clear all accumulated usage. |
+| `SetPricing(provider, model, Pricing)` |, | Override or add pricing for a model. |
 | `GetPricing(provider, model)` | `(Pricing, bool)` | Look up current pricing. |
 
 All tracker methods are safe for concurrent use.
@@ -427,7 +427,7 @@ All tracker methods are safe for concurrent use.
 
 The SDK ships a `DefaultPricing` table (USD per 1M tokens) covering common OpenAI,
 Anthropic, Gemini, and TogetherAI models. Models not in the table estimate to
-`$0` — supply your own rates for everything else:
+`$0`, supply your own rates for everything else:
 
 ```go
 custom := map[string]llms.Pricing{
@@ -456,7 +456,7 @@ if known {
 
 `EstimateCost` returns `(cost, known)`; `known` is `false` when no built-in
 pricing exists for the model, which distinguishes unknown pricing from a real
-zero-cost model — do not treat the returned `0` as free. (The `bool` from
+zero-cost model, do not treat the returned `0` as free. (The `bool` from
 `tracker.Record` / `tracker.GetPricing` carries the same signal.)
 
 `llms.FormatCost` renders 4 decimal places for sub-cent values and 2 decimals
@@ -467,7 +467,7 @@ otherwise.
 ## Composing middleware
 
 Middleware wrappers nest because each one is itself an `llms.LLM`. Apply them
-inside-out — the outermost wrapper runs first. A typical production stack:
+inside-out, the outermost wrapper runs first. A typical production stack:
 
 ```go
 base, err := openai.New(openai.WithModel("gpt-4o"))

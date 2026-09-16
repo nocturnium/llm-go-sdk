@@ -316,3 +316,15 @@ func TestMemoryResponseCache_EmptyStringKeyDoesNotDefeatEviction(t *testing.T) {
 		t.Errorf("cap=1 exceeded, empty-string key defeated eviction: Len=%d", cache.Len())
 	}
 }
+
+// A request whose cache key cannot be marshaled must miss every time: sharing
+// one sentinel key would serve the first such request's answer to the next.
+func TestDefaultCacheKey_UnmarshalableRequestsDoNotShareAKey(t *testing.T) {
+	unmarshalable := ApplyOptions(WithExtraBodyParam("bad", make(chan int)))
+	first := defaultCacheKey("openai", "gpt-4o", []Message{{Role: RoleUser, Content: "one"}}, unmarshalable)
+	second := defaultCacheKey("anthropic", "claude", []Message{{Role: RoleUser, Content: "two"}}, unmarshalable)
+
+	if first == second {
+		t.Fatalf("two unhashable requests share the cache key %q", first)
+	}
+}

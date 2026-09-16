@@ -4,7 +4,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) is an open standar
 for connecting LLMs to external tools and data. The `pkg/mcp` package is a
 minimal MCP **client** for the tools subset of the protocol: it connects to an
 MCP server, discovers its tools, and registers them into an
-[`llms.ToolRegistry`](tools.md) so they drive `llms.RunTools` — exactly like
+[`llms.ToolRegistry`](tools.md) so they drive `llms.RunTools`, exactly like
 native Go tools.
 
 It is a small, dependency-free implementation (stdio + Streamable HTTP
@@ -27,11 +27,11 @@ if err != nil {
 defer server.Close()
 ```
 
-The context governs the subprocess lifetime — pass a long-lived context that
+The context governs the subprocess lifetime, pass a long-lived context that
 covers the whole session (cancelling it terminates the server).
 
 By default the subprocess receives only a minimal safe environment (PATH, HOME,
-and common platform keys) — the parent environment is NOT inherited, so provider
+and common platform keys), the parent environment is not inherited, so provider
 API keys are not leaked to the server. Pass any variables the server needs
 explicitly with `mcp.WithEnv([]string{"GITHUB_TOKEN="+token})` (these are merged
 over the minimal set). Use `mcp.WithWorkDir(dir)` to set the subprocess working

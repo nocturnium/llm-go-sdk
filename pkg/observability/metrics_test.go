@@ -489,10 +489,16 @@ func TestMetricsMiddleware_ActiveRequests(t *testing.T) {
 		}()
 	}
 
-	// Wait a bit for requests to start
-	time.Sleep(10 * time.Millisecond)
-
-	active := middleware.ActiveRequests()
+	// Poll rather than sleep once: a loaded runner can leave a goroutine yet to
+	// enter the middleware, which a fixed wait turns into a flake.
+	deadline := time.Now().Add(2 * time.Second)
+	var active int64
+	for time.Now().Before(deadline) {
+		if active = middleware.ActiveRequests(); active == 3 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if active != 3 {
 		t.Errorf("active requests = %d, want 3", active)
 	}

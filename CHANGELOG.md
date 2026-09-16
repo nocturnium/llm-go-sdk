@@ -20,6 +20,21 @@ All notable changes to this project will be documented in this file.
 
 - OpenAI image generation and editing, speech synthesis and SSE streaming, multipart transcription, and polling video jobs, with shared configurable OpenAI-compatible media routes and media pricing.
 
+### Fixed
+
+- `CostTracker.Reset` now clears the per-mode split, so `GetModeCosts` returns to zero with `GetTotalCost` instead of reporting the previous window's spend.
+- The Responses API's JSON schema is sent as an object again: `ResponsesFormat.Schema` was `[]byte`, which `encoding/json` encodes as base64, so every structured-output request over the Responses path carried `{"schema":"<base64>"}`.
+- A request whose cache key cannot be marshaled gets a key of its own instead of a shared `llms:uncacheable` sentinel, which served the first such request's response to every later one.
+- `Extra` maps can no longer overwrite reserved typed request fields in Groq, Mistral, Together AI and Z.AI transcription or Together AI image generation, via the new `openaicompat.ApplyMultipartExtra`; ElevenLabs video revalidates the prompt and frame references after extras merge.
+- Ollama `PullModel` reports a stream that ends before the pull completes rather than returning nil.
+- The non-blocking rate-limit path clamps the request count to the limiter's burst, matching the blocking path, instead of refusing every call.
+- `llamacpp.ListModels` sets `HasMore` when a limit truncated the list.
+- The quickstart installs the module at `@latest` rather than `@v5.0.0` on a `/v6` path.
+- A cache breakpoint on a system message survives `ConsolidateSystemMessages`, which runs by default through `MergeConsecutiveMessages`, so Anthropic prompt caching set via `Message.CacheControl` is no longer dropped before the request is built.
+- Ollama `PullModel` reports a pull that failed mid-stream (`{"error": ...}`) instead of returning nil as though the model downloaded.
+- Groq transcription refuses an `Extra` key that has a typed option (`model`, `file`, `url`, `language`, `prompt`) rather than silently replacing the caller's value; `response_format` has no typed option and stays open.
+- ElevenLabs Flows image generation revalidates the prompt after extras merge, so `Extra{"prompt": ""}` no longer bypasses the empty-prompt check.
+
 ### Changed
 
 - **`pkg/providers/anthropic`: behavior parity with the other providers.** A review
@@ -68,7 +83,7 @@ All notable changes to this project will be documented in this file.
   URIs are validated: absolute `file://`, empty authority, no `.` or `..` segments.
   Static roots are validated at **construction** (a bad URI is a wiring bug worth
   surfacing immediately); dynamic ones per response, and a malformed root is reported
-  to the server rather than published. Validation **rejects rather than normalizes** —
+  to the server rather than published. Validation **rejects rather than normalizes** , 
   silently rewriting a caller's path would publish a location they did not write.
   Notably `file://relative/path` is rejected: two slashes make `relative` the
   *authority*, so that URI does not mean what it looks like.
@@ -86,20 +101,20 @@ All notable changes to this project will be documented in this file.
   No separate approver is needed here, unlike sampling: the handler *is* the
   human-in-the-loop, and declining is expressible in the result. Content is **dropped**
   on decline or cancel, so a handler cannot leak partially-filled form data, and an
-  unrecognized action is reported as an error rather than passed through — a server
+  unrecognized action is reported as an error rather than passed through, a server
   seeing an unknown action might otherwise assume success. With no handler registered
   the capability is unadvertised and requests get `MethodNotFound`, so a host with no
   way to ask a human is never presented as able to.
 
   `RequestedSchema` is server-supplied and therefore untrusted: render it as a form,
-  and never auto-accept a schema you did not show a user — a server can ask for
+  and never auto-accept a schema you did not show a user, a server can ask for
   anything, including credentials.
 
   This completes MCP Track C.
 
 ### Added
 
-- **`pkg/mcp`: sampling — serve `sampling/createMessage` from any `llms.LLM`.** An MCP
+- **`pkg/mcp`: sampling, serve `sampling/createMessage` from any `llms.LLM`.** An MCP
   server can now ask the host to run a completion, and the host answers with a model it
   already owns, under its own credentials and budget. `WithSamplingLLM` adapts any
   `llms.LLM`; `WithSamplingHandler` takes a custom source. Adds `SamplingRequest`,
@@ -107,22 +122,22 @@ All notable changes to this project will be documented in this file.
   `SamplingHandler`, `SamplingApprover`, `SamplingApproval`, `ApproveAllSampling`, and
   `ContentBlock.Data`/`.MimeType` for image content. All additions are
   apidiff-compatible, and `ContentBlock` stays **comparable** (both new fields are
-  strings) — pinned by a test.
+  strings), pinned by a test.
 
   **Consent is mandatory and enforced at construction.** Configuring sampling without
   `WithSamplingApprover` makes `NewStdioClient`/`NewHTTPClient` **return an error**.
   Denying at request time instead would hide the misconfiguration until a server first
-  asks — which is exactly when nobody is watching. `ApproveAllSampling()` is the single,
+  asks, which is exactly when nobody is watching. `ApproveAllSampling()` is the single,
   greppable opt-out; do not use it with a server you do not control.
 
   The approver runs **before** any model call, on the inbound worker rather than the
   read path, so it may block on real human input. A denial invokes no LLM at all
-  (pinned by a stub that fails the test if called) and returns `CodeInvalidRequest` —
+  (pinned by a stub that fails the test if called) and returns `CodeInvalidRequest` , 
   a deliberate refusal the server should not retry. `SamplingApproval`'s zero value is
   a **denial**, so a forgotten field refuses rather than approves. An approval may only
   **lower** the requested `MaxTokens`, never raise it.
 
-  Host-supplied `llms.CallOption` values are applied **last**, so the host always wins —
+  Host-supplied `llms.CallOption` values are applied **last**, so the host always wins , 
   pass `llms.WithModel` to force a cheaper model regardless of what the server asked for.
   `modelPreferences` is accepted and **ignored**: model choice belongs to whoever pays
   for the tokens. `includeContext` is likewise accepted and ignored, since honoring
@@ -131,20 +146,20 @@ All notable changes to this project will be documented in this file.
   **Transport boundary:** server-initiated requests work over **stdio only**. The
   Streamable HTTP transport has no standalone SSE listener to receive them and no path
   to send a response frame back, so a handler registered on an HTTP client is never
-  invoked — and the capability is **not advertised** there, since telling a server this
+  invoked, and the capability is **not advertised** there, since telling a server this
   client samples when the request can never arrive leaves it waiting on a promise the
   transport cannot keep.
 
 - **`pkg/mcp`: server-initiated request dispatch.** The client can now serve
   requests a server sends *to it*, the direction the package previously had no path
   for at all (v6.0.1 made such frames answerable; this makes them serviceable).
-  Adds `ClientCapabilities` — with `SamplingCapability`, `RootsCapability`,
-  `ElicitationCapability` — plus `Client.ClientCapabilities()` and
+  Adds `ClientCapabilities`, with `SamplingCapability`, `RootsCapability`,
+  `ElicitationCapability`, plus `Client.ClientCapabilities()` and
   `Client.RefusedRequests()`. All additions are apidiff-compatible.
 
   **Capabilities are derived from registered handlers, never declared separately.**
   A server told this client samples, which then answers `MethodNotFound`, has no way
-  to recover — so handlers are installed before `initialize` and the advertised set
+  to recover, so handlers are installed before `initialize` and the advertised set
   is computed from them. Advertisement and capability cannot drift.
 
   **Concurrency deliberately differs from the notification pump.** That pump is
@@ -154,8 +169,8 @@ All notable changes to this project will be documented in this file.
   (sampling can take tens of seconds). Handlers therefore run concurrently, bounded
   at 8, and overflow is **refused with an error response and counted** via
   `RefusedRequests()` rather than dropped. Parsing, handler lookup and refusal stay
-  on the transport read path — they are cheap and a refusal must not consume a
-  slot — while handler execution moves to a worker, so a slow handler cannot stall
+  on the transport read path, they are cheap and a refusal must not consume a
+  slot, while handler execution moves to a worker, so a slow handler cannot stall
   responses to the client's own in-flight calls.
 
   A panicking handler is converted into an `InternalError` response and the client
@@ -163,7 +178,7 @@ All notable changes to this project will be documented in this file.
   internals and the peer is not necessarily trusted. Teardown waits for in-flight
   handlers but is bounded, so a wedged handler cannot make `Close` hang.
 
-  No capability is served yet — this is the machinery. Sampling, roots and
+  No capability is served yet, this is the machinery. Sampling, roots and
   elicitation follow.
 
 ## [6.1.0] - 2026-08-03
@@ -176,7 +191,7 @@ All notable changes to this project will be documented in this file.
   premium-latency rate card instead of the interactive one. The zero value is
   standard, so existing behavior is unchanged; every addition is apidiff-compatible.
 
-  **Rates are absolute per-model cards, not multipliers** — because that is how
+  **Rates are absolute per-model cards, not multipliers**, because that is how
   providers publish them and the ratios are not uniform. OpenAI's Fast mode is 2×
   standard on `gpt-5.6-sol` but 2.5× on `gpt-5.5`; its Batch tier drops cached-input
   pricing entirely for some older models; and not every model appears in every
@@ -188,16 +203,16 @@ All notable changes to this project will be documented in this file.
 
   Seeded from first-party tables verified 2026-08-02: OpenAI Batch/Flex/Fast for the
   gpt-5.6/5.5/5.4 families, and Anthropic Batch (all models) plus Fast (Opus 5 and
-  Opus 4.8 only — Opus 4.7 rejects fast mode and Opus 4.6 silently runs at standard
+  Opus 4.8 only, Opus 4.7 rejects fast mode and Opus 4.6 silently runs at standard
   rates). A provider/model with no published card for a mode is priced at **standard**
   rates and reports `known=false`, so an unknown lane is never silently discounted.
 
-  The mode is **accounting only** — it does not route the request. Send the request to
+  The mode is **accounting only**, it does not route the request. Send the request to
   the lane with the provider's own mechanism (OpenAI's `service_tier` via
   `WithExtraBodyParam`, Anthropic's Batches API), then set the matching mode.
 
   Per-mode cost lives on the tracker (`GetModeCosts`) rather than on `ModelUsage`,
-  which stays **comparable** — adding a map field to it would have been the same
+  which stays **comparable**, adding a map field to it would have been the same
   breaking change that forced v6.
 
   *Known gap:* OpenAI publishes separate long-context columns for Batch and Flex that
@@ -212,7 +227,7 @@ All notable changes to this project will be documented in this file.
 - **`pkg/mcp`: server-initiated requests were misrouted, silently corrupting
   concurrent calls.** Frame dispatch classified purely on the presence of a JSON-RPC
   `id`, but a server-initiated request (`sampling/createMessage`, `roots/list`,
-  `elicitation/create`) carries **both** a method and an id — so it was treated as a
+  `elicitation/create`) carries **both** a method and an id, so it was treated as a
   *response*. If its id collided with an in-flight client call, the request frame was
   delivered to that caller, which then found neither a result nor an error and
   returned a **nil-result success**: `CallTool` handed back an empty result with no
@@ -236,7 +251,7 @@ All notable changes to this project will be documented in this file.
 v6 is a deliberately small major release. The module path is now
 `github.com/nocturnium/llm-go-sdk/v6` (Go semantic import versioning); v5 and v6 are
 distinct module paths and can coexist, so consumers may migrate incrementally. See
-`docs/migration-guide.md` for the v5 → v6 guide.
+`docs/migration-guide.md` for the v5 to v6 guide.
 
 There is exactly **one** breaking change, and it is a compile-time break rather than a
 behavioral one: `llms.Pricing` gained a `Tiers` field so long-context pricing can be
@@ -246,7 +261,7 @@ plus `go mod tidy`.
 
 ### Changed (BREAKING)
 
-- **Module path → `/v6`.** `go get github.com/nocturnium/llm-go-sdk/v6@v6.0.0` (the core
+- **Module path to `/v6`.** `go get github.com/nocturnium/llm-go-sdk/v6@v6.0.0` (the core
   package name stays `llms`).
 - **`llms.Pricing` is no longer comparable.** It gained `Tiers []PricingTier`, so `==`,
   `!=`, use as a map key, and comparison of any enclosing struct no longer compile. Use
@@ -258,13 +273,13 @@ plus `go mod tidy`.
 ### Added
 
 - **Long-context pricing tiers.** `Pricing.Tiers` models the case where a provider
-  reprices an *entire* request once its input crosses a threshold — OpenAI's gpt-5 family
+  reprices an *entire* request once its input crosses a threshold, OpenAI's gpt-5 family
   above 272K input tokens (2× input, 1.5× output) and Gemini Pro tiers above 200K. v5
   priced these at the short-context rate, so **cost estimates for long-context requests on
   those models were roughly half the true figure**; they are now correct. The threshold is
   evaluated on total input (`PromptTokens + CacheReadTokens + CacheCreationTokens`), since
   `Usage.PromptTokens` excludes cache tokens by contract while providers threshold on the
-  full input. Tiers need not be sorted — the highest matching threshold wins — and an unset
+  full input. Tiers need not be sorted, the highest matching threshold wins, and an unset
   cache rate on a tier falls back to that tier's own `Input` rate. Models with no published
   long-context row (OpenAI's mini/nano variants) are deliberately left flat rather than
   given an invented tier. **If you have dashboards or budget alerts calibrated against v5's
@@ -272,11 +287,11 @@ plus `go mod tidy`.
 
 - **Current-generation model coverage** (verified against first-party pricing/model pages
   on 2026-08-02, not inferred): Anthropic `claude-opus-5` ($5/$25) and `claude-sonnet-5`
-  ($3/$15) — the current Claude 5 flagships, previously absent entirely — plus
+  ($3/$15), the current Claude 5 flagships, previously absent entirely, plus
   `claude-mythos-5`; OpenAI's `gpt-5.6` line (`-sol`, `-terra`, `-luna`) and the
   `gpt-5.1`/`5.2`/`5.3-codex` tiers; Google `gemini-3.6-flash` and `gemini-3.5-flash-lite`.
-  Each is registered in all three places that carry model data — provider `knownModels`,
-  `DefaultPricing`, and the capability registry — so `EstimateCost` now returns a price
+  Each is registered in all three places that carry model data, provider `knownModels`,
+  `DefaultPricing`, and the capability registry, so `EstimateCost` now returns a price
   (rather than `ok=false`) and capability lookups no longer fall through to stale provider
   defaults for these IDs.
 
@@ -285,9 +300,9 @@ plus `go mod tidy`.
 - **Gemini cache-read pricing was overstated ~2.5×.** `DefaultPricing` derived Gemini
   `CacheRead` from an assumed 0.25× multiple of the prompt rate, but Google publishes
   cached input at ≈0.1×. Every Gemini entry now uses the published per-model figure
-  (e.g. `gemini-2.5-flash` 0.075 → 0.03, `gemini-3.5-flash` 0.375 → 0.15), and models
-  that previously had no cache rate at all — and so silently billed cache reads at the
-  full prompt rate — now carry one. Cost estimates for cache-heavy Gemini workloads were
+  (e.g. `gemini-2.5-flash` 0.075 to 0.03, `gemini-3.5-flash` 0.375 to 0.15), and models
+  that previously had no cache rate at all, and so silently billed cache reads at the
+  full prompt rate, now carry one. Cost estimates for cache-heavy Gemini workloads were
   too high; they are now correct.
 
 ### Notes
@@ -298,19 +313,19 @@ plus `go mod tidy`.
   consistently conservative. Register the promotional rate via the cost tracker's
   custom-pricing API if you need it.
 - OpenAI `gpt-5.x` prices are the short-context (&lt;272K) tier. Requests above 272K input
-  tokens bill at 2× input / 1.5× output for the entire request — not expressible in a
+  tokens bill at 2× input / 1.5× output for the entire request, not expressible in a
   per-token table, so cost estimates for those requests will read low.
 - `gpt-5.6` publishes a total context window (1,050,000) larger than its maximum input
   (922,000), the remainder being reserved for output. `ModelInfo.ContextLength` carries the
-  total; `ModelCapabilities.MaxContextTokens` — documented as the maximum *input* window —
+  total; `ModelCapabilities.MaxContextTokens`, documented as the maximum *input* window , 
   carries 922,000, which is the figure to size a prompt against. This is the first model
   family where the two genuinely differ, which is why every other entry mirrors a single
   number. Max output is 128,000 for all three variants.
 - Claude Opus 4.1 (`claude-opus-4-1`) is deprecated and retires **2026-08-05**. Its pricing
   entry is retained for cost attribution of historical usage.
 - Documentation: `docs/roadmap.md` marked MCP Track B items 2–4 (capabilities coverage,
-  notifications, `Register` ergonomics) as shipped — all three have been implemented since
-  the doc was last touched — corrected the apidiff baseline reference from `api/v3.txt` to
+  notifications, `Register` ergonomics) as shipped, all three have been implemented since
+  the doc was last touched, corrected the apidiff baseline reference from `api/v3.txt` to
   `api/v5.txt`, and added Track C scoping the unimplemented MCP server-side surface
   (sampling, roots, elicitation).
 
@@ -324,14 +339,14 @@ plus `go mod tidy`.
   reaching an `http://` MCP server now requires **both** `WithAllowPrivateIPs(true)`
   **and** `WithAllowHTTP(true)`. This closes the same silent-cleartext /
   credential-leak vector for the MCP subsystem that v5.0.0 closed for provider
-  clients. No exported API changes (`apidiff` stays compatible) — if you connect
+  clients. No exported API changes (`apidiff` stays compatible), if you connect
   to a local `http://` MCP server, add `WithAllowHTTP(true)`.
 
 ## [5.0.0] - 2026-07-12
 
 v5 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v5`
 (Go semantic import versioning); v4 and v5 are distinct module paths and can coexist, so
-consumers may migrate incrementally. See `docs/migration-guide.md` for the full v4 → v5
+consumers may migrate incrementally. See `docs/migration-guide.md` for the full v4 to v5
 guide. v5 removes the last long-deprecated shims and cleans up several overloaded or
 inconsistent APIs; the core surface (`Call`, `GenerateContent`, `Stream`, tools, structured
 output, embeddings, providers, middleware) is unchanged in shape. Every change was built as
@@ -340,7 +355,7 @@ an independently expert-gated packet, and the release passed a unanimous tri-rev
 
 ### Changed (BREAKING)
 
-- **Module path → `/v5`.** `go get github.com/nocturnium/llm-go-sdk/v5@v5.0.0` (the core
+- **Module path to `/v5`.** `go get github.com/nocturnium/llm-go-sdk/v5@v5.0.0` (the core
   package name stays `llms`).
 - **`Config.AllowHTTP` is now independent of `AllowPrivateIPs`** (secure default `false`).
   Enabling private-IP access previously also permitted plain HTTP; reaching a private
@@ -348,7 +363,7 @@ an independently expert-gated packet, and the release passed a unanimous tri-rev
   (`ollama`/`llamacpp`/`infinity`) still default both on. Closes a cleartext / API-key-leak
   foot-gun.
 - **Removed the deprecated `Thinking` API.** `Response.Thinking()`, `StreamChunk.Thinking()`,
-  the `ThinkingContent` alias, and `WithThinkingMode` are gone — use `Reasoning`.
+  the `ThinkingContent` alias, and `WithThinkingMode` are gone, use `Reasoning`.
 - **Unified the two pricing types into one `llms.Pricing`**
   (`{Input, Output, CacheRead, CacheWrite, Hourly, Finetune, Base}`). `ModelPricing` is
   removed and `ModelInfo.Pricing` is now `*Pricing`; the `openaicompat.ModelPricing` alias
@@ -357,7 +372,7 @@ an independently expert-gated packet, and the release passed a unanimous tri-rev
 - **`ToolChoice` de-overloaded** to `{Mode ToolChoiceMode; Tool string}` (was
   `{Type ToolChoiceType; Function *FunctionReference}`); `ToolChoiceTool` added and
   `FunctionReference` removed. The provider wire encoding is unchanged.
-- **`AnthropicTTL` removed from the root package** — prompt-cache TTL handling now lives
+- **`AnthropicTTL` removed from the root package**, prompt-cache TTL handling now lives
   inside the anthropic provider.
 - **Renames & constructor changes:** `WithModelsLimit`/`WithModelsCursor` →
   `WithModelLimit`/`WithModelCursor`; `openaicompat.ProviderConfig.ProviderName` removed
@@ -376,15 +391,15 @@ an independently expert-gated packet, and the release passed a unanimous tri-rev
 
 ## [4.2.0] - 2026-07-12
 
-A correctness, resilience, and transport-security hardening sweep. Additive — no breaking
+A correctness, resilience, and transport-security hardening sweep. Additive, no breaking
 changes. See the
 [v4.2.0 release notes](https://github.com/nocturnium/llm-go-sdk/releases/tag/v4.2.0) for the
 full list.
 
 ## [4.1.1] - 2026-06-21
 
-Security and correctness hardening — the HIGH-severity items from a post-v4.1.0 review.
-Additive — no breaking changes.
+Security and correctness hardening, the HIGH-severity items from a post-v4.1.0 review.
+Additive, no breaking changes.
 
 ### Security
 
@@ -396,23 +411,23 @@ Additive — no breaking changes.
 
 - **`FallbackChain` data race** between dispatch reads and `AddClient`/`RemoveClient` (an
   immutable snapshot is now taken under the read lock).
-- **Streaming token usage** silently lost on OpenAI-compatible providers — streaming requests
+- **Streaming token usage** silently lost on OpenAI-compatible providers, streaming requests
   now send `stream_options.include_usage` so the terminal usage chunk is emitted.
 - **Stale model capabilities** for the current GPT-5 / Claude / Gemini flagships.
 - **Non-compiling embeddings godoc** examples for the OpenAI and Gemini packages.
 
 ## [4.1.0] - 2026-06-21
 
-Additive, non-breaking fast-follow on top of v4.0.0 — observability for two
+Additive, non-breaking fast-follow on top of v4.0.0, observability for two
 previously-silent failure paths, plus internal cleanups. Every change is API-compatible
 (the `apidiff` baseline grows, with no removals).
 
 ### Added
 
-- **`mcp.Client.DroppedNotifications() uint64`** — exposes the cumulative count of
+- **`mcp.Client.DroppedNotifications() uint64`**, exposes the cumulative count of
   notifications dropped when a slow or wedged handler overflows the bounded notification
   queue, so consumers can observe otherwise-silent notification loss.
-- **`resilience.WithOnCallbackPanic(func(recovered any, from, to CircuitState))`** — an
+- **`resilience.WithOnCallbackPanic(func(recovered any, from, to CircuitState))`**, an
   opt-in circuit-breaker option that delivers a panicking `onStateChange` callback's
   recovered value (and the state transition) to a hook instead of silently discarding it.
   Default behavior is unchanged (the panic is still recovered with no output) unless the
@@ -422,7 +437,7 @@ previously-silent failure paths, plus internal cleanups. Every change is API-com
 
 - **Consolidated the CR/LF log-injection sanitizer** into a single canonical
   `internal/logsanitize` used by both the HTTP client and the observability loggers. The
-  unified implementation is a strict superset of the previous per-package copies — it
+  unified implementation is a strict superset of the previous per-package copies, it
   neutralizes CR, LF, tab, NUL, ESC, DEL, and all Unicode control runes.
 - **HTTP-client error messages** are now extracted from provider error JSON envelopes
   (`{"error":{"message":…}}`, `{"error":"…"}`, `{"message":…}`) when present, falling back
@@ -436,30 +451,30 @@ previously-silent failure paths, plus internal cleanups. Every change is API-com
 
 v4 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v4`
 (Go semantic import versioning); v3 and v4 are distinct module paths and can coexist, so
-consumers may migrate incrementally. See `docs/migration-guide.md` for the v3 → v4 guide.
+consumers may migrate incrementally. See `docs/migration-guide.md` for the v3 to v4 guide.
 The release is dominated by a security / correctness / resilience hardening sweep (each
 fix gated by an independent expert review); the breaking surface is deliberately small.
 
 ### Changed (BREAKING)
 
-- **Module path → `/v4`.** `go get github.com/nocturnium/llm-go-sdk/v4@v4.0.0` (the core
+- **Module path to `/v4`.** `go get github.com/nocturnium/llm-go-sdk/v4@v4.0.0` (the core
   package name stays `llms`).
 - **Removed the deprecated `Thinking` fields.** `Response.Thinking` and
   `StreamChunk.Thinking` were exported, mutable alias *fields* that had to be hand-synced
-  with `Reasoning` — a desync foot-gun (`Response{Reasoning: x}` left `Thinking` nil). They
+  with `Reasoning`, a desync foot-gun (`Response{Reasoning: x}` left `Thinking` nil). They
   are now deprecated *methods* `Thinking() *ReasoningContent` computed from `Reasoning`. Use
   `Reasoning` (or call `.Thinking()`).
 - **Removed the unused `ErrorMapper` registry.** `ErrorMapper`, `ErrorMapperRegistry`,
   `MapProviderError`, `RegisterErrorMapper`, `DefaultErrorMapperRegistry`, and related
   symbols were never wired into any production path (dead code). Error classification is
-  automatic — match the exported sentinels with `errors.Is`.
+  automatic, match the exported sentinels with `errors.Is`.
 
 ### Security
 
 - **SSRF: DNS-rebinding is closed on the custom-`DialContext` path.** When a caller
   supplied an `*http.Client` whose transport already had a `DialContext`, the resolved-IP
   guard was silently skipped; the resolved remote IP is now re-validated on every dial path.
-- **`WithHTTPClient` no longer mutates the caller's `*http.Client`** — it shallow-copies
+- **`WithHTTPClient` no longer mutates the caller's `*http.Client`**, it shallow-copies
   before installing the SSRF dialer / redirect policy, leaving the caller's `Transport` and
   `CheckRedirect` untouched.
 - **The Ollama NDJSON stream reader is bounded** (4 MB cap) against unbounded-allocation /
@@ -472,9 +487,9 @@ fix gated by an independent expert review); the breaking surface is deliberately
 - **Streaming requests are no longer bound by the unary `http.Client.Timeout`** (default
   5 m), which previously tore down long streams mid-read; streams are bounded by `ctx`.
 - **MCP notification handlers are never invoked concurrently** (the documented contract):
-  the overflow path no longer spawns a goroutine per notification — overflow is counted
+  the overflow path no longer spawns a goroutine per notification, overflow is counted
   atomically and drained by the single serial pump.
-- **Error classification now maps 404 → `ErrModelNotFound` and 502/504/529 →
+- **Error classification now maps 404 to `ErrModelNotFound` and 502/504/529 →
   `ErrServiceUnavailable`**, with the classify and retry tables driven from one source so
   they cannot disagree.
 - **The circuit-breaker `onStateChange` path no longer leaks a watchdog goroutine + timer**
@@ -487,7 +502,7 @@ fix gated by an independent expert review); the breaking surface is deliberately
   billed prices can no longer drift, enforced by reconciliation tests. Corrected
   `gemini-2.0-flash` to $0.10 / $0.40 per 1M tokens (it was mistakenly priced at
   Flash-Lite's rate).
-- **Reasoning options compose order-independently** — `WithReasoning` now merges into a
+- **Reasoning options compose order-independently**, `WithReasoning` now merges into a
   previously-set `WithReasoningEffort` / `WithReasoningBudget` / `WithThinkingMode` instead
   of clobbering it.
 - Retryable response bodies are drained before close, restoring keep-alive connection reuse.
@@ -497,7 +512,7 @@ fix gated by an independent expert review); the breaking surface is deliberately
 - **The `llms-cli` demo no longer depends on `urfave/cli`.** It was rewritten on the
   standard-library `flag` package, removing `urfave/cli/v2`, `russross/blackfriday/v2`,
   `cpuguy83/go-md2man/v2`, and `xrash/smetrics` from the module's dependency graph entirely
-  — they no longer appear in a library consumer's `go.sum`. CLI commands and flags are
+, they no longer appear in a library consumer's `go.sum`. CLI commands and flags are
   unchanged; only help-text formatting differs.
 
 ## [3.1.0] - 2026-06-21
@@ -507,18 +522,18 @@ every change is API-compatible (the `apidiff` baseline grows, with no removals).
 
 ### Added
 
-- **Middleware composition — `llms.Chain`.** `Chain(base, ...Middleware)` (where
+- **Middleware composition, `llms.Chain`.** `Chain(base, ...Middleware)` (where
   `Middleware = func(LLM) LLM`) composes middleware around a base client: the first
   listed sits innermost (resilience/fallback), the last outermost (observability/
   logging). A flat alternative to manual nesting now that the middleware live in
   `pkg/middleware/resilience` and `pkg/observability`.
-- **OpenAI Responses API — stateless reasoning round-trip.**
+- **OpenAI Responses API, stateless reasoning round-trip.**
   `openai.WithReasoningRoundTrip()` requests encrypted reasoning items
   (`include: ["reasoning.encrypted_content"]`) so a reasoning model's thinking can be
   replayed across turns without server-side state. The new `Message.Reasoning` field
   carries it (also usable for Anthropic extended-thinking signatures); `pkg/openaicompat`
   gains `ResponsesReasoningItem` and `MetadataKeyResponsesReasoning`.
-- **MCP client — resources, prompts, capabilities, mounting, and notifications**
+- **MCP client, resources, prompts, capabilities, mounting, and notifications**
   (`pkg/mcp`, extending the tools-only client):
   - Resources: `Client.ListResources` (cursor-paginated) and `Client.ReadResource`
     (`Resource`, `ResourceContents`, `ReadResourceResult`).
@@ -545,17 +560,17 @@ every change is API-compatible (the `apidiff` baseline grows, with no removals).
 v3 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v3`
 (Go semantic import versioning). v2 and v3 are distinct module paths and can coexist,
 so consumers may migrate incrementally. See `docs/migration-guide.md` for the full
-v2 → v3 guide.
+v2 to v3 guide.
 
 The single structural change: **the observability and resilience middleware moved out
 of the root `llms` package into leaf subpackages.** Importing `llms` for the core types
-(`Message`, `Response`, `Call`, …) no longer compiles the OpenTelemetry SDK — the OTel
+(`Message`, `Response`, `Call`, …) no longer compiles the OpenTelemetry SDK, the OTel
 dependency count of the bare root package drops from ~20 packages to **0**. Exported
 symbol names are unchanged; only the package that holds them moved.
 
 ### Changed (BREAKING)
 
-- **Module path → `/v3`.** Update imports to `github.com/nocturnium/llm-go-sdk/v3`
+- **Module path to `/v3`.** Update imports to `github.com/nocturnium/llm-go-sdk/v3`
   (the core package name stays `llms`): `go get github.com/nocturnium/llm-go-sdk/v3@v3.0.0`.
 - **Observability middleware moved to `pkg/observability`.** `llms.NewOTelMiddleware`,
   `llms.NewMetricsMiddleware`, the Langfuse exporters, the JSON/slog loggers, the GenAI
@@ -574,11 +589,11 @@ signature, so migration is a mechanical import/qualifier update (see the migrati
 v2 is a major release. The module path is now `github.com/nocturnium/llm-go-sdk/v2`
 (Go semantic import versioning). v1 and v2 are distinct module paths and can coexist,
 so consumers may migrate incrementally. See `docs/migration-guide.md` for the full
-v1 → v2 guide.
+v1 to v2 guide.
 
 ### Changed (BREAKING)
 
-- **Module path → `/v2`.** Update imports to `github.com/nocturnium/llm-go-sdk/v2`
+- **Module path to `/v2`.** Update imports to `github.com/nocturnium/llm-go-sdk/v2`
   (the package name stays `llms`): `go get github.com/nocturnium/llm-go-sdk/v2@v2.0.0`.
 - **Tool handlers take a context.** `ToolHandler`, `RegisterFunc`'s typed handler, and
   `ToolRegistry.Handle`/`HandleAll` now take a leading `context.Context`. `RunTools`
@@ -597,7 +612,7 @@ v1 → v2 guide.
 
 ### Added
 
-- `llms.CollectStream` / `llms.StreamText` (and `StreamResult`) — drain a stream to
+- `llms.CollectStream` / `llms.StreamText` (and `StreamResult`), drain a stream to
   completion and surface the terminal error explicitly instead of dropping the in-band
   `StreamChunk.Error`.
 - Capability helpers completing the `As*`/`Supports*` set: `AsModelLister`,
@@ -653,7 +668,7 @@ breaking changes to exported APIs; additions are backward-compatible.
   schemas (`additionalProperties: false` on every object, all non-skipped fields
   required) and maps `time.Time`→`string` (date-time), `[]byte`→`string` (base64),
   and `json.RawMessage`/`encoding.TextMarshaler`/`json.Marshaler` to their real JSON
-  shapes — previously these produced HTTP 400s or silently wrong output.
+  shapes, previously these produced HTTP 400s or silently wrong output.
 - **Reasoning leak.** Chain-of-thought no longer leaks into the visible `Content`
   stream and is no longer double-counted for OpenAI-compatible reasoning models
   (DeepSeek / Z.AI / Qwen), on both the streaming and non-streaming paths.
@@ -699,7 +714,7 @@ breaking changes to exported APIs; additions are backward-compatible.
 - SSE and response readers are size-bounded to prevent OOM from untrusted endpoints.
 - The MCP stdio transport launches subprocesses with a minimal environment allowlist
   instead of inheriting the full parent environment, so provider API keys are not
-  leaked to MCP servers by default — use `WithEnv` to pass variables a server needs.
+  leaked to MCP servers by default, use `WithEnv` to pass variables a server needs.
 
 ### MCP
 
@@ -742,8 +757,8 @@ breaking changes to exported APIs; additions are backward-compatible.
 
 ### Hardened (pre-release review)
 
-- Streaming tool-call accumulation rejects malformed indices (negative → no panic,
-  absurd → no unbounded allocation); stream processing and the `RunTools` loop
+- Streaming tool-call accumulation rejects malformed indices (negative to no panic,
+  absurd to no unbounded allocation); stream processing and the `RunTools` loop
   recover from panics instead of crashing the host.
 - OpenAI reasoning models (o-series, gpt-5) send `max_completion_tokens` and omit
   unsupported sampling params instead of failing with HTTP 400.

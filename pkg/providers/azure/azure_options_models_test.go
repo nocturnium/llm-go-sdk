@@ -244,8 +244,10 @@ func TestListModels_FallbackToCurrentDeployment(t *testing.T) {
 }
 
 func TestListModels_FallbackHonorsTypeFilter(t *testing.T) {
+	// 404 is the deployment that does not serve /models, the one case that falls
+	// back to the configured deployment; other failures are returned.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
@@ -333,5 +335,18 @@ func TestRegisterProviderFactory(t *testing.T) {
 
 	if llm.Provider() != llms.ProviderAzure {
 		t.Errorf("Provider() = %q, want %q", llm.Provider(), llms.ProviderAzure)
+	}
+}
+
+// A credential, network or throttling failure is returned: substituting the
+// configured deployment would report a fabricated catalog as a successful list.
+func TestListModels_NonNotFoundErrorIsReturned(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	if _, err := newTestClient(t, server.URL).ListModels(context.Background()); err == nil {
+		t.Fatal("a 401 produced a model list")
 	}
 }

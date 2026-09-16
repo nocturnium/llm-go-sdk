@@ -595,8 +595,9 @@ func NewWeightedFallbackChain(clients []llms.LLM, weights []int, opts ...Fallbac
 		cw[i] = clientWeight{client: clients[i], weight: w}
 	}
 
-	// Sort by weight descending (higher weights first)
-	sort.Slice(cw, func(i, j int) bool {
+	// Stable, so clients of equal weight keep the order the caller gave them
+	// rather than being reshuffled on every call.
+	sort.SliceStable(cw, func(i, j int) bool {
 		return cw[i].weight > cw[j].weight
 	})
 

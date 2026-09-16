@@ -831,3 +831,51 @@ func TestJSONLoggerRedactsStructuredContent(t *testing.T) {
 		t.Fatalf("redacted entry leaked content: %s", logged)
 	}
 }
+
+// The Stream path has branching the happy-path test does not reach: an error
+// chunk logs an error and still reaches the consumer.
+func TestLoggingMiddleware_StreamErrorChunkReachesConsumer(t *testing.T) {
+	var loggedErrors int
+	logger := &testLogger{onError: func(*LogEntry, error) { loggedErrors++ }}
+	llm := &mockLLM{streamFn: func(context.Context, []llms.Message, ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+		ch := make(chan llms.StreamChunk, 2)
+		ch <- llms.StreamChunk{Content: "partial"}
+		ch <- llms.StreamChunk{Error: llms.ErrServiceUnavailable}
+		close(ch)
+		return ch, nil
+	}}
+
+	stream, err := NewLoggingMiddleware(llm, logger).Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawError bool
+	for chunk := range stream {
+		if chunk.Error != nil {
+			sawError = true
+		}
+	}
+	if !sawError {
+		t.Error("the consumer never saw the error chunk")
+	}
+	if loggedErrors == 0 {
+		t.Error("the stream error was not logged")
+	}
+}
+
+// A logger has nowhere to log its own failure, so a failing sink reaches the
+// caller through the error callback rather than vanishing.
+func TestJSONLoggerReportsWriteFailures(t *testing.T) {
+	sinkErr := errors.New("disk full")
+	var got []error
+	logger := NewJSONLogger(
+		func([]byte) error { return sinkErr },
+		WithJSONWriteError(func(err error) { got = append(got, err) }),
+	)
+
+	logger.LogRequest(context.Background(), &LogEntry{RequestID: "write-fail"})
+
+	if len(got) != 1 || !errors.Is(got[0], sinkErr) {
+		t.Fatalf("callback received %v, want the sink error", got)
+	}
+}

@@ -37,7 +37,7 @@ with `==` or `!=`, used as a map key, or compared as part of an enclosing struct
 The compiler will point at every site.
 
 ```go
-// Before (v5) — no longer compiles
+// Before (v5), no longer compiles
 if got == want { ... }
 seen := map[Pricing]bool{}
 
@@ -53,7 +53,7 @@ scalar fields directly is cheaper than reflection and states the intent:
 if got.Input == want.Input && got.Output == want.Output { ... }
 ```
 
-**Everything else about `Pricing` is unchanged** — the existing fields, their JSON
+**Everything else about `Pricing` is unchanged**, the existing fields, their JSON
 keys, and the cost arithmetic for models without tiers all behave exactly as in
 v5. `Tiers` is omitted from JSON when empty, so serialized model metadata for
 untiered models is byte-identical to v5.
@@ -61,7 +61,7 @@ untiered models is byte-identical to v5.
 ## 3. Long-context pricing is now modeled (no action required)
 
 Several providers reprice an *entire* request once its input crosses a threshold
-— OpenAI's gpt-5 family above 272K input tokens (2× input, 1.5× output) and
+,  OpenAI's gpt-5 family above 272K input tokens (2× input, 1.5× output) and
 Gemini Pro tiers above 200K. v5 priced these at the short-context rate, so cost
 estimates for long-context requests were roughly half the true figure. v6 carries
 the published long-context rates as `Tiers` and applies them automatically.
@@ -71,7 +71,7 @@ will now report higher (correct) figures for long-context requests** on those
 models. If you have dashboards or budget alerts calibrated against v5's
 understated numbers, re-baseline them.
 
-The threshold is evaluated on *total* input — `PromptTokens + CacheReadTokens +
+The threshold is evaluated on *total* input: `PromptTokens + CacheReadTokens +
 CacheCreationTokens` — because `Usage.PromptTokens` excludes cache tokens by
 contract while providers threshold on the full input.
 
@@ -98,7 +98,7 @@ rate on a tier falls back to that tier's own `Input` rate.
 v5 is a major release that removes the last of the long-deprecated shims and
 cleans up several overloaded or inconsistent APIs. The core surface (`Call`,
 `GenerateContent`, `Stream`, tools, structured output, embeddings, providers,
-middleware) is unchanged in shape — most migrations are a mechanical import-path
+middleware) is unchanged in shape, most migrations are a mechanical import-path
 bump plus a handful of renames the compiler will point you straight at.
 
 ## 1. Update the import path
@@ -123,7 +123,7 @@ compiler is the entire migration.
 ## 2. Security: `AllowHTTP` is now independent of `AllowPrivateIPs`
 
 In v4, setting `Config.AllowPrivateIPs` also implicitly permitted plain-HTTP
-(non-TLS) URLs. In v5 the two are **independent** — `AllowPrivateIPs` governs
+(non-TLS) URLs. In v5 the two are **independent**, `AllowPrivateIPs` governs
 private/loopback destinations only, and a new `Config.AllowHTTP bool` governs the
 `http://` scheme. Both default to `false` (secure).
 
@@ -152,7 +152,7 @@ rc := resp.Reasoning                 // was resp.Thinking()
 
 ## 4. Pricing types unified into one `llms.Pricing`
 
-v4 had two pricing structs — the cost-layer `Pricing` (`PromptPerMillion` /
+v4 had two pricing structs, the cost-layer `Pricing` (`PromptPerMillion` /
 `CompletionPerMillion`) and the model-layer `ModelPricing` (`Input` / `Output` /
 `Hourly`). v5 merges them into a single canonical type:
 
@@ -182,7 +182,7 @@ and the separate `EstimateCostKnown` function is removed:
 cost := llms.EstimateCost(provider, model, usage)
 known := llms.EstimateCostKnown(provider, model, usage)
 
-// v5 — comma-ok
+// v5, comma-ok
 cost, known := llms.EstimateCost(provider, model, usage)
 ```
 
@@ -211,7 +211,7 @@ llms.WithToolChoiceTool("get_weather")
 
 The root-package `AnthropicTTL` helper (an Anthropic-specific prompt-cache detail)
 is removed from `llms`. Prompt-cache TTL handling now lives inside the anthropic
-provider and needs no caller action — drop any direct reference to
+provider and needs no caller action, drop any direct reference to
 `llms.AnthropicTTL`.
 
 ## 8. Renames and constructor changes
@@ -220,7 +220,7 @@ provider and needs no caller action — drop any direct reference to
 |----|----|
 | `WithModelsLimit(n)` | `WithModelLimit(n)` |
 | `WithModelsCursor(c)` | `WithModelCursor(c)` |
-| `openaicompat.ProviderConfig.ProviderName` | removed — `Provider` is the single identity |
+| `openaicompat.ProviderConfig.ProviderName` | removed, `Provider` is the single identity |
 | `openaicompat.ModelPricing` | `openaicompat.Pricing` (both alias the unified `llms.Pricing`; see §4) |
 | `NewBoundedMemoryResponseCache(ttl, max)` | `NewMemoryResponseCache(ttl, max)` (now bounded by default) |
 
@@ -243,7 +243,7 @@ default; the separate `NewBoundedMemoryResponseCache` is removed. And
 # Migrating from v3 to v4
 
 v4 is a major release whose changes are dominated by a security / correctness / resilience
-hardening sweep — the breaking surface is small and migration is mostly a mechanical
+hardening sweep, the breaking surface is small and migration is mostly a mechanical
 import-path bump. The core API (`Call`, `GenerateContent`, `Stream`, tools, structured
 output, embeddings, providers, middleware) is unchanged.
 
@@ -263,7 +263,7 @@ grep -rl 'nocturnium/llm-go-sdk/v3' --include='*.go' . \
 go mod tidy
 ```
 
-If you only use the core API, that is the entire migration — you are done.
+If you only use the core API, that is the entire migration, you are done.
 
 ## 2. Replace `Thinking` with `Reasoning`
 
@@ -282,7 +282,7 @@ instead, and replace `WithThinkingMode(true/false)` with `WithReasoning`.
 
 `ErrorMapper`, `ErrorMapperRegistry`, `MapProviderError`, `RegisterErrorMapper`, and
 `DefaultErrorMapperRegistry` were never used on any production path and have been removed.
-Error classification is automatic — match the exported sentinels with `errors.Is`:
+Error classification is automatic, match the exported sentinels with `errors.Is`:
 
 ```go
 if errors.Is(err, llms.ErrModelNotFound) { ... }      // now also fires for a bare HTTP 404
@@ -292,7 +292,7 @@ if errors.Is(err, llms.ErrServiceUnavailable) { ... } // now also fires for 502 
 ## 4. Note: `gemini-2.0-flash` cost estimate corrected
 
 `EstimateCost` / `CostTracker` priced `gemini-2.0-flash` at the Flash-Lite rate by mistake;
-it is now $0.10 / $0.40 per 1M input/output tokens (its actual price). No API change — only
+it is now $0.10 / $0.40 per 1M input/output tokens (its actual price). No API change, only
 the computed cost differs.
 
 ## 5. `llms-cli` flag parsing (only if you script the demo CLI)
@@ -308,7 +308,7 @@ help-text formatting differs.
 v3 is a major release with **one** structural change: the observability and resilience
 middleware moved out of the root `llms` package into leaf subpackages, so importing
 `llms` for the core types no longer pulls in the OpenTelemetry SDK. Every moved symbol
-keeps its exact name and signature — migration is a mechanical import/qualifier update.
+keeps its exact name and signature, migration is a mechanical import/qualifier update.
 
 ## 1. Update the import path
 
@@ -327,7 +327,7 @@ go mod tidy
 ```
 
 If you only use the core API (providers, `Call`, `GenerateContent`, tools, structured
-output, embeddings, cost tracking), that is the entire migration — you are done.
+output, embeddings, cost tracking), that is the entire migration, you are done.
 
 ## 2. Repoint moved middleware (only if you used it)
 
@@ -359,7 +359,7 @@ client := resilience.NewResilientClient(base, resilience.WithMaxRetries(3))
 client = observability.NewOTelMiddleware(client)
 ```
 
-There are **no other breaking changes** in v3 — no signature changes, no removed
+There are **no other breaking changes** in v3, no signature changes, no removed
 behavior. If your code does not reference the moved middleware, step 1 is sufficient.
 
 Why the move: it lets a consumer import `llms` for `Message`/`Response`/`Call` without
@@ -412,9 +412,9 @@ at a time.
 
 | Change | v1 | v2 | Migration |
 |--------|----|----|-----------|
-| **Tool handlers take a context** | `func(args json.RawMessage) (any, error)` | `func(ctx context.Context, args json.RawMessage) (any, error)` | Add `ctx context.Context` as the first parameter of every `ToolHandler` / `RegisterFunc` handler. `ToolRegistry.Handle` and `HandleAll` also gain a leading `ctx`. Handlers now receive a context that is canceled when the agent loop is canceled or a turn errors — honor it for long-running tools. |
+| **Tool handlers take a context** | `func(args json.RawMessage) (any, error)` | `func(ctx context.Context, args json.RawMessage) (any, error)` | Add `ctx context.Context` as the first parameter of every `ToolHandler` / `RegisterFunc` handler. `ToolRegistry.Handle` and `HandleAll` also gain a leading `ctx`. Handlers now receive a context that is canceled when the agent loop is canceled or a turn errors, honor it for long-running tools. |
 | **Sampling penalties are pointers** | `FrequencyPenalty float64`, `PresencePenalty float64` | `*float64` | If you set these via the `WithFrequencyPenalty` / `WithPresencePenalty` options, no change is needed. If you construct `CallOptions` as a struct literal, wrap values in a `*float64` (an explicit `0` is now distinguishable from unset). |
-| **`MustParseToolArguments` removed** | `MustParseToolArguments[T](tc)` (panicked on malformed model output) | — | Use the error-returning `ParseToolArguments[T](tc)` or `ParseToolArgumentsMap(tc)`. The `Must` variant was a denial-of-service risk because it panicked on model-controlled JSON. |
+| **`MustParseToolArguments` removed** | `MustParseToolArguments[T](tc)` (panicked on malformed model output) |, | Use the error-returning `ParseToolArguments[T](tc)` or `ParseToolArgumentsMap(tc)`. The `Must` variant was a denial-of-service risk because it panicked on model-controlled JSON. |
 | **RunPod registry error value** | `llms.New("runpod", cfg)` without `endpoint_id` returned `runpod.ErrMissingEndpointID` | returns an error wrapping `llms.ErrInvalidParameters` (names both provider and key) | Construction still fails the same way; only the error *value* changed. If you matched `errors.Is(err, runpod.ErrMissingEndpointID)` on the **registry** path, match `llms.ErrInvalidParameters` instead. The direct `runpod.New(...)` constructor still returns `ErrMissingEndpointID`. |
 
 Everything else is additive. New conveniences in v2 worth knowing: `llms.CollectStream` /
@@ -441,7 +441,7 @@ all shared types live in the root package.
 |---------|-------------|--------------|
 | Root (`llms`) | `github.com/nocturnium/llm-go-sdk/v6` | The entire core: the `LLM` interface, `Message`/`Response`/`Tool`/`Usage` types, `CallOption` builders (`WithTemperature`, `WithMaxTokens`, …), errors and sentinels, streaming, the capability registry, and every middleware (cost, resilience, rate limiting, fallback, OTel, Langfuse, logging, metrics). |
 | Providers | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>` | The 19 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
-| All-providers registry | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` | Blank-import only. Registers the 17 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
+| All-providers registry | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` | Blank-import only. Registers the 18 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
 | OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
 
 Everything else lives under `internal/` and is not importable by external code.
@@ -494,7 +494,7 @@ factory, then call `llms.New` or `llms.NewFromEnv`:
 ```go
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v6"
-	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 17 auto-registered chat providers
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 18 auto-registered chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o-mini"})
@@ -518,7 +518,7 @@ var client llms.LLM = base
 
 tracker := llms.NewCostTracker()
 client = llms.NewCostMiddleware(client, tracker)
-client = llms.NewResilientClient(client) // opt-in retries + circuit breaker
+client = resilience.NewResilientClient(client) // opt-in retries + circuit breaker
 ```
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design, including the

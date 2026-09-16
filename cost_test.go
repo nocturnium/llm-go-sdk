@@ -544,10 +544,15 @@ func TestCostMiddleware_Stream(t *testing.T) {
 		t.Errorf("content = %s, want %q", content, testCostHelloWorld)
 	}
 
-	// Wait for goroutine to finish tracking
-	time.Sleep(10 * time.Millisecond)
-
-	usage := tracker.GetUsage(ProviderOpenAI, "gpt-4o")
+	// Poll rather than sleep once: the middleware records usage on its own
+	// goroutine, and a fixed wait turns a loaded runner into a flake.
+	var usage *ModelUsage
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if usage = tracker.GetUsage(ProviderOpenAI, "gpt-4o"); usage != nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if usage == nil {
 		t.Fatal("expected usage to be tracked")
 	}
@@ -698,5 +703,24 @@ func TestCostTrackerPrefersReportedCost(t *testing.T) {
 	modeCost, modeKnown := tracker.RecordMode(ProviderOpenAI, "gpt-4o", usage, PricingModeBatch)
 	if !modeKnown || modeCost != reported {
 		t.Fatalf("RecordMode = (%v, %v), want (%v, true)", modeCost, modeKnown, reported)
+	}
+}
+
+// Reset is documented as clearing usage, so the per-mode split has to return to
+// zero with it; otherwise a per-window reset reports spend from the last window.
+func TestCostTrackerResetClearsModeCosts(t *testing.T) {
+	tracker := NewCostTracker()
+	tracker.RecordMode(ProviderOpenAI, "gpt-5.6-sol", Usage{PromptTokens: 1_000_000}, PricingModeBatch)
+	if len(tracker.GetModeCosts()) == 0 {
+		t.Fatal("expected a recorded mode cost to start from")
+	}
+
+	tracker.Reset()
+
+	if modes := tracker.GetModeCosts(); len(modes) != 0 {
+		t.Fatalf("GetModeCosts after Reset = %v, want empty", modes)
+	}
+	if total := tracker.GetTotalCost(); total != 0 {
+		t.Fatalf("GetTotalCost after Reset = %v", total)
 	}
 }

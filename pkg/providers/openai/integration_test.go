@@ -268,12 +268,14 @@ func TestClient_GenerateContent_ErrorResponse(t *testing.T) {
 			}
 
 			if tc.wantErr != nil {
-				// Check that the error matches the expected error type
+				// Unguarded, a regression that stops returning *llms.APIError
+				// would leave the status assertion unreached.
 				var apiErr *llms.APIError
-				if errors.As(err, &apiErr) {
-					if apiErr.StatusCode != tc.statusCode {
-						t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
-					}
+				if !errors.As(err, &apiErr) {
+					t.Fatalf("error is %T, want *llms.APIError: %v", err, err)
+				}
+				if apiErr.StatusCode != tc.statusCode {
+					t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
 				}
 			}
 		})
@@ -297,7 +299,9 @@ func TestClient_Stream_Integration(t *testing.T) {
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("expected http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("expected http.Flusher")
+			return
 		}
 
 		chunks := []string{
@@ -477,8 +481,24 @@ func TestClient_RetryAfterHeader(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	// Note: The httpclient may retry automatically, so check the error details
-	_ = attempts // Attempts may vary based on retry policy
+	// The transport retries nothing by default, so the 429 comes straight back.
+	// What the header buys the caller is the wait it names, on the error.
+	if attempts != 1 {
+		t.Errorf("attempts = %d, want 1 (the default policy does not retry)", attempts)
+	}
+	if !errors.Is(err, llms.ErrRateLimited) {
+		t.Fatalf("err = %v, want ErrRateLimited", err)
+	}
+	var apiErr *llms.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error is %T, want *llms.APIError", err)
+	}
+	if apiErr.RetryAfter != 30*time.Second {
+		t.Errorf("RetryAfter = %v, want 30s", apiErr.RetryAfter)
+	}
+	if apiErr.RequestID != "req-123" {
+		t.Errorf("RequestID = %q, want req-123", apiErr.RequestID)
+	}
 }
 
 func TestClient_Call_Convenience(t *testing.T) {
@@ -490,7 +510,9 @@ func TestClient_Call_Convenience(t *testing.T) {
 
 		messages, ok := req["messages"].([]any)
 		if !ok {
-			t.Fatal("messages is not a []any")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("messages is not a []any")
+			return
 		}
 		if len(messages) != 1 {
 			t.Errorf("expected 1 message, got %d", len(messages))

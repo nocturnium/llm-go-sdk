@@ -25,7 +25,7 @@ Steps to reproduce the behavior:
 
 ## Actual Behavior
 
-<!-- What actually happened -->
+<!-- What happened -->
 
 ## Code Example
 

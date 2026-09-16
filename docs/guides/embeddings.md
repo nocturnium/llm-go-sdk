@@ -10,7 +10,7 @@ This guide covers both, using only the current public API.
 !!! note "Vectors are `[]float32`"
     Every embedding vector in this SDK is a Go `[]float32`. The package-level
     helpers (`llms.EmbedQuery`, `llms.EmbedDocuments`) return `[]float32` and
-    `[][]float32` respectively — no boxing, no `interface{}`.
+    `[][]float32` respectively, no boxing, no `interface{}`.
 
 ## The `Embedder` interface
 
@@ -143,7 +143,7 @@ resp, err := embedder.Embed(ctx, []string{"text to embed"},
 
 !!! warning "Not every model supports dimension reduction"
     `WithDimensions` only takes effect on models that allow it. On models that
-    don't, the option is ignored or the request errors — handle the error and
+    don't, the option is ignored or the request errors, handle the error and
     fall back to the model's native size.
 
 ## Which providers support embeddings
@@ -157,7 +157,7 @@ These providers implement `Embedder` and can be used with `llms.AsEmbedder`:
 | gemini | `gemini.New(...)` | `text-embedding-004` |
 | mistral | `mistral.New(...)` | `mistral-embed` |
 | ollama | `ollama.New(...)` | `nomic-embed-text` |
-| llamacpp | `llamacpp.New(...)` | (model-dependent — set explicitly) |
+| llamacpp | `llamacpp.New(...)` | (model-dependent, set explicitly) |
 | fireworks | `fireworks.New(...)` | (set explicitly) |
 | togetherai | `togetherai.New(...)` | (set explicitly) |
 | synthetic | `synthetic.New(...)` | (set explicitly) |

@@ -376,13 +376,3 @@ func TestClientCapabilitiesDerivedFromHandlers(t *testing.T) {
 		}
 	})
 }
-
-// TestClientStaysComparable pins the reason inbound is pointer-held. A mutex by
-// value on Client would break every caller comparing two client values.
-func TestClientStaysComparable(t *testing.T) {
-	var a, b *Client
-	if a != b {
-		t.Error("nil client pointers should compare equal")
-	}
-	_ = map[*Client]struct{}{}
-}

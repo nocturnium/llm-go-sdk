@@ -3,7 +3,7 @@
 This guide covers the everyday request/response flow: building a slice of
 messages, calling the model with `GenerateContent`, tuning the call with
 options, and reading the `Response` back. Streaming and tool calling have their
-own guides — here we focus on plain text generation and multi-turn conversation.
+own guides, here we focus on plain text generation and multi-turn conversation.
 
 !!! info "Imports used on this page"
     ```go
@@ -20,7 +20,7 @@ own guides — here we focus on plain text generation and multi-turn conversatio
 ## Messages
 
 A conversation is an ordered `[]llms.Message`. Each message has a `Role` and
-either simple text (`Content`) or multi-part content (`Parts`, used for vision —
+either simple text (`Content`) or multi-part content (`Parts`, used for vision , 
 see the vision guide).
 
 ```go
@@ -195,13 +195,13 @@ the constants rather than raw strings:
 | Constant | Value | Meaning |
 | --- | --- | --- |
 | `llms.FinishReasonStop` | `stop` | Normal completion (or a stop word was hit). |
-| `llms.FinishReasonLength` | `length` | Hit the token / length limit — output is truncated. |
+| `llms.FinishReasonLength` | `length` | Hit the token / length limit, output is truncated. |
 | `llms.FinishReasonToolCalls` | `tool_calls` | The model wants to call one or more tools. |
 | `llms.FinishReasonContentFilter` | `content_filter` | Generation was halted by a content filter. |
 
 ```go
 if resp.FinishReason == llms.FinishReasonLength {
-    log.Println("output was truncated — consider raising WithMaxTokens")
+    log.Println("output was truncated, consider raising WithMaxTokens")
 }
 ```
 
@@ -256,7 +256,7 @@ provider-specific detail.
 
 ## The `llms.Call` helper
 
-For the simplest case — one user prompt, just the text back —
+For the simplest case, one user prompt, just the text back , 
 `llms.Call` is a package-level helper (not a method) that wraps the prompt in a
 single user message and returns `resp.Content`:
 
@@ -323,7 +323,7 @@ messages = append(messages,
     llms.Message{Role: llms.RoleUser, Content: "Which week has the best cherry blossoms?"},
 )
 
-// Turn 2 — the model now has the full context.
+// Turn 2, the model now has the full context.
 resp, err = client.GenerateContent(ctx, messages)
 if err != nil {
     log.Fatal(err)
@@ -335,14 +335,14 @@ fmt.Println("Assistant:", resp.Content)
     - Append the assistant turn from `resp.Content` (or the full message,
       including any `resp.ToolCalls`, when using tools).
     - Keep exactly one system message at the front.
-    - Long histories cost tokens on every turn — trim or summarize old turns to
+    - Long histories cost tokens on every turn, trim or summarize old turns to
       stay within the model's context window and your budget.
 
 ---
 
 ## Inspecting the client
 
-Three accessors let you introspect a client at runtime — handy for logging,
+Three accessors let you introspect a client at runtime, handy for logging,
 routing, and capability checks:
 
 ```go
@@ -377,4 +377,4 @@ if err != nil {
 !!! note "Providers do not retry by default"
     A transient `429` or `5xx` surfaces immediately as an error. To add
     automatic retries, backoff, circuit breaking, or fallback, wrap the client
-    with the resilience helpers — see the resilience guide.
+    with the resilience helpers, see the resilience guide.

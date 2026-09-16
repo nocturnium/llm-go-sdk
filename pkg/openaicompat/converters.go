@@ -164,11 +164,6 @@ func convertToolCallsToLLMs(toolCalls []ToolCall) []llms.ToolCall {
 	return result
 }
 
-// appendOrMergeToolCall appends a new tool call or merges with an existing one.
-// This is used during streaming to accumulate tool call arguments.
-// OpenAI streaming sends tool call deltas with an index field to identify which
-// tool call to update. The first delta has the id/name, subsequent deltas only
-// have the index and arguments to append.
 // mergeIndexedToolCall merges delta into the tool call at idx (0 <= idx < cap),
 // extending the slice with empty entries if idx is beyond the current length.
 func mergeIndexedToolCall(calls []llms.ToolCall, idx int, delta ToolCall) []llms.ToolCall {
@@ -206,6 +201,9 @@ func mergeIndexedToolCall(calls []llms.ToolCall, idx int, delta ToolCall) []llms
 	return calls
 }
 
+// appendOrMergeToolCall appends a new tool call or merges delta into an existing
+// one while a stream accumulates arguments. OpenAI sends the id and name on the
+// first delta and only an index plus argument text after that.
 func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCall {
 	// First try to match by index (OpenAI streaming format). A negative index is
 	// malformed (a hostile/buggy server could send -1 to panic calls[-1]); fall
@@ -223,7 +221,15 @@ func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCal
 	// Fall back to ID-based matching (for non-OpenAI providers or edge cases)
 	for i := range calls {
 		if calls[i].ID != "" && calls[i].ID == delta.ID {
-			if delta.Function != nil && calls[i].Function != nil {
+			if delta.Function != nil {
+				// A first delta that carried only the id leaves Function nil, so
+				// the arguments that follow would otherwise be dropped.
+				if calls[i].Function == nil {
+					calls[i].Function = &llms.FunctionCall{}
+				}
+				if calls[i].Function.Name == "" {
+					calls[i].Function.Name = delta.Function.Name
+				}
 				calls[i].Function.Arguments += delta.Function.Arguments
 			}
 			return calls

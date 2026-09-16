@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -352,6 +353,26 @@ func formatGeminiModelName(id string) string {
 }
 
 // inferGeminiModelTypes infers the model types from the model ID and supported methods
+// visionCapableGemini reports whether a Gemini id belongs to a family that takes
+// image input. Everything from 1.5 on does, so this is a minimum version check
+// rather than a list that has to grow with each new family.
+func visionCapableGemini(idLower string) bool {
+	rest, ok := strings.CutPrefix(idLower, "gemini-")
+	if !ok {
+		return false
+	}
+	major, _, _ := strings.Cut(rest, ".")
+	major, _, _ = strings.Cut(major, "-")
+	n, err := strconv.Atoi(major)
+	if err != nil {
+		return false
+	}
+	if n == 1 {
+		return strings.HasPrefix(rest, "1.5")
+	}
+	return n >= 2
+}
+
 func inferGeminiModelTypes(id string, methods []string) []llms.ModelType {
 	idLower := strings.ToLower(id)
 
@@ -378,10 +399,9 @@ func inferGeminiModelTypes(id string, methods []string) []llms.ModelType {
 		}
 	}
 
-	// Gemini 1.5+ and 2.0 models support vision
-	if strings.HasPrefix(idLower, "gemini-1.5") ||
-		strings.HasPrefix(idLower, "gemini-2") ||
-		strings.Contains(idLower, "vision") {
+	// Gemini 1.5 and everything after it takes image input, so the check has to
+	// admit families this build has never heard of rather than name each one.
+	if visionCapableGemini(idLower) || strings.Contains(idLower, "vision") {
 		return []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}
 	}
 

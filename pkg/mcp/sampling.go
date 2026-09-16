@@ -48,6 +48,29 @@ type SamplingRequest struct {
 	MaxTokens      int             `json:"maxTokens"`
 	StopSequences  []string        `json:"stopSequences,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
+
+	// temperatureSet records whether the server sent a temperature at all, so an
+	// explicit 0 is distinguishable from an omitted field without changing the
+	// exported type.
+	temperatureSet bool
+}
+
+// UnmarshalJSON decodes the request and notes whether temperature was present.
+func (r *SamplingRequest) UnmarshalJSON(data []byte) error {
+	type plain SamplingRequest
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var presence struct {
+		Temperature *float64 `json:"temperature"`
+	}
+	if err := json.Unmarshal(data, &presence); err != nil {
+		return err
+	}
+	*r = SamplingRequest(decoded)
+	r.temperatureSet = presence.Temperature != nil
+	return nil
 }
 
 // SamplingResult is the completion returned to the server.
@@ -226,7 +249,9 @@ func samplingFromLLM(llm llms.LLM, extra []llms.CallOption) SamplingHandler {
 		// Server-requested parameters first, host options last, so a host option
 		// always overrides what the server asked for.
 		options := []llms.CallOption{llms.WithMaxTokens(req.MaxTokens)}
-		if req.Temperature > 0 {
+		// temperatureSet, not Temperature > 0: a server asking for 0 wants
+		// deterministic output, which is not the same as asking for nothing.
+		if req.temperatureSet {
 			options = append(options, llms.WithTemperature(req.Temperature))
 		}
 		if len(req.StopSequences) > 0 {

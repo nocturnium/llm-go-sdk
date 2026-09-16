@@ -184,21 +184,28 @@ data: world
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event1, _ := reader.Read()
+	event1, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read first event: %v", err)
+	}
 	if event1.ID != "123" {
 		t.Errorf("expected id=123, got %s", event1.ID)
 	}
 
-	event2, _ := reader.Read()
+	event2, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event2: %v", err)
+	}
 	if event2.ID != "456" {
 		t.Errorf("expected id=456, got %s", event2.ID)
 	}
 }
 
+// Concurrent readers share one reader, so no event may be delivered twice or
+// lost: the counts across goroutines have to add up to what was written.
 func TestSSEReader_ConcurrentRead(t *testing.T) {
-	// Verify that concurrent reads don't cause issues
-	// (though typically only one goroutine should read)
-	data := strings.Repeat("data: test\n\n", 100)
+	const eventCount = 100
+	data := strings.Repeat("data: test\n\n", eventCount)
 
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
@@ -228,35 +235,28 @@ func TestSSEReader_ConcurrentRead(t *testing.T) {
 
 	wg.Wait()
 
-	// Due to concurrent reads, we might not get exactly 100
-	// but we should get at least some
-	if count == 0 {
-		t.Error("expected some events to be read")
+	if count != eventCount {
+		t.Errorf("read %d events across readers, want the %d written", count, eventCount)
 	}
 }
 
 func TestSSEReader_ContextCancellation(t *testing.T) {
 	pr, pw := io.Pipe()
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Writer that blocks indefinitely
+	// The reader takes no context, so what ends a blocked Read is the writer
+	// closing the pipe. That is what this pins; a context would not reach it.
 	go func() {
-		time.Sleep(100 * time.Millisecond)
-		cancel() // Cancel after a short delay
-		_ = pw.Close()
+		time.Sleep(10 * time.Millisecond)
+		_ = pw.CloseWithError(context.Canceled)
 	}()
 
 	reader := NewSSEReader(pr)
 	defer func() { _ = reader.Close() }()
 
-	// Try to read - should eventually fail when pipe closes
 	_, err := reader.Read()
-	if err == nil {
-		t.Error("expected error after context cancellation")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want the error the writer closed with", err)
 	}
-
-	_ = ctx // Used for documentation
 }
 
 func TestSSEReader_CloseWhileReading(t *testing.T) {
@@ -302,12 +302,18 @@ data: {"id":"2","content":"world","done":true}
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event1, _ := reader.Read()
+	event1, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event1: %v", err)
+	}
 	if event1.Data != `{"id":"1","content":"hello"}` {
 		t.Errorf("unexpected data: %s", event1.Data)
 	}
 
-	event2, _ := reader.Read()
+	event2, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event2: %v", err)
+	}
 	if event2.Data != `{"id":"2","content":"world","done":true}` {
 		t.Errorf("unexpected data: %s", event2.Data)
 	}
@@ -324,12 +330,18 @@ data: [DONE]
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event1, _ := reader.Read()
+	event1, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event1: %v", err)
+	}
 	if event1.Data != `{"content":"hello"}` {
 		t.Errorf("unexpected data: %s", event1.Data)
 	}
 
-	event2, _ := reader.Read()
+	event2, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event2: %v", err)
+	}
 	if event2.Data != "[DONE]" {
 		t.Errorf("expected [DONE], got: %s", event2.Data)
 	}
@@ -427,10 +439,13 @@ data: with-space
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event, _ := reader.Read()
-	// Both should be handled, space after colon is optional
-	if event.Data != "no-space\nwith-space" && event.Data != " no-space\nwith-space" {
-		// Implementation may vary
-		t.Logf("data handling: %q", event.Data)
+	event, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event: %v", err)
+	}
+	// The SSE spec strips one optional space after the colon, so both field
+	// forms decode to the same data.
+	if event.Data != "no-space\nwith-space" {
+		t.Errorf("data = %q, want %q", event.Data, "no-space\nwith-space")
 	}
 }

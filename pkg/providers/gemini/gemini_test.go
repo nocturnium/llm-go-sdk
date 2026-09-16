@@ -41,15 +41,15 @@ func TestNewClientMissingAPIKey(t *testing.T) {
 	// Ensure env vars are not set
 	originalGemini := os.Getenv("GEMINI_API_KEY")
 	originalGoogle := os.Getenv("GOOGLE_API_KEY")
-	_ = os.Unsetenv("GEMINI_API_KEY")
-	_ = os.Unsetenv("GOOGLE_API_KEY")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("LLM_API_KEY", "")
 	defer func() {
 		if originalGemini != "" {
-			_ = os.Setenv("GEMINI_API_KEY", originalGemini)
+			t.Setenv("GEMINI_API_KEY", originalGemini)
 		}
 		if originalGoogle != "" {
-			_ = os.Setenv("GOOGLE_API_KEY", originalGoogle)
+			t.Setenv("GOOGLE_API_KEY", originalGoogle)
 		}
 	}()
 
@@ -62,17 +62,17 @@ func TestNewClientMissingAPIKey(t *testing.T) {
 func TestNewClientWithGeminiEnvAPIKey(t *testing.T) {
 	originalGemini := os.Getenv("GEMINI_API_KEY")
 	originalGoogle := os.Getenv("GOOGLE_API_KEY")
-	_ = os.Setenv("GEMINI_API_KEY", "gemini-env-key")
-	_ = os.Unsetenv("GOOGLE_API_KEY")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("GEMINI_API_KEY", "gemini-env-key")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("LLM_API_KEY", "")
 	defer func() {
 		if originalGemini != "" {
-			_ = os.Setenv("GEMINI_API_KEY", originalGemini)
+			t.Setenv("GEMINI_API_KEY", originalGemini)
 		} else {
-			_ = os.Unsetenv("GEMINI_API_KEY")
+			t.Setenv("GEMINI_API_KEY", "")
 		}
 		if originalGoogle != "" {
-			_ = os.Setenv("GOOGLE_API_KEY", originalGoogle)
+			t.Setenv("GOOGLE_API_KEY", originalGoogle)
 		}
 	}()
 
@@ -93,17 +93,17 @@ func TestNewClientWithGoogleEnvAPIKey(t *testing.T) {
 	// Set GOOGLE_API_KEY env var (fallback)
 	originalGemini := os.Getenv("GEMINI_API_KEY")
 	originalGoogle := os.Getenv("GOOGLE_API_KEY")
-	_ = os.Unsetenv("GEMINI_API_KEY")
-	_ = os.Setenv("GOOGLE_API_KEY", "google-env-key")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "google-env-key")
+	t.Setenv("LLM_API_KEY", "")
 	defer func() {
 		if originalGemini != "" {
-			_ = os.Setenv("GEMINI_API_KEY", originalGemini)
+			t.Setenv("GEMINI_API_KEY", originalGemini)
 		}
 		if originalGoogle != "" {
-			_ = os.Setenv("GOOGLE_API_KEY", originalGoogle)
+			t.Setenv("GOOGLE_API_KEY", originalGoogle)
 		} else {
-			_ = os.Unsetenv("GOOGLE_API_KEY")
+			t.Setenv("GOOGLE_API_KEY", "")
 		}
 	}()
 
@@ -147,20 +147,20 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 	originalGemini := os.Getenv("GEMINI_API_KEY")
 	originalGoogle := os.Getenv("GOOGLE_API_KEY")
 	originalLLM := os.Getenv("LLM_API_KEY")
-	_ = os.Unsetenv("GEMINI_API_KEY")
-	_ = os.Unsetenv("GOOGLE_API_KEY")
-	_ = os.Setenv("LLM_API_KEY", "llm-fallback-key")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("LLM_API_KEY", "llm-fallback-key")
 	defer func() {
 		if originalGemini != "" {
-			_ = os.Setenv("GEMINI_API_KEY", originalGemini)
+			t.Setenv("GEMINI_API_KEY", originalGemini)
 		}
 		if originalGoogle != "" {
-			_ = os.Setenv("GOOGLE_API_KEY", originalGoogle)
+			t.Setenv("GOOGLE_API_KEY", originalGoogle)
 		}
 		if originalLLM != "" {
-			_ = os.Setenv("LLM_API_KEY", originalLLM)
+			t.Setenv("LLM_API_KEY", originalLLM)
 		} else {
-			_ = os.Unsetenv("LLM_API_KEY")
+			t.Setenv("LLM_API_KEY", "")
 		}
 	}()
 

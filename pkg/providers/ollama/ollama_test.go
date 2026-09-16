@@ -64,9 +64,9 @@ func TestOllamaHostEnvVar(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// The client should have used the custom host
-	if client.Provider() != llms.ProviderOllama {
-		t.Errorf("expected provider ollama, got %s", client.Provider())
+	// The point of the env var is the base URL it produces.
+	if got := client.options.BaseURL; got != "http://custom-host:11434/v1" {
+		t.Errorf("BaseURL = %q, want the host from OLLAMA_HOST", got)
 	}
 }
 
@@ -141,5 +141,18 @@ func TestInferModelTypes(t *testing.T) {
 				t.Errorf("inferModelTypes(%s) returned %d types, want %d", tt.modelID, len(result), len(tt.expectedTypes))
 			}
 		})
+	}
+}
+
+// OLLAMA_HOST is commonly set as host:port; without a scheme the base URL is
+// not something the transport can dial.
+func TestOllamaHostWithoutScheme(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "127.0.0.1:11500")
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.options.BaseURL; got != "http://127.0.0.1:11500/v1" {
+		t.Fatalf("BaseURL = %q", got)
 	}
 }

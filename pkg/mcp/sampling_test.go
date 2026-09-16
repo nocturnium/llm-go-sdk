@@ -443,3 +443,23 @@ func TestSamplingNotAdvertisedOnTransportsThatCannotServeIt(t *testing.T) {
 		t.Error("sampling advertised on a transport that cannot deliver the request")
 	}
 }
+
+// A server asking for temperature 0 wants deterministic output, which is not the
+// same as omitting the field.
+func TestSamplingRequest_ExplicitZeroTemperature(t *testing.T) {
+	var explicit SamplingRequest
+	if err := json.Unmarshal([]byte(`{"messages":[],"maxTokens":16,"temperature":0}`), &explicit); err != nil {
+		t.Fatal(err)
+	}
+	if !explicit.temperatureSet {
+		t.Error("an explicit temperature of 0 read as unset")
+	}
+
+	var omitted SamplingRequest
+	if err := json.Unmarshal([]byte(`{"messages":[],"maxTokens":16}`), &omitted); err != nil {
+		t.Fatal(err)
+	}
+	if omitted.temperatureSet {
+		t.Error("an omitted temperature read as set")
+	}
+}

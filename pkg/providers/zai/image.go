@@ -35,8 +35,11 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...llms.
 		body["quality"] = o.Quality
 	}
 	for k, v := range o.Extra {
-		if k == "n" || k == "response_format" {
+		switch k {
+		case "n", "response_format":
 			return nil, c.mediaError(fmt.Errorf("unsupported image extra %q: %w", k, llms.ErrInvalidParameters))
+		case "model", "prompt", "size", "quality":
+			return nil, c.mediaError(fmt.Errorf("image extra %q is reserved for the typed option: %w", k, llms.ErrInvalidParameters))
 		}
 		body[k] = v
 	}

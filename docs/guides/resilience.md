@@ -1,14 +1,14 @@
 # Resilience
 
 Network calls to LLM providers fail. APIs rate-limit you (HTTP 429), have transient
-outages (HTTP 5xx), get overloaded, or simply time out. This guide covers the
+outages (HTTP 5xx), get overloaded, or time out. This guide covers the
 opt-in resilience wrappers in `llms` that make your application robust against
 these failures:
 
-- **Retries with exponential backoff** — re-issue requests that hit transient errors.
-- **Circuit breaker** — stop hammering a provider that is clearly down.
-- **Client-side rate limiting** — pace your own requests to stay under provider quotas.
-- **Fallback chains** — automatically switch to a backup provider/model when the
+- **Retries with exponential backoff**, re-issue requests that hit transient errors.
+- **Circuit breaker**, stop hammering a provider that is clearly down.
+- **Client-side rate limiting**, pace your own requests to stay under provider quotas.
+- **Fallback chains**, automatically switch to a backup provider/model when the
   primary fails, with time-based recovery.
 
 !!! warning "Retries are OFF by default"
@@ -71,7 +71,7 @@ func main() {
 ### What gets retried
 
 The default retry policy (`resilience.DefaultShouldRetry`) only retries errors that are
-genuinely transient:
+transient:
 
 | Condition | Retried? |
 |-----------|----------|
@@ -83,7 +83,7 @@ genuinely transient:
 
 Retryable errors are detected via the typed `*llms.APIError` (which exposes
 `StatusCode`, `Type`, `Code`, etc.). Client-side mistakes such as a bad API key or
-an invalid request are returned immediately — retrying them would be pointless.
+an invalid request are returned immediately, retrying them would be pointless.
 
 ### Defaults and options
 
@@ -144,7 +144,7 @@ The fields of `RetryConfig` are:
 | `ShouldRetry` | `func(error) bool` | Predicate deciding whether an error is retryable. |
 
 When a provider returns a Retry-After value (surfaced on `*llms.APIError` as
-`RetryAfter`), the retry waits at least that long — it overrides the computed
+`RetryAfter`), the retry waits at least that long, it overrides the computed
 backoff when larger, still bounded by `MaxDelay`.
 
 You can supply your own `ShouldRetry` to broaden or narrow what counts as
@@ -170,10 +170,10 @@ own).
 
 The breaker has three states:
 
-- **`CircuitClosed`** — normal operation; requests pass through.
-- **`CircuitOpen`** — failure threshold exceeded; requests are rejected immediately
+- **`CircuitClosed`**, normal operation; requests pass through.
+- **`CircuitOpen`**, failure threshold exceeded; requests are rejected immediately
   with `resilience.ErrCircuitOpen` (this error is **not** retried).
-- **`CircuitHalfOpen`** — after the reset timeout elapses, a limited number of probe
+- **`CircuitHalfOpen`**, after the reset timeout elapses, a limited number of probe
   requests are allowed through to test recovery. Enough successes close the circuit
   again; any failure re-opens it.
 
@@ -199,13 +199,13 @@ client := resilience.NewResilientClient(base,
 | `WithMaxFailures(n int)` | 5 | Consecutive provider-health failures before opening. |
 | `WithResetTimeout(d time.Duration)` | 30s | Time to stay open before allowing half-open probes. |
 | `WithHalfOpenMax(n int)` | 3 | Probe requests allowed (and successes required to close) in half-open. |
-| `WithOnStateChange(fn func(from, to CircuitState))` | — | Callback on every state transition. |
+| `WithOnStateChange(fn func(from, to CircuitState))` |, | Callback on every state transition. |
 
 !!! note "Only transient failures trip the breaker"
     The breaker counts a failure toward opening **only** when the error indicates the
     provider itself is unhealthy (429/5xx responses, or transport-level failures
     such as connection refused, connection reset, EOF, and timeouts). Context cancellation, deadlines, other
-    4xx errors, and `ErrCircuitOpen` do **not** trip it — so a burst of bad requests
+    4xx errors, and `ErrCircuitOpen` do **not** trip it, so a burst of bad requests
     or canceled calls will not needlessly open the circuit on a healthy provider.
 
 You can inspect or reset the breaker. `ResilientClient.CircuitBreaker()` returns the
@@ -314,7 +314,7 @@ errors that suggest the current provider is the problem:
 
 - HTTP 429 (rate limited)
 - HTTP 500 / 502 / 503 / 504 (server errors)
-- HTTP 529 (overloaded — Anthropic)
+- HTTP 529 (overloaded, Anthropic)
 - API error types `rate_limit_error`, `overloaded_error`, `server_error`
 - Transport-level failures: connection refused, connection reset, EOF /
   unexpected EOF, and network timeouts (any net.Error)
@@ -328,8 +328,8 @@ tried and failed, it returns the last error encountered.
 
 | Option | Default | Effect |
 |--------|---------|--------|
-| `WithOnFallback(fn func(fromIdx, toIdx int, from, to LLM, err error))` | — | Callback when advancing to the next client. |
-| `WithOnSuccess(fn func(idx int, client LLM))` | — | Callback when a client succeeds. |
+| `WithOnFallback(fn func(fromIdx, toIdx int, from, to LLM, err error))` |, | Callback when advancing to the next client. |
+| `WithOnSuccess(fn func(idx int, client LLM))` |, | Callback when a client succeeds. |
 | `WithRecoveryAfter(d time.Duration)` | 30s | Cooldown before a failed client is probed again. |
 | `WithFallbackSelector(s FallbackSelector)` | `DefaultFallbackSelector` | Customize which errors trigger fallback. |
 
@@ -341,7 +341,7 @@ Built-in selectors: `resilience.DefaultFallbackSelector{}` (the default, above),
 ### Time-based recovery
 
 The chain tracks per-client health. When a client fails, it is marked **unhealthy
-for `WithRecoveryAfter`** (default 30s) and is skipped on subsequent calls — the
+for `WithRecoveryAfter`** (default 30s) and is skipped on subsequent calls, the
 chain starts from the next healthy client, so you do not pay the latency of retrying
 a known-bad provider on every request.
 
@@ -352,7 +352,7 @@ The recovery is "half-open" style:
   tried as a probe. A success marks it healthy again; a failure restarts its
   cooldown.
 - **Failsafe:** if *every* client is currently in cooldown, the chain falls back to
-  trying all clients anyway rather than returning "no clients available" — better a
+  trying all clients anyway rather than returning "no clients available", better a
   long shot than no shot.
 
 ```go
@@ -408,7 +408,7 @@ func buildClient() (llms.LLM, error) {
 		return nil, err
 	}
 
-	// 1. Rate-limit, then 2. make resilient — once per provider.
+	// 1. Rate-limit, then 2. make resilient, once per provider.
 	primary := resilience.NewResilientClient(
 		resilience.NewRateLimitedClient(openaiBase,
 			resilience.WithRequestsPerMinute(60),

@@ -28,10 +28,8 @@ func TestResolveAPIKey(t *testing.T) {
 	}
 
 	t.Run("explicit key takes precedence", func(t *testing.T) {
-		_ = os.Setenv("TEST_PROVIDER_KEY", "env-key")
-		_ = os.Setenv("LLM_API_KEY", "fallback-key")
-		defer func() { _ = os.Unsetenv("TEST_PROVIDER_KEY") }()
-		defer func() { _ = os.Unsetenv("LLM_API_KEY") }()
+		t.Setenv("TEST_PROVIDER_KEY", "env-key")
+		t.Setenv("LLM_API_KEY", "fallback-key")
 
 		key := ResolveAPIKey("explicit-key", "TEST_PROVIDER_KEY")
 		if key != "explicit-key" {
@@ -40,10 +38,8 @@ func TestResolveAPIKey(t *testing.T) {
 	})
 
 	t.Run("provider env var takes precedence over fallback", func(t *testing.T) {
-		_ = os.Setenv("TEST_PROVIDER_KEY", "provider-key")
-		_ = os.Setenv("LLM_API_KEY", "fallback-key")
-		defer func() { _ = os.Unsetenv("TEST_PROVIDER_KEY") }()
-		defer func() { _ = os.Unsetenv("LLM_API_KEY") }()
+		t.Setenv("TEST_PROVIDER_KEY", "provider-key")
+		t.Setenv("LLM_API_KEY", "fallback-key")
 
 		key := ResolveAPIKey("", "TEST_PROVIDER_KEY")
 		if key != "provider-key" {
@@ -52,8 +48,7 @@ func TestResolveAPIKey(t *testing.T) {
 	})
 
 	t.Run("checks provider env vars in order", func(t *testing.T) {
-		_ = os.Setenv("TEST_FALLBACK_KEY", "second-key")
-		defer func() { _ = os.Unsetenv("TEST_FALLBACK_KEY") }()
+		t.Setenv("TEST_FALLBACK_KEY", "second-key")
 
 		key := ResolveAPIKey("", "TEST_PROVIDER_KEY", "TEST_FALLBACK_KEY")
 		if key != "second-key" {
@@ -62,8 +57,7 @@ func TestResolveAPIKey(t *testing.T) {
 	})
 
 	t.Run("falls back to LLM_API_KEY", func(t *testing.T) {
-		_ = os.Setenv("LLM_API_KEY", "fallback-key")
-		defer func() { _ = os.Unsetenv("LLM_API_KEY") }()
+		t.Setenv("LLM_API_KEY", "fallback-key")
 
 		key := ResolveAPIKey("", "TEST_PROVIDER_KEY")
 		if key != "fallback-key" {
@@ -79,8 +73,7 @@ func TestResolveAPIKey(t *testing.T) {
 	})
 
 	t.Run("works with no provider env vars", func(t *testing.T) {
-		_ = os.Setenv("LLM_API_KEY", "fallback-key")
-		defer func() { _ = os.Unsetenv("LLM_API_KEY") }()
+		t.Setenv("LLM_API_KEY", "fallback-key")
 
 		key := ResolveAPIKey("")
 		if key != "fallback-key" {
@@ -95,19 +88,19 @@ func TestRequireAPIKey(t *testing.T) {
 	originalTestKey := os.Getenv("TEST_PROVIDER_KEY")
 	defer func() {
 		if originalLLMKey == "" {
-			_ = os.Unsetenv("LLM_API_KEY")
+			t.Setenv("LLM_API_KEY", "")
 		} else {
-			_ = os.Setenv("LLM_API_KEY", originalLLMKey)
+			t.Setenv("LLM_API_KEY", originalLLMKey)
 		}
 		if originalTestKey == "" {
-			_ = os.Unsetenv("TEST_PROVIDER_KEY")
+			t.Setenv("TEST_PROVIDER_KEY", "")
 		} else {
-			_ = os.Setenv("TEST_PROVIDER_KEY", originalTestKey)
+			t.Setenv("TEST_PROVIDER_KEY", originalTestKey)
 		}
 	}()
 
-	_ = os.Unsetenv("LLM_API_KEY")
-	_ = os.Unsetenv("TEST_PROVIDER_KEY")
+	t.Setenv("LLM_API_KEY", "")
+	t.Setenv("TEST_PROVIDER_KEY", "")
 
 	t.Run("returns key when found", func(t *testing.T) {
 		key, err := RequireAPIKey("testprovider", "explicit-key", "TEST_PROVIDER_KEY")

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -534,5 +535,45 @@ func TestWrapError(t *testing.T) {
 	err := WrapError("test", context.Canceled)
 	if err == nil {
 		t.Error("expected non-nil error")
+	}
+}
+
+// Ollama reports a failed pull as an error line in the NDJSON stream rather than
+// an HTTP status, so a nil return there would tell the caller a model it does not
+// have is downloaded.
+func TestPullModel_StreamError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/pull" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprint(w, `{"status":"pulling manifest"}`+"\n")
+		fmt.Fprint(w, `{"error":"model \"nope\" not found"}`+"\n")
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	err := client.PullModel(context.Background(), "nope", nil)
+	if err == nil {
+		t.Fatal("a failed pull returned nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("error lost the provider's reason: %v", err)
+	}
+}
+
+// A pull stream that ends without a success status is a pull that stopped
+// partway, which must not read as a downloaded model.
+func TestPullModel_TruncatedStream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprint(w, `{"status":"pulling manifest"}`+"\n")
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	if err := client.PullModel(context.Background(), "llama3.2", nil); err == nil {
+		t.Fatal("a truncated pull returned nil")
 	}
 }

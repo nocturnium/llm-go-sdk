@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -197,11 +199,14 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 			event.Delta = &delta
 		case "content_block_stop":
 			event.Type = eventType
-			// Parse index if present
 			var raw struct {
 				Index int `json:"index"`
 			}
-			_ = json.Unmarshal([]byte(sseEvent.Data), &raw)
+			// A stop event that does not parse is an error rather than an index of
+			// 0, which would attribute it to the first block of the stream.
+			if err := json.Unmarshal([]byte(sseEvent.Data), &raw); err != nil {
+				return nil, fmt.Errorf("decode content_block_stop: %w", err)
+			}
 			event.Index = raw.Index
 		case "message_delta":
 			var raw struct {
@@ -218,9 +223,12 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 
 			if len(raw.Delta) > 0 {
 				var msgDelta MessageDelta
-				if err := json.Unmarshal(raw.Delta, &msgDelta); err == nil {
-					event.MessageDelta = &msgDelta
+				// The delta carries the stop reason, so dropping a malformed one
+				// would end the stream as though the model gave none.
+				if err := json.Unmarshal(raw.Delta, &msgDelta); err != nil {
+					return nil, fmt.Errorf("decode message_delta: %w", err)
 				}
+				event.MessageDelta = &msgDelta
 			}
 		default:
 			// Skip unknown event types
@@ -292,26 +300,28 @@ func (c *Client) ListModels(ctx context.Context, params *ModelsListParams) (*Mod
 	var response ModelsListResponse
 
 	// Build URL with query parameters
-	url := c.baseURL + "/models"
+	requestURL := c.baseURL + "/models"
 	if params != nil {
-		queryParts := []string{}
+		// Escaped rather than concatenated: a cursor carrying & or = would
+		// otherwise truncate the query and page to the wrong place.
+		query := neturl.Values{}
 		if params.Limit > 0 {
-			queryParts = append(queryParts, fmt.Sprintf("limit=%d", params.Limit))
+			query.Set("limit", strconv.Itoa(params.Limit))
 		}
 		if params.AfterID != "" {
-			queryParts = append(queryParts, "after_id="+params.AfterID)
+			query.Set("after_id", params.AfterID)
 		}
 		if params.BeforeID != "" {
-			queryParts = append(queryParts, "before_id="+params.BeforeID)
+			query.Set("before_id", params.BeforeID)
 		}
-		if len(queryParts) > 0 {
-			url += "?" + strings.Join(queryParts, "&")
+		if len(query) > 0 {
+			requestURL += "?" + query.Encode()
 		}
 	}
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodGet,
-		URL:     url,
+		URL:     requestURL,
 		Headers: headers,
 	}, &response)
 
@@ -328,8 +338,10 @@ func (c *Client) GetModel(ctx context.Context, modelID string) (*ModelInfo, erro
 	var response ModelInfo
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method:  http.MethodGet,
-		URL:     c.baseURL + "/models/" + modelID,
+		Method: http.MethodGet,
+		// Escaped: a model id with a slash or a query character would otherwise
+		// change the path this request hits.
+		URL:     c.baseURL + "/models/" + neturl.PathEscape(modelID),
 		Headers: headers,
 	}, &response)
 

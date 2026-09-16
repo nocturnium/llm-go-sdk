@@ -3,8 +3,10 @@ package synthetic
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
@@ -48,8 +50,8 @@ func TestApplyOptions(t *testing.T) {
 func TestNewClientMissingAPIKey(t *testing.T) {
 	// Ensure env var is not set
 	originalKey := os.Getenv("SYNTHETIC_API_KEY")
-	_ = os.Unsetenv("SYNTHETIC_API_KEY")
-	_ = os.Unsetenv("LLM_API_KEY")
+	t.Setenv("SYNTHETIC_API_KEY", "")
+	t.Setenv("LLM_API_KEY", "")
 	defer func() {
 		if originalKey != "" {
 			t.Setenv("SYNTHETIC_API_KEY", originalKey)
@@ -70,7 +72,7 @@ func TestNewClientWithEnvAPIKey(t *testing.T) {
 		if originalKey != "" {
 			t.Setenv("SYNTHETIC_API_KEY", originalKey)
 		} else {
-			_ = os.Unsetenv("SYNTHETIC_API_KEY")
+			t.Setenv("SYNTHETIC_API_KEY", "")
 		}
 	}()
 
@@ -127,7 +129,7 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 	// Ensure provider-specific env var is not set but LLM_API_KEY is
 	originalSynthetic := os.Getenv("SYNTHETIC_API_KEY")
 	originalLLM := os.Getenv("LLM_API_KEY")
-	_ = os.Unsetenv("SYNTHETIC_API_KEY")
+	t.Setenv("SYNTHETIC_API_KEY", "")
 	t.Setenv("LLM_API_KEY", "llm-fallback-key")
 	defer func() {
 		if originalSynthetic != "" {
@@ -136,7 +138,7 @@ func TestNewClientWithLLMAPIKeyFallback(t *testing.T) {
 		if originalLLM != "" {
 			t.Setenv("LLM_API_KEY", originalLLM)
 		} else {
-			_ = os.Unsetenv("LLM_API_KEY")
+			t.Setenv("LLM_API_KEY", "")
 		}
 	}()
 
@@ -185,14 +187,14 @@ func TestEmbedRequiresModel(t *testing.T) {
 }
 
 func TestWithHTTPClient(t *testing.T) {
+	custom := &http.Client{Timeout: 3 * time.Second}
 	opts := apply(
 		WithAPIKey("test-key"),
-		WithHTTPClient(nil), // Just testing the option works
+		WithHTTPClient(custom),
 	)
 
-	// Just verify the option is applied (nil is valid for testing)
-	if opts.HTTPClient != nil {
-		t.Error("expected HTTPClient to be nil when set to nil")
+	if opts.HTTPClient != custom {
+		t.Errorf("HTTPClient = %v, want the client passed in", opts.HTTPClient)
 	}
 }
 

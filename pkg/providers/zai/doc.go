@@ -2,11 +2,12 @@
 //
 // # Overview
 //
-// Z.AI offers the GLM (General Language Model) series with a 200K context window
-// and up to 128K max output tokens. The platform provides three model variants:
-//   - GLM-4.7 (flagship model)
-//   - GLM-4.7-FlashX (optimized variant)
-//   - GLM-4.7-Flash (free tier)
+// Z.AI offers the GLM (General Language Model) series. The constants in this
+// package name the models it serves:
+//   - ModelGLM52, ModelGLM51, ModelGLM5 (GLM-5 family, 1M context on 5.2)
+//   - ModelGLM5Turbo (the fast GLM-5 variant for agentic and coding work)
+//   - ModelGLM47, ModelGLM46 (200K context)
+//   - ModelGLM45, ModelGLM45Air (128K context; Air is the lighter one)
 //
 // # Authentication
 //

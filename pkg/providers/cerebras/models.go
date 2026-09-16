@@ -34,13 +34,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		models = llms.FilterModelsByType(models, options.Types...)
 	}
 
+	hasMore := false
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		hasMore = true
 	}
 
 	return &llms.ListModelsResult{
 		Models:  models,
-		HasMore: false,
+		HasMore: hasMore,
 	}, nil
 }
 
@@ -60,13 +62,22 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	return nil, llms.ErrModelNotFound
 }
 
+// modelOrganization prefers the publisher the API reports; the id-substring
+// guess is the fallback for a response that omits it.
+func modelOrganization(m *openaicompat.ModelResponse) string {
+	if m.OwnedBy != "" {
+		return m.OwnedBy
+	}
+	return inferOrganization(m.ID)
+}
+
 func convertModelResponse(m *openaicompat.ModelResponse) llms.ModelInfo {
 	info := llms.ModelInfo{
 		ID:            m.ID,
 		DisplayName:   m.DisplayName,
 		Provider:      llms.ProviderCerebras,
 		ContextLength: m.ContextLength,
-		Organization:  inferOrganization(m.ID),
+		Organization:  modelOrganization(m),
 		FromCache:     false,
 	}
 

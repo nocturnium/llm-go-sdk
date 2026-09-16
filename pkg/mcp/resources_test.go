@@ -29,7 +29,9 @@ func TestClient_ListResourcesPagination(t *testing.T) {
 	// The second page must have been requested with the returned cursor.
 	if call, ok := m.lastCall(methodResourcesList); ok {
 		var p listResourcesParams
-		_ = json.Unmarshal(call.params, &p)
+		if err := json.Unmarshal(call.params, &p); err != nil {
+			t.Fatalf("decode captured params: %v", err)
+		}
 		if p.Cursor != "page2" {
 			t.Errorf("expected cursor=page2 on second call, got %q", p.Cursor)
 		}

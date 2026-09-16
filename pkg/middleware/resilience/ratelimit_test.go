@@ -639,3 +639,12 @@ func TestRateLimiter_WaitN_ClampsRequestsToBurst(t *testing.T) {
 		t.Fatalf("WaitN with requests above the burst: %v", err)
 	}
 }
+
+// AllowN refuses any count above the burst outright, so the non-blocking path
+// clamps it the way the blocking path does rather than refusing every call.
+func TestRateLimiter_TryAcquire_ClampsRequestsToBurst(t *testing.T) {
+	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithRequestBurst(2), WithBlocking(false))
+	if err := rl.WaitN(context.Background(), 5, 0); err != nil {
+		t.Fatalf("tryAcquire with requests above the burst: %v", err)
+	}
+}

@@ -212,10 +212,20 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 
 		// Check if we can merge with current
 		if current != nil && current.Role == msg.Role {
+			// Providers read Parts and ignore Content when a message carries both,
+			// so text merged into a multi-part message becomes a text part rather
+			// than sitting in Content unread.
+			if len(msg.Parts) > 0 && current.Content != "" {
+				current.Parts = append([]ContentPart{{Type: PartTypeText, Text: current.Content}}, current.Parts...)
+				current.Content = ""
+			}
 			if msg.Content != "" {
-				if current.Content != "" {
+				switch {
+				case len(current.Parts) > 0:
+					current.Parts = append(current.Parts, ContentPart{Type: PartTypeText, Text: msg.Content})
+				case current.Content != "":
 					current.Content += "\n" + msg.Content
-				} else {
+				default:
 					current.Content = msg.Content
 				}
 			}
@@ -261,6 +271,11 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 
 	var systemParts []string
 	var nonSystemMessages []Message
+	// A cache breakpoint on a system message survives consolidation: the merged
+	// message is the one a provider turns into its system block, so dropping it
+	// here would silently disable prompt caching the caller asked for. The first
+	// breakpoint wins, since the merged message can carry only one.
+	var systemCacheControl *CacheControl
 
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
@@ -268,6 +283,9 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 			// the simple Content field) is not silently dropped.
 			if text := msg.Text(); text != "" {
 				systemParts = append(systemParts, text)
+			}
+			if systemCacheControl == nil {
+				systemCacheControl = msg.CacheControl
 			}
 		} else {
 			nonSystemMessages = append(nonSystemMessages, msg)
@@ -281,8 +299,9 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 
 	result := make([]Message, 0, len(nonSystemMessages)+1)
 	result = append(result, Message{
-		Role:    RoleSystem,
-		Content: joinStrings(systemParts, "\n\n"),
+		Role:         RoleSystem,
+		Content:      joinStrings(systemParts, "\n\n"),
+		CacheControl: systemCacheControl,
 	})
 	result = append(result, nonSystemMessages...)
 

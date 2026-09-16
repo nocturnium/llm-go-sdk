@@ -11,7 +11,7 @@ queries:
 # go/log-injection; they are runnable docs, not shipped library code.
 #
 # The Go extractor filters via LGTM_INDEX_FILTERS, whose globs are file-based:
-# a bare "examples" does NOT match "examples/basic/main.go", so the "/**" form
+# a bare "examples" leaves "examples/basic/main.go" unmatched, so the "/**" form
 # is required (verified from the analyze run log).
 paths-ignore:
   - examples

@@ -63,7 +63,8 @@ func TestGetCapabilitiesHelper(t *testing.T) {
 	if got := GetCapabilities(mock); !got.Vision || got.MaxContextTokens != 4096 {
 		t.Errorf("GetCapabilities = %+v", got)
 	}
-	// A type that is not a CapableProvider yields the zero Capabilities.
+	// A wrapper that is not itself a CapableProvider is unwrapped, so the
+	// capabilities of the LLM inside it are what comes back.
 	if got := GetCapabilities(testWrapper{LLM: mock}); !got.Vision {
 		t.Errorf("GetCapabilities(wrapped) should pass through, got %+v", got)
 	}

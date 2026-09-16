@@ -386,13 +386,21 @@ func TestConvertModelResponse(t *testing.T) {
 }
 
 func TestClientImplementsModelLister(t *testing.T) {
-	// This is a compile-time check, but we can also verify at runtime
+	// The assertion below is a compile-time one; the call that follows is what
+	// shows the interface method works against a server.
 	client := setupMockServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"object": "list", "data": []}`))
 	})
 
-	var _ llms.ModelLister = client
+	var lister llms.ModelLister = client
+	result, err := lister.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels through the interface: %v", err)
+	}
+	if len(result.Models) != 0 {
+		t.Errorf("models = %d, want 0 for an empty catalog", len(result.Models))
+	}
 }
 
 // helper function

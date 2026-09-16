@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 )
 
 const (
@@ -271,4 +272,35 @@ func videoUsage(secondsText, size string) llms.MediaUsage {
 		usage.Unit = llms.MediaUnitSecond
 	}
 	return usage
+}
+
+// ApplyMultipartExtra merges a caller's Extra map into a multipart transcription
+// request, returning the files to append.
+//
+// Keys in reserved are refused with [llms.ErrInvalidParameters] rather than
+// applied: those name a typed option, and letting an extra win would send a
+// request the caller did not ask for (a replaced model bills against the wrong
+// rate; a replaced file transcribes different audio). Scalars become form
+// fields; a []string becomes repeated file parts under that field name;
+// anything else is refused.
+func ApplyMultipartExtra(fields map[string]string, extra map[string]any, reserved ...string) ([]httpclient.MultipartFile, error) {
+	var files []httpclient.MultipartFile
+	for key, value := range extra {
+		for _, name := range reserved {
+			if key == name {
+				return nil, fmt.Errorf("extra key %q is reserved for the typed option: %w", key, llms.ErrInvalidParameters)
+			}
+		}
+		switch typed := value.(type) {
+		case string, bool, int, float64:
+			fields[key] = fmt.Sprint(typed)
+		case []string:
+			for _, item := range typed {
+				files = append(files, httpclient.MultipartFile{Field: key, Data: []byte(item)})
+			}
+		default:
+			return nil, fmt.Errorf("invalid multipart extra %q: %w", key, llms.ErrInvalidParameters)
+		}
+	}
+	return files, nil
 }

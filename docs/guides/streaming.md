@@ -11,7 +11,7 @@ Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption)
 `Stream` accepts the same messages and [`CallOption`s](../configuration.md) as `GenerateContent`. It returns a **receive-only channel** of `llms.StreamChunk` values. The error in the return tuple is non-nil only for *setup* failures (invalid options, a failed initial connection); errors that occur mid-stream are delivered as a chunk on the channel (see [Terminal-chunk guarantee](#terminal-chunk-guarantee)).
 
 !!! note
-    Streaming is opt-in per call — it is a different method, not a flag on `GenerateContent`. There is no separate "enable streaming" option; calling `Stream` is what enables it.
+    Streaming is opt-in per call, it is a different method, not a flag on `GenerateContent`. There is no separate "enable streaming" option; calling `Stream` is what enables it.
 
 ## The StreamChunk type
 
@@ -116,7 +116,7 @@ func main() {
 }
 ```
 
-The three steps inside the loop — **check `Error`**, **accumulate `Content`**, **handle the terminal chunk** — are the pattern to remember.
+The three steps inside the loop, **check `Error`**, **accumulate `Content`**, **handle the terminal chunk**, are the pattern to remember.
 
 !!! tip
     Check `chunk.Error` before reading any other field. On an error chunk, `Content` and `Usage` may be empty or partial; treating the error path first keeps your accumulation logic clean.
@@ -129,14 +129,14 @@ The SDK provides a strong delivery contract:
 
 A terminal chunk is one with `Done == true` **or** a non-nil `Error`. This holds regardless of *how* the stream ends:
 
-- **Normal completion** — a final chunk with `Done == true`, carrying `FinishReason` and (when available) `Usage`.
-- **Mid-stream provider error** — a final chunk with `Error != nil`.
-- **Context cancellation or deadline** — a final chunk with `Error` set to the context error (`context.Canceled` or `context.DeadlineExceeded`).
-- **Consumer stops reading (send timeout)** — a terminal chunk carrying `llms.ErrStreamTimeout` is delivered if there is room; the producing goroutine then exits.
+- **Normal completion**, a final chunk with `Done == true`, carrying `FinishReason` and (when available) `Usage`.
+- **Mid-stream provider error**, a final chunk with `Error != nil`.
+- **Context cancellation or deadline**, a final chunk with `Error` set to the context error (`context.Canceled` or `context.DeadlineExceeded`).
+- **Consumer stops reading (send timeout)**, a terminal chunk carrying `llms.ErrStreamTimeout` is delivered if there is room; the producing goroutine then exits.
 
 This means two things for your code:
 
-1. You never have to distinguish "the channel closed" from "the stream finished" — a silent close that looks like success cannot happen. If the loop ends, you will have seen a terminal chunk (unless you `break`ed early yourself).
+1. You never have to distinguish "the channel closed" from "the stream finished", a silent close that looks like success cannot happen. If the loop ends, you will have seen a terminal chunk (unless you `break`ed early yourself).
 2. You should not assume `Done == true` implies success. A truncated stream caused by cancellation surfaces as an `Error` chunk, never as a clean `Done`. Always inspect `chunk.Error`.
 
 !!! warning
@@ -168,7 +168,7 @@ for chunk := range stream {
 }
 ```
 
-To stop early from inside the loop (for example, once you have enough output), call `cancel()` and continue draining — or simply `break`. Either way the SDK's send-timeout machinery prevents the producer goroutine from leaking:
+To stop early from inside the loop (for example, once you have enough output), call `cancel()` and continue draining, or `break`. Either way the SDK's send-timeout machinery prevents the producer goroutine from leaking:
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
@@ -202,7 +202,7 @@ stream, err := client.Stream(ctx, messages,
 )
 ```
 
-A value of `0` (or negative) leaves the default in effect rather than disabling the timeout — the SDK always applies a minimum to avoid leaks.
+A value of `0` (or negative) leaves the default in effect rather than disabling the timeout, the SDK always applies a minimum to avoid leaks.
 
 You can also size the channel buffer with `WithStreamBufferSize` (default 100). A larger buffer reduces backpressure on the producer at the cost of memory:
 
@@ -250,7 +250,7 @@ fmt.Println(text)
 ```
 
 !!! tip
-    If you do not actually need incremental delivery, prefer `client.GenerateContent(ctx, messages)` — it returns a fully populated `*llms.Response` and avoids the bookkeeping entirely. Use `Stream` only when partial output, lower time-to-first-token, or early cancellation matter.
+    If you do not actually need incremental delivery, prefer `client.GenerateContent(ctx, messages)`, it returns a fully populated `*llms.Response` and avoids the bookkeeping entirely. Use `Stream` only when partial output, lower time-to-first-token, or early cancellation matter.
 
 ## Streaming reasoning and tool calls
 
@@ -274,7 +274,7 @@ for chunk := range stream {
 }
 ```
 
-**Tool calls** (`ToolCalls`) may be emitted incrementally — a single logical tool call can be split across several chunks, so treat them as partial until the terminal chunk reports `FinishReason == llms.FinishReasonToolCalls`. For a full agentic loop that drives tools to completion, use [`llms.RunTools`](tools.md) rather than assembling tool-call deltas by hand.
+**Tool calls** (`ToolCalls`) may be emitted incrementally, a single logical tool call can be split across several chunks, so treat them as partial until the terminal chunk reports `FinishReason == llms.FinishReasonToolCalls`. For a full agentic loop that drives tools to completion, use [`llms.RunTools`](tools.md) rather than assembling tool-call deltas by hand.
 
 ## Streaming through middleware
 

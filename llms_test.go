@@ -3,7 +3,6 @@ package llms
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -206,48 +205,6 @@ func TestErrorVariables(t *testing.T) {
 	}
 	if ErrMissingAPIKey.Error() != "API key is required" {
 		t.Errorf("unexpected error message: %s", ErrMissingAPIKey.Error())
-	}
-}
-
-func TestMessageStruct(t *testing.T) {
-	msg := Message{
-		Role:    RoleUser,
-		Content: "Hello, world!",
-	}
-
-	if msg.Role != RoleUser {
-		t.Errorf("expected role user, got %s", msg.Role)
-	}
-	if msg.Content != "Hello, world!" {
-		t.Errorf("expected content 'Hello, world!', got %s", msg.Content)
-	}
-}
-
-func TestResponseStruct(t *testing.T) {
-	resp := Response{
-		Content:      "Response content",
-		FinishReason: testStop,
-		Usage: Usage{
-			PromptTokens:     10,
-			CompletionTokens: 20,
-			TotalTokens:      30,
-		},
-	}
-
-	if resp.Content != "Response content" {
-		t.Errorf("unexpected content: %s", resp.Content)
-	}
-	if resp.FinishReason != testStop {
-		t.Errorf("unexpected finish reason: %s", resp.FinishReason)
-	}
-	if resp.Usage.PromptTokens != 10 {
-		t.Errorf("expected prompt tokens 10, got %d", resp.Usage.PromptTokens)
-	}
-	if resp.Usage.CompletionTokens != 20 {
-		t.Errorf("expected completion tokens 20, got %d", resp.Usage.CompletionTokens)
-	}
-	if resp.Usage.TotalTokens != 30 {
-		t.Errorf("expected total tokens 30, got %d", resp.Usage.TotalTokens)
 	}
 }
 
@@ -502,30 +459,6 @@ func TestWithJSONMode(t *testing.T) {
 	}
 }
 
-func TestToolCallStruct(t *testing.T) {
-	tc := ToolCall{
-		ID:   "call_123",
-		Type: ToolTypeFunction,
-		Function: &FunctionCall{
-			Name:      "get_weather",
-			Arguments: `{"location": "San Francisco"}`,
-		},
-	}
-
-	if tc.ID != "call_123" {
-		t.Errorf("unexpected ID: %s", tc.ID)
-	}
-	if tc.Type != ToolTypeFunction {
-		t.Errorf("unexpected type: %s", tc.Type)
-	}
-	if tc.Function.Name != "get_weather" {
-		t.Errorf("unexpected function name: %s", tc.Function.Name)
-	}
-	if tc.Function.Arguments != `{"location": "San Francisco"}` {
-		t.Errorf("unexpected arguments: %s", tc.Function.Arguments)
-	}
-}
-
 func TestResponseWithToolCalls(t *testing.T) {
 	resp := Response{
 		Content:      "",
@@ -550,101 +483,7 @@ func TestResponseWithToolCalls(t *testing.T) {
 	}
 }
 
-func TestMessageWithToolFields(t *testing.T) {
-	msg := Message{
-		Role:       RoleTool,
-		Content:    "result data",
-		ToolCallID: "call_xyz",
-		Name:       "my_tool",
-	}
-
-	if msg.Role != RoleTool {
-		t.Errorf("expected role tool, got %s", msg.Role)
-	}
-	if msg.ToolCallID != "call_xyz" {
-		t.Errorf("expected ToolCallID 'call_xyz', got %s", msg.ToolCallID)
-	}
-	if msg.Name != "my_tool" {
-		t.Errorf("expected Name 'my_tool', got %s", msg.Name)
-	}
-}
-
 // StreamChunk tests
-
-func TestStreamChunkStruct(t *testing.T) {
-	usage := &Usage{
-		PromptTokens:     10,
-		CompletionTokens: 20,
-		TotalTokens:      30,
-	}
-
-	chunk := StreamChunk{
-		Content:      "Hello",
-		ToolCalls:    []ToolCall{{ID: "call_1", Type: "function"}},
-		FinishReason: testStop,
-		Usage:        usage,
-		Error:        nil,
-		Done:         true,
-	}
-
-	if chunk.Content != "Hello" {
-		t.Errorf("expected content 'Hello', got %s", chunk.Content)
-	}
-	if len(chunk.ToolCalls) != 1 {
-		t.Errorf("expected 1 tool call, got %d", len(chunk.ToolCalls))
-	}
-	if chunk.FinishReason != testStop {
-		t.Errorf("expected finish reason 'stop', got %s", chunk.FinishReason)
-	}
-	if chunk.Usage == nil {
-		t.Error("expected usage to be set")
-	}
-	if chunk.Usage.TotalTokens != 30 {
-		t.Errorf("expected total tokens 30, got %d", chunk.Usage.TotalTokens)
-	}
-	if chunk.Error != nil {
-		t.Errorf("expected no error, got %v", chunk.Error)
-	}
-	if !chunk.Done {
-		t.Error("expected done to be true")
-	}
-}
-
-func TestStreamChunkWithError(t *testing.T) {
-	testErr := errors.New("test error")
-	chunk := StreamChunk{
-		Error: testErr,
-		Done:  true,
-	}
-
-	if chunk.Error == nil {
-		t.Error("expected error to be set")
-	}
-	if chunk.Error.Error() != "test error" {
-		t.Errorf("unexpected error message: %s", chunk.Error.Error())
-	}
-	if !chunk.Done {
-		t.Error("expected done to be true")
-	}
-}
-
-func TestStreamChunkPartial(t *testing.T) {
-	// Partial chunk during streaming
-	chunk := StreamChunk{
-		Content: "partial content",
-		Done:    false,
-	}
-
-	if chunk.Content != "partial content" {
-		t.Errorf("unexpected content: %s", chunk.Content)
-	}
-	if chunk.Done {
-		t.Error("expected done to be false for partial chunk")
-	}
-	if chunk.Usage != nil {
-		t.Error("expected usage to be nil for partial chunk")
-	}
-}
 
 // WithModel tests
 
@@ -729,38 +568,6 @@ func TestToolStruct(t *testing.T) {
 	}
 	if tool.Function.Name != "test" {
 		t.Errorf("unexpected function name: %s", tool.Function.Name)
-	}
-}
-
-func TestToolChoiceStruct(t *testing.T) {
-	choice := ToolChoice{
-		Mode: ToolChoiceTool,
-		Tool: "specific_func",
-	}
-
-	if choice.Mode != ToolChoiceTool {
-		t.Errorf("unexpected mode: %s", choice.Mode)
-	}
-	if choice.Tool != "specific_func" {
-		t.Errorf("unexpected forced tool: %s", choice.Tool)
-	}
-}
-
-func TestUsageStruct(t *testing.T) {
-	usage := Usage{
-		PromptTokens:     100,
-		CompletionTokens: 50,
-		TotalTokens:      150,
-	}
-
-	if usage.PromptTokens != 100 {
-		t.Errorf("expected prompt tokens 100, got %d", usage.PromptTokens)
-	}
-	if usage.CompletionTokens != 50 {
-		t.Errorf("expected completion tokens 50, got %d", usage.CompletionTokens)
-	}
-	if usage.TotalTokens != 150 {
-		t.Errorf("expected total tokens 150, got %d", usage.TotalTokens)
 	}
 }
 

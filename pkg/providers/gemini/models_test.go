@@ -474,3 +474,26 @@ func TestModelIDExtraction(t *testing.T) {
 		})
 	}
 }
+
+// Vision support is a minimum-version property, so a family this build has never
+// heard of must not lose it.
+func TestInferGeminiModelTypes_VisionAcrossFamilies(t *testing.T) {
+	for _, id := range []string{"gemini-1.5-pro", "gemini-2.0-flash", "gemini-3.1-pro", "gemini-4-flash"} {
+		types := inferGeminiModelTypes(id, nil)
+		if !containsModelType(types, llms.ModelTypeVision) {
+			t.Errorf("%s: types = %v, want vision", id, types)
+		}
+	}
+	if types := inferGeminiModelTypes("gemini-1.0-pro", nil); containsModelType(types, llms.ModelTypeVision) {
+		t.Errorf("gemini-1.0-pro typed as vision: %v", types)
+	}
+}
+
+func containsModelType(types []llms.ModelType, want llms.ModelType) bool {
+	for _, t := range types {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}

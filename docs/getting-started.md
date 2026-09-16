@@ -10,7 +10,7 @@ one-liner, and `Stream`.
 - **Go 1.25 or newer.** The module declares `go 1.25.0`. Check your toolchain
   with `go version`.
 - **An API key** for at least one provider. The examples below use OpenAI, but
-  switching to another provider is a one-line change — see
+  switching to another provider is a one-line change, see
   [Switching providers](#switching-providers).
 
 ## Install
@@ -18,7 +18,7 @@ one-liner, and `Stream`.
 Add the SDK to your module:
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v6@v5.0.0
+go get github.com/nocturnium/llm-go-sdk/v6@latest
 ```
 
 The SDK's root package is named `llms`. Because the import path
@@ -220,7 +220,7 @@ importing the `pkg/providers/all` bundle).
     Most providers share the same options:
     `WithModel`, `WithAPIKey`, `WithBaseURL`, `WithEmbeddingModel`,
     `WithTimeout(time.Duration)`, and `WithHTTPClient(*http.Client)`. Azure
-    differs — it uses `WithEndpoint` and `WithDeployment`. See
+    differs, it uses `WithEndpoint` and `WithDeployment`. See
     [Providers](providers.md) for per-provider details.
 
 ## GenerateContent vs Call vs Stream
@@ -266,11 +266,11 @@ for chunk := range stream {
 
 ## Next steps
 
-- **[Configuration](configuration.md)** — call options, timeouts, custom HTTP
+- **[Configuration](configuration.md)**, call options, timeouts, custom HTTP
   clients, environment variables, and network-security settings.
-- **[Providers](providers.md)** — all 19 providers, their environment
+- **[Providers](providers.md)**, all 21 providers, their environment
   variables, provider-specific options, and the construct-by-name registry.
 
 From here you can also explore structured outputs (`llms.GenerateTyped`), tool
 calling and agent loops (`llms.RunTools`), embeddings, vision, and resilience
-wrappers — each covered in its own page.
+wrappers, each covered in its own page.

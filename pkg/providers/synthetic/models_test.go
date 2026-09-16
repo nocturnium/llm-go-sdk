@@ -3,6 +3,7 @@ package synthetic
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -256,9 +257,10 @@ func TestModelIndex(t *testing.T) {
 			if _, ok := modelIndex[model.ID]; !ok {
 				t.Errorf("model %q not found in index", model.ID)
 			}
-			// Also check lowercase
-			if _, ok := modelIndex[model.ID]; !ok {
-				t.Errorf("model %q not found in index (lowercase)", model.ID)
+			if lower := strings.ToLower(model.ID); lower != model.ID {
+				if _, ok := modelIndex[lower]; !ok {
+					t.Errorf("model %q not found in index under its lowercase key", model.ID)
+				}
 			}
 		})
 	}
@@ -425,5 +427,14 @@ func TestModelInfoReturnsCopy(t *testing.T) {
 	}
 	if hasEmbedding {
 		t.Error("ModelInfo returns reference instead of copy (Types slice)")
+	}
+}
+
+// A cursor naming no model is an error: restarting from the first page would
+// have a paginating caller loop over the same models forever.
+func TestListModels_UnknownCursorIsRejected(t *testing.T) {
+	c := &Client{}
+	if _, err := c.ListModels(context.Background(), llms.WithModelCursor("no-such-model")); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("err = %v", err)
 	}
 }

@@ -50,6 +50,12 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...llms.
 		body["output_format"] = o.OutputFormat
 	}
 	for k, v := range o.Extra {
+		// Every key here is owned by a typed option, and an override would change
+		// the request and the model the usage is priced against.
+		switch k {
+		case "model", "prompt", "n", "width", "height", "seed", "negative_prompt", "output_format", "aspect_ratio", "response_format":
+			return nil, c.mediaError(fmt.Errorf("image Extra key %q is reserved for the typed option: %w", k, llms.ErrInvalidParameters))
+		}
 		body[k] = v
 	}
 	// Decode the effective request to validate overrides and account for actual dimensions.

@@ -513,3 +513,34 @@ func assertAttribute(t *testing.T, attrs []attribute.KeyValue, key string, expec
 	}
 	t.Errorf("attribute %s not found", key)
 }
+
+// The error category becomes the llm.error.type attribute and the errorCounter
+// label, so every branch that produces one is pinned here.
+func TestNormalizeErrorType(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err  error
+		want string
+	}{
+		"nil":             {nil, errorCategoryUnknown},
+		"canceled":        {context.Canceled, "canceled"},
+		"deadline":        {context.DeadlineExceeded, errorCategoryTimeout},
+		"stream timeout":  {llms.ErrStreamTimeout, errorCategoryStreamTimeout},
+		"rate limited":    {llms.ErrRateLimited, errorCategoryRateLimited},
+		"quota":           {llms.ErrQuotaExceeded, errorCategoryQuotaExceeded},
+		"auth":            {llms.ErrAuthenticationFailed, errorCategoryAuthentication},
+		"context length":  {llms.ErrContextLengthExceeded, errorCategoryContextLengthExceeded},
+		"invalid request": {llms.ErrInvalidParameters, errorCategoryInvalidRequest},
+		"status 400":      {&llms.APIError{StatusCode: 400}, errorCategoryInvalidRequest},
+		"status 401":      {&llms.APIError{StatusCode: 401}, errorCategoryAuthentication},
+		"status 404":      {&llms.APIError{StatusCode: 404}, errorCategoryModelNotFound},
+		"status 429":      {&llms.APIError{StatusCode: 429}, errorCategoryRateLimited},
+		"status 500":      {&llms.APIError{StatusCode: 500}, errorCategoryServerError},
+		// A streamed rate limit carries the type with no status of its own.
+		"api type without status": {&llms.APIError{Type: "rate_limit_error"}, errorCategoryRateLimited},
+		"unrecognized":            {errors.New("something else"), errorCategoryUnknown},
+	} {
+		if got := normalizeErrorType(tc.err); got != tc.want {
+			t.Errorf("%s: normalizeErrorType = %q, want %q", name, got, tc.want)
+		}
+	}
+}

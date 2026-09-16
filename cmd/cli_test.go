@@ -77,3 +77,37 @@ func TestRun_DispatchSmoke(t *testing.T) {
 		})
 	}
 }
+
+// The runners take a writer, so nothing an action prints may go straight to
+// os.Stdout: a caller that redirects output has to see all of it.
+func TestProvidersAction_WritesToTheGivenWriter(t *testing.T) {
+	var buf bytes.Buffer
+	if err := runProviders(nil, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "openrouter") {
+		t.Fatalf("provider listing did not reach the writer: %q", buf.String())
+	}
+}
+
+// Every provider the listing advertises has to be constructible, or the CLI
+// tells a user to pass a provider it then refuses.
+func TestProvidersListing_MatchesCreateClient(t *testing.T) {
+	var buf bytes.Buffer
+	if err := runProviders(nil, &buf); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(buf.String(), "\n") {
+		// Table rows are the indented ones; headings and the trailing notes are not.
+		if !strings.HasPrefix(line, "  ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 || fields[0] == "PROVIDER" || fields[0] == "--------" {
+			continue
+		}
+		if _, err := createClient(fields[0], ""); err != nil && strings.Contains(err.Error(), "unknown or non-chat provider") {
+			t.Errorf("listed provider %q is not constructible", fields[0])
+		}
+	}
+}

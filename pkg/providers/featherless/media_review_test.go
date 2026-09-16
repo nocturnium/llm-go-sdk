@@ -23,21 +23,20 @@ func TestSpeech_FormatsAndCharacterUsage(t *testing.T) {
 }
 func TestStreamSpeech_ReportedCharacters(t *testing.T) {
 	for _, usage := range []string{`{"input_characters":25}`, `{"input_characters":0}`, `{}`, `{"input_characters":-1}`} {
-		c := mediaTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var got *llms.MediaUsage
+		c := mediaTestClientWith(t, func(w http.ResponseWriter, r *http.Request) {
 			b := mediaJSON(t, r)
 			if b["stream_format"] != "sse" {
 				t.Error(b)
 			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprintf(w, "event: speech.audio.delta\ndata: {\"audio\":\"aGk=\"}\n\nevent: speech.audio.done\ndata: {\"usage\":%s}\n\n", usage)
-		})
-		var got *llms.MediaUsage
-		WithSpeechUsageHandler(func(model string, u llms.MediaUsage) {
+		}, WithSpeechUsageHandler(func(model string, u llms.MediaUsage) {
 			if model != providerConfig.DefaultSpeechModel {
 				t.Error(model)
 			}
 			got = &u
-		})(c.options)
+		}))
 		ch, err := c.StreamSpeech(context.Background(), "hi")
 		if err != nil {
 			t.Fatal(err)

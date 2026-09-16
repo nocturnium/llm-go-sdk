@@ -299,3 +299,15 @@ func TestVideo_ResultErrors(t *testing.T) {
 		}
 	}
 }
+
+// Extras are applied after the typed fields and revalidated, so an Extra that
+// blanks the prompt is refused rather than shipped as an empty request.
+func TestGenerateImage_ExtraCannotBlankPrompt(t *testing.T) {
+	c := testClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
+	_, err := c.GenerateImage(context.Background(), "moon",
+		llms.WithImageModel("bytedance-seedream-5-lite"),
+		llms.WithImageExtra(map[string]any{"prompt": "   "}))
+	if !errors.Is(err, llms.ErrEmptyPrompt) {
+		t.Fatalf("err = %v, want ErrEmptyPrompt", err)
+	}
+}

@@ -499,3 +499,24 @@ func TestAPIError_Error(t *testing.T) {
 		}
 	}
 }
+
+// A 204, or a 200 with no payload, is a success: decoding it must leave the
+// target at its zero value instead of failing with EOF.
+func TestDoJSON_EmptyBodyIsNotAnError(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusNoContent} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+		}))
+		client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true))
+		var out struct {
+			Name string `json:"name"`
+		}
+		if err := client.DoJSON(context.Background(), Request{Method: http.MethodGet, URL: server.URL}, &out); err != nil {
+			t.Errorf("status %d: %v", status, err)
+		}
+		if out.Name != "" {
+			t.Errorf("status %d: target mutated: %+v", status, out)
+		}
+		server.Close()
+	}
+}

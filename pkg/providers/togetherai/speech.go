@@ -40,8 +40,11 @@ func speechRequest(text string, o *llms.SpeechOptions) (*openaicompat.SpeechRequ
 	if o.Language != "" {
 		req.ExtraBody["language"] = o.Language
 	}
-	req.Instructions = ""
-	req.Speed = nil
+	// Together AI's speech route accepts neither, and dropping a typed option
+	// would send a request that ignores what the caller asked for.
+	if o.Instructions != "" || o.Speed != nil {
+		return nil, fmt.Errorf("togetherai: speech Instructions and Speed are unsupported: %w", llms.ErrInvalidParameters)
+	}
 	if o.Format.SampleRate > 0 {
 		req.ExtraBody["sample_rate"] = o.Format.SampleRate
 	}
