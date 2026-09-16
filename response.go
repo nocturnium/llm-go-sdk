@@ -15,7 +15,9 @@ const (
 )
 
 // Response represents the response from an LLM.
-// Response methods use pointer receivers for nil-safety.
+//
+// Its read methods take a pointer receiver and tolerate a nil Response;
+// SetReasoning writes to the receiver, so it needs a real one.
 type Response struct {
 	// ID is the provider's identifier for this response, when one is returned
 	// (e.g. the OpenAI chat completion id, or the Responses API response id). It
@@ -38,7 +40,8 @@ type Response struct {
 	// providers that sell more than one grade of capacity per model and report
 	// which one ran: "default", "flex" or "priority" (OpenAI, OpenRouter).
 	// Empty when the provider reports nothing, which includes every provider
-	// without tiers and every streamed response.
+	// without tiers. A stream carries the served tier on its final
+	// [StreamChunk] instead.
 	//
 	// It reports what served the request, not what was asked for: a priority
 	// request can fall back to another endpoint and is then billed at that

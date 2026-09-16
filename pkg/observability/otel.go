@@ -367,8 +367,8 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 		contentBuilder.Grow(1024)
 
 		// Ensure metrics are always recorded, even on panic or early return.
-		// This defer runs after the span.End() defer, so metrics are recorded
-		// before the span ends.
+		// Registered after the span.End() defer, so it runs first and the metrics
+		// land while the span is still open.
 		defer func() {
 			if r := recover(); r != nil {
 				panicErr := fmt.Errorf("panic in stream processing: %v", r)
