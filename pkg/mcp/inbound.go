@@ -35,8 +35,9 @@ type requestHandler func(ctx context.Context, params json.RawMessage) (any, erro
 
 // inbound routes server-initiated requests to registered handlers.
 //
-// It is pointer-held by Client for the same reason as notifier: a mutex by value
-// would make the Client struct non-comparable.
+// It is pointer-held by Client for the same reason as notifier: it owns a mutex
+// and a WaitGroup, and copying a Client that held them by value would copy the
+// lock state, which go vet's copylocks check refuses.
 type inbound struct {
 	mu       sync.RWMutex
 	handlers map[string]requestHandler

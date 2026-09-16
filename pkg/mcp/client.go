@@ -57,11 +57,12 @@ type Client struct {
 	clientInfo Implementation
 	serverInfo Implementation
 	serverCaps ServerCapabilities
-	// notifier holds the server-notification handler state behind a pointer so the
-	// Client struct itself stays comparable (a mutex by value would not be).
+	// notifier holds the server-notification handler state behind a pointer: it
+	// owns a mutex, and copying a Client that held it by value would copy lock
+	// state, which go vet's copylocks check refuses.
 	notifier *notifier
 	// inbound holds the server-initiated request handler state, pointer-held for
-	// the same comparability reason as notifier.
+	// the same reason.
 	inbound *inbound
 	// clientCaps is what this client advertised during initialize. It is derived
 	// from the registered request handlers and written once, before the Client is
