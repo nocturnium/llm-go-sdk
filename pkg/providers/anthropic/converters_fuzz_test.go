@@ -181,9 +181,16 @@ func FuzzConvertTools(f *testing.F) {
 		// Should not panic
 		result := convertTools(tools)
 
-		if len(tools) > 0 && len(result) != len(tools) {
-			// Tools with Function defined should be converted
-			t.Logf("input tools: %d, output tools: %d", len(tools), len(result))
+		// Every tool carrying a Function converts; anything else would drop or
+		// duplicate a tool the caller passed.
+		want := 0
+		for _, tool := range tools {
+			if tool.Function != nil {
+				want++
+			}
+		}
+		if len(result) != want {
+			t.Errorf("convertTools returned %d tools, want %d", len(result), want)
 		}
 	})
 }

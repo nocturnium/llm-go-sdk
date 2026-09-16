@@ -204,10 +204,10 @@ func TestE2E_SimilaritySearch(t *testing.T) {
 	t.Logf("\nMost similar document (index %d, score %.4f):", maxIdx, similarities[maxIdx])
 	t.Logf("  %s", documents[maxIdx])
 
-	// The ML-related documents (0, 2, 4) should have higher similarity
-	// than weather (1) and Python (3) for an AI/ML query
+	// For an AI/ML query the ML document must rank above the weather one; a
+	// model or pipeline regression that inverts them is the thing worth failing on.
 	if similarities[1] > similarities[0] {
-		t.Log("Warning: Weather document scored higher than ML document")
+		t.Errorf("weather document scored %.4f above the ML document at %.4f", similarities[1], similarities[0])
 	}
 }
 

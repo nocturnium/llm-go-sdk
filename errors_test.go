@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -294,6 +295,8 @@ func TestAPIError_IsRetryable_TypeFallback(t *testing.T) {
 	}
 }
 
+// A rate-limit error carries the wait the provider asked for, and reports
+// itself as retryable and as the ErrRateLimited sentinel.
 func TestAPIError_RetryAfter(t *testing.T) {
 	err := &APIError{
 		StatusCode: 429,
@@ -301,6 +304,15 @@ func TestAPIError_RetryAfter(t *testing.T) {
 		RetryAfter: 30 * time.Second,
 	}
 
+	if !err.IsRetryable() {
+		t.Error("a 429 is not reported as retryable")
+	}
+	if !errors.Is(err, ErrRateLimited) {
+		t.Error("a 429 does not match ErrRateLimited")
+	}
+	if !strings.Contains(err.Error(), "Rate limited") {
+		t.Errorf("Error() drops the provider message: %q", err.Error())
+	}
 	if err.RetryAfter != 30*time.Second {
 		t.Errorf("expected RetryAfter=30s, got %v", err.RetryAfter)
 	}

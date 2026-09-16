@@ -24,6 +24,20 @@ func mediaTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 	return c
 }
 
+// mediaTestClientWith builds a client against the handler with extra options, so
+// a test configures through New rather than mutating options behind it.
+func mediaTestClientWith(t *testing.T, handler http.HandlerFunc, opts ...Option) *Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	base := []Option{WithAPIKey("test"), WithBaseURL(server.URL), WithHTTPClient(server.Client()), WithTimeout(time.Second), WithAllowHTTP(), WithAllowPrivateIPs()}
+	c, err := New(append(base, opts...)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
 func TestMediaCapabilities(t *testing.T) {
 	c, err := New(WithAPIKey("test"))
 	if err != nil {

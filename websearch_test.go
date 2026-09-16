@@ -23,10 +23,10 @@ func TestWebSearchProvider_Constants(t *testing.T) {
 	}
 }
 
+// WithWebSearchEnabled is the documented one-liner, so what it builds is what
+// this pins rather than a struct literal read back.
 func TestWebSearchConfig_Defaults(t *testing.T) {
-	config := WebSearchConfig{
-		Enabled: true,
-	}
+	config := *ApplyOptions(WithWebSearchEnabled()).WebSearch
 
 	if !config.Enabled {
 		t.Error("expected enabled")

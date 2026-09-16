@@ -380,9 +380,15 @@ func TestClientCapabilitiesDerivedFromHandlers(t *testing.T) {
 // TestClientStaysComparable pins the reason inbound is pointer-held. A mutex by
 // value on Client would break every caller comparing two client values.
 func TestClientStaysComparable(t *testing.T) {
-	var a, b *Client
-	if a != b {
-		t.Error("nil client pointers should compare equal")
+	// A real client, not a nil pointer: a mutex held by value on Client would
+	// make this assignment and the map key below fail to compile.
+	first := &Client{}
+	second := &Client{}
+	if first == second {
+		t.Error("distinct clients compared equal")
 	}
-	_ = map[*Client]struct{}{}
+	index := map[*Client]string{first: "first", second: "second"}
+	if index[first] != "first" || index[second] != "second" {
+		t.Errorf("clients are not usable as map keys: %v", index)
+	}
 }

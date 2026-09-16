@@ -56,16 +56,22 @@ func TestRegistry_New(t *testing.T) {
 	}
 }
 
+// Registration is case-insensitive, so the second call replaces the first: the
+// test has to show which factory answers, not merely that one does.
 func TestRegistry_Overwrite(t *testing.T) {
 	llms.RegisterProvider("RegistryOverwrite", func(llms.Config) (llms.LLM, error) {
-		return registryTestLLM{}, nil
+		return nil, errors.New("first factory")
 	})
 	llms.RegisterProvider("registryoverwrite", func(llms.Config) (llms.LLM, error) {
 		return registryTestLLM{}, nil
 	})
 
-	if _, err := llms.New("REGISTRYOVERWRITE", llms.Config{}); err != nil {
+	llm, err := llms.New("REGISTRYOVERWRITE", llms.Config{})
+	if err != nil {
 		t.Fatalf("New after overwrite returned error: %v", err)
+	}
+	if _, ok := llm.(registryTestLLM); !ok {
+		t.Fatalf("New returned %T, want the second registration to have replaced the first", llm)
 	}
 }
 

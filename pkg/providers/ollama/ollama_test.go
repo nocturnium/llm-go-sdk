@@ -64,9 +64,9 @@ func TestOllamaHostEnvVar(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// The client should have used the custom host
-	if client.Provider() != llms.ProviderOllama {
-		t.Errorf("expected provider ollama, got %s", client.Provider())
+	// The point of the env var is the base URL it produces.
+	if got := client.options.BaseURL; got != "http://custom-host:11434/v1" {
+		t.Errorf("BaseURL = %q, want the host from OLLAMA_HOST", got)
 	}
 }
 

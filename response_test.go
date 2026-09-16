@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// Reasoning reaches callers through Response, which is nil-safe and reports the
+// text a provider produced.
 func TestReasoningContent_Basic(t *testing.T) {
 	rc := &ReasoningContent{
 		Content: "Let me think about this...",
@@ -15,8 +17,17 @@ func TestReasoningContent_Basic(t *testing.T) {
 		},
 	}
 
-	if rc.Content != "Let me think about this..." {
-		t.Errorf("expected content, got %s", rc.Content)
+	var resp *Response
+	if resp.ReasoningText() != "" {
+		t.Error("ReasoningText on a nil Response is not empty")
+	}
+	resp = &Response{}
+	if resp.ReasoningText() != "" {
+		t.Error("ReasoningText without reasoning is not empty")
+	}
+	resp.SetReasoning(rc)
+	if resp.ReasoningText() != rc.Content {
+		t.Errorf("ReasoningText = %q, want %q", resp.ReasoningText(), rc.Content)
 	}
 	if rc.Tokens != 50 {
 		t.Errorf("expected 50 tokens, got %d", rc.Tokens)

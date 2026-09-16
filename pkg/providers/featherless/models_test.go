@@ -3,6 +3,7 @@ package featherless
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -237,9 +238,10 @@ func TestModelIndex(t *testing.T) {
 			if _, ok := modelIndex[model.ID]; !ok {
 				t.Errorf("model %q not found in index", model.ID)
 			}
-			// Also check lowercase
-			if _, ok := modelIndex[model.ID]; !ok {
-				t.Errorf("model %q not found in index (lowercase)", model.ID)
+			if lower := strings.ToLower(model.ID); lower != model.ID {
+				if _, ok := modelIndex[lower]; !ok {
+					t.Errorf("model %q not found in index under its lowercase key", model.ID)
+				}
 			}
 		})
 	}
