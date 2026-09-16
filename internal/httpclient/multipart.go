@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -97,7 +98,11 @@ func (c *Client) DoMultipart(ctx context.Context, method, path string, fields ma
 	}
 	if out != nil {
 		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(out); err != nil {
-			return fmt.Errorf("decode multipart response: %w", err)
+			// An empty 2xx body leaves the target zero-valued, matching DoJSON:
+			// the upload succeeded and the endpoint returned no payload.
+			if !errors.Is(err, io.EOF) {
+				return fmt.Errorf("decode multipart response: %w", err)
+			}
 		}
 	}
 	return nil

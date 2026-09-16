@@ -202,8 +202,8 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 			var raw struct {
 				Index int `json:"index"`
 			}
-			// Index falls back to 0 on a parse failure, which would attribute the
-			// stop to the first block of a multi-block stream.
+			// A stop event that does not parse is an error rather than an index of
+			// 0, which would attribute it to the first block of the stream.
 			if err := json.Unmarshal([]byte(sseEvent.Data), &raw); err != nil {
 				return nil, fmt.Errorf("decode content_block_stop: %w", err)
 			}

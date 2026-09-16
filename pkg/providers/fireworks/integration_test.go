@@ -241,7 +241,9 @@ func TestClient_Stream_Integration(t *testing.T) {
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("expected http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("expected http.Flusher")
+			return
 		}
 
 		chunks := []string{

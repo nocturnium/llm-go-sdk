@@ -97,6 +97,10 @@ type TraceContextOption func(*TraceContext)
 // PropagateAttributes creates a child context with inherited trace attributes.
 // This mirrors Langfuse's propagate_attributes() behavior, automatically
 // propagating user_id, session_id, tags, version, and metadata to child contexts.
+//
+// Span identity is deliberately not inherited: TraceID, SpanID and ParentID
+// belong to one observation, so a child context starts without them and the
+// exporter assigns its own. Set them explicitly to link spans by hand.
 func PropagateAttributes(ctx context.Context, overrides ...TraceContextOption) context.Context {
 	parent := GetTraceContext(ctx)
 	child := &TraceContext{}

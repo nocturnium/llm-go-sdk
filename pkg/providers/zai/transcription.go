@@ -96,6 +96,8 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		}
 		out.Words = append(out.Words, llms.TranscriptWord{Word: w.Word, Start: w.Start, End: w.End, Speaker: speaker})
 	}
+	// Z.AI reports no transcription usage of its own; the shared converter's
+	// duration-derived estimate would read as provider-reported, so it is cleared.
 	out.Usage = llms.MediaUsage{}
 	return out, nil
 }

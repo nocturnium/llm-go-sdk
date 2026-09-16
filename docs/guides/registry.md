@@ -57,8 +57,8 @@ import _ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all"
 This registers the **18 auto-registered chat providers**:
 
 `anthropic`, `azure`, `cerebras`, `deepseek`, `featherless`, `fireworks`,
-`gemini`, `groq`, `llamacpp`, `mistral`, `ollama`, `openai`, `perplexity`,
-`runpod`, `synthetic`, `togetherai`, `zai`.
+`gemini`, `groq`, `llamacpp`, `mistral`, `ollama`, `openai`, `openrouter`,
+`perplexity`, `runpod`, `synthetic`, `togetherai`, `zai`.
 
 HuggingFace (chat or embeddings) and Infinity (embeddings only) are **not**
 auto-registered, they need explicit construction, so build them directly with

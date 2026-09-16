@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -501,10 +502,15 @@ func TestClient_Call_Convenience(t *testing.T) {
 }
 
 func TestClient_AcceptLanguageHeader(t *testing.T) {
+	// The handler runs on the server's goroutine, so what it captures is
+	// published under a mutex rather than read straight from the test.
+	var mu sync.Mutex
 	headerReceived := ""
 
 	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		headerReceived = r.Header.Get("Accept-Language")
+		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -533,8 +539,11 @@ func TestClient_AcceptLanguageHeader(t *testing.T) {
 		t.Fatalf("Call failed: %v", err)
 	}
 
-	if headerReceived != "en-US,en" {
-		t.Errorf("expected Accept-Language 'en-US,en', got '%s'", headerReceived)
+	mu.Lock()
+	got := headerReceived
+	mu.Unlock()
+	if got != "en-US,en" {
+		t.Errorf("expected Accept-Language 'en-US,en', got '%s'", got)
 	}
 }
 

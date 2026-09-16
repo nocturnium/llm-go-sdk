@@ -44,7 +44,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	if o.Language != "" {
 		fields["language"] = o.Language
 	}
-	// Prompt has no verified native mapping.
+	// Prompt has no verified native mapping, and dropping a typed option the
+	// caller set would send a request that ignores it.
+	if o.Prompt != "" {
+		return nil, c.mediaError(fmt.Errorf("transcription Prompt is unsupported: %w", llms.ErrInvalidParameters))
+	}
 	format := "json"
 	if o.Diarize {
 		fields["diarize"] = "true"

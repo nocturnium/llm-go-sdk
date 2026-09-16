@@ -42,8 +42,10 @@ func TestWebSearchConfig_Defaults(t *testing.T) {
 	}
 }
 
+// A fully specified config reaches the call options the providers read, which is
+// the only path it travels.
 func TestWebSearchConfig_Full(t *testing.T) {
-	config := WebSearchConfig{
+	config := *ApplyOptions(WithWebSearch(WebSearchConfig{
 		Enabled:        true,
 		Provider:       WebSearchBrave,
 		APIKey:         "test-api-key",
@@ -52,7 +54,7 @@ func TestWebSearchConfig_Full(t *testing.T) {
 		DomainExclude:  []string{"spam.com"},
 		RecencyFilter:  "week",
 		IncludeResults: true,
-	}
+	})).WebSearch
 
 	if config.Provider != WebSearchBrave {
 		t.Errorf("expected brave, got %s", config.Provider)

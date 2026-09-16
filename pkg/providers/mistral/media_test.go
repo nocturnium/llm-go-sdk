@@ -120,7 +120,7 @@ func TestMediaTranscription(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"text":"hello","duration":60,"words":[{"word":"hello","start":0,"end":1,"speaker_id":"A"}]}`)
 	})
-	out, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("RIFF"), MIMEType: "audio/wav"}, llms.WithTranscribePrompt("names"))
+	out, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("RIFF"), MIMEType: "audio/wav"})
 	if err != nil || out.Text != "hello" || len(out.Words) != 1 || out.Words[0].Speaker != "A" {
 		t.Fatalf("%+v %v", out, err)
 	}
@@ -159,5 +159,16 @@ func TestMediaTranscription_Errors(t *testing.T) {
 	})
 	if _, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("x"), MIMEType: "audio/wav"}); !errors.Is(err, llms.ErrPlanRequired) {
 		t.Fatal(err)
+	}
+}
+
+// Mistral's transcription route has no prompt field, so a typed Prompt is
+// refused rather than dropped from the request.
+func TestTranscribe_RejectsUnsupportedPrompt(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
+	_, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("RIFF"), MIMEType: "audio/wav"},
+		llms.WithTranscribePrompt("names"))
+	if !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("err = %v", err)
 	}
 }
