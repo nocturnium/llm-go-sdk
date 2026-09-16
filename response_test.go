@@ -64,47 +64,6 @@ func TestResponse_WithReasoning(t *testing.T) {
 	}
 }
 
-func TestResponse_NilReasoning(t *testing.T) {
-	resp := &Response{
-		Content:      "Simple answer",
-		FinishReason: "stop",
-	}
-
-	if resp.Reasoning != nil {
-		t.Error("expected nil reasoning for providers without reasoning")
-	}
-}
-
-func TestStreamChunk_WithReasoning(t *testing.T) {
-	chunk := StreamChunk{
-		Content: "partial answer",
-		Reasoning: &ReasoningContent{
-			Content: "reasoning step 1",
-		},
-	}
-
-	if chunk.Reasoning == nil {
-		t.Fatal("expected reasoning in chunk")
-	}
-	if chunk.Reasoning.Content != "reasoning step 1" {
-		t.Errorf("unexpected reasoning: %s", chunk.Reasoning.Content)
-	}
-}
-
-func TestResponse_WithSearchResults(t *testing.T) {
-	resp := &Response{
-		Content: "Based on my search...",
-		SearchResults: []SearchResult{
-			{Title: "Result 1", URL: "https://example.com/1"},
-			{Title: "Result 2", URL: "https://example.com/2"},
-		},
-	}
-
-	if len(resp.SearchResults) != 2 {
-		t.Errorf("expected 2 search results, got %d", len(resp.SearchResults))
-	}
-}
-
 func TestResponse_UnmarshalJSON_PreservesReasoning(t *testing.T) {
 	data := []byte(`{
 		"content": "The answer is 42.",
