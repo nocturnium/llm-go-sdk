@@ -352,3 +352,15 @@ func TestClientImplementsModelLister(t *testing.T) {
 
 	var _ llms.ModelLister = client
 }
+
+// The API reports the publisher in owned_by; guessing from the id mislabels a
+// fine-tune, and a truncated list has more.
+func TestConvertModelResponse_PrefersOwnedBy(t *testing.T) {
+	info := convertModelResponse(&openaicompat.ModelResponse{ID: "llama3.1-70b", OwnedBy: "Meta"})
+	if info.Organization != "Meta" {
+		t.Errorf("Organization = %q, want Meta", info.Organization)
+	}
+	if fallback := convertModelResponse(&openaicompat.ModelResponse{ID: "llama3.1-70b"}); fallback.Organization == "" {
+		t.Error("no organization inferred when owned_by is absent")
+	}
+}
