@@ -61,6 +61,9 @@ type PullResponse struct {
 	Digest    string `json:"digest,omitempty"`
 	Total     int64  `json:"total,omitempty"`
 	Completed int64  `json:"completed,omitempty"`
+	// Error carries a failure reported mid-stream, which Ollama sends in place
+	// of a status line and which ends the pull without a "success".
+	Error string `json:"error,omitempty"`
 }
 
 // DeleteRequest is the request body for /api/delete.

@@ -261,6 +261,11 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 
 	var systemParts []string
 	var nonSystemMessages []Message
+	// A cache breakpoint on a system message survives consolidation: the merged
+	// message is the one a provider turns into its system block, so dropping it
+	// here would silently disable prompt caching the caller asked for. The first
+	// breakpoint wins, since the merged message can carry only one.
+	var systemCacheControl *CacheControl
 
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
@@ -268,6 +273,9 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 			// the simple Content field) is not silently dropped.
 			if text := msg.Text(); text != "" {
 				systemParts = append(systemParts, text)
+			}
+			if systemCacheControl == nil {
+				systemCacheControl = msg.CacheControl
 			}
 		} else {
 			nonSystemMessages = append(nonSystemMessages, msg)
@@ -281,8 +289,9 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 
 	result := make([]Message, 0, len(nonSystemMessages)+1)
 	result = append(result, Message{
-		Role:    RoleSystem,
-		Content: joinStrings(systemParts, "\n\n"),
+		Role:         RoleSystem,
+		Content:      joinStrings(systemParts, "\n\n"),
+		CacheControl: systemCacheControl,
 	})
 	result = append(result, nonSystemMessages...)
 

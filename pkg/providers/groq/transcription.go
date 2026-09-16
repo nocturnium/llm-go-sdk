@@ -57,6 +57,14 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	}
 
 	for k, v := range o.Extra {
+		// Keys with a typed option are reserved: silently replacing a caller's
+		// Model or Language would send a request they did not ask for.
+		// response_format has no typed option, so it stays open and is range
+		// checked below.
+		switch k {
+		case "model", "file", "url", "language", "prompt":
+			return nil, c.mediaError(fmt.Errorf("transcription Extra key %q is reserved for the typed option: %w", k, llms.ErrInvalidParameters))
+		}
 		switch value := v.(type) {
 		case string, bool, int, float64:
 			fields[k] = fmt.Sprint(value)

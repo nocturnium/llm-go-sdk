@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestMergeConsecutiveMessages_Empty(t *testing.T) {
@@ -541,5 +542,23 @@ func TestMergeConsecutiveMessages_PreservesOriginal(t *testing.T) {
 	// Verify result is different
 	if len(result) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(result))
+	}
+}
+
+// A cache breakpoint on a system message is the canonical Anthropic placement,
+// and consolidation runs by default, so it has to survive the rebuild.
+func TestConsolidateSystemMessages_KeepsCacheControl(t *testing.T) {
+	messages := []Message{
+		{Role: RoleSystem, Content: "rules", CacheControl: &CacheControl{TTL: time.Hour}},
+		{Role: RoleUser, Content: "hi"},
+	}
+
+	result := ConsolidateSystemMessages(messages)
+
+	if result[0].CacheControl == nil {
+		t.Fatal("consolidation dropped the system message's cache breakpoint")
+	}
+	if prepared := MergeConsecutiveMessages(messages); prepared[0].CacheControl == nil {
+		t.Fatal("the default merge path dropped the cache breakpoint")
 	}
 }

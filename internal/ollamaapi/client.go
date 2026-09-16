@@ -145,6 +145,9 @@ func (c *Client) PullModel(ctx context.Context, name string, callback func(PullR
 			callback(progress)
 		}
 
+		if progress.Error != "" {
+			return WrapError("pull model", fmt.Errorf("%s: %w", progress.Error, llms.ErrServerError))
+		}
 		if progress.Status == "success" {
 			break
 		}

@@ -60,3 +60,17 @@ func TestTranscription_FormatsAndTranslation(t *testing.T) {
 		}
 	}
 }
+
+// A transcription Extra key that has a typed option is refused rather than
+// silently replacing what the caller asked for; response_format has no typed
+// option and stays open.
+func TestTranscribe_ExtraCannotOverrideTypedFields(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
+	for _, key := range []string{"model", "file", "url", "language", "prompt"} {
+		_, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("wav"), MIMEType: "audio/wav"},
+			llms.WithTranscribeExtra(map[string]any{key: "hijacked"}))
+		if !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Errorf("Extra %q: err = %v, want ErrInvalidParameters", key, err)
+		}
+	}
+}

@@ -133,6 +133,9 @@ func imageBody(prompt string, images []llms.MediaInput, o *llms.ImageOptions) (m
 	if !ok || model == "" {
 		return nil, invalid("model_id must be a nonempty string")
 	}
+	if text, ok := body["prompt"].(string); !ok || strings.TrimSpace(text) == "" {
+		return nil, WrapError("image", llms.ErrEmptyPrompt)
+	}
 	if _, ok = body["seed"]; ok && !strings.HasPrefix(model, "bytedance-seedream") {
 		return nil, invalid("image seed requires Seedream")
 	}

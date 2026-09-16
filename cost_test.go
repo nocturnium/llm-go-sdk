@@ -700,3 +700,22 @@ func TestCostTrackerPrefersReportedCost(t *testing.T) {
 		t.Fatalf("RecordMode = (%v, %v), want (%v, true)", modeCost, modeKnown, reported)
 	}
 }
+
+// Reset is documented as clearing usage, so the per-mode split has to return to
+// zero with it; otherwise a per-window reset reports spend from the last window.
+func TestCostTrackerResetClearsModeCosts(t *testing.T) {
+	tracker := NewCostTracker()
+	tracker.RecordMode(ProviderOpenAI, "gpt-5.6-sol", Usage{PromptTokens: 1_000_000}, PricingModeBatch)
+	if len(tracker.GetModeCosts()) == 0 {
+		t.Fatal("expected a recorded mode cost to start from")
+	}
+
+	tracker.Reset()
+
+	if modes := tracker.GetModeCosts(); len(modes) != 0 {
+		t.Fatalf("GetModeCosts after Reset = %v, want empty", modes)
+	}
+	if total := tracker.GetTotalCost(); total != 0 {
+		t.Fatalf("GetTotalCost after Reset = %v", total)
+	}
+}

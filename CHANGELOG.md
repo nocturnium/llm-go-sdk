@@ -20,6 +20,14 @@ All notable changes to this project will be documented in this file.
 
 - OpenAI image generation and editing, speech synthesis and SSE streaming, multipart transcription, and polling video jobs, with shared configurable OpenAI-compatible media routes and media pricing.
 
+### Fixed
+
+- `CostTracker.Reset` now clears the per-mode split, so `GetModeCosts` returns to zero with `GetTotalCost` instead of reporting the previous window's spend.
+- A cache breakpoint on a system message survives `ConsolidateSystemMessages`, which runs by default through `MergeConsecutiveMessages`, so Anthropic prompt caching set via `Message.CacheControl` is no longer dropped before the request is built.
+- Ollama `PullModel` reports a pull that failed mid-stream (`{"error": ...}`) instead of returning nil as though the model downloaded.
+- Groq transcription refuses an `Extra` key that has a typed option (`model`, `file`, `url`, `language`, `prompt`) rather than silently replacing the caller's value; `response_format` has no typed option and stays open.
+- ElevenLabs Flows image generation revalidates the prompt after extras merge, so `Extra{"prompt": ""}` no longer bypasses the empty-prompt check.
+
 ### Changed
 
 - **`pkg/providers/anthropic`: behavior parity with the other providers.** A review
