@@ -714,6 +714,9 @@ func TestPullModelIntegration(t *testing.T) {
 
 // TestDeleteModel tests model deletion.
 func TestDeleteModel(t *testing.T) {
+	// The handler runs on the server's goroutine, so the flag it sets is
+	// published under a mutex rather than read straight from the test.
+	var mu sync.Mutex
 	deleted := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/delete" && r.Method == http.MethodDelete {
@@ -721,7 +724,9 @@ func TestDeleteModel(t *testing.T) {
 			json.NewDecoder(r.Body).Decode(&req)
 
 			if req.Name == "test-model" {
+				mu.Lock()
 				deleted = true
+				mu.Unlock()
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -743,7 +748,10 @@ func TestDeleteModel(t *testing.T) {
 		t.Fatalf("DeleteModel failed: %v", err)
 	}
 
-	if !deleted {
+	mu.Lock()
+	gotDeleted := deleted
+	mu.Unlock()
+	if !gotDeleted {
 		t.Error("expected model to be deleted")
 	}
 }

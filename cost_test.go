@@ -544,10 +544,15 @@ func TestCostMiddleware_Stream(t *testing.T) {
 		t.Errorf("content = %s, want %q", content, testCostHelloWorld)
 	}
 
-	// Wait for goroutine to finish tracking
-	time.Sleep(10 * time.Millisecond)
-
-	usage := tracker.GetUsage(ProviderOpenAI, "gpt-4o")
+	// Poll rather than sleep once: the middleware records usage on its own
+	// goroutine, and a fixed wait turns a loaded runner into a flake.
+	var usage *ModelUsage
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if usage = tracker.GetUsage(ProviderOpenAI, "gpt-4o"); usage != nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	if usage == nil {
 		t.Fatal("expected usage to be tracked")
 	}

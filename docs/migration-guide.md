@@ -518,7 +518,7 @@ var client llms.LLM = base
 
 tracker := llms.NewCostTracker()
 client = llms.NewCostMiddleware(client, tracker)
-client = llms.NewResilientClient(client) // opt-in retries + circuit breaker
+client = resilience.NewResilientClient(client) // opt-in retries + circuit breaker
 ```
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design, including the

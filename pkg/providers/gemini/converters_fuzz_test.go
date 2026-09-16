@@ -130,11 +130,15 @@ func FuzzConvertTools(f *testing.F) {
 			},
 		}
 
-		// Should not panic
 		result := convertTools(tools)
 
-		if len(tools) == 0 && result != nil {
-			t.Error("expected nil for empty tools")
+		// tools is never empty here, so assert what the conversion produced:
+		// one Gemini tool carrying every function declaration.
+		if len(result) != 1 {
+			t.Fatalf("convertTools returned %d tools, want 1", len(result))
+		}
+		if len(result[0].FunctionDeclarations) != len(tools) {
+			t.Errorf("declarations = %d, want %d", len(result[0].FunctionDeclarations), len(tools))
 		}
 	})
 }

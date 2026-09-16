@@ -289,10 +289,11 @@ func SanitizeModelName(model string) string {
 	model = strings.ReplaceAll(model, "/", "-")
 	model = strings.ReplaceAll(model, "\\", "-")
 
-	// Remove null bytes and other control characters
+	// Drop control characters (including the null byte and DEL); printable
+	// characters are kept, ASCII and non-ASCII alike.
 	var sanitized strings.Builder
 	for _, r := range model {
-		if r >= 32 && r != 127 { // Printable ASCII and valid UTF-8
+		if r >= 32 && r != 127 {
 			sanitized.WriteRune(r)
 		}
 	}

@@ -201,10 +201,11 @@ data: world
 	}
 }
 
+// Concurrent readers share one reader, so no event may be delivered twice or
+// lost: the counts across goroutines have to add up to what was written.
 func TestSSEReader_ConcurrentRead(t *testing.T) {
-	// Verify that concurrent reads don't cause issues
-	// (though typically only one goroutine should read)
-	data := strings.Repeat("data: test\n\n", 100)
+	const eventCount = 100
+	data := strings.Repeat("data: test\n\n", eventCount)
 
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
@@ -234,35 +235,28 @@ func TestSSEReader_ConcurrentRead(t *testing.T) {
 
 	wg.Wait()
 
-	// Due to concurrent reads, we might not get exactly 100
-	// but we should get at least some
-	if count == 0 {
-		t.Error("expected some events to be read")
+	if count != eventCount {
+		t.Errorf("read %d events across readers, want the %d written", count, eventCount)
 	}
 }
 
 func TestSSEReader_ContextCancellation(t *testing.T) {
 	pr, pw := io.Pipe()
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Writer that blocks indefinitely
+	// The reader takes no context, so what ends a blocked Read is the writer
+	// closing the pipe. That is what this pins; a context would not reach it.
 	go func() {
-		time.Sleep(100 * time.Millisecond)
-		cancel() // Cancel after a short delay
-		_ = pw.Close()
+		time.Sleep(10 * time.Millisecond)
+		_ = pw.CloseWithError(context.Canceled)
 	}()
 
 	reader := NewSSEReader(pr)
 	defer func() { _ = reader.Close() }()
 
-	// Try to read - should eventually fail when pipe closes
 	_, err := reader.Read()
-	if err == nil {
-		t.Error("expected error after context cancellation")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want the error the writer closed with", err)
 	}
-
-	_ = ctx // Used for documentation
 }
 
 func TestSSEReader_CloseWhileReading(t *testing.T) {

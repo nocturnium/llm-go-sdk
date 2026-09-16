@@ -510,7 +510,9 @@ func TestClient_Call_Convenience(t *testing.T) {
 
 		messages, ok := req["messages"].([]any)
 		if !ok {
-			t.Fatal("messages is not a []any")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("messages is not a []any")
+			return
 		}
 		if len(messages) != 1 {
 			t.Errorf("expected 1 message, got %d", len(messages))

@@ -162,7 +162,9 @@ func TestSchemaFrom_OuterShadowsPromotedEmbeddedField(t *testing.T) {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
 	var schema map[string]any
-	_ = json.Unmarshal(raw, &schema)
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("unmarshal schema: %v", err)
+	}
 
 	props, _ := schema["properties"].(map[string]any)
 	if _, ok := props["id"]; !ok {
@@ -197,7 +199,9 @@ func TestSchemaFrom_EmbeddedWithJSONNameIsNamedField(t *testing.T) {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
 	var schema map[string]any
-	_ = json.Unmarshal(raw, &schema)
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("unmarshal schema: %v", err)
+	}
 	props, _ := schema["properties"].(map[string]any)
 	if _, ok := props["meta"]; !ok {
 		t.Errorf("named-embedded struct should appear as %q object: %v", "meta", props)

@@ -149,6 +149,9 @@ func (c *Client) getPropsLazy(ctx context.Context) (*llamacppapi.PropsResponse, 
 		return c.props, nil
 	}
 
+	// The fetch happens under the lock so one slow server stalls callers rather
+	// than every caller issuing its own /props request; the caller's context
+	// bounds how long that lasts.
 	props, err := c.nativeClient.GetProps(ctx)
 	if err != nil {
 		return nil, err

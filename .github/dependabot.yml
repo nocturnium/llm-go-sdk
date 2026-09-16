@@ -53,10 +53,5 @@ updates:
     reviewers:
       - "jdziat"
 
-registries:
-  # GitHub Container Registry (if needed in future)
-  ghcr:
-    type: docker-registry
-    url: ghcr.io
-    username: ${{ github.actor }}
-    password: ${{ secrets.GITHUB_TOKEN }}
+# No registries block: the repository publishes no images, and Dependabot
+# resolves only its own secrets, not workflow expressions like github.actor.

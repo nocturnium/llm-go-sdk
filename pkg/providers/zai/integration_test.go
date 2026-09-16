@@ -358,7 +358,9 @@ func TestClient_Stream_ContextCancellation(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("ResponseWriter does not implement http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("ResponseWriter does not implement http.Flusher")
+			return
 		}
 
 		// Send chunks slowly to allow cancellation
@@ -397,8 +399,10 @@ func TestClient_Stream_ContextCancellation(t *testing.T) {
 		count++
 	}
 
-	if count >= 100 {
-		t.Error("expected stream to be canceled before all chunks")
+	// The cancel fires after the first chunk, so the stream has to stop well
+	// short of the hundred the handler would otherwise send.
+	if count == 0 || count >= 100 {
+		t.Errorf("read %d chunks, want a cancellation partway through", count)
 	}
 }
 

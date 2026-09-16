@@ -134,11 +134,22 @@ func TestAnthropicBatchDerivesFromStatedPolicy(t *testing.T) {
 	// the standard cache-read (0.50 becomes 0.25) coincides here, but halving the
 	// standard cache-write would give 3.125 only because 6.25/2 == 3.125. Assert
 	// the ratio to the batch input rate explicitly instead.
-	if !approxEqual(wantCacheRead, wantInput*anthropicCacheReadRatio) {
-		t.Errorf("cache read %v is not %vx the batch input rate", wantCacheRead, anthropicCacheReadRatio)
+	standard, standardKnown := DefaultPricing[modelPricingKey(ProviderAnthropic, "claude-opus-5")]
+	if !standardKnown {
+		t.Fatal("no standard card to derive from")
 	}
-	if !approxEqual(wantCacheWrite, wantInput*anthropicCacheWriteRatio) {
-		t.Errorf("cache write %v is not %vx the batch input rate", wantCacheWrite, anthropicCacheWriteRatio)
+	derived, ok := deriveAnthropicBatchPricing(standard, standardKnown)
+	if !ok {
+		t.Fatal("derivation reported unknown")
+	}
+	if !approxEqual(derived.CacheRead, derived.Input*anthropicCacheReadRatio) {
+		t.Errorf("derived cache read %v is not %vx the derived input rate %v", derived.CacheRead, anthropicCacheReadRatio, derived.Input)
+	}
+	if !approxEqual(derived.CacheWrite, derived.Input*anthropicCacheWriteRatio) {
+		t.Errorf("derived cache write %v is not %vx the derived input rate %v", derived.CacheWrite, anthropicCacheWriteRatio, derived.Input)
+	}
+	if approxEqual(derived.CacheWrite, standard.CacheWrite*anthropicBatchDiscount) && !approxEqual(standard.CacheWrite/2, derived.Input*anthropicCacheWriteRatio) {
+		t.Error("derivation halved the standard cache-write card instead of deriving from the batch input rate")
 	}
 }
 
