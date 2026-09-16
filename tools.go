@@ -305,13 +305,23 @@ func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Contex
 	r.tools = append(r.tools, tool)
 }
 
-// Tools returns a copy of all registered tools for use with WithTools.
-// A copy is returned to prevent external modification.
+// Tools returns the registered tools for use with WithTools.
+//
+// Each Tool is copied along with its FunctionDefinition, so a caller editing a
+// returned tool's schema or description changes only its own copy, not what the
+// registry hands the next caller.
 func (r *ToolRegistry) Tools() []Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make([]Tool, len(r.tools))
-	copy(result, r.tools)
+	for i, tool := range r.tools {
+		if tool.Function != nil {
+			fn := *tool.Function
+			fn.Parameters = append(json.RawMessage(nil), fn.Parameters...)
+			tool.Function = &fn
+		}
+		result[i] = tool
+	}
 	return result
 }
 

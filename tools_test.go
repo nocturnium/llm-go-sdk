@@ -446,3 +446,23 @@ func TestRegisterFunc(t *testing.T) {
 		t.Errorf("expected content=42, got %s", msg.Content)
 	}
 }
+
+// Tools hands out copies: a caller editing a returned tool's schema must not
+// change what the registry gives the next caller.
+func TestToolRegistry_ToolsReturnsIndependentCopies(t *testing.T) {
+	registry := NewToolRegistry()
+	registry.Register(NewFunctionTool("weather", "Get weather", map[string]any{"type": "object"}),
+		func(context.Context, json.RawMessage) (any, error) { return nil, nil })
+
+	first := registry.Tools()
+	first[0].Function.Description = "mutated"
+	first[0].Function.Parameters = json.RawMessage(`{"type":"string"}`)
+
+	second := registry.Tools()
+	if second[0].Function.Description != "Get weather" {
+		t.Errorf("description leaked: %q", second[0].Function.Description)
+	}
+	if string(second[0].Function.Parameters) == `{"type":"string"}` {
+		t.Errorf("parameters leaked: %s", second[0].Function.Parameters)
+	}
+}
