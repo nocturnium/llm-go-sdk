@@ -31,17 +31,19 @@ func TestImage_Extras(t *testing.T) {
 			return
 		}
 		b := mediaJSON(t, r)
-		if b["user_id"] != "user" || b["model"] != "custom" || b["prompt"] != "effective" {
+		if b["user_id"] != "user" || b["model"] != providerConfig.DefaultImageModel || b["prompt"] != "hi" {
 			t.Error(b)
 		}
 		fmt.Fprintf(w, `{"data":[{"url":"http://%s/asset"}]}`, r.Host)
 	})
-	if _, err := c.GenerateImage(context.Background(), "hi", llms.WithImageExtra(map[string]any{"user_id": "user", "model": "custom", "prompt": "effective", "quality": "hd"})); err != nil {
+	// A native key with no typed option rides along.
+	if _, err := c.GenerateImage(context.Background(), "hi", llms.WithImageExtra(map[string]any{"user_id": "user"})); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"n", "response_format"} {
+	// Unsupported keys, and keys owned by a typed option, are refused.
+	for _, key := range []string{"n", "response_format", "model", "prompt", "size", "quality"} {
 		if _, err := c.GenerateImage(context.Background(), "hi", llms.WithImageExtra(map[string]any{key: 1})); !errors.Is(err, llms.ErrInvalidParameters) {
-			t.Fatal(err)
+			t.Fatalf("extra %q: %v", key, err)
 		}
 	}
 }

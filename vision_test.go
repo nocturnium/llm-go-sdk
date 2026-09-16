@@ -2,6 +2,8 @@ package llms
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -345,5 +347,16 @@ func TestDetectMediaType(t *testing.T) {
 				t.Errorf("detectMediaType(%s) = %s, expected %s", tc.path, result, tc.expected)
 			}
 		})
+	}
+}
+
+// The cap applies to what was read, not to a stat taken before the read.
+func TestNewImageFromFile_RejectsOversizeFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big.png")
+	if err := os.WriteFile(path, make([]byte, MaxImageSize+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewImageFromFile(path); err == nil {
+		t.Fatal("oversize file accepted")
 	}
 }

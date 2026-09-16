@@ -102,20 +102,21 @@ func NewImageFromFile(path string) (ContentPart, error) {
 	// Normalize the caller-supplied path (collapses ./ and ../ segments).
 	path = filepath.Clean(path)
 
-	// Check file size before reading to prevent OOM on large files
-	fileInfo, err := os.Stat(path)
-	if err != nil {
-		return ContentPart{}, fmt.Errorf("failed to stat image file: %w", err)
-	}
-
-	if fileInfo.Size() > MaxImageSize {
-		return ContentPart{}, fmt.Errorf("image file size %d bytes exceeds maximum allowed size of %d bytes", fileInfo.Size(), MaxImageSize)
-	}
-
+	// Read under a cap rather than stat-then-read: the file can grow between the
+	// two, and the size that matters is what was read into memory.
 	// #nosec G304 -- reading a caller-supplied local image path is the documented purpose of NewImageFromFile.
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return ContentPart{}, fmt.Errorf("failed to open image file: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	data, err := io.ReadAll(io.LimitReader(file, MaxImageSize+1))
 	if err != nil {
 		return ContentPart{}, fmt.Errorf("failed to read image file: %w", err)
+	}
+	if int64(len(data)) > MaxImageSize {
+		return ContentPart{}, fmt.Errorf("image file size exceeds maximum allowed size of %d bytes", MaxImageSize)
 	}
 
 	mediaType := detectMediaType(path, data)
