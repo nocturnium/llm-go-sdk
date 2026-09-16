@@ -310,7 +310,9 @@ func TestToolRegistry(t *testing.T) {
 		}
 
 		var result map[string]any
-		_ = json.Unmarshal([]byte(msg.Content), &result)
+		if err := json.Unmarshal([]byte(msg.Content), &result); err != nil {
+			t.Fatalf("tool result is not JSON: %v (%q)", err, msg.Content)
+		}
 		if result["location"] != "Boston" {
 			t.Errorf("expected location=Boston, got %v", result["location"])
 		}

@@ -223,9 +223,12 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 
 			if len(raw.Delta) > 0 {
 				var msgDelta MessageDelta
-				if err := json.Unmarshal(raw.Delta, &msgDelta); err == nil {
-					event.MessageDelta = &msgDelta
+				// The delta carries the stop reason, so dropping a malformed one
+				// would end the stream as though the model gave none.
+				if err := json.Unmarshal(raw.Delta, &msgDelta); err != nil {
+					return nil, fmt.Errorf("decode message_delta: %w", err)
 				}
+				event.MessageDelta = &msgDelta
 			}
 		default:
 			// Skip unknown event types
