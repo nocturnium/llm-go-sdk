@@ -267,12 +267,14 @@ func TestClient_GenerateContent_ErrorResponses(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 
-			// Verify the error contains status code information
+			// Unguarded, a regression that stops returning *llms.APIError would
+			// leave the status assertion unreached.
 			var apiErr *llms.APIError
-			if errors.As(err, &apiErr) {
-				if apiErr.StatusCode != tc.statusCode {
-					t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
-				}
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error is %T, want *llms.APIError: %v", err, err)
+			}
+			if apiErr.StatusCode != tc.statusCode {
+				t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
 			}
 		})
 	}
@@ -299,7 +301,9 @@ func TestClient_Stream_Integration(t *testing.T) {
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("expected http.Flusher")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test.
+			t.Error("expected http.Flusher")
+			return
 		}
 
 		chunks := []string{

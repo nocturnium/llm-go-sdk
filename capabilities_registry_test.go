@@ -409,14 +409,13 @@ func TestCapabilityRegistry_CaseInsensitive(t *testing.T) {
 		}
 	})
 
-	t.Run("lowercase match works", func(t *testing.T) {
-		// First register lowercase version
-		r.Register(ProviderOpenAI, "my-custom-model", ModelCapabilities{
-			MaxContextTokens: 12345,
-		})
-		caps := r.Get(ProviderOpenAI, "my-custom-model")
-		if caps.MaxContextTokens != 12345 {
-			t.Errorf("got %d, want 12345", caps.MaxContextTokens)
+	t.Run("lookup is case-insensitive", func(t *testing.T) {
+		// Registered as "My-Custom-Model" above; a differently cased lookup has
+		// to find it, which is what makes this case-insensitive rather than exact.
+		for _, id := range []string{"my-custom-model", "MY-CUSTOM-MODEL", "My-Custom-Model"} {
+			if caps := r.Get(ProviderOpenAI, id); caps.MaxContextTokens != 12345 {
+				t.Errorf("Get(%q) = %d, want 12345", id, caps.MaxContextTokens)
+			}
 		}
 	})
 }

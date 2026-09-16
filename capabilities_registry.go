@@ -60,8 +60,12 @@ func DefaultCapabilityRegistry() *CapabilityRegistry {
 func (r *CapabilityRegistry) Register(provider Provider, modelID string, caps ModelCapabilities) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	key := r.makeKey(provider, modelID)
-	r.capabilities[key] = caps
+	r.capabilities[r.makeKey(provider, modelID)] = caps
+	// Get falls back to a lowercase lookup, which only finds a mixed-case
+	// registration if it is indexed here too.
+	if lower := strings.ToLower(modelID); lower != modelID {
+		r.capabilities[r.makeKey(provider, lower)] = caps
+	}
 }
 
 // RegisterDefault sets the default capabilities for a provider.

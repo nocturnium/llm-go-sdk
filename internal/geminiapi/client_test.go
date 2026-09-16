@@ -76,7 +76,9 @@ func TestClient_GenerateContent(t *testing.T) {
 		// Parse request
 		var req GenerateContentRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("failed to decode request: %v", err)
+			// t.Fatalf on a handler goroutine stops that goroutine, not the test.
+			t.Errorf("failed to decode request: %v", err)
+			return
 		}
 
 		if len(req.Contents) != 1 {

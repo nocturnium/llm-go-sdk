@@ -587,11 +587,14 @@ func TestClient_ErrorResponses(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 
+			// Unguarded, a regression that stops returning *llms.APIError would
+			// leave the status assertion unreached.
 			var apiErr *llms.APIError
-			if errors.As(err, &apiErr) {
-				if apiErr.StatusCode != tc.statusCode {
-					t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
-				}
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error is %T, want *llms.APIError: %v", err, err)
+			}
+			if apiErr.StatusCode != tc.statusCode {
+				t.Errorf("expected status %d, got %d", tc.statusCode, apiErr.StatusCode)
 			}
 		})
 	}

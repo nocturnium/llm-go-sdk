@@ -184,12 +184,18 @@ data: world
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event1, _ := reader.Read()
+	event1, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read first event: %v", err)
+	}
 	if event1.ID != "123" {
 		t.Errorf("expected id=123, got %s", event1.ID)
 	}
 
-	event2, _ := reader.Read()
+	event2, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event2: %v", err)
+	}
 	if event2.ID != "456" {
 		t.Errorf("expected id=456, got %s", event2.ID)
 	}
@@ -302,12 +308,18 @@ data: {"id":"2","content":"world","done":true}
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event1, _ := reader.Read()
+	event1, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event1: %v", err)
+	}
 	if event1.Data != `{"id":"1","content":"hello"}` {
 		t.Errorf("unexpected data: %s", event1.Data)
 	}
 
-	event2, _ := reader.Read()
+	event2, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event2: %v", err)
+	}
 	if event2.Data != `{"id":"2","content":"world","done":true}` {
 		t.Errorf("unexpected data: %s", event2.Data)
 	}
@@ -324,12 +336,18 @@ data: [DONE]
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event1, _ := reader.Read()
+	event1, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event1: %v", err)
+	}
 	if event1.Data != `{"content":"hello"}` {
 		t.Errorf("unexpected data: %s", event1.Data)
 	}
 
-	event2, _ := reader.Read()
+	event2, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event2: %v", err)
+	}
 	if event2.Data != "[DONE]" {
 		t.Errorf("expected [DONE], got: %s", event2.Data)
 	}
@@ -427,10 +445,13 @@ data: with-space
 	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
 	defer func() { _ = reader.Close() }()
 
-	event, _ := reader.Read()
-	// Both should be handled, space after colon is optional
-	if event.Data != "no-space\nwith-space" && event.Data != " no-space\nwith-space" {
-		// Implementation may vary
-		t.Logf("data handling: %q", event.Data)
+	event, err := reader.Read()
+	if err != nil {
+		t.Fatalf("read event: %v", err)
+	}
+	// The SSE spec strips one optional space after the colon, so both field
+	// forms decode to the same data.
+	if event.Data != "no-space\nwith-space" {
+		t.Errorf("data = %q, want %q", event.Data, "no-space\nwith-space")
 	}
 }
