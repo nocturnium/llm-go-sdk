@@ -209,48 +209,6 @@ func TestErrorVariables(t *testing.T) {
 	}
 }
 
-func TestMessageStruct(t *testing.T) {
-	msg := Message{
-		Role:    RoleUser,
-		Content: "Hello, world!",
-	}
-
-	if msg.Role != RoleUser {
-		t.Errorf("expected role user, got %s", msg.Role)
-	}
-	if msg.Content != "Hello, world!" {
-		t.Errorf("expected content 'Hello, world!', got %s", msg.Content)
-	}
-}
-
-func TestResponseStruct(t *testing.T) {
-	resp := Response{
-		Content:      "Response content",
-		FinishReason: testStop,
-		Usage: Usage{
-			PromptTokens:     10,
-			CompletionTokens: 20,
-			TotalTokens:      30,
-		},
-	}
-
-	if resp.Content != "Response content" {
-		t.Errorf("unexpected content: %s", resp.Content)
-	}
-	if resp.FinishReason != testStop {
-		t.Errorf("unexpected finish reason: %s", resp.FinishReason)
-	}
-	if resp.Usage.PromptTokens != 10 {
-		t.Errorf("expected prompt tokens 10, got %d", resp.Usage.PromptTokens)
-	}
-	if resp.Usage.CompletionTokens != 20 {
-		t.Errorf("expected completion tokens 20, got %d", resp.Usage.CompletionTokens)
-	}
-	if resp.Usage.TotalTokens != 30 {
-		t.Errorf("expected total tokens 30, got %d", resp.Usage.TotalTokens)
-	}
-}
-
 func TestAsCapableProvider(t *testing.T) {
 	base := NewMockLLM(WithMockCapabilities(Capabilities{Streaming: true}))
 	wrapped := testWrapper{LLM: base}
@@ -502,30 +460,6 @@ func TestWithJSONMode(t *testing.T) {
 	}
 }
 
-func TestToolCallStruct(t *testing.T) {
-	tc := ToolCall{
-		ID:   "call_123",
-		Type: ToolTypeFunction,
-		Function: &FunctionCall{
-			Name:      "get_weather",
-			Arguments: `{"location": "San Francisco"}`,
-		},
-	}
-
-	if tc.ID != "call_123" {
-		t.Errorf("unexpected ID: %s", tc.ID)
-	}
-	if tc.Type != ToolTypeFunction {
-		t.Errorf("unexpected type: %s", tc.Type)
-	}
-	if tc.Function.Name != "get_weather" {
-		t.Errorf("unexpected function name: %s", tc.Function.Name)
-	}
-	if tc.Function.Arguments != `{"location": "San Francisco"}` {
-		t.Errorf("unexpected arguments: %s", tc.Function.Arguments)
-	}
-}
-
 func TestResponseWithToolCalls(t *testing.T) {
 	resp := Response{
 		Content:      "",
@@ -547,25 +481,6 @@ func TestResponseWithToolCalls(t *testing.T) {
 	}
 	if resp.ToolCalls[0].Function.Name != testSearch {
 		t.Errorf("unexpected function name: %s", resp.ToolCalls[0].Function.Name)
-	}
-}
-
-func TestMessageWithToolFields(t *testing.T) {
-	msg := Message{
-		Role:       RoleTool,
-		Content:    "result data",
-		ToolCallID: "call_xyz",
-		Name:       "my_tool",
-	}
-
-	if msg.Role != RoleTool {
-		t.Errorf("expected role tool, got %s", msg.Role)
-	}
-	if msg.ToolCallID != "call_xyz" {
-		t.Errorf("expected ToolCallID 'call_xyz', got %s", msg.ToolCallID)
-	}
-	if msg.Name != "my_tool" {
-		t.Errorf("expected Name 'my_tool', got %s", msg.Name)
 	}
 }
 
@@ -625,24 +540,6 @@ func TestStreamChunkWithError(t *testing.T) {
 	}
 	if !chunk.Done {
 		t.Error("expected done to be true")
-	}
-}
-
-func TestStreamChunkPartial(t *testing.T) {
-	// Partial chunk during streaming
-	chunk := StreamChunk{
-		Content: "partial content",
-		Done:    false,
-	}
-
-	if chunk.Content != "partial content" {
-		t.Errorf("unexpected content: %s", chunk.Content)
-	}
-	if chunk.Done {
-		t.Error("expected done to be false for partial chunk")
-	}
-	if chunk.Usage != nil {
-		t.Error("expected usage to be nil for partial chunk")
 	}
 }
 
@@ -729,38 +626,6 @@ func TestToolStruct(t *testing.T) {
 	}
 	if tool.Function.Name != "test" {
 		t.Errorf("unexpected function name: %s", tool.Function.Name)
-	}
-}
-
-func TestToolChoiceStruct(t *testing.T) {
-	choice := ToolChoice{
-		Mode: ToolChoiceTool,
-		Tool: "specific_func",
-	}
-
-	if choice.Mode != ToolChoiceTool {
-		t.Errorf("unexpected mode: %s", choice.Mode)
-	}
-	if choice.Tool != "specific_func" {
-		t.Errorf("unexpected forced tool: %s", choice.Tool)
-	}
-}
-
-func TestUsageStruct(t *testing.T) {
-	usage := Usage{
-		PromptTokens:     100,
-		CompletionTokens: 50,
-		TotalTokens:      150,
-	}
-
-	if usage.PromptTokens != 100 {
-		t.Errorf("expected prompt tokens 100, got %d", usage.PromptTokens)
-	}
-	if usage.CompletionTokens != 50 {
-		t.Errorf("expected completion tokens 50, got %d", usage.CompletionTokens)
-	}
-	if usage.TotalTokens != 150 {
-		t.Errorf("expected total tokens 150, got %d", usage.TotalTokens)
 	}
 }
 

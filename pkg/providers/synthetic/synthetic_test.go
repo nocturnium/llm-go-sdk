@@ -3,8 +3,10 @@ package synthetic
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
@@ -185,14 +187,14 @@ func TestEmbedRequiresModel(t *testing.T) {
 }
 
 func TestWithHTTPClient(t *testing.T) {
+	custom := &http.Client{Timeout: 3 * time.Second}
 	opts := apply(
 		WithAPIKey("test-key"),
-		WithHTTPClient(nil), // Just testing the option works
+		WithHTTPClient(custom),
 	)
 
-	// Just verify the option is applied (nil is valid for testing)
-	if opts.HTTPClient != nil {
-		t.Error("expected HTTPClient to be nil when set to nil")
+	if opts.HTTPClient != custom {
+		t.Errorf("HTTPClient = %v, want the client passed in", opts.HTTPClient)
 	}
 }
 
