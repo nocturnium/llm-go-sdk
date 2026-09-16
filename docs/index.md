@@ -9,7 +9,7 @@ hide:
 # One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
 
 <p class="noct-hero__tagline" markdown>
-Streaming, tool calling, vision, embeddings, and built-in resilience — across **21 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
+Streaming, tool calling, vision, embeddings, and built-in resilience, across **21 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
 </p>
 
 <div class="noct-hero__cta" markdown>
@@ -30,7 +30,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
     ---
 
-    One `LLM` interface — `GenerateContent`, `Stream`, `Provider`, `Model` — works identically across every provider.
+    One `LLM` interface, `GenerateContent`, `Stream`, `Provider`, `Model`, works identically across every provider.
 
 -   :material-language-go:{ .lg .middle } __Native HTTP, zero LLM deps__
 
@@ -84,7 +84,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
     ---
 
-    A first-class MCP client — tools, resources, prompts, and progress — that drops into `RunTools`.
+    A first-class MCP client, tools, resources, prompts, and progress, that drops into `RunTools`.
 
 -   :material-shield-lock:{ .lg .middle } __Secure by default__
 
@@ -96,13 +96,13 @@ Streaming, tool calling, vision, embeddings, and built-in resilience — across 
 
     ---
 
-    Wrap a client with `llms.Chain(base, ...)` — resilience innermost, observability outermost.
+    Wrap a client with `llms.Chain(base, ...)`, resilience innermost, observability outermost.
 
 </div>
 
 ## Supported providers
 
-**21 providers** — 18 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct), ElevenLabs (media only) and Infinity (embeddings and reranking).
+**21 providers**, 18 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct), ElevenLabs (media only) and Infinity (embeddings and reranking).
 
 | Native | OpenAI-compatible | Local / self-hosted | Direct-construct |
 | --- | --- | --- | --- |
@@ -176,8 +176,8 @@ fmt.Println(client.Provider(), client.Model())
 ```
 
 !!! note "Same code, any provider"
-    Swap the import and constructor — `anthropic.New(anthropic.WithModel("claude-..."))`
-    or `ollama.New(ollama.WithModel("llama3.1"))` — and everything below the constructor
+    Swap the import and constructor, `anthropic.New(anthropic.WithModel("claude-..."))`
+    or `ollama.New(ollama.WithModel("llama3.1"))`, and everything below the constructor
     is unchanged.
 
 ## Where to next

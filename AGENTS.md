@@ -29,7 +29,7 @@ This document defines strict code quality standards for AI coding assistants wor
 
 ### 1. Provider Implementation Pattern
 
-**REQUIRED**: All new providers MUST use the `openaicompat.BaseProvider` pattern when the provider has an OpenAI-compatible API.
+**REQUIRED**: All new providers must use the `openaicompat.BaseProvider` pattern when the provider has an OpenAI-compatible API.
 
 ```go
 // CORRECT - Use BaseProvider for OpenAI-compatible APIs
@@ -98,7 +98,7 @@ If model-specific capabilities cannot be determined, document the assumption cle
 
 ### 3. Error Handling Standards
 
-All provider errors MUST:
+All provider errors must:
 
 1. Wrap with provider name prefix
 2. Map to standard error types when possible
@@ -120,7 +120,7 @@ return nil, fmt.Errorf("request failed")
 
 ### 4. Context Cancellation
 
-All long-running operations MUST check context cancellation:
+All long-running operations must check context cancellation:
 
 ```go
 // REQUIRED in ListModels, ModelInfo, and any API calls
@@ -157,7 +157,7 @@ var modelIndex map[string]*llms.ModelInfo
 
 ### Provider Package Structure
 
-Each provider MUST have:
+Each provider must have:
 
 ```
 pkg/providers/<name>/
@@ -169,15 +169,15 @@ pkg/providers/<name>/
 └── integration_test.go # Integration tests (build tag: integration)
 ```
 
-**Canonical location**: All provider code lives in `pkg/providers/<name>/`. This is the only provider location — import providers as `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>`. (Earlier builds had a top-level `providers/*` backwards-compat shim and `pkg/*` alias packages; both have been removed. The shared types now live only in the root `llms` package.)
+**Canonical location**: All provider code lives in `pkg/providers/<name>/`. This is the only provider location, import providers as `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>`. (Earlier builds had a top-level `providers/*` backwards-compat shim and `pkg/*` alias packages; both have been removed. The shared types now live only in the root `llms` package.)
 
 ### Required Interfaces
 
-All providers MUST implement:
+All providers must implement:
 
 | Interface | Required | Notes |
 |-----------|----------|-------|
-| `llms.LLM` | Yes | Core chat/completion (`GenerateContent`, `Stream`, `Provider`, `Model` — no `Call`) |
+| `llms.LLM` | Yes | Core chat/completion (`GenerateContent`, `Stream`, `Provider`, `Model`, no `Call`) |
 | `llms.CapableProvider` | Yes | Capability reporting |
 | `llms.ModelLister` | Yes | Model enumeration (`ListModels` + `ModelInfo`) |
 | `llms.Embedder` | If supported | Embedding generation (single `Embed` method) |
@@ -198,7 +198,7 @@ var (
 
 ### Minimum Test Coverage
 
-Every provider MUST have tests for:
+Every provider must have tests for:
 
 1. **Options Tests**
    - `TestDefaultOptions` - Verify defaults are sensible
@@ -226,7 +226,7 @@ Every provider MUST have tests for:
 
 ### Race Detection
 
-All tests MUST pass with race detection:
+All tests must pass with race detection:
 
 ```bash
 go test -race ./...
@@ -275,8 +275,8 @@ func resolveAPIKey(explicit string, providerEnvVars ...string) string {
 
 ### Default Models
 
-- MUST be a current, widely-available model
-- MUST be documented in the provider's doc comment
+- must be a current, widely-available model
+- must be documented in the provider's doc comment
 - SHOULD be updated when models are deprecated
 
 ---
@@ -301,7 +301,7 @@ return fmt.Errorf("authentication failed")  // No key in message
 
 ### Input Validation
 
-All user-provided inputs MUST be validated:
+All user-provided inputs must be validated:
 
 ```go
 // REQUIRED - Validate before use
@@ -339,7 +339,7 @@ self-hosted/private endpoints via the no-argument `WithAllowPrivateIPs()` and
 
 - Off-by-default is the rule: never enable private/HTTP access implicitly.
 - Local-only providers (Ollama, llama.cpp, Infinity) may default these flags to `true`,
-  since they target `localhost` servers — document that default.
+  since they target `localhost` servers, document that default.
 
 ### Content Filtering
 
@@ -369,7 +369,7 @@ func (c *Client) GenerateContent(...) {
 
 ### Timeout Configuration
 
-All network operations MUST have timeouts:
+All network operations must have timeouts:
 
 ```go
 // REQUIRED - Always set timeouts
@@ -636,7 +636,7 @@ func validateMessages(messages []llms.Message) error {
 
 ### Package Documentation
 
-Every provider package MUST have a doc comment:
+Every provider package must have a doc comment:
 
 ```go
 // Package <name> provides an LLM client for <Provider Name>.
@@ -669,7 +669,7 @@ package <name>
 
 ### Exported Functions
 
-All exported functions MUST have doc comments explaining:
+All exported functions must have doc comments explaining:
 - What it does
 - Parameters
 - Return values
@@ -707,15 +707,15 @@ Follow this step-by-step guide when adding a new LLM provider:
 
 ```
 Is the provider OpenAI-compatible?
-├── YES → Use openaicompat.BaseProvider (proceed to Step 2a)
-└── NO  → Requires native implementation (needs justification, proceed to Step 2b)
+├── YES to Use openaicompat.BaseProvider (proceed to Step 2a)
+└── NO to Requires native implementation (needs justification, proceed to Step 2b)
 ```
 
 ### Step 2a: OpenAI-Compatible Provider
 
 The construction surface is `New(...)` plus `WithX(...)` options. The `options` struct,
 its `apply`/`defaultOptions` helpers, and the `defaultProviderConfig` are **unexported**.
-Resolve the API key with `llms.RequireAPIKey` (explicit → provider env var → `LLM_API_KEY`),
+Resolve the API key with `llms.RequireAPIKey` (explicit to provider env var to `LLM_API_KEY`),
 and pass the HTTP/SSRF knobs through to `openaicompat.ClientConfig`.
 
 ```go
@@ -1055,7 +1055,7 @@ const defaultBaseURL = "https://..." // Full URL with scheme
 ### Function Names
 
 ```go
-// Constructor — named New (not NewClient)
+// Constructor, named New (not NewClient)
 func New(opts ...Option) (*Client, error)
 
 // Functional options - With prefix (exported)
@@ -1067,7 +1067,7 @@ func WithHTTPClient(c *http.Client) Option
 func WithAllowPrivateIPs() Option // no-arg SSRF opt-out (private/loopback IPs)
 func WithAllowHTTP() Option       // no-arg SSRF opt-out (plain HTTP)
 
-// Defaults / apply helpers — UNEXPORTED
+// Defaults / apply helpers, UNEXPORTED
 func defaultOptions() *options
 func apply(opts ...Option) *options
 ```

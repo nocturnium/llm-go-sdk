@@ -7,34 +7,34 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/nocturnium/llm-go-sdk/v6)](https://goreportcard.com/report/github.com/nocturnium/llm-go-sdk/v6)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nocturnium/llm-go-sdk)](https://github.com/nocturnium/llm-go-sdk/blob/main/go.mod)
 
-> A unified, dependency-light Go SDK for **21 AI providers** — streaming, tool calling,
+> A unified, dependency-light Go SDK for **21 AI providers**, streaming, tool calling,
 > vision, embeddings, and built-in resilience over the standard `net/http`.
 
 One `LLM` interface across chat providers. Switch from OpenAI to Anthropic to a local
-Ollama server by changing a single import and constructor — everything else
+Ollama server by changing a single import and constructor, everything else
 (streaming, tools, retries, fallback, cost tracking, tracing) stays the same.
 
 ## Features
 
-- **Unified interface** — a single `LLM` interface works across chat providers
-- **Native HTTP** — zero external LLM SDK dependencies, built on `net/http`
-- **Streaming** — real-time token streaming over channels
-- **Media generation** — provider-agnostic image, video, speech and transcription
+- **Unified interface**, a single `LLM` interface works across chat providers
+- **Native HTTP**, zero external LLM SDK dependencies, built on `net/http`
+- **Streaming**, real-time token streaming over channels
+- **Media generation**, provider-agnostic image, video, speech and transcription
   interfaces (`ImageGenerator`, `VideoGenerator`, `SpeechSynthesizer`, `Transcriber`) with
   async video jobs, asset fetching and per-unit cost tracking; see `docs/guides/media.md`
-- **Tool / function calling** — consistent tool-calling API across providers, plus an
+- **Tool / function calling**, consistent tool-calling API across providers, plus an
   automatic `RunTools` agent loop
-- **MCP client** — connect to Model Context Protocol servers (`pkg/mcp`) and use their tools
-- **Reasoning** — cross-provider thinking controls (`WithReasoningEffort`, `WithReasoningBudget`)
-- **Structured outputs** — typed JSON via JSON Schema (`GenerateTyped[T]`, `WithJSONSchema`)
-- **Vision** — multi-modal image input (PNG, JPEG, GIF, WebP)
-- **Embeddings & reranking** — for semantic search and RAG
-- **Prompt caching** — cross-provider caching (`WithCache`) with discounted cache-token cost accounting
-- **Web search** — native provider search plus external Brave / Tavily backends
-- **Cost tracking** — token usage and cost estimation with built-in pricing
-- **Resilience** — circuit breaker, retries with backoff, rate limiting, fallback chains
-- **Observability** — OpenTelemetry (GenAI semantic conventions) and Langfuse
-- **Functional options** — clean, composable configuration
+- **MCP client**, connect to Model Context Protocol servers (`pkg/mcp`) and use their tools
+- **Reasoning**, cross-provider thinking controls (`WithReasoningEffort`, `WithReasoningBudget`)
+- **Structured outputs**, typed JSON via JSON Schema (`GenerateTyped[T]`, `WithJSONSchema`)
+- **Vision**, multi-modal image input (PNG, JPEG, GIF, WebP)
+- **Embeddings & reranking**, for semantic search and RAG
+- **Prompt caching**, cross-provider caching (`WithCache`) with discounted cache-token cost accounting
+- **Web search**, native provider search plus external Brave / Tavily backends
+- **Cost tracking**, token usage and cost estimation with built-in pricing
+- **Resilience**, circuit breaker, retries with backoff, rate limiting, fallback chains
+- **Observability**, OpenTelemetry (GenAI semantic conventions) and Langfuse
+- **Functional options**, clean, composable configuration
 
 ## 60-Second Quickstart
 
@@ -91,7 +91,7 @@ func main() {
 ```
 
 Switching providers is a one-line import + constructor change (e.g. `anthropic.New()`,
-`gemini.New()`, `groq.New()`) — every chat provider implements the same `llms.LLM` interface.
+`gemini.New()`, `groq.New()`), every chat provider implements the same `llms.LLM` interface.
 
 ### Construct by name
 
@@ -121,7 +121,7 @@ client, err = llms.New("zai", llms.Config{Extra: map[string]string{"coding": "tr
 ```
 
 `llms.Config` fields: `APIKey`, `Model`, `BaseURL`, `Timeout`, `AllowPrivateIPs`,
-`AllowHTTP` (independent of `AllowPrivateIPs` — a private plain-HTTP endpoint
+`AllowHTTP` (independent of `AllowPrivateIPs`, a private plain-HTTP endpoint
 needs both), `HTTPClient`, and `Extra map[string]string` for provider-specific keys.
 
 ## Installation
@@ -135,7 +135,7 @@ Requires **Go 1.25+**.
 ## Supported Providers
 
 The SDK ships **21 providers** (18 chat-registered; HuggingFace, Infinity and ElevenLabs are
-direct-construct — HuggingFace serves chat or embeddings per its deployed model,
+direct-construct, HuggingFace serves chat or embeddings per its deployed model,
 Infinity serves embeddings/reranking and ElevenLabs serves media only).
 Import each from its canonical path
 `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>`. Every chat provider also
@@ -164,9 +164,9 @@ schema); "Native" providers implement a provider-specific wire format.
 | RunPod | `pkg/providers/runpod` | `RUNPOD_API_KEY` (+ `WithEndpointID`) | OpenAI-compatible (vLLM) | Serverless vLLM endpoints (`https://api.runpod.ai/v2/<id>/openai/v1`); model set by deployment; chat, streaming, tools (model-dependent) |
 | Ollama | `pkg/providers/ollama` | `OLLAMA_HOST` (default `http://localhost:11434`), `OLLAMA_API_KEY` (optional) | OpenAI-compatible + native mgmt API | `llama3.2` (default); local inference; chat, streaming, tools (model-dependent), vision (`llava`), embeddings (`nomic-embed-text`); pull/list/show/delete management |
 | llama.cpp | `pkg/providers/llamacpp` | `LLAMA_CPP_HOST` (default `http://localhost:8080`), `LLAMA_CPP_API_KEY` (optional) | OpenAI-compatible + native server API | Model discovered from `/props`; local inference; chat, streaming, tools (model-dependent), grammar JSON mode, vision (LLaVA), embeddings; `/health`, `/slots`, `/props` |
-| Infinity | `pkg/providers/infinity` | `INFINITY_API_KEY` (optional), `WithBaseURL` (default `http://localhost:7997/v1`) | OpenAI-compatible (embeddings) | **Embeddings + reranking only — does NOT implement chat/`llms.LLM`**; implements `llms.Embedder` + `llms.Reranker`; default embed `michaelfeil/bge-small-en-v1.5`, default rerank `mixedbread-ai/mxbai-rerank-xsmall-v1` |
+| Infinity | `pkg/providers/infinity` | `INFINITY_API_KEY` (optional), `WithBaseURL` (default `http://localhost:7997/v1`) | OpenAI-compatible (embeddings) | **Embeddings + reranking only, does NOT implement chat/`llms.LLM`**; implements `llms.Embedder` + `llms.Reranker`; default embed `michaelfeil/bge-small-en-v1.5`, default rerank `mixedbread-ai/mxbai-rerank-xsmall-v1` |
 
-> **Note:** Infinity is an embeddings/reranking provider only — it does not implement
+> **Note:** Infinity is an embeddings/reranking provider only, it does not implement
 > the chat `llms.LLM` interface.
 
 ## Environment Variables
@@ -253,8 +253,8 @@ llm-go-sdk/
 └── examples/                 # runnable examples
 ```
 
-For a deep dive into the design — the interface, the middleware/decorator chain, how
-providers and the capability registry work, and the observability stack — see
+For a deep dive into the design, the interface, the middleware/decorator chain, how
+providers and the capability registry work, and the observability stack, see
 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md). A short package-layout reference also
 lives in [docs/migration-guide.md](./docs/migration-guide.md).
 
@@ -275,18 +275,18 @@ messages := []llms.Message{ /* ... */ }
 
 See [examples/](./examples/) for runnable programs:
 
-- **basic** — simple chat completion
-- **streaming** — real-time streaming responses
-- **tools** — function / tool calling
-- **reasoning** — reasoning / "thinking" models
-- **caching** — cross-provider prompt caching
-- **mcp** — Model Context Protocol tools via `RunTools`
-- **vision** — image analysis
-- **embeddings** — text embeddings
-- **resilience** — circuit breakers and retry
-- **fallback** — multi-provider failover
-- **cost-tracking** — token usage and cost estimation
-- **new-style** — the root + `pkg/providers/<name>` import style
+- **basic**, simple chat completion
+- **streaming**, real-time streaming responses
+- **tools**, function / tool calling
+- **reasoning**, reasoning / "thinking" models
+- **caching**, cross-provider prompt caching
+- **mcp**, Model Context Protocol tools via `RunTools`
+- **vision**, image analysis
+- **embeddings**, text embeddings
+- **resilience**, circuit breakers and retry
+- **fallback**, multi-provider failover
+- **cost-tracking**, token usage and cost estimation
+- **new-style**, the root + `pkg/providers/<name>` import style
 
 ## API Reference
 
@@ -393,8 +393,8 @@ type Usage struct {
 ## Streaming
 
 The stream channel always closes with a terminal chunk: either one with `Done == true`
-(success) or one with `Error != nil` (failure). You can simply range over the channel —
-it is guaranteed to end — and check for those two cases:
+(success) or one with `Error != nil` (failure). You can range over the channel , 
+it is guaranteed to end, and check for those two cases:
 
 ```go
 chunks, err := client.Stream(ctx, messages, llms.WithMaxTokens(1000))
@@ -485,7 +485,7 @@ returns the first call to a named function (both return `nil` if not present).
 
 ### Automatic tool loop (RunTools)
 
-`llms.RunTools` runs the full model → tool → model agent loop for you. Register your
+`llms.RunTools` runs the full model to tool to model agent loop for you. Register your
 tools and their handlers in a `ToolRegistry`, then let `RunTools` drive the conversation
 until the model stops asking for tools:
 
@@ -643,7 +643,7 @@ Built-in pricing for 25+ models including GPT-4o, Claude, Gemini, and Llama mode
 > **A bare provider does not retry.** A client returned by `openai.New()` (or any
 > other provider) makes exactly one attempt per call and surfaces the error. Retries,
 > circuit breaking, and failover are **opt-in** and come from wrapping the provider with
-> the middleware below — most prominently `resilience.NewResilientClient(...)`. This keeps the
+> the middleware below, most prominently `resilience.NewResilientClient(...)`. This keeps the
 > base client's behavior predictable and puts you in control of when calls are retried.
 
 The resilience wrappers live in
@@ -668,7 +668,7 @@ cb := resilience.NewCircuitBreaker(
 client = resilience.NewResilientClient(client, resilience.WithCircuitBreaker(cb))
 ```
 
-States: Closed (normal) → Open (blocking) → Half-Open (testing).
+States: Closed (normal) to Open (blocking) to Half-Open (testing).
 
 ### Retry with Backoff
 
@@ -757,7 +757,7 @@ The observability middleware lives in
 ### OpenTelemetry
 
 Traces and metrics following the OpenTelemetry GenAI semantic conventions. Prompt and
-response content is **not recorded by default** — opt in with `WithContentRecording(true)`:
+response content is **not recorded by default**, opt in with `WithContentRecording(true)`:
 
 ```go
 base, _ := openai.New()
@@ -786,7 +786,7 @@ Built-in [Langfuse](https://langfuse.com) tracing maps GenAI spans to Langfuse
 generations/observations, with per-call trace context (trace/user/session IDs, tags,
 metadata) supplied through the standard `WithTrace` option.
 
-Prompt/response capture is **off by default** for privacy — enable it explicitly with
+Prompt/response capture is **off by default** for privacy, enable it explicitly with
 `WithLangfuseInputCapture` / `WithLangfuseOutputCapture`:
 
 ```go
@@ -825,8 +825,8 @@ full set):
 
 Every provider accepts two HTTP knobs:
 
-- `WithTimeout(d time.Duration)` — sets the per-request timeout on the HTTP client.
-- `WithHTTPClient(c *http.Client)` — supplies your own `*net/http.Client` for full
+- `WithTimeout(d time.Duration)`, sets the per-request timeout on the HTTP client.
+- `WithHTTPClient(c *http.Client)`, supplies your own `*net/http.Client` for full
   control over transport, connection pooling, proxies, and timeouts.
 
 > Note: the SDK installs its own `CheckRedirect` on the client you pass (to re-validate
@@ -852,11 +852,11 @@ client, _ = openai.New(openai.WithHTTPClient(hc))
 ### Network security (SSRF protection)
 
 By default the SDK refuses to send requests to private, loopback, link-local, or
-cloud-metadata addresses, and **requires HTTPS** — this guards against SSRF when a
+cloud-metadata addresses, and **requires HTTPS**, this guards against SSRF when a
 base URL is derived from untrusted input. These are two separate, no-argument opt-outs:
 
-- `WithAllowPrivateIPs()` — allow requests to private/loopback IP addresses.
-- `WithAllowHTTP()` — allow plain-HTTP (non-HTTPS) requests.
+- `WithAllowPrivateIPs()`, allow requests to private/loopback IP addresses.
+- `WithAllowHTTP()`, allow plain-HTTP (non-HTTPS) requests.
 
 A self-hosted endpoint on a private network over plain HTTP typically needs both:
 
@@ -868,7 +868,7 @@ client, _ := openai.New(
 )
 ```
 
-The local providers — **Ollama**, **llama.cpp**, and **Infinity** — default to allowing
+The local providers, **Ollama**, **llama.cpp**, and **Infinity**, default to allowing
 local/private addresses and plain HTTP, since they target `localhost` servers, so no
 flag is needed for the usual local setup.
 
@@ -996,8 +996,8 @@ if errors.Is(err, llms.ErrMissingAPIKey) {
 
 Common sentinel errors:
 
-- `llms.ErrMissingAPIKey` — no API key provided or found in the environment
-- `llms.ErrProviderNotSupported` — unknown provider requested
+- `llms.ErrMissingAPIKey`, no API key provided or found in the environment
+- `llms.ErrProviderNotSupported`, unknown provider requested
 
 ## Contributing
 
@@ -1008,9 +1008,9 @@ checklist. By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT
 ## Security
 
 Please report security vulnerabilities privately as described in
-[SECURITY.md](./SECURITY.md) — do not open public issues for security reports.
+[SECURITY.md](./SECURITY.md), do not open public issues for security reports.
 
 ## License
 
-Licensed under the **Apache License 2.0** — see [LICENSE](./LICENSE) and
+Licensed under the **Apache License 2.0**, see [LICENSE](./LICENSE) and
 [NOTICE](./NOTICE). Copyright © 2026 Nocturnium, Inc.

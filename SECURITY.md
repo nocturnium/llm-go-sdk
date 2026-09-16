@@ -27,9 +27,9 @@ security vulnerability.** Public reports expose users before a fix is available.
 
 Report privately through either of the following channels:
 
-- **Email:** [hello@nocturnium.ai](mailto:hello@nocturnium.ai) — preferred for a
+- **Email:** [hello@nocturnium.ai](mailto:hello@nocturnium.ai), preferred for a
   direct, written report.
-- **GitHub private security advisories:** use the **Security → Report a
+- **GitHub private security advisories:** use the **Security to Report a
   vulnerability** ("Privately report a vulnerability") flow on the repository to
   open a confidential advisory that we can coordinate within GitHub.
 
@@ -56,8 +56,8 @@ disclosure. We are committed to working with reporters in good faith.
 
 This SDK handles API keys and other provider credentials on behalf of the
 calling application (see `apikey.go`'s `ResolveAPIKey`/`RequireAPIKey`). Reports
-about credential handling — for example keys leaking into logs, error messages,
-traces/telemetry, panics, or being transmitted to an unintended endpoint — are
+about credential handling, for example keys leaking into logs, error messages,
+traces/telemetry, panics, or being transmitted to an unintended endpoint, are
 high priority. If you find anything in this category, please report it through
 the private channels above.
 
@@ -95,14 +95,14 @@ help triage.
 
 Security is enforced continuously in CI (see `.github/workflows/`):
 
-- **CodeQL** — GitHub's semantic code analysis with the `security-extended` and
+- **CodeQL**, GitHub's semantic code analysis with the `security-extended` and
   `security-and-quality` query packs, run on pushes, pull requests, and on a
   weekly schedule.
-- **gosec** — Go-specific static security analysis, with results uploaded as
+- **gosec**, Go-specific static security analysis, with results uploaded as
   SARIF to GitHub code scanning.
-- **Trivy** — filesystem vulnerability scanning for `CRITICAL` and `HIGH`
+- **Trivy**, filesystem vulnerability scanning for `CRITICAL` and `HIGH`
   severity findings, also surfaced via SARIF.
-- **govulncheck** — the official Go vulnerability scanner, run against the module
+- **govulncheck**, the official Go vulnerability scanner, run against the module
   to catch known vulnerabilities in dependencies and standard-library usage.
 
 These tools complement, and do not replace, responsible disclosure. If you find

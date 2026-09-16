@@ -150,7 +150,7 @@ client, err := llms.New("runpod", llms.Config{
 | `LLM_PROVIDER` | Default provider name read by `llms.NewFromEnv()` |
 | `LLM_MODEL` | Default model read by `llms.NewFromEnv()` |
 | `LLM_HTTP_TIMEOUT` | Overrides the default HTTP timeout (Go duration, e.g. `"10m"`, `"300s"`) when an explicit timeout is not set in code |
-| `LLM_DEBUG_REQUESTS` | When non-empty, logs raw HTTP requests. Bodies may contain prompts and credentials — **never enable in production** |
+| `LLM_DEBUG_REQUESTS` | When non-empty, logs raw HTTP requests. Bodies may contain prompts and credentials, **never enable in production** |
 
 ---
 
@@ -174,7 +174,7 @@ honors the `LLM_HTTP_TIMEOUT` environment variable as an override.
 
 ### Custom HTTP client
 
-`WithHTTPClient(*http.Client)` lets you supply a fully configured client —
+`WithHTTPClient(*http.Client)` lets you supply a fully configured client , 
 custom transport, connection pooling, proxy settings, your own timeout, etc.
 
 ```go
@@ -206,7 +206,7 @@ client, err := anthropic.New(
 ## Network security (SSRF)
 
 SSRF (Server-Side Request Forgery) protection is **on by default** for every
-provider. Before each request — and on **every redirect hop** — the destination
+provider. Before each request, and on **every redirect hop**, the destination
 URL is validated, and requests are **rejected** when they target:
 
 - **Loopback** addresses (`127.0.0.0/8`, `::1`) and the hostname `localhost`
@@ -217,11 +217,11 @@ URL is validated, and requests are **rejected** when they target:
   `169.254.169.254`).
 - **Unspecified** addresses (`0.0.0.0`, `::`) and **carrier-grade NAT**
   (`100.64.0.0/10`).
-- **Obfuscated IPv4 literals** — octal, hexadecimal, decimal, and short-dotted
+- **Obfuscated IPv4 literals**, octal, hexadecimal, decimal, and short-dotted
   spellings of an IP are decoded and checked against the same ranges, so they
   cannot be used to disguise a private/loopback/link-local target.
 - Internal hostname suffixes: `.local`, `.internal`, `.localdomain`.
-- Non-HTTPS (`http://`) URLs — HTTPS is required.
+- Non-HTTPS (`http://`) URLs, HTTPS is required.
 
 !!! note "Why hostnames are not DNS-resolved at validation time"
     The validator does not resolve DNS for hostnames before the request, to
@@ -252,13 +252,13 @@ client, err := openai.New(
 
 !!! tip "Local providers relax this automatically"
     `ollama`, `llamacpp`, and `infinity` target local servers, so they enable
-    `AllowPrivateIPs` **and** `AllowHTTP` by default — no opt-out flags are
+    `AllowPrivateIPs` **and** `AllowHTTP` by default, no opt-out flags are
     needed to reach `http://localhost`. The options are still available if you
     ever need to override behavior.
 
 When constructing by name, the same relaxations are available through the
 independent `Config.AllowPrivateIPs` and `Config.AllowHTTP` flags. A private,
-plain-HTTP endpoint needs **both** — enabling private-IP access alone no longer
+plain-HTTP endpoint needs **both**, enabling private-IP access alone no longer
 permits cleartext HTTP:
 
 ```go
@@ -301,12 +301,12 @@ The default retry conditions are `429` and `5xx` responses. The returned
 `*resilience.ResilientClient` satisfies the same `llms.LLM` interface, so it is a
 drop-in replacement.
 
-See the [Resilience](guides/resilience.md) guide for the full set of wrappers —
+See the [Resilience](guides/resilience.md) guide for the full set of wrappers , 
 retries, circuit breakers, rate limiting, and fallback chains.
 
 ---
 
 ## See also
 
-- [Resilience](guides/resilience.md) — retries, circuit breakers, rate limiting, fallbacks.
-- [`.env.example`](https://github.com/nocturnium/llm-go-sdk/blob/main/.env.example) — copy-ready environment template.
+- [Resilience](guides/resilience.md), retries, circuit breakers, rate limiting, fallbacks.
+- [`.env.example`](https://github.com/nocturnium/llm-go-sdk/blob/main/.env.example), copy-ready environment template.

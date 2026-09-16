@@ -163,7 +163,7 @@ jobs:
 
       # Persists benchmark history to a `gh-pages` branch. That branch must be
       # created (and GitHub Pages enabled) for storage to succeed; until then,
-      # don't fail CI — the benchmarks above still run on every push to main.
+      # don't fail CI: the benchmarks above still run on every push to main.
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         continue-on-error: true

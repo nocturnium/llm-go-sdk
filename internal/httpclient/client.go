@@ -376,7 +376,7 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(response); err != nil {
 			// A 204, or a 200 with no payload, leaves the target at its zero
 			// value rather than failing: the request succeeded and the endpoint
-			// simply returned nothing.
+			// returned no payload.
 			if errors.Is(err, io.EOF) {
 				return nil
 			}

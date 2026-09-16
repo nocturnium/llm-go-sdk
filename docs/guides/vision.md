@@ -29,7 +29,7 @@ fmt.Println(resp.Content)
 ```
 
 `NewImageMessage(prompt, imageURL)` returns a `RoleUser` message containing one
-text part and one image-URL part — it never returns an error.
+text part and one image-URL part, it never returns an error.
 
 ## Constructing image messages
 
@@ -58,7 +58,7 @@ The SDK provides three message-level constructors and a set of lower-level
 | `NewImageFromReader` | `(r io.Reader, mediaType string) (ContentPart, error)` | Streaming source |
 
 !!! note "URL vs. base64"
-    `NewImageURLPart` does not set a media type — the provider fetches the URL.
+    `NewImageURLPart` does not set a media type, the provider fetches the URL.
     The base64 / file / bytes / reader builders embed the image inline and a
     media type is required (auto-detected for files).
 
@@ -165,7 +165,7 @@ this guards both against local OOM and remote rejection.
 
 !!! tip "Validate before sending"
     `llms.ValidateImageContent(img *ImageContent) error` checks that an
-    `ImageContent` is well-formed — valid source (`url`/`base64`), non-empty
+    `ImageContent` is well-formed, valid source (`url`/`base64`), non-empty
     data, a supported media type for base64 images, an estimated decoded size
     within `MaxImageSize`, and an `http(s)://` URL for URL images.
 
@@ -176,7 +176,7 @@ A few helpers let you read image data back off a message:
 ```go
 msg.HasParts()  // true if the message uses multi-part Parts
 msg.HasImages() // true if any part is an image
-msg.Images()    // []*llms.ImageContent — all image parts
+msg.Images()    // []*llms.ImageContent, all image parts
 msg.Text()      // concatenated text (Content, or all text parts joined by "\n")
 ```
 
@@ -225,7 +225,7 @@ Providers whose default capability set advertises vision:
 
 !!! warning "Capability flags are provider-level defaults"
     The flag reflects whether the provider *can* serve vision with an
-    appropriate model — not whether the specific model you configured supports
+    appropriate model, not whether the specific model you configured supports
     it. For example, OpenAI reports `Vision: true`, but you must still pick a
     vision-capable model such as `gpt-4o`. Conversely, `ollama` and `runpod`
     default to `false` because it depends entirely on which model you load,
@@ -303,11 +303,11 @@ func createClient() llms.LLM {
 
 !!! note "Streaming works too"
     Vision messages are just regular messages, so they also work with
-    `client.Stream(ctx, []llms.Message{msg})` — the image is sent on the first
+    `client.Stream(ctx, []llms.Message{msg})`, the image is sent on the first
     request and the response streams back as text chunks.
 
 ## See also
 
 - [Multi-modal example source](https://github.com/nocturnium/llm-go-sdk/blob/main/examples/vision/main.go)
-- Structured outputs and tools — combine vision with `WithTools` or
+- Structured outputs and tools, combine vision with `WithTools` or
   `GenerateTyped` to extract structured data from images.

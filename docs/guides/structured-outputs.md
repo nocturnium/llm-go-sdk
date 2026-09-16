@@ -1,6 +1,6 @@
 # Structured Outputs
 
-Structured outputs let you constrain a model's response to valid JSON — either
+Structured outputs let you constrain a model's response to valid JSON, either
 free-form JSON (`json_object` mode) or JSON that conforms to a specific JSON
 Schema (`json_schema` mode). The SDK builds on these primitives with a generic
 helper, `GenerateTyped[T]`, that derives a schema from a Go struct, requests
@@ -24,7 +24,7 @@ import (
 | `llms.SchemaFrom[T]()` | Derives a `json.RawMessage` JSON Schema from a Go struct via reflection. |
 | `llms.GenerateTyped[T](ctx, client, messages, opts...)` | Generates, constrains, and unmarshals into a typed `T` in one call. |
 
-## `WithJSONMode()` — JSON without a schema
+## `WithJSONMode()`, JSON without a schema
 
 `WithJSONMode()` asks the provider to emit a syntactically valid JSON object,
 but does not enforce any particular shape. The model decides the keys. Use this
@@ -50,7 +50,7 @@ if err := json.Unmarshal([]byte(resp.Content), &data); err != nil {
 Under the hood this sets `ResponseFormat.Type` to `llms.ResponseFormatJSONObject`
 (the wire value `"json_object"`).
 
-## `WithJSONSchema()` — JSON constrained by a schema
+## `WithJSONSchema()`, JSON constrained by a schema
 
 `WithJSONSchema(name string, schema json.RawMessage, strict bool)` requests
 output that conforms to an explicit JSON Schema. The `name` labels the schema,
@@ -86,7 +86,7 @@ if err := json.Unmarshal([]byte(resp.Content), &out); err != nil {
 This sets `ResponseFormat.Type` to `llms.ResponseFormatJSONSchema` (wire value
 `"json_schema"`).
 
-## `SchemaFrom[T]()` — derive a schema from a struct
+## `SchemaFrom[T]()`, derive a schema from a struct
 
 Writing JSON Schema by hand is tedious. `SchemaFrom[T]()` generates one from a
 Go struct using reflection, so your struct stays the single source of truth.
@@ -112,28 +112,28 @@ Reflection rules:
 - Unexported fields are skipped.
 - Every non-skipped field is marked **required**, and every object emits
   `additionalProperties: false`, so the schema is OpenAI strict-compatible.
-  `omitempty` and pointer fields are NOT treated as optional. If you need
+  `omitempty` and pointer fields are not treated as optional. If you need
   optional fields, supply a hand-authored schema via `WithJSONSchema`.
-- Go kinds map to JSON Schema types: integers → `integer`, floats → `number`,
-  `bool` → `boolean`, `string` → `string`, slices/arrays → `array`, maps →
-  `object` with `additionalProperties`, nested structs → nested `object`.
-- `time.Time` → `string` (format `date-time`); `[]byte` → `string`; types
-  implementing `json.Marshaler`/`encoding.TextMarshaler` → `string`. Types with
-  no closed shape — `json.RawMessage`, `interface{}`, and maps with arbitrary
-  values — map to an unconstrained `{}`, which OpenAI strict validators reject.
+- Go kinds map to JSON Schema types: integers to `integer`, floats to `number`,
+  `bool` to `boolean`, `string` to `string`, slices/arrays to `array`, maps to
+  `object` with `additionalProperties`, nested structs to nested `object`.
+- `time.Time` to `string` (format `date-time`); `[]byte` to `string`; types
+  implementing `json.Marshaler`/`encoding.TextMarshaler` to `string`. Types with
+  no closed shape, `json.RawMessage`, `interface{}`, and maps with arbitrary
+  values, map to an unconstrained `{}`, which OpenAI strict validators reject.
   For structs containing such fields, supply a hand-authored schema via
   `WithJSONSchema` instead of the auto-strict `GenerateTyped` path.
 
 For `Person` above, all three of `name`, `age`, and `email` are marked required
 (`omitempty` no longer makes a field optional), and the object schema gets
-`additionalProperties: false`. To make `email` truly optional, hand-author a
+`additionalProperties: false`. To make `email` optional, hand-author a
 schema and pass it via `WithJSONSchema`.
 
 !!! note "Schemas are cached"
     `SchemaFrom[T]()` caches the generated schema per type and returns a copy on
     each call, so repeated use is cheap.
 
-## `GenerateTyped[T]()` — the one-call path
+## `GenerateTyped[T]()`, the one-call path
 
 `GenerateTyped[T]` ties the pieces together. It:
 
@@ -194,7 +194,7 @@ func main() {
     // The schema is derived from Recipe, sent as a strict json_schema response
     // format, and the JSON response is decoded straight into the struct.
     recipe, resp, err := llms.GenerateTyped[Recipe](ctx, client, messages,
-        llms.WithTemperature(0), // 0 is honored — deterministic extraction
+        llms.WithTemperature(0), // 0 is honored, deterministic extraction
     )
     if err != nil {
         log.Fatalf("structured generation failed: %v", err)
@@ -211,7 +211,7 @@ func main() {
 ### Bring your own schema
 
 If you pass a `json_schema` response format yourself, `GenerateTyped` uses it
-verbatim instead of deriving one from `T` — useful when you want a hand-tuned
+verbatim instead of deriving one from `T`, useful when you want a hand-tuned
 schema (descriptions, enums, constraints) but still want typed decoding:
 
 ```go
@@ -290,12 +290,12 @@ if llms.HasCapability(client, func(c llms.Capabilities) bool { return c.JSONMode
 
 ## Tips
 
-- **Use `WithTemperature(0)`** for extraction and classification tasks — a value
+- **Use `WithTemperature(0)`** for extraction and classification tasks, a value
   of `0` is honored by the SDK and yields more deterministic structured output.
 - `SchemaFrom`/`GenerateTyped` emit a strict schema in which every field is
   required. There is no struct-tag way to mark a field optional; if you need
   optional fields, author the schema by hand and pass it with `WithJSONSchema`.
-- **Inspect `resp.FinishReason`** (typed `llms.FinishReason`) — a value of
+- **Inspect `resp.FinishReason`** (typed `llms.FinishReason`), a value of
   `llms.FinishReasonLength` means the JSON was likely truncated; raise
   `WithMaxTokens`.
 - **Keep your struct authoritative.** Deriving the schema from `T` with
@@ -303,6 +303,6 @@ if llms.HasCapability(client, func(c llms.Capabilities) bool { return c.JSONMode
 
 ## See also
 
-- [Tools and Function Calling](tools.md) for the agent loop (`llms.RunTools`) —
+- [Tools and Function Calling](tools.md) for the agent loop (`llms.RunTools`) , 
   structured outputs and tool calling are complementary.
 - The `llms.Response` type for usage, finish reason, and tool-call accessors.

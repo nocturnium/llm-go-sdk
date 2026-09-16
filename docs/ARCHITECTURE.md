@@ -16,7 +16,7 @@ add a provider (including coding standards and required tests), see
 - No external LLM SDK dependencies; the only notable third-party packages are
   `urfave/cli/v2` (for the CLI), `go.opentelemetry.io/otel` (for tracing and
   metrics), and `golang.org/x/time` (for rate limiting). As of v3 OpenTelemetry is
-  pulled in only by `pkg/observability` — the bare `llms` root package no longer
+  pulled in only by `pkg/observability`, the bare `llms` root package no longer
   compiles OTel (rate limiting moved with the resilience middleware into
   `pkg/middleware/resilience`).
 
@@ -84,18 +84,18 @@ hatches (`WithExtraBody`, `WithAdapterID`, `WithWebSearch`).
 
 `WithMaxTokens(int)` is unchanged for callers, but internally `CallOptions.MaxTokens`
 is now a `*int`: unset means "use the provider/model default" (Anthropic still sends an
-explicit limit), while a set value — including an explicit `0` — is forwarded verbatim.
+explicit limit), while a set value, including an explicit `0`, is forwarded verbatim.
 `Temperature` and `TopP` follow the same pointer convention.
 
 Provider *construction* uses the same pattern with a separate per-provider
 `Option` type (e.g. `openai.WithAPIKey`, `openai.WithModel`,
 `openai.WithBaseURL`). For HTTP control every provider exposes
 `WithTimeout(time.Duration)` (per-request timeout) and `WithHTTPClient(*http.Client)`
-(supply your own `net/http` client), plus two separate no-argument SSRF opt-outs —
+(supply your own `net/http` client), plus two separate no-argument SSRF opt-outs , 
 `WithAllowPrivateIPs()` (allow private/loopback IPs) and `WithAllowHTTP()` (allow
-plain-HTTP) — for self-hosted/private endpoints. Construction options configure
+plain-HTTP), for self-hosted/private endpoints. Construction options configure
 the client; `CallOption`s configure individual requests. Each provider's construction
-surface is `New(...)` plus its `WithX(...)` options — the option struct, its constructor,
+surface is `New(...)` plus its `WithX(...)` options, the option struct, its constructor,
 and the apply helper are unexported implementation details.
 
 Providers can also be constructed by name through the package-level registry:
@@ -180,26 +180,26 @@ tracing outermost (so they see the full, final outcome).
 The SDK has a small, flat public surface. The guiding rule:
 
 > **The root package holds the core types and logic, period. There are no alias
-> packages — the only other public packages are the providers and the
+> packages, the only other public packages are the providers and the
 > custom-provider base.**
 
 The public surface is exactly:
 
-- **Root (`llms "github.com/nocturnium/llm-go-sdk/v6"`)** — every shared type and
+- **Root (`llms "github.com/nocturnium/llm-go-sdk/v6"`)**, every shared type and
   function: the `LLM` interface, `Message`/`Response`/`Tool` and friends, the
   `CallOption` builders, errors and sentinels, streaming, the capability registry,
   and cost tracking. A single import reaches the core (`llms.Message`,
   `llms.WithTemperature`, `llms.NewCostTracker`, …).
-- **`pkg/middleware/resilience`** — retry, circuit-breaker, rate-limiting, and
+- **`pkg/middleware/resilience`**, retry, circuit-breaker, rate-limiting, and
   fallback wrappers (`resilience.NewResilientClient`, `resilience.NewFallbackChain`, …),
   each a drop-in `llms.LLM`.
-- **`pkg/observability`** — OpenTelemetry, Langfuse, and structured-logging
+- **`pkg/observability`**, OpenTelemetry, Langfuse, and structured-logging
   middleware (`observability.NewOTelMiddleware`, `observability.NewLoggingMiddleware`, …).
-- **`pkg/providers/<name>`** — the 19 provider implementations (17 chat-registered;
-  HuggingFace and Infinity are direct-construct — HuggingFace does chat or
+- **`pkg/providers/<name>`**, the 19 provider implementations (17 chat-registered;
+  HuggingFace and Infinity are direct-construct, HuggingFace does chat or
   embeddings per its deployed model, Infinity is embeddings-only). Import the one
   you need, e.g. `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai`.
-- **`pkg/openaicompat`** — the shared OpenAI-compatible base, public so external code
+- **`pkg/openaicompat`**, the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
 
 Everything else lives under `internal/` and is not importable by external code.
@@ -211,19 +211,19 @@ Everything else lives under `internal/` and is not importable by external code.
 > imported only from `pkg/providers/<name>`. See
 > [`migration-guide.md`](./migration-guide.md) for the layout reference.
 
-> **Decision — why not a "facade at root"?** A recurring suggestion is to shrink
+> **Decision, why not a "facade at root"?** A recurring suggestion is to shrink
 > the root by moving its code into sub-packages and re-exporting from a thin root
 > facade. This does not work in Go here, and we have deliberately rejected it:
-> the root package is the dependency **leaf** — every provider imports it for both
+> the root package is the dependency **leaf**, every provider imports it for both
 > *types* (`llms.Message`) and *functions* (`llms.ApplyOptions`, `llms.PrepareMessages`,
 > `llms.WrapProviderError`). A root that re-exported from sub-packages would need to
-> import them, creating `root → subpkg → root` **import cycles** that do not compile.
+> import them, creating `root to subpkg to root` **import cycles** that do not compile.
 > Type aliases (`type X = sub.X`) can forward types but cannot forward functions
 > (the bulk of the surface), so a facade also means hundreds of hand-maintained
 > wrappers that fracture godoc. The correct dependency direction is *inward to the
 > core*: features depend on the core, never the reverse. If the root must shed a
 > heavy dependency (e.g. OpenTelemetry), the answer is to move that **middleware
-> out** to a leaf sub-package that imports the core — a breaking change reserved for
+> out** to a leaf sub-package that imports the core, a breaking change reserved for
 > a deliberate major version, documented in
 > [`v3-package-taxonomy.md`](./v3-package-taxonomy.md).
 
@@ -276,7 +276,7 @@ llm-go-sdk/
 │   ├── websearch/      # Brave / Tavily search clients
 │   └── testutil/       # internal test helpers
 │
-├── cmd/                # llms-cli — a real shipping CLI built on the SDK
+├── cmd/                # llms-cli, a real shipping CLI built on the SDK
 ├── docs/               # documentation (this file)
 └── examples/           # runnable usage examples
 ```
@@ -383,13 +383,13 @@ The `internal/` tree is not importable by external code; it is the engine room.
   `*http.Client` with a configurable `RetryPolicy`, exposes `DoJSON`, `DoRaw`,
   and `DoStream`, and includes an `SSEReader` for streaming. **Retries are off by
   default** (`NoRetryPolicy`): a bare provider makes a single attempt per call.
-  This is deliberate — the higher-level `ResilientClient` middleware
+  This is deliberate, the higher-level `ResilientClient` middleware
   (`resilience.NewResilientClient`) is the single authority for retrying whole `LLM`
   operations (with backoff) and adds the circuit breaker, so retry behavior lives
   in one place rather than being silently duplicated at the HTTP layer. Streaming
   requests are never retried (a partially consumed stream cannot be safely
   replayed). A `security` layer guards request construction (SSRF protection,
-  HTTPS enforcement — see below).
+  HTTPS enforcement, see below).
 - `internal/anthropicapi`, `internal/geminiapi`, `internal/ollamaapi`,
   `internal/llamacppapi` each provide a typed client for one native provider's
   protocol, built on `internal/httpclient`.
@@ -458,7 +458,7 @@ single instrumented call is legible to both generic OTel backends and Langfuse:
   (`WithLangfuseInputCapture(enabled, maxLen)`,
   `WithLangfuseOutputCapture(enabled, maxLen)`), recorded under both the GenAI
   (`gen_ai.prompt` / `gen_ai.completion`) and OpenInference (`input.value` /
-  `output.value`) keys. **Content capture is off by default** for privacy — prompts
+  `output.value`) keys. **Content capture is off by default** for privacy, prompts
   and responses are not recorded unless you opt in via these options.
 
 Trace context is carried through `context.Context`. `pkg/observability/langfuse.go` defines
@@ -494,7 +494,7 @@ concurrency helper and is independent of any provider's native batch API.
 
 ### Embeddings and reranking
 
-`embeddings.go` defines the `Embedder` interface — a single method, `Embed(ctx,
+`embeddings.go` defines the `Embedder` interface: a single method, `Embed(ctx,
 texts, ...EmbedOption) (*EmbeddingResponse, error)` — and the `Reranker` interface,
 with `EmbeddingResponse`, `Embedding`, and `EmbeddingUsage` types. Embedding vectors
 are `[]float32` throughout (`Embedding.Vector`). The query/document conveniences are
@@ -539,8 +539,8 @@ and unmarshals the reply into `T`.
 ### Streaming
 
 Streaming is uniform across providers: `Stream` returns `<-chan StreamChunk`. The
-channel is always closed with a terminal chunk — either one with `Done == true` on
-success or one carrying `Error` on failure — so a consumer can simply range over the
+channel is always closed with a terminal chunk, either one with `Done == true` on
+success or one carrying `Error` on failure, so a consumer can range over the
 channel and be guaranteed it ends in one of those two states. The `StreamSender`
 (`streaming.go`) sends chunks with a send timeout (`StreamSendTimeout`, a
 `time.Duration`, tunable per call via `WithStreamSendTimeout`) so a consumer that stops
@@ -607,7 +607,7 @@ its own OpenAI-compatible providers without forking the SDK. The fast path is to
 embed `BaseProvider`: construct an `openaicompat.Client` with `NewClient(ClientConfig{...})`
 pointed at any OpenAI-shaped endpoint, then call
 `NewBaseProvider(client, ProviderConfig{...})`. `NewBaseProvider` takes exactly two
-arguments — the client and the config — and reads the default chat/embedding models from
+arguments, the client and the config, and reads the default chat/embedding models from
 `ProviderConfig.DefaultModel` and `ProviderConfig.DefaultEmbeddingModel`; the embedded
 `BaseProvider` then supplies the full `LLM`, `Embedder`, and `CapableProvider` surface
 (streaming, embeddings, capability reporting, token estimation).
@@ -632,8 +632,8 @@ Because middleware is just "an `LLM` wrapping an `LLM`," consumers can write
 their own decorators: implement the `LLM` methods, store the wrapped client, and
 implement `Unwrap() LLM` so the wrapper participates in `UnwrapAll` /
 `GetMiddleware` introspection and capability passthrough. The built-in
-decorators — cost and response caching in the root package, and the wrappers in
-pkg/middleware/resilience and pkg/observability — are examples to follow.
+decorators, cost and response caching in the root package, and the wrappers in
+pkg/middleware/resilience and pkg/observability, are examples to follow.
 
 ---
 

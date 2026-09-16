@@ -12,7 +12,7 @@ wrapping.
 
 This guide shows the fast path: construct a low-level client, declare a provider
 config, embed `BaseProvider` to inherit the full `llms.LLM` (and `llms.Embedder`)
-implementation, and — optionally — register the provider so callers can build it
+implementation, and, optionally, register the provider so callers can build it
 by name.
 
 !!! tip "When to use this"
@@ -220,7 +220,7 @@ var (
 ```
 
 That is the whole provider. By embedding `BaseProvider`, `*Client` already
-satisfies `llms.LLM`, `llms.CapableProvider`, and `llms.Embedder` — no further
+satisfies `llms.LLM`, `llms.CapableProvider`, and `llms.Embedder`, no further
 method implementations are required.
 
 ## Using your provider
@@ -270,7 +270,7 @@ fmt.Println(c.Provider(), c.Model(), c.Capabilities().Streaming)
 ```
 
 Because `*Client` is an ordinary `llms.LLM`, it composes with the SDK's
-decorators — for example resilience and observability (from
+decorators, for example resilience and observability (from
 `pkg/middleware/resilience` and `pkg/observability`):
 
 ```go
@@ -345,7 +345,7 @@ provider, for instance, reads `Extra["endpoint_id"]`).
 
 Some endpoints accept extra top-level JSON fields (a LoRA adapter id, a custom
 sampler, etc.). Rather than forking the request type, set them via the call
-option `llms.WithExtraBodyParam` / `llms.WithExtraBody` / `llms.WithAdapterID` —
+option `llms.WithExtraBodyParam` / `llms.WithExtraBody` / `llms.WithAdapterID` , 
 `BaseProvider` flattens them into the request body:
 
 ```go
@@ -387,12 +387,12 @@ When driving the `Client` directly you can reuse the same conversions
 `BaseProvider` uses internally, so your custom path produces identical
 `llms` types:
 
-- `openaicompat.BuildChatRequest(model, messages, opts, stream)` — build a
+- `openaicompat.BuildChatRequest(model, messages, opts, stream)`, build a
   `ChatCompletionRequest` from `llms` messages and applied `CallOptions`.
-- `openaicompat.ConvertMessages(messages)` — `[]llms.Message` to `[]ChatMessage`.
-- `openaicompat.ConvertResponse(resp)` — `*ChatCompletionResponse` to `*llms.Response`.
-- `openaicompat.ConvertEmbeddingResponse(resp)` — to `*llms.EmbeddingResponse`.
-- `openaicompat.WrapError(provider, op, err)` — attach provider context to errors.
+- `openaicompat.ConvertMessages(messages)`, `[]llms.Message` to `[]ChatMessage`.
+- `openaicompat.ConvertResponse(resp)`, `*ChatCompletionResponse` to `*llms.Response`.
+- `openaicompat.ConvertEmbeddingResponse(resp)`, to `*llms.EmbeddingResponse`.
+- `openaicompat.WrapError(provider, op, err)`, attach provider context to errors.
 
 ## Checklist
 
@@ -406,7 +406,7 @@ When driving the `Client` directly you can reuse the same conversions
 
 ## See also
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — "Building custom providers on
+- [ARCHITECTURE.md](../ARCHITECTURE.md), "Building custom providers on
   `pkg/openaicompat`" and the provider-model overview.
 - The `pkg/providers/featherless` and `pkg/providers/synthetic` packages are
   minimal real-world references built exactly this way.

@@ -11,13 +11,13 @@ parameter for you.
 Use one of the call options:
 
 ```go
-// Qualitative effort — maps to OpenAI reasoning_effort; providers that only take
+// Qualitative effort, maps to OpenAI reasoning_effort; providers that only take
 // a token budget (Anthropic, Gemini) derive one automatically.
 resp, err := client.GenerateContent(ctx, messages,
     llms.WithReasoningEffort(llms.ReasoningEffortHigh),
 )
 
-// Explicit thinking-token budget — honored by Anthropic and Gemini.
+// Explicit thinking-token budget, honored by Anthropic and Gemini.
 resp, err := client.GenerateContent(ctx, messages,
     llms.WithReasoningBudget(8192),
 )
@@ -73,7 +73,7 @@ fmt.Println("reasoning tokens:", resp.Usage.ReasoningTokens)
 ```
 
 `resp.Reasoning` is a `*llms.ReasoningContent` (`nil` when the model produced no
-reasoning) with `Content`, `Tokens`, and — for Anthropic — a `Signature` that
+reasoning) with `Content`, `Tokens`, and, for Anthropic, a `Signature` that
 authenticates the thinking block for multi-turn use.
 
 ## Streaming

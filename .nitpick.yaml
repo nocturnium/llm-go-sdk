@@ -8,7 +8,7 @@
 # unless NITPICK_TRUST_CONFIG_ENDPOINTS=1, since a pull request must not be able
 # to redirect its own review.
 #
-# A change that edits THIS file is reviewed under the base revision's copy, so
+# A change that edits this very file is reviewed under the base revision's copy, so
 # the first run of a config change still needs LLM_PROVIDER/LLM_MODEL set.
 # See open-nitpick docs/configuration.md for every key.
 

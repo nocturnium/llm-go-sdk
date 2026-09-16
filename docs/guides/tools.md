@@ -4,10 +4,10 @@ Tool calling (also called *function calling*) lets a model ask your program to
 run a function and feed the result back into the conversation. The SDK supports
 this at two levels:
 
-- **Manual loop** — you define tools, pass them per call, read `resp.ToolCalls`,
+- **Manual loop**, you define tools, pass them per call, read `resp.ToolCalls`,
   execute them yourself, append the results as `RoleTool` messages, and call the
   model again. Maximum control.
-- **`llms.RunTools` agent loop** — a high-level helper that drives the whole
+- **`llms.RunTools` agent loop**, a high-level helper that drives the whole
   read-execute-append-repeat cycle for you, given a `ToolRegistry` that maps tool
   names to Go handlers.
 
@@ -17,7 +17,7 @@ before reaching for `RunTools`.
 ## Defining a tool
 
 A tool is created with `llms.NewFunctionTool`. The `parameters` argument is the
-JSON Schema for the function's arguments — pass any Go value that marshals to the
+JSON Schema for the function's arguments, pass any Go value that marshals to the
 schema you want (a `map[string]any` is the most common choice).
 
 ```go
@@ -96,10 +96,10 @@ Each `llms.ToolCall` carries:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `ID` | `string` | Unique id for this call — echo it back in your `RoleTool` message |
+| `ID` | `string` | Unique id for this call, echo it back in your `RoleTool` message |
 | `Type` | `llms.ToolType` | Always `"function"` today |
 | `Function.Name` | `string` | The tool name the model chose |
-| `Function.Arguments` | `string` | A JSON string of arguments — `json.Unmarshal` it |
+| `Function.Arguments` | `string` | A JSON string of arguments, `json.Unmarshal` it |
 
 Convenience accessors on `*llms.Response` help when you expect a specific call:
 
@@ -264,7 +264,7 @@ appended), and an error.
 ### Registering tools
 
 Create a registry with `llms.NewToolRegistry()` and register each tool with its
-handler. A handler has the signature `func(args json.RawMessage) (any, error)` —
+handler. A handler has the signature `func(args json.RawMessage) (any, error)` , 
 whatever non-string value you return is JSON-encoded into the tool result; a
 returned error is converted into a tool-result message so the model can react to
 it rather than aborting the run.
@@ -416,7 +416,7 @@ func main() {
 ### How `RunTools` behaves
 
 - **Tools are injected automatically.** `RunTools` calls `GenerateContent` with
-  `WithTools(registry.Tools())` on every turn — you do not pass `WithTools`
+  `WithTools(registry.Tools())` on every turn, you do not pass `WithTools`
   yourself. Forward per-turn options with `WithCallOptions`. `RunTools` prepends
   them before `WithTools(registry.Tools())`, so options like model, temperature,
   max tokens, reasoning, and response format are honored, while registry tools
@@ -426,15 +426,15 @@ func main() {
   calls run concurrently (bounded by `WithToolConcurrency`, default 8), but the
   resulting `RoleTool` messages are appended in the same order as
   `resp.ToolCalls`, so the transcript is reproducible.
-- **Errors become tool results.** If a handler returns an error — or dispatch
-  fails because of a missing tool or malformed call — `RunTools` appends a
+- **Errors become tool results.** If a handler returns an error, or dispatch
+  fails because of a missing tool or malformed call, `RunTools` appends a
   tool-result message containing the error text instead of aborting, letting the
   model recover.
 - **Context cancellation is respected.** If `ctx` is cancelled, `RunTools`
   returns promptly with `ctx.Err()`, the last response, and the transcript built
   so far. `RunTools` checks `ctx` before model calls and while
   scheduling/awaiting tool results, but a `ToolHandler` already running when
-  cancellation occurs runs to completion — `ToolHandler` receives no context.
+  cancellation occurs runs to completion, `ToolHandler` receives no context.
   Handlers that must abort on cancellation should capture a context via closure
   and check it themselves.
 
@@ -505,5 +505,5 @@ resulting `RoleTool` message.
 
 ## See also
 
-- [Structured outputs](structured-outputs.md) — `GenerateTyped`, `SchemaFrom`, and JSON-schema-constrained responses.
-- [Streaming](streaming.md) — incremental responses with `client.Stream`.
+- [Structured outputs](structured-outputs.md), `GenerateTyped`, `SchemaFrom`, and JSON-schema-constrained responses.
+- [Streaming](streaming.md), incremental responses with `client.Stream`.

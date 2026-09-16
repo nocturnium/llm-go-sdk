@@ -3,7 +3,7 @@ name: PR Title Lint
 # The auto-release workflow derives the next version from the squash-merge commit
 # subject, which (with squash merges) is the PR title. This check enforces that PR
 # titles follow Conventional Commits so the version bump is computed correctly:
-# feat -> minor, fix -> patch, ! / BREAKING CHANGE -> major; other types do not
+# feat gives minor, fix gives patch, ! or BREAKING CHANGE gives major; other types do not
 # trigger a release. Keep PRs squash-merged for this guarantee to hold.
 
 on:

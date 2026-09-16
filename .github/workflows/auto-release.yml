@@ -3,12 +3,12 @@ name: Auto Release
 # Automatically cuts a release when releasable conventional commits land on main.
 #
 # git-cliff computes the next semantic version from the commits since the latest
-# tag (feat -> minor, fix -> patch, ! / BREAKING CHANGE -> major). If nothing
+# tag (feat gives minor, fix gives patch, ! or BREAKING CHANGE gives major). If nothing
 # releasable landed (only docs/chore/ci/refactor/style/test/build commits), the
 # run skips without tagging.
 #
-# This path is SELF-CONTAINED: it creates+pushes the tag AND runs GoReleaser in
-# the same run. A tag pushed by the default GITHUB_TOKEN does NOT trigger the
+# This path is SELF-CONTAINED: it creates and pushes the tag, then runs GoReleaser in
+# the same run. A tag pushed by the default GITHUB_TOKEN does not trigger the
 # tag-gated release.yml (GitHub suppresses workflow recursion for GITHUB_TOKEN),
 # so we release inline here rather than depending on that. release.yml remains
 # the path for manual / emergency tags (`git push origin vX.Y.Z`).
@@ -64,9 +64,9 @@ jobs:
         id: decide
         run: |
           LATEST="$(git describe --tags --abbrev=0 2>/dev/null || echo none)"
-          # A release is warranted ONLY when a feat/fix/perf/breaking commit landed
-          # since the last tag (feat -> minor, fix/perf -> patch, breaking -> major).
-          # NOTE: `git cliff --bumped-version` alone bumps a PATCH for ANY commit
+          # A release is warranted only when a feat/fix/perf/breaking commit landed
+          # since the last tag (feat gives minor, fix and perf give patch, a breaking change gives major).
+          # NOTE: `git cliff --bumped-version` alone bumps a patch for any commit
           # (including docs/chore/ci), so we must gate on the count of releasable
           # commits rather than on "did the version change". Other types
           # (docs/chore/ci/refactor/style/test/build) intentionally do not release.

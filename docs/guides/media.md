@@ -102,10 +102,10 @@ unsupported operations return the corresponding `Err*NotSupported`.
 | ElevenLabs | Flows generation + edits (`gemini-3.1-flash-lite-image`), Pro plan+ | Flows async (`veo-3.1-fast-generate-001`), Pro plan+ | Binary/chunked TTS, timestamps, dialogue, SFX/music | Scribe multipart (`scribe_v2`) |
 | OpenRouter | Generation (`google/gemini-3.1-flash-lite-image`); native `/images` | Native async MP4 (`google/veo-3.1-lite`) | Binary mp3/pcm; optional cost lookup | Multipart JSON/verbose JSON (`openai/whisper-1`) |
 | Together AI | Generation (`black-forest-labs/FLUX.1-schnell`), base64 or eager URL download | Native `/v2/videos` (`ByteDance/Seedance-2.5`) | Binary + raw SSE (`hexgrad/Kokoro-82M`) | Multipart (`openai/whisper-large-v3`) |
-| Groq | — | — | WAV only (`canopylabs/orpheus-v1-english`), 200 characters | Transcription + translation (`whisper-large-v3-turbo`) |
-| Featherless | — | — | Binary + SSE (`hexgrad/Kokoro-82M`) | — |
-| Mistral | — | — | JSON base64 (`voxtral-mini-tts-2603`), no streaming | Multipart (`voxtral-mini-latest`) |
-| Z.AI | One URL image (`cogview-4-250304`), eager download | Native async (`cogvideox-3`) | — | Multipart (`glm-asr-2512`), clips up to 30 seconds |
+| Groq |, |, | WAV only (`canopylabs/orpheus-v1-english`), 200 characters | Transcription + translation (`whisper-large-v3-turbo`) |
+| Featherless |, |, | Binary + SSE (`hexgrad/Kokoro-82M`) |, |
+| Mistral |, |, | JSON base64 (`voxtral-mini-tts-2603`), no streaming | Multipart (`voxtral-mini-latest`) |
+| Z.AI | One URL image (`cogview-4-250304`), eager download | Native async (`cogvideox-3`) |, | Multipart (`glm-asr-2512`), clips up to 30 seconds |
 
 ### Thin OpenAI-compatible providers
 
