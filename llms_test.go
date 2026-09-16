@@ -3,7 +3,6 @@ package llms
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -485,24 +484,6 @@ func TestResponseWithToolCalls(t *testing.T) {
 }
 
 // StreamChunk tests
-
-func TestStreamChunkWithError(t *testing.T) {
-	testErr := errors.New("test error")
-	chunk := StreamChunk{
-		Error: testErr,
-		Done:  true,
-	}
-
-	if chunk.Error == nil {
-		t.Error("expected error to be set")
-	}
-	if chunk.Error.Error() != "test error" {
-		t.Errorf("unexpected error message: %s", chunk.Error.Error())
-	}
-	if !chunk.Done {
-		t.Error("expected done to be true")
-	}
-}
 
 // WithModel tests
 

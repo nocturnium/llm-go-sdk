@@ -148,12 +148,14 @@ func FuzzConvertResponse(f *testing.F) {
 			},
 		}
 
-		// Should not panic
 		result := convertResponse(resp)
 
-		// Basic invariants
-		if result == nil {
-			t.Error("expected non-nil result")
+		// The text part and the usage carry through whatever the fuzzer supplied.
+		if result.Content != content {
+			t.Errorf("content = %q, want %q", result.Content, content)
+		}
+		if result.Usage.CompletionTokens != outputTokens {
+			t.Errorf("completion tokens = %d, want %d", result.Usage.CompletionTokens, outputTokens)
 		}
 	})
 }

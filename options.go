@@ -248,9 +248,9 @@ func WithStreamBufferSize(size int) CallOption {
 // WithStreamSendTimeout sets the timeout for sending chunks to the stream channel.
 // If the consumer stops reading and the buffer fills, chunks will be dropped after
 // this timeout so the producing goroutine can exit instead of leaking.
-// A value of 0 (or negative) leaves the default in effect (DefaultStreamSendTimeout,
-// 30s) rather than disabling the timeout, to avoid goroutine leaks.
-// Default is 30 seconds.
+// The option stores what it is given; a stored 0 or negative value is read back
+// as DefaultStreamSendTimeout (30s) by the senders, so the timeout cannot be
+// disabled and a stalled consumer can never leak the producing goroutine.
 func WithStreamSendTimeout(d time.Duration) CallOption {
 	return func(o *CallOptions) {
 		o.StreamSendTimeout = d
