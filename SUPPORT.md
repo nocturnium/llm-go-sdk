@@ -31,7 +31,7 @@ need a fix on an older major, upgrade to the current major, we do not backport.
 
 ## Upgrading
 
-The current major is **v5**. Install it with:
+The current major is **v6**. Install it with:
 
 ```bash
 go get github.com/nocturnium/llm-go-sdk/v6@latest

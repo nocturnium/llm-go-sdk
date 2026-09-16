@@ -199,11 +199,14 @@ func (r *StreamReader) Read() (*StreamEvent, error) {
 			event.Delta = &delta
 		case "content_block_stop":
 			event.Type = eventType
-			// Parse index if present
 			var raw struct {
 				Index int `json:"index"`
 			}
-			_ = json.Unmarshal([]byte(sseEvent.Data), &raw)
+			// Index falls back to 0 on a parse failure, which would attribute the
+			// stop to the first block of a multi-block stream.
+			if err := json.Unmarshal([]byte(sseEvent.Data), &raw); err != nil {
+				return nil, fmt.Errorf("decode content_block_stop: %w", err)
+			}
 			event.Index = raw.Index
 		case "message_delta":
 			var raw struct {

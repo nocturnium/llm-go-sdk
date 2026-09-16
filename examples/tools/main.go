@@ -148,7 +148,11 @@ func executeTool(name, arguments string) string {
 			Location string `json:"location"`
 			Unit     string `json:"unit"`
 		}
-		_ = json.Unmarshal([]byte(arguments), &args)
+		// Answering a malformed call with a fabricated reading would feed the
+		// model a result it can only trust; tell it the call failed instead.
+		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+			return fmt.Sprintf(`{"error": %q}`, "could not parse arguments: "+err.Error())
+		}
 
 		unit := args.Unit
 		if unit == "" {
@@ -169,7 +173,9 @@ func executeTool(name, arguments string) string {
 			A         float64 `json:"a"`
 			B         float64 `json:"b"`
 		}
-		_ = json.Unmarshal([]byte(arguments), &args)
+		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+			return fmt.Sprintf(`{"error": %q}`, "could not parse arguments: "+err.Error())
+		}
 
 		var result float64
 		switch args.Operation {

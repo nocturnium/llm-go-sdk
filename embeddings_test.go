@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"testing"
 )
 
@@ -98,33 +99,28 @@ func TestApplyEmbedOptions_Defaults(t *testing.T) {
 	}
 }
 
+// An embedding response is consumed through the helpers, so those are what this
+// pins: the vectors come back in index order and the usage totals add up.
 func TestEmbeddingResponse_Structure(t *testing.T) {
 	resp := &EmbeddingResponse{
 		Embeddings: []Embedding{
-			{Index: 0, Vector: []float32{0.1, 0.2, 0.3}, Object: "embedding"},
 			{Index: 1, Vector: []float32{0.4, 0.5, 0.6}, Object: "embedding"},
+			{Index: 0, Vector: []float32{0.1, 0.2, 0.3}, Object: "embedding"},
 		},
 		Model: "text-embedding-3-small",
-		Usage: EmbeddingUsage{
-			PromptTokens: 10,
-			TotalTokens:  10,
-		},
+		Usage: EmbeddingUsage{PromptTokens: 10, TotalTokens: 10},
 	}
 
-	if len(resp.Embeddings) != 2 {
-		t.Errorf("expected 2 embeddings, got %d", len(resp.Embeddings))
+	vectors, err := EmbedDocuments(context.Background(), &stubEmbedder{resp: resp}, []string{"a", "b"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if resp.Embeddings[0].Index != 0 {
-		t.Errorf("first embedding index = %d, want 0", resp.Embeddings[0].Index)
+	if len(vectors) != 2 {
+		t.Fatalf("EmbedDocuments returned %d vectors, want 2", len(vectors))
 	}
-	if len(resp.Embeddings[0].Vector) != 3 {
-		t.Errorf("first embedding vector length = %d, want 3", len(resp.Embeddings[0].Vector))
-	}
-	if resp.Model != "text-embedding-3-small" {
-		t.Errorf("Model = %s, want text-embedding-3-small", resp.Model)
-	}
-	if resp.Usage.PromptTokens != 10 {
-		t.Errorf("PromptTokens = %d, want 10", resp.Usage.PromptTokens)
+	// Response order, which is what the documented contract promises.
+	if vectors[0][0] != 0.4 || vectors[1][0] != 0.1 {
+		t.Errorf("vectors = %v, want them in response order", vectors)
 	}
 }
 

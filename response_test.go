@@ -37,14 +37,23 @@ func TestReasoningContent_Basic(t *testing.T) {
 	}
 }
 
+// CollectStream is how a caller turns chunks into a Response, so reasoning is
+// pinned through it rather than through a literal.
 func TestResponse_WithReasoning(t *testing.T) {
-	resp := &Response{
-		Content: "The answer is 42.",
-		Reasoning: &ReasoningContent{
-			Content: "I need to calculate...",
-			Tokens:  25,
-		},
-		FinishReason: "stop",
+	ch := make(chan StreamChunk, 3)
+	ch <- StreamChunk{Content: "The answer is 42."}
+	ch <- StreamChunk{Reasoning: &ReasoningContent{Content: "I need to calculate...", Tokens: 25}}
+	ch <- StreamChunk{FinishReason: "stop", Done: true}
+	close(ch)
+
+	var recv <-chan StreamChunk = ch
+	collected, err := CollectStream(recv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := &Response{Content: collected.Content, Reasoning: collected.Reasoning, FinishReason: collected.FinishReason}
+	if resp.Content != "The answer is 42." || resp.FinishReason != "stop" {
+		t.Fatalf("response = %+v", resp)
 	}
 
 	if resp.Reasoning == nil {

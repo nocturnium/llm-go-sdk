@@ -833,8 +833,7 @@ func TestJSONLoggerRedactsStructuredContent(t *testing.T) {
 }
 
 // The Stream path has branching the happy-path test does not reach: an error
-// chunk logs an error and still reaches the consumer, and content past the cap
-// is truncated rather than accumulated without bound.
+// chunk logs an error and still reaches the consumer.
 func TestLoggingMiddleware_StreamErrorChunkReachesConsumer(t *testing.T) {
 	var loggedErrors int
 	logger := &testLogger{onError: func(*LogEntry, error) { loggedErrors++ }}

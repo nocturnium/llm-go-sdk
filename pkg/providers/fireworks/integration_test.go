@@ -714,8 +714,9 @@ func TestClient_EnvVarFallbacks(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if client.Provider() != llms.ProviderFireworks {
-				t.Errorf("expected provider fireworks, got %s", client.Provider())
+			// The point of the case is which env var supplied the key.
+			if client.options.APIKey != "test-key-from-env" {
+				t.Errorf("APIKey = %q, want the key from %s", client.options.APIKey, tc.envVar)
 			}
 		})
 	}
@@ -747,13 +748,13 @@ func TestClient_WithEmbeddingModel(t *testing.T) {
 }
 
 func TestClient_WithHTTPClient(t *testing.T) {
-	// Just verify the option can be applied without error
+	custom := &http.Client{Timeout: 3 * time.Second}
 	opts := apply(
 		WithAPIKey("test-key"),
-		WithHTTPClient(nil),
+		WithHTTPClient(custom),
 	)
 
-	if opts.APIKey != "test-key" {
-		t.Errorf("unexpected API key: %s", opts.APIKey)
+	if opts.HTTPClient != custom {
+		t.Errorf("HTTPClient = %v, want the client passed in", opts.HTTPClient)
 	}
 }
