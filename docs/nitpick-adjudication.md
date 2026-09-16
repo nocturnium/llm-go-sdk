@@ -36,8 +36,11 @@ remaining nit-level classes are a standing floor, described at the end.
 The warning count stops falling because what remains is the adjudicated set
 above (model tables the reviewer's cutoff predates, ExtraBody's documented
 escape hatch, the Responses reasoning parameter this SDK consumes itself) plus
-the nit-level floor below. The model slop pass went 12 findings to 4 to 2 over
-the same rounds, and the last two are fixed in the final batch.
+the nit-level floor below.
+
+The model slop pass ran to zero: 12 findings, then 4, 2, 2, 2, 1, 2, 1, 5, 1, 3,
+4, 1 and finally **0 on b7a28f4**, with every round's findings fixed before the
+next pass. What that pass still reports is the deterministic tells floor below.
 
 ## Standing floor
 
