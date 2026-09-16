@@ -70,11 +70,16 @@ var providerRegistry = struct {
 // RegisterProvider registers a provider factory by name.
 //
 // Names are case-insensitive. Registering the same name more than once
-// overwrites the previous factory.
+// overwrites the previous factory. An empty name or a nil factory panics: those
+// are programming errors at init time, and dropping them silently surfaces much
+// later as an unknown provider from [New].
 func RegisterProvider(name string, factory ProviderFactory) {
 	key := normalizeProviderName(name)
-	if key == "" || factory == nil {
-		return
+	if key == "" {
+		panic("llms: RegisterProvider called with an empty name")
+	}
+	if factory == nil {
+		panic("llms: RegisterProvider called with a nil factory for " + key)
 	}
 
 	providerRegistry.Lock()

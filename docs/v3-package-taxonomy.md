@@ -1,5 +1,8 @@
 # v3 Package Taxonomy (realized in v3.0.0)
 
+> **Historical note.** This records the v3 package split. The module path is now
+> `/v6`; the `/v3` paths below are the ones current at the time of that change.
+
 > Status: **realized in v3.0.0.** This document originally captured the plan; it has now
 > been fully executed on the `reorg/middleware-extraction` branch as the v3 release:
 > resilience → `pkg/middleware/resilience`, observability → `pkg/observability`, with the

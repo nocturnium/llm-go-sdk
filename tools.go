@@ -257,7 +257,9 @@ func NewToolRegistry() *ToolRegistry {
 	}
 }
 
-// Register adds a tool and its handler to the registry.
+// Register adds a tool and its handler to the registry. A tool with no Function
+// is ignored: there is no name to dispatch on, and the model is never told about
+// it, so registering one is a caller mistake rather than a runtime condition.
 func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 	if tool.Function == nil {
 		return

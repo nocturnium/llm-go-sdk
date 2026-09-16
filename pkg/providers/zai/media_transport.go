@@ -29,7 +29,9 @@ func newMediaHTTP(o *options) *httpclient.Client {
 func (c *Client) mediaEndpoint(route string) string {
 	endpoint, err := url.JoinPath(c.options.BaseURL, route)
 	if err != nil {
-		return c.options.BaseURL
+		// An empty endpoint is refused by the transport; the bare base URL would
+		// aim the request at the wrong path instead of failing.
+		return ""
 	}
 	return endpoint
 }

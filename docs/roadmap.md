@@ -5,7 +5,7 @@ teardown (CTO / 10x / Go-idioms review). Items are grouped by status.
 
 ## Shipped (v2.x, additive / non-breaking)
 
-- **API contract gate** — `apidiff` baseline (`api/v5.txt`) + `make apidiff` in CI guards the
+- **API contract gate** — `apidiff` baseline (`api/v6.txt`) + `make apidiff` in CI guards the
   ~950-symbol public surface (single-version policy, no v1 fallback).
 - **Discoverability** — curated API map in `doc.go`, runnable `Example*` tests, no-facade
   decision recorded in `ARCHITECTURE.md`.
