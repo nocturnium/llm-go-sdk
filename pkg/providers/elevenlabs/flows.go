@@ -244,6 +244,16 @@ func validateVideoBody(body map[string]any) error {
 	if !ok || model == "" {
 		return invalid("model_id must be a nonempty string")
 	}
+	if text, ok := body["prompt"].(string); !ok || strings.TrimSpace(text) == "" {
+		return WrapError("video", llms.ErrEmptyPrompt)
+	}
+	for _, key := range []string{"start_frame", "end_frame"} {
+		if value, exists := body[key]; exists {
+			if _, ok := value.(map[string]any); !ok {
+				return invalid(key + " must be an inline reference object")
+			}
+		}
+	}
 	if err := validateBools(body, "generate_audio", "enhance_prompt"); err != nil {
 		return err
 	}

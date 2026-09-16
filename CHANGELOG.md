@@ -23,6 +23,13 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - `CostTracker.Reset` now clears the per-mode split, so `GetModeCosts` returns to zero with `GetTotalCost` instead of reporting the previous window's spend.
+- The Responses API's JSON schema is sent as an object again: `ResponsesFormat.Schema` was `[]byte`, which `encoding/json` encodes as base64, so every structured-output request over the Responses path carried `{"schema":"<base64>"}`.
+- A request whose cache key cannot be marshaled gets a key of its own instead of a shared `llms:uncacheable` sentinel, which served the first such request's response to every later one.
+- `Extra` maps can no longer overwrite reserved typed request fields in Groq, Mistral, Together AI and Z.AI transcription or Together AI image generation, via the new `openaicompat.ApplyMultipartExtra`; ElevenLabs video revalidates the prompt and frame references after extras merge.
+- Ollama `PullModel` reports a stream that ends before the pull completes rather than returning nil.
+- The non-blocking rate-limit path clamps the request count to the limiter's burst, matching the blocking path, instead of refusing every call.
+- `llamacpp.ListModels` sets `HasMore` when a limit truncated the list.
+- The quickstart installs the module at `@latest` rather than `@v5.0.0` on a `/v6` path.
 - A cache breakpoint on a system message survives `ConsolidateSystemMessages`, which runs by default through `MergeConsecutiveMessages`, so Anthropic prompt caching set via `Message.CacheControl` is no longer dropped before the request is built.
 - Ollama `PullModel` reports a pull that failed mid-stream (`{"error": ...}`) instead of returning nil as though the model downloaded.
 - Groq transcription refuses an `Extra` key that has a typed option (`model`, `file`, `url`, `language`, `prompt`) rather than silently replacing the caller's value; `response_format` has no typed option and stays open.

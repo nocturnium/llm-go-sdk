@@ -157,10 +157,10 @@ type ResponsesText struct {
 
 // ResponsesFormat is the text.format object.
 type ResponsesFormat struct {
-	Type   string `json:"type"` // "text" | "json_object" | "json_schema"
-	Name   string `json:"name,omitempty"`
-	Schema []byte `json:"schema,omitempty"`
-	Strict bool   `json:"strict,omitempty"`
+	Type   string          `json:"type"` // "text" | "json_object" | "json_schema"
+	Name   string          `json:"name,omitempty"`
+	Schema json.RawMessage `json:"schema,omitempty"`
+	Strict bool            `json:"strict,omitempty"`
 }
 
 // ResponsesReasoning configures reasoning effort for reasoning models.

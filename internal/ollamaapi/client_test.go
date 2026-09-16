@@ -562,3 +562,18 @@ func TestPullModel_StreamError(t *testing.T) {
 		t.Fatalf("error lost the provider's reason: %v", err)
 	}
 }
+
+// A pull stream that ends without a success status is a pull that stopped
+// partway, which must not read as a downloaded model.
+func TestPullModel_TruncatedStream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		fmt.Fprint(w, `{"status":"pulling manifest"}`+"\n")
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	if err := client.PullModel(context.Background(), "llama3.2", nil); err == nil {
+		t.Fatal("a truncated pull returned nil")
+	}
+}

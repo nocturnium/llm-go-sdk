@@ -236,6 +236,11 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 	requestLimiter := rl.requestLim()
 	tokenLimiter := rl.tokenLim()
 
+	// Same clamp as the blocking path: AllowN refuses any count above the burst
+	// outright, which would turn every call into ErrRateLimitExceeded.
+	if b := requestLimiter.Burst(); b > 0 && requests > b {
+		requests = b
+	}
 	if !requestLimiter.AllowN(time.Now(), requests) {
 		return ErrRateLimitExceeded
 	}

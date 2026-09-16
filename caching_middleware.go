@@ -5,9 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// uncacheableSeq numbers requests whose cache key cannot be marshaled, so each
+// one gets a key of its own and never reads another request's entry.
+var uncacheableSeq atomic.Uint64
 
 // ResponseCache is a pluggable backend for the response-cache middleware
 // (CachedClient). Implementations may be in-memory, Redis-backed, etc. Get
@@ -166,9 +172,10 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 	}
 	data, err := json.Marshal(k)
 	if err != nil {
-		// Fall back to a non-colliding-with-real-keys sentinel; an unhashable
-		// request never caches.
-		return "llms:uncacheable"
+		// A key that cannot be hashed gets a value unique to this call, so two
+		// unhashable requests never share an entry. A shared sentinel would hand
+		// the first one's response to every later one.
+		return "llms:uncacheable:" + strconv.FormatUint(uncacheableSeq.Add(1), 10)
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])

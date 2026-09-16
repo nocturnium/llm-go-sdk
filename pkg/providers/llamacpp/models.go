@@ -44,14 +44,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		models = llms.FilterModelsByType(models, options.Types...)
 	}
 
-	// apply limit if specified
+	hasMore := false
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		hasMore = true
 	}
 
 	return &llms.ListModelsResult{
 		Models:  models,
-		HasMore: false,
+		HasMore: hasMore,
 	}, nil
 }
 

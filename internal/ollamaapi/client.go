@@ -126,6 +126,7 @@ func (c *Client) PullModel(ctx context.Context, name string, callback func(PullR
 	}
 	defer func() { _ = body.Close() }()
 
+	pulled := false
 	scanner := bufio.NewScanner(body)
 	// Ollama pull progress is NDJSON; allow large progress payloads explicitly
 	// while keeping a hard cap instead of Scanner's small default token limit.
@@ -149,12 +150,18 @@ func (c *Client) PullModel(ctx context.Context, name string, callback func(PullR
 			return WrapError("pull model", fmt.Errorf("%s: %w", progress.Error, llms.ErrServerError))
 		}
 		if progress.Status == "success" {
+			pulled = true
 			break
 		}
 	}
 
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
 		return WrapError("pull model stream", err)
+	}
+	if !pulled {
+		// A stream that ends without "success" is a pull that stopped partway,
+		// which must not read as a downloaded model.
+		return WrapError("pull model", fmt.Errorf("stream ended before the pull completed: %w", llms.ErrIncompleteResponse))
 	}
 
 	return nil

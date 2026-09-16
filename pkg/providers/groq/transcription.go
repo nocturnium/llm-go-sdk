@@ -56,26 +56,12 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		return nil, c.mediaError(llms.ErrInvalidParameters)
 	}
 
-	for k, v := range o.Extra {
-		// Keys with a typed option are reserved: silently replacing a caller's
-		// Model or Language would send a request they did not ask for.
-		// response_format has no typed option, so it stays open and is range
-		// checked below.
-		switch k {
-		case "model", "file", "url", "language", "prompt":
-			return nil, c.mediaError(fmt.Errorf("transcription Extra key %q is reserved for the typed option: %w", k, llms.ErrInvalidParameters))
-		}
-		switch value := v.(type) {
-		case string, bool, int, float64:
-			fields[k] = fmt.Sprint(value)
-		case []string:
-			for _, item := range value {
-				files = append(files, httpclient.MultipartFile{Field: k, Data: []byte(item)})
-			}
-		default:
-			return nil, c.mediaError(fmt.Errorf("invalid multipart extra %q: %w", k, llms.ErrInvalidParameters))
-		}
+	// response_format has no typed option, so it stays open and is range checked below.
+	extraFiles, err := openaicompat.ApplyMultipartExtra(fields, o.Extra, "model", "file", "url", "language", "prompt")
+	if err != nil {
+		return nil, c.mediaError(err)
 	}
+	files = append(files, extraFiles...)
 	if f, ok := fields["response_format"]; ok {
 		format = f
 	}
@@ -84,7 +70,7 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	}
 	fields["response_format"] = format
 	var raw []byte
-	err := c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)
+	err = c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)
 	if err != nil {
 		return nil, c.mediaError(err)
 	}

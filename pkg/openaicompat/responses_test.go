@@ -367,3 +367,16 @@ func TestBuildResponsesRequest_MergesExtraBody(t *testing.T) {
 		t.Errorf("store should be the typed field value, got %v", m["store"])
 	}
 }
+
+// The Responses API expects the JSON schema as an object; a []byte field would
+// marshal it as a base64 string and the provider would reject the request.
+func TestResponsesFormatSchemaMarshalsAsObject(t *testing.T) {
+	rf := ResponsesFormat{Type: "json_schema", Name: "answer", Schema: []byte(`{"type":"object"}`)}
+	data, err := json.Marshal(rf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"schema":{"type":"object"}`) {
+		t.Fatalf("schema is not a JSON object: %s", data)
+	}
+}
