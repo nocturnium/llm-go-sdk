@@ -14,7 +14,9 @@ import (
 
 // Transcribe uploads audio using the provider's multipart route. Options map to
 // native fields; unsupported formats and streaming return ErrInvalidParameters.
-// Timing is retained when reported; missing duration leaves usage unpriced.
+// Word timings and speaker labels are retained when reported. Usage is left
+// empty: Z.AI reports none, and a duration-derived estimate would read as
+// provider-reported.
 func (c *Client) Transcribe(ctx context.Context, audio llms.MediaInput, opts ...llms.TranscribeOption) (*llms.Transcription, error) {
 	return c.transcribe(ctx, "audio/transcriptions", audio, llms.ApplyTranscribeOptions(opts...))
 }

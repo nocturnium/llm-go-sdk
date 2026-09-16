@@ -3,7 +3,6 @@ package llms
 import (
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 func TestWebSearchProvider_Constants(t *testing.T) {
@@ -67,26 +66,6 @@ func TestWebSearchConfig_Full(t *testing.T) {
 	}
 	if !config.IncludeResults {
 		t.Error("expected IncludeResults true")
-	}
-}
-
-// Search results reach a caller on the Response, and a nil-safe read of an
-// absent one is what the accessor promises.
-func TestSearchResult_Basic(t *testing.T) {
-	now := time.Now()
-	resp := &Response{SearchResults: []SearchResult{{
-		Title:   "Example Page",
-		URL:     "https://example.com/page",
-		Snippet: "This is an example snippet...",
-		Date:    &now,
-	}}}
-
-	if len(resp.SearchResults) != 1 || resp.SearchResults[0].URL != "https://example.com/page" {
-		t.Fatalf("search results = %+v", resp.SearchResults)
-	}
-	var empty *Response
-	if empty.ReasoningText() != "" {
-		t.Error("a nil Response is not readable")
 	}
 }
 

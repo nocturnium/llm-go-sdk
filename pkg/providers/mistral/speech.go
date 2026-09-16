@@ -33,7 +33,8 @@ func speechRequest(text string, o *llms.SpeechOptions) (*openaicompat.SpeechRequ
 }
 
 // Synthesize returns audio using the provider's speech model and voice defaults.
-// Invalid input or format returns ErrInvalidParameters before sending a request.
+// Empty text returns ErrEmptyText and an unsupported format returns
+// ErrInvalidParameters, both before a request is sent.
 func (c *Client) Synthesize(ctx context.Context, text string, opts ...llms.SpeechOption) (*llms.SpeechResponse, error) {
 	req, err := speechRequest(text, llms.ApplySpeechOptions(opts...))
 	if err != nil {
