@@ -577,3 +577,22 @@ func TestPullModel_TruncatedStream(t *testing.T) {
 		t.Fatal("a truncated pull returned nil")
 	}
 }
+
+// A remote Ollama behind auth refuses the management routes without the bearer
+// token the chat path already sends.
+func TestClient_SendsAPIKeyOnManagementRoutes(t *testing.T) {
+	var auth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "secret", AllowPrivateIPs: true, AllowHTTP: true})
+	if _, err := client.ListModels(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if auth != "Bearer secret" {
+		t.Fatalf("Authorization = %q, want the configured key", auth)
+	}
+}

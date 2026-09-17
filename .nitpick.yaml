@@ -14,7 +14,16 @@ models:
   # Reviewer: laguna-s-2.1 — R=0.87, N=0.09 on open-nitpick tuning corpus (2 runs).
   # Cleanest noise floor of any model measured; recall matches deepseek at 10x lower cost.
   # Context does not help on this corpus; leave related_context off.
+  #
+  # Pin review (not only default): a user-level models.review wins over repo
+  # models.default, which is how deepseek/deepseek-v4.1-flash took 55/88
+  # batches on the first full-review after a3d3d56.
   default:
+    provider: openrouter
+    model: poolside/laguna-s-2.1
+    timeout: 15m
+
+  review:
     provider: openrouter
     model: poolside/laguna-s-2.1
     timeout: 15m

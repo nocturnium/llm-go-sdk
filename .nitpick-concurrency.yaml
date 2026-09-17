@@ -8,7 +8,14 @@
 #   OPENROUTER_API_KEY=... nitpick full-review -repo . -config .nitpick-concurrency.yaml
 
 models:
+  # Pin review (not only default): user-level models.review otherwise wins.
   default:
+    provider: openrouter
+    model: openai/gpt-5.6-luna
+    service_tier: flex
+    timeout: 15m
+
+  review:
     provider: openrouter
     model: openai/gpt-5.6-luna
     service_tier: flex

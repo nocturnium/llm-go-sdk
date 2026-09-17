@@ -28,11 +28,23 @@ const (
 type Client struct {
 	httpClient *httpclient.Client
 	baseURL    string
+	apiKey     string
+}
+
+// headers carries the bearer credential when one is configured. A local Ollama
+// needs none; a remote one behind auth refuses the management routes without it.
+func (c *Client) headers() map[string]string {
+	if c.apiKey == "" {
+		return nil
+	}
+	return map[string]string{"Authorization": "Bearer " + c.apiKey}
 }
 
 // ClientConfig configures the Ollama native API client.
 type ClientConfig struct {
-	BaseURL    string
+	BaseURL string
+	// APIKey authenticates the management routes against a remote Ollama.
+	APIKey     string
 	HTTPClient *http.Client
 	Timeout    time.Duration // Timeout for the underlying HTTP client; 0 uses the default.
 
@@ -66,6 +78,7 @@ func NewClient(config ClientConfig) *Client {
 	return &Client{
 		httpClient: httpClient,
 		baseURL:    baseURL,
+		apiKey:     config.APIKey,
 	}
 }
 
@@ -74,8 +87,9 @@ func (c *Client) ListModels(ctx context.Context) (*ListModelsResponse, error) {
 	var response ListModelsResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodGet,
-		URL:    c.baseURL + "/api/tags",
+		Method:  http.MethodGet,
+		URL:     c.baseURL + "/api/tags",
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
@@ -95,9 +109,10 @@ func (c *Client) ShowModel(ctx context.Context, name string, verbose bool) (*Sho
 	var response ShowResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/show",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/show",
+		Body:    req,
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
@@ -116,9 +131,10 @@ func (c *Client) PullModel(ctx context.Context, name string, callback func(PullR
 	}
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/pull",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/pull",
+		Body:    req,
+		Headers: c.headers(),
 	})
 
 	if err != nil {
@@ -174,9 +190,10 @@ func (c *Client) DeleteModel(ctx context.Context, name string) error {
 	req := DeleteRequest{Name: name}
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodDelete,
-		URL:    c.baseURL + "/api/delete",
-		Body:   req,
+		Method:  http.MethodDelete,
+		URL:     c.baseURL + "/api/delete",
+		Body:    req,
+		Headers: c.headers(),
 	}, nil)
 
 	if err != nil {
@@ -194,9 +211,10 @@ func (c *Client) CopyModel(ctx context.Context, source, destination string) erro
 	}
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/copy",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/copy",
+		Body:    req,
+		Headers: c.headers(),
 	}, nil)
 
 	if err != nil {
@@ -211,8 +229,9 @@ func (c *Client) ListRunning(ctx context.Context) (*ListRunningResponse, error) 
 	var response ListRunningResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodGet,
-		URL:    c.baseURL + "/api/ps",
+		Method:  http.MethodGet,
+		URL:     c.baseURL + "/api/ps",
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
@@ -227,8 +246,9 @@ func (c *Client) GetVersion(ctx context.Context) (string, error) {
 	var response VersionResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodGet,
-		URL:    c.baseURL + "/api/version",
+		Method:  http.MethodGet,
+		URL:     c.baseURL + "/api/version",
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
@@ -245,9 +265,10 @@ func (c *Client) Generate(ctx context.Context, req *GenerateRequest) (*GenerateR
 	var response GenerateResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/generate",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/generate",
+		Body:    req,
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
@@ -262,9 +283,10 @@ func (c *Client) GenerateStream(ctx context.Context, req *GenerateRequest) (*Str
 	req.Stream = true
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/generate",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/generate",
+		Body:    req,
+		Headers: c.headers(),
 	})
 
 	if err != nil {
@@ -284,9 +306,10 @@ func (c *Client) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, err
 	var response ChatResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/chat",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/chat",
+		Body:    req,
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
@@ -301,9 +324,10 @@ func (c *Client) ChatStream(ctx context.Context, req *ChatRequest) (*ChatStreamR
 	req.Stream = true
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/chat",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/chat",
+		Body:    req,
+		Headers: c.headers(),
 	})
 
 	if err != nil {
@@ -321,9 +345,10 @@ func (c *Client) Embed(ctx context.Context, req *EmbedRequest) (*EmbedResponse, 
 	var response EmbedResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
-		Method: http.MethodPost,
-		URL:    c.baseURL + "/api/embed",
-		Body:   req,
+		Method:  http.MethodPost,
+		URL:     c.baseURL + "/api/embed",
+		Body:    req,
+		Headers: c.headers(),
 	}, &response)
 
 	if err != nil {
