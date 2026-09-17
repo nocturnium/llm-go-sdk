@@ -1,40 +1,38 @@
 # open-nitpick review configuration for llm-go-sdk.
 #
-# This file names both models, so LLM_PROVIDER and LLM_MODEL are not needed:
-#   OPENROUTER_API_KEY=... nitpick review -base main -head <branch> -dry-run
+# Full-review comparison (2026-09-16) against 525 files showed config-B
+# (laguna reviewer + luna flex triage) gives the best signal-to-noise ratio
+# and 12-minute wall time. See open-nitpick docs/full-review-comparison-llm-go-sdk.md.
 #
-# The key comes from OPENROUTER_API_KEY in the environment. api_key_env is
-# deliberately omitted: nitpick ignores endpoint keys from a repository config
-# unless NITPICK_TRUST_CONFIG_ENDPOINTS=1, since a pull request must not be able
-# to redirect its own review.
+# To run:
+#   OPENROUTER_API_KEY=... nitpick full-review -repo .
 #
-# A change that edits this very file is reviewed under the base revision's copy, so
-# the first run of a config change still needs LLM_PROVIDER/LLM_MODEL set.
-# See open-nitpick docs/configuration.md for every key.
+# For the supplementary concurrency pass (luna reviewer + glm triage):
+#   OPENROUTER_API_KEY=... nitpick full-review -repo . -config .nitpick-concurrency.yaml
 
 models:
-  # Reviewer: the model that reads each batch and writes findings.
+  # Reviewer: laguna-s-2.1 — R=0.87, N=0.09 on open-nitpick tuning corpus (2 runs).
+  # Cleanest noise floor of any model measured; recall matches deepseek at 10x lower cost.
+  # Context does not help on this corpus; leave related_context off.
   default:
     provider: openrouter
-    model: z-ai/glm-5.3
+    model: poolside/laguna-s-2.1
     timeout: 15m
 
-  # Triage: merges, deduplicates and ranks findings. Cheaper than the reviewer
-  # and run at temperature 0 so the same findings rank the same way twice.
+  # Triage: luna flex — perfect precision and class accuracy; $0.0004/call.
+  # Cut 72 raw findings to 42 in the comparison run, preserving the high-signal ones.
   triage:
     provider: openrouter
-    model: qwen/qwen3.8-27b
+    model: openai/gpt-5.6-luna
+    service_tier: flex
     temperature: 0
 
 review:
-  # This module is one Go package tree; a media or provider packet routinely
-  # changes more than the shipped 60-file cap, which silently skips the rest.
   max_files: 200
   token_budget_per_request: 60000
-  # Advisory: findings are reported, nothing gates the merge.
   fail_on: none
   min_severity: info
-  related_context: true
+  related_context: false
   slop: true
   ignore:
     - "**/vendor/**"
@@ -42,9 +40,6 @@ review:
     - "api/v6.txt"
 
 linters:
-  # golangci-lint fails when nitpick shells out to it from this checkout: the
-  # parent go.work pins a newer toolchain than the mise-installed go. CI already
-  # runs golangci-lint, staticcheck, gosec and CodeQL on every pull request.
   mode: "off"
 
 instructions:

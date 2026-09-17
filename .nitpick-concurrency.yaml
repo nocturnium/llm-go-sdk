@@ -1,0 +1,47 @@
+# Supplementary concurrency pass: luna reviewer + glm triage.
+#
+# Config-C in the 2026-09-16 comparison. Found 6 concurrency findings
+# (goroutine sync, blocking network calls, channel races) that laguna missed.
+# Wall time ~22 min due to glm triage stalls; run on-demand or weekly.
+#
+# Use with:
+#   OPENROUTER_API_KEY=... nitpick full-review -repo . -config .nitpick-concurrency.yaml
+
+models:
+  default:
+    provider: openrouter
+    model: openai/gpt-5.6-luna
+    service_tier: flex
+    timeout: 15m
+
+  triage:
+    provider: openrouter
+    model: z-ai/glm-5.3-flash
+    temperature: 0
+
+review:
+  max_files: 200
+  token_budget_per_request: 24000
+  fail_on: none
+  min_severity: warning
+  related_context: false
+  slop: false
+  ignore:
+    - "**/vendor/**"
+    - "**/*.pb.go"
+    - "api/v6.txt"
+
+linters:
+  mode: "off"
+
+instructions:
+  - path: "**/*.go"
+    prompt: >-
+      Focus on goroutine safety, data races, unbounded blocking, missing
+      synchronization, and context propagation. Flag any goroutine that can
+      block indefinitely, any shared state accessed without a lock, and any
+      channel send that can block after the receiver has exited.
+  - path: "**/*_test.go"
+    prompt: >-
+      Flag t.Fatal and t.Error calls in goroutines spawned by the test,
+      goroutine leaks in test helpers, and sleeps used as synchronization.
