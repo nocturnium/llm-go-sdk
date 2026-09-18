@@ -1,6 +1,7 @@
 package zai
 
 import (
+	"fmt"
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -12,7 +13,11 @@ func init() {
 		if cfg.APIKey != "" {
 			opts = append(opts, WithAPIKey(cfg.APIKey))
 		}
-		if isExtraEnabled(cfg.Extra[llms.ExtraZAICoding]) {
+		coding, err := parseExtraEnabled(cfg.Extra[llms.ExtraZAICoding])
+		if err != nil {
+			return nil, err
+		}
+		if coding {
 			opts = append(opts, WithUseCodingAPI())
 		}
 		if cfg.Model != "" {
@@ -37,11 +42,19 @@ func init() {
 	})
 }
 
-func isExtraEnabled(value string) bool {
+// parseExtraEnabled reads a boolean Config.Extra value. An unrecognized value
+// is an error rather than a silent false: a user writing "on" or "enabled" to
+// reach the Coding API would otherwise be routed to the standard endpoint with
+// no signal that the setting was ignored.
+func parseExtraEnabled(value string) (bool, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return false, nil
 	case "true", "1", "yes":
-		return true
+		return true, nil
+	case "false", "0", "no":
+		return false, nil
 	default:
-		return false
+		return false, fmt.Errorf("zai: %s must be true or false, got %q: %w", llms.ExtraZAICoding, value, llms.ErrInvalidParameters)
 	}
 }

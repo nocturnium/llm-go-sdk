@@ -186,9 +186,12 @@ func executeTool(name, arguments string) string {
 		case "multiply":
 			result = args.A * args.B
 		case "divide":
-			if args.B != 0 {
-				result = args.A / args.B
+			if args.B == 0 {
+				return `{"error": "division by zero"}`
 			}
+			result = args.A / args.B
+		default:
+			return `{"error": "unknown operation"}`
 		}
 		return fmt.Sprintf(`{"result": %g}`, result)
 

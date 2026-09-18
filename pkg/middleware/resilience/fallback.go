@@ -215,7 +215,9 @@ func (fc *FallbackChain) Call(ctx context.Context, prompt string, options ...llm
 
 // executeWithFallback executes an operation across clients with fallback logic.
 // The operation function receives a client and returns a result and error.
-// This helper centralizes the retry/fallback logic used by GenerateContent and Stream.
+// GenerateContent is its only caller: Call returns a bare string and Stream has
+// to decide on the first chunk, so both run their own loop over the same
+// candidate snapshot.
 func executeWithFallback[T any](fc *FallbackChain, operation func(client llms.LLM) (T, error)) (T, error) {
 	candidates := fc.snapshot()
 	var zero T

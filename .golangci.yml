@@ -100,9 +100,9 @@ linters:
     nestif:
       min-complexity: 15
     revive:
-      # Note: the `exported` rule is intentionally omitted. With the package
-      # re-export / alias layout (pkg/types, pkg/errors, pkg/providers shims),
-      # its comment-form and stutter checks produce noise without value;
+      # Note: the `exported` rule is intentionally omitted. Its comment-form and
+      # stutter checks fire on the provider packages' repeated type names
+      # (openai.Client, openai.Option) without finding real gaps;
       # exported-symbol documentation is enforced by review instead.
       rules:
         - name: blank-imports

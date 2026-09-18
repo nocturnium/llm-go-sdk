@@ -840,3 +840,47 @@ func TestLangfuseOTelMiddleware_CaptureOffByDefault(t *testing.T) {
 		t.Error("expected captureOutput to be false by default (privacy-safe)")
 	}
 }
+
+// TestLangfuseOTelMiddleware_ResponseModelFollowsOverride pins that a per-call
+// model override lands on gen_ai.response.model too. The response attribute
+// used to report the middleware's default model, so one span claimed two
+// different models for a single generation.
+func TestLangfuseOTelMiddleware_ResponseModelFollowsOverride(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	otel.SetTracerProvider(tracerProvider)
+
+	mock := &mockLangfuseLLM{
+		provider: llms.ProviderOpenAI,
+		model:    "gpt-4",
+		genResp:  &llms.Response{Content: "ok"},
+	}
+	middleware, err := NewLangfuseOTelMiddleware(mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := middleware.GenerateContent(context.Background(),
+		[]llms.Message{{Role: llms.RoleUser, Content: "Hello"}},
+		llms.WithModel("gpt-4o-mini"),
+	); err != nil {
+		t.Fatalf("GenerateContent: %v", err)
+	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no span recorded")
+	}
+	var request, response string
+	for _, attr := range spans[len(spans)-1].Attributes() {
+		switch string(attr.Key) {
+		case AttrGenAIRequestModel:
+			request = attr.Value.AsString()
+		case AttrGenAIResponseModel:
+			response = attr.Value.AsString()
+		}
+	}
+	if request != "gpt-4o-mini" || response != "gpt-4o-mini" {
+		t.Errorf("request model = %q, response model = %q, want both %q", request, response, "gpt-4o-mini")
+	}
+}

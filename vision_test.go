@@ -377,3 +377,18 @@ func TestValidateImageContent_CorruptTail(t *testing.T) {
 		t.Error("ValidateImageContent accepted base64 with a corrupt tail, want an error")
 	}
 }
+
+// TestDetectMediaType_UnsupportedSniff pins that a format outside the SDK's
+// allowlist is not returned from magic-byte sniffing. http.DetectContentType
+// recognizes BMP, so NewImageFromFile used to hand back an image/bmp part that
+// ValidateImageContent then rejected.
+func TestDetectMediaType_UnsupportedSniff(t *testing.T) {
+	bmp := append([]byte("BM"), make([]byte, 30)...)
+	if got := detectMediaType("photo.bmp", bmp); got != "" {
+		t.Errorf("detectMediaType(bmp) = %q, want \"\"", got)
+	}
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 30)...)
+	if got := detectMediaType("photo.png", png); got != MediaTypePNG {
+		t.Errorf("detectMediaType(png) = %q, want %q", got, MediaTypePNG)
+	}
+}

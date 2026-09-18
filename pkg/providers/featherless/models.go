@@ -465,13 +465,18 @@ func (c *Client) ModelInfo(_ context.Context, modelID string) (*llms.ModelInfo, 
 	return nil, llms.ErrModelNotFound
 }
 
-// copyModelInfo creates a deep copy of a ModelInfo to prevent aliasing.
+// copyModelInfo copies a ModelInfo far enough that a caller cannot mutate the
+// cached entry: the Types slice and the Pricing pointer are both cloned, which
+// is every reference field ModelInfo carries.
 func copyModelInfo(info *llms.ModelInfo) *llms.ModelInfo {
 	result := *info
-	// Deep copy the Types slice to prevent aliasing
 	if len(info.Types) > 0 {
 		result.Types = make([]llms.ModelType, len(info.Types))
 		copy(result.Types, info.Types)
+	}
+	if info.Pricing != nil {
+		pricing := *info.Pricing
+		result.Pricing = &pricing
 	}
 	return &result
 }

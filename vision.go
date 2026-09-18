@@ -241,10 +241,13 @@ func (m Message) Images() []*ImageContent {
 
 // detectMediaType determines the media type from file extension and magic bytes.
 func detectMediaType(path string, data []byte) string {
-	// First, try to detect from magic bytes
+	// First, try to detect from magic bytes. DetectContentType also sniffs BMP,
+	// TIFF and ICO, which ValidateImageContent rejects, so only the four types
+	// this SDK supports are accepted here; anything else falls through to the
+	// extension, which returns "" for an unsupported format.
 	if len(data) > 0 {
-		contentType := http.DetectContentType(data)
-		if strings.HasPrefix(contentType, "image/") {
+		switch contentType := http.DetectContentType(data); contentType {
+		case MediaTypePNG, MediaTypeJPEG, MediaTypeGIF, MediaTypeWebP:
 			return contentType
 		}
 	}

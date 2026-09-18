@@ -344,11 +344,14 @@ func (c *Client) getHeaders() map[string]string {
 
 // rerankRequest is the request body for the /rerank endpoint.
 type rerankRequest struct {
-	Model           string   `json:"model"`
-	Query           string   `json:"query"`
-	Documents       []string `json:"documents"`
-	TopN            int      `json:"top_n,omitempty"`
-	ReturnDocuments bool     `json:"return_documents,omitempty"`
+	Model     string   `json:"model"`
+	Query     string   `json:"query"`
+	Documents []string `json:"documents"`
+	TopN      int      `json:"top_n,omitempty"`
+	// return_documents is sent even when false: omitempty would make an explicit
+	// WithReturnDocuments(false) indistinguishable from unset, leaving the
+	// server's own default to decide.
+	ReturnDocuments bool `json:"return_documents"`
 }
 
 // rerankAPIResponse is the response from the /rerank endpoint.
