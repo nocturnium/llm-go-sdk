@@ -162,6 +162,13 @@ func NewConcurrentBatcher(llm LLM) *ConcurrentBatcher {
 }
 
 // ProcessBatch processes multiple requests concurrently.
+//
+// Results holds an entry for every request that started. Two cases leave it
+// short of len(requests): a parent context that expires, and, with
+// ContinueOnError false, the requests still queued when an earlier failure
+// cancels the batch. The first is returned as an error alongside the partial
+// response; the second is not an error of its own, so compare len(Results)
+// against len(requests) to see what ran.
 func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRequest, options ...BatchOption) (*BatchResponse, error) {
 	if len(requests) == 0 {
 		return nil, ErrBatchEmpty
@@ -310,13 +317,22 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 
 	wg.Wait()
 
-	return &BatchResponse{
+	response := &BatchResponse{
 		Results:      results,
 		TotalUsage:   totalUsage,
 		Duration:     time.Since(start),
 		SuccessCount: successCount,
 		FailureCount: failureCount,
-	}, nil
+	}
+	// A parent-context cancellation that stopped requests before they started
+	// leaves Results short, which nothing else in the response reports. Say so,
+	// and hand back the partial response with it. A cancellation that merely
+	// failed in-flight requests is already visible in their entries, so it is
+	// not reported twice.
+	if err := ctx.Err(); err != nil && len(results) < len(requests) {
+		return response, err
+	}
+	return response, nil
 }
 
 func validateBatchRequestIDs(requests []BatchRequest) error {
