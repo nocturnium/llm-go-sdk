@@ -170,7 +170,7 @@ func validateConnRemoteAddr(conn net.Conn) error {
 	if err != nil {
 		host = conn.RemoteAddr().String()
 	}
-	if ip := net.ParseIP(host); ip != nil {
+	if ip := parseIPLiteral(host); ip != nil {
 		return validateNotPrivateIP(ip)
 	}
 	return nil
@@ -185,7 +185,7 @@ func ssrfDialControl(_, address string, _ syscall.RawConn) error {
 	if err != nil {
 		host = address
 	}
-	if ip := net.ParseIP(host); ip != nil {
+	if ip := parseIPLiteral(host); ip != nil {
 		return validateNotPrivateIP(ip)
 	}
 	return nil

@@ -191,9 +191,11 @@ type ChatResponse struct {
 
 // EmbedRequest is the request body for /api/embed.
 type EmbedRequest struct {
-	Model     string         `json:"model"`
-	Input     any            `json:"input"` // string or []string
-	Truncate  bool           `json:"truncate,omitempty"`
+	Model string `json:"model"`
+	Input any    `json:"input"` // string or []string
+	// Truncate is sent unconditionally: Ollama defaults it to true, so omitting
+	// a false value would silently truncate input the caller asked to reject.
+	Truncate  bool           `json:"truncate"`
 	KeepAlive string         `json:"keep_alive,omitempty"`
 	Options   map[string]any `json:"options,omitempty"`
 }

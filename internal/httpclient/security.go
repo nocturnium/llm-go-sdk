@@ -137,10 +137,20 @@ func ValidateURL(rawURL string, opts *URLValidationOptions) error {
 	return nil
 }
 
+// parseIPLiteral parses a host as an IP address, tolerating an IPv6 zone
+// ("fe80::1%eth0"). net.ParseIP rejects the zoned form outright, which would
+// otherwise let a link-local literal past every check that parses the host.
+func parseIPLiteral(host string) net.IP {
+	if i := strings.IndexByte(host, '%'); i >= 0 {
+		host = host[:i]
+	}
+	return net.ParseIP(host)
+}
+
 // validateNotPrivateHost checks if a host resolves to a private or internal IP
 func validateNotPrivateHost(host string) error {
 	// Check if it's a direct IP address
-	if ip := net.ParseIP(host); ip != nil {
+	if ip := parseIPLiteral(host); ip != nil {
 		return validateNotPrivateIP(ip)
 	}
 	if ip := parseIPv4Literal(host); ip != nil {

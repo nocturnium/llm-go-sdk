@@ -596,3 +596,38 @@ func TestClient_SendsAPIKeyOnManagementRoutes(t *testing.T) {
 		t.Fatalf("Authorization = %q, want the configured key", auth)
 	}
 }
+
+// TestEmbed_SendsTruncateFalse pins that truncate reaches the wire when false.
+// Ollama defaults /api/embed truncate to true, so an omitted false silently
+// truncates input the caller asked the server to reject.
+func TestEmbed_SendsTruncateFalse(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(EmbedResponse{Embeddings: [][]float32{{0.1}}}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	if _, err := client.Embed(context.Background(), &EmbedRequest{
+		Model:    "nomic-embed-text",
+		Input:    "Hello world",
+		Truncate: false,
+	}); err != nil {
+		t.Fatalf("Embed failed: %v", err)
+	}
+
+	got, ok := body["truncate"]
+	if !ok {
+		t.Fatal("request body omitted truncate; the server would default it to true")
+	}
+	if got != false {
+		t.Errorf("truncate = %v, want false", got)
+	}
+}
