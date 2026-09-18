@@ -95,3 +95,17 @@ returning a nil error.
 | Azure labels every discovered model as chat; anthropic coerces an unknown tool-choice mode to auto | Fixing either means inventing a classification or an error path in a function that returns no error. |
 | `ToLangfuseGeneration` keys do not match Langfuse's ingestion API | The finding states its key names cannot be verified from the diff, and the repository rule forbids acting on unverified external schemas. |
 | mcp `stdio` write is not cancellable | Accepted as real and deferred: the fix needs an owner goroutine serializing writes, since an abandoned writer would hold writeMu and wedge every later request. |
+
+### The 12 files the run could not reach
+
+A follow-up review over `pkg/providers/openrouter` and `pkg/providers/perplexity`
+(26 files) returned 11 findings: 1 error, 3 warning, 7 info. Fixed: a numeric
+`code` in an OpenRouter batch error payload, which failed the decode of the
+whole batch, and the Perplexity package doc, which advertised citations and
+search_domain_filter that the package exposes no way to reach.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| Perplexity registers no provider factory | `pkg/providers/perplexity/register.go` calls `llms.RegisterProvider("perplexity", ...)`, and `pkg/providers/all/all_test.go` asserts the name resolves. The reviewer saw a subset of the package. |
+| OpenRouter speech and video should reject reserved Extra keys rather than drop them | The marshalers drop reserved keys by design, matching `SpeechRequest.MarshalJSON` in openaicompat; only the togetherai image path errors, and that difference is deliberate. |
+| OpenRouter documents typed media options as silently dropped | Same policy question as the main run, unchanged: rejecting them is a behavior change across every media provider, not a fix to this package. |
