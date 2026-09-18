@@ -57,3 +57,41 @@ next pass. What that pass still reports is the deterministic tells floor below.
 
 Everything else the tells flag (em dashes, arrows, shouted words, filler) is
 cleared across the Go tree, the docs, the workflows and the contributor guides.
+
+## Second full review (2026-09-17, reviewer `z-ai/glm-5.3-flash`)
+
+A rerun on `fix/ollama-native-auth` produced 155 findings (8 error, 59 warning,
+88 info) with triage by `openai/gpt-5.6-luna`. 12 files (openrouter, perplexity)
+went unreviewed after 2 failed batches, so their absence of findings means
+nothing. An earlier attempt with `poolside/laguna-s-2.1` was abandoned at 33 of
+88 batches: the same config that ran 1m14s per batch on 2026-09-15 was taking
+24m per batch.
+
+Fixed: `message.go` Content/Parts merge loss, zone-scoped IPv6 literals past
+`ValidateURL` and `ssrfDialControl`, Ollama `truncate,omitempty`,
+`CircuitBreaker.Reset` on a closed breaker, the Z.AI thinking toggle leaking
+into OpenAI bodies, a numeric error `code` failing envelope parsing, base64
+validated only for its first kilobyte, magic-byte sniffing outside the
+supported types, ElevenLabs extras replacing validated media refs, an
+unrecognized Z.AI coding extra silently disabling the endpoint, Langfuse's
+response-model attribute ignoring a per-call override, `return_documents=false`
+dropped by omitempty, and a batch cancelled before its requests started
+returning a nil error.
+
+### Rejected, with the check that rejected them
+
+| Finding | Why it does not stand |
+| --- | --- |
+| togetherai `Extra{"Width": 2000}` bypasses the reserved-key guard and bills 2 megapixels | Map keys marshal sorted, so `"width"` decodes after `"Width"` and the typed value wins. The case-variant key reaches the wire but changes neither validation nor pricing. |
+| codeql.yml's schedule trigger bypasses the private-repo guard | The `if: github.event.repository.private == false` is on the job, so it gates every trigger including schedule. |
+| featherless and openrouter merge Extra without a reserved-field guard | `SpeechRequest.MarshalJSON` drops every reserved key from ExtraBody before the request is marshaled. |
+| llamacpp's zero-value client cannot reach its own default base URL | `llamacpp.go:68` passes AllowPrivateIPs and AllowHTTP from the options, and the local providers default both to true. |
+| openai `models.go` invents pricing; mistral, groq, fireworks, azure invent model metadata | The reviewer's cutoff predates the 2026 flagships; these tables were transcribed from first-party pages. |
+| `include_encrypted_reasoning` is not a Responses parameter | Unchanged from the first review: it is consumed into the `include` list and never forwarded. |
+| zai uploads keyterms as file parts | Unchanged from the first review: a `MultipartFile` with an empty `Filename` is written as a plain form field. |
+| togetherai sends `response_format: "base64"`, not the OpenAI enum | Together documents `base64` and `url` for the request; `b64_json` is the response field this code reads back. |
+| `extractJSON` returns the first balanced object rather than the payload | The proposed remedy (try each candidate) does not address the described failure, where the first candidate unmarshals cleanly, and preferring a later object would discard legitimate output. |
+| A Responses stream ending without `response.completed` is reported as a clean stop | Both stream paths treat EOF as a clean finish; changing one would split the behavior across compat providers. |
+| Azure labels every discovered model as chat; anthropic coerces an unknown tool-choice mode to auto | Fixing either means inventing a classification or an error path in a function that returns no error. |
+| `ToLangfuseGeneration` keys do not match Langfuse's ingestion API | The finding states its key names cannot be verified from the diff, and the repository rule forbids acting on unverified external schemas. |
+| mcp `stdio` write is not cancellable | Accepted as real and deferred: the fix needs an owner goroutine serializing writes, since an abandoned writer would hold writeMu and wedge every later request. |
