@@ -2,11 +2,12 @@ package ollama
 
 import llms "github.com/nocturnium/llm-go-sdk/v6"
 
-// The registry cannot turn the SSRF relaxations off: ollama serves a loopback
+// Nothing here can turn the SSRF relaxations off: ollama serves a loopback
 // endpoint by default, so this provider defaults AllowPrivateIPs and AllowHTTP
-// to true and a Config leaving them at their zero value is indistinguishable
-// from one setting them false. Construct the provider with New and no relaxing
-// option to run it against a remote host under the strict defaults.
+// to true, a Config leaving them at their zero value is indistinguishable from
+// one setting them false, and New has no option that clears either flag. A
+// deployment that needs private-IP and plain-HTTP requests refused has to wrap
+// the client's transport itself.
 func init() {
 	llms.RegisterProvider("ollama", func(cfg llms.Config) (llms.LLM, error) {
 		opts := make([]Option, 0, 6)
