@@ -2,6 +2,11 @@ package llamacpp
 
 import llms "github.com/nocturnium/llm-go-sdk/v6"
 
+// The registry cannot turn the SSRF relaxations off: llamacpp serves a loopback
+// endpoint by default, so this provider defaults AllowPrivateIPs and AllowHTTP
+// to true and a Config leaving them at their zero value is indistinguishable
+// from one setting them false. Construct the provider with New and no relaxing
+// option to run it against a remote host under the strict defaults.
 func init() {
 	llms.RegisterProvider("llamacpp", func(cfg llms.Config) (llms.LLM, error) {
 		opts := make([]Option, 0, 6)

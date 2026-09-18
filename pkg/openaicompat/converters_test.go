@@ -836,6 +836,29 @@ func TestBuildChatRequest_ThinkingToggle(t *testing.T) {
 	}
 }
 
+// TestBuildChatRequest_ThinkingToggleSkippedForOpenAI pins that the Z.AI/Qwen
+// thinking object stays off OpenAI reasoning models, which read reasoning_effort
+// and answer an unrecognized top-level field with an HTTP 400.
+func TestBuildChatRequest_ThinkingToggleSkippedForOpenAI(t *testing.T) {
+	enabled := true
+	opts := llms.ApplyOptions(llms.WithReasoning(llms.ReasoningConfig{Enabled: &enabled}))
+
+	for _, model := range []string{"gpt-5.6-sol", "o3-mini"} {
+		req := BuildChatRequest(model, nil, opts, false)
+		data, err := json.Marshal(req)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", model, err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("unmarshal %s: %v", model, err)
+		}
+		if _, exists := m["thinking"]; exists {
+			t.Errorf("%s: request carries a thinking field, got %v", model, m["thinking"])
+		}
+	}
+}
+
 func TestBuildChatRequest_ReasoningDoesNotMutateOptions(t *testing.T) {
 	// Translating reasoning into ExtraBody must not mutate the caller's option map.
 	enabled := true

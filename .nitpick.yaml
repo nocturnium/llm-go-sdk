@@ -18,15 +18,24 @@ models:
   # Pin review (not only default): a user-level models.review wins over repo
   # models.default, which is how deepseek/deepseek-v4.1-flash took 55/88
   # batches on the first full-review after a3d3d56.
+  #
+  # reasoning: off and max_tokens: 16384: under an inherited max_tokens: 8192
+  # laguna spent the budget on thinking twice (finish_reason=length, content
+  # empty) and left 12 files unreviewed. OpenRouter lists include_reasoning
+  # for this model; forcing reasoning off keeps the answer in content.
   default:
     provider: openrouter
     model: poolside/laguna-s-2.1
     timeout: 15m
+    reasoning: off
+    max_tokens: 16384
 
   review:
     provider: openrouter
     model: poolside/laguna-s-2.1
     timeout: 15m
+    reasoning: off
+    max_tokens: 16384
 
   # Triage: luna flex — perfect precision and class accuracy; $0.0004/call.
   # Cut 72 raw findings to 42 in the comparison run, preserving the high-signal ones.

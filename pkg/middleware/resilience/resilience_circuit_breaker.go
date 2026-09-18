@@ -257,11 +257,18 @@ func (cb *CircuitBreaker) release() {
 	}
 }
 
-// Reset resets the circuit breaker to closed state
+// Reset returns the circuit breaker to the closed state with a clean slate.
+// The counters are cleared even when the breaker is already closed, because
+// transitionTo is a no-op on an unchanged state and an operator resetting a
+// closed breaker that sits one failure below the threshold expects the
+// accumulated failures to be gone.
 func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.transitionTo(CircuitClosed)
+	cb.failures = 0
+	cb.successes = 0
+	cb.halfOpenCount = 0
 }
 
 // stateTransition holds a captured state-change callback and its arguments.

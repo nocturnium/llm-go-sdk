@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -358,5 +359,21 @@ func TestNewImageFromFile_RejectsOversizeFile(t *testing.T) {
 	}
 	if _, err := NewImageFromFile(path); err == nil {
 		t.Fatal("oversize file accepted")
+	}
+}
+
+// TestValidateImageContent_CorruptTail pins that corruption past the first
+// kilobyte is caught. The earlier sampling check read only 1KB of decoded
+// output, so any real-sized image with a damaged tail validated clean.
+func TestValidateImageContent_CorruptTail(t *testing.T) {
+	head := strings.Repeat("QUJD", 1024) // 4KB of valid base64
+	img := &ImageContent{
+		Source:    contentTypeBase64,
+		MediaType: "image/png",
+		Data:      head + "!!!!",
+	}
+
+	if err := ValidateImageContent(img); err == nil {
+		t.Error("ValidateImageContent accepted base64 with a corrupt tail, want an error")
 	}
 }
