@@ -11,7 +11,7 @@
 #   OPENROUTER_API_KEY=... nitpick full-review -repo . -config .nitpick-concurrency.yaml
 
 models:
-  # Reviewer: laguna-s-2.1 — R=0.87, N=0.09 on open-nitpick tuning corpus (2 runs).
+  # Reviewer: laguna-s-2.1, R=0.87, N=0.09 on open-nitpick tuning corpus (2 runs).
   # Cleanest noise floor of any model measured; recall matches deepseek at 10x lower cost.
   # Context does not help on this corpus; leave related_context off.
   #
@@ -37,7 +37,7 @@ models:
     reasoning: off
     max_tokens: 16384
 
-  # Triage: luna flex — perfect precision and class accuracy; $0.0004/call.
+  # Triage: luna flex, perfect precision and class accuracy; $0.0004/call.
   # Cut 72 raw findings to 42 in the comparison run, preserving the high-signal ones.
   triage:
     provider: openrouter
