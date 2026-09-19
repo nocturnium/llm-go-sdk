@@ -190,7 +190,11 @@ func (c *Client) dispatchRequest(raw []byte, id json.RawMessage) {
 // handler's context is derived from the client's governing context, so canceling
 // that context cancels in-flight handlers rather than orphaning them.
 func (c *Client) serveRequest(id json.RawMessage, handler requestHandler, params json.RawMessage) {
-	ctx, cancel := context.WithCancel(c.baseCtx)
+	base := c.baseCtx
+	if c.handlers != nil {
+		base = c.handlers.ctx
+	}
+	ctx, cancel := context.WithCancel(base)
 	defer cancel()
 
 	result, rpcErr := invokeGuarded(ctx, handler, params)

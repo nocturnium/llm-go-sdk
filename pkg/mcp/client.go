@@ -50,8 +50,13 @@ const (
 // tool calls dispatched through Register. Methods are safe for concurrent use.
 // Call Close to release resources.
 type Client struct {
-	transport  transport
-	baseCtx    context.Context //nolint:containedctx // governs the client's connection lifetime
+	transport transport
+	baseCtx   context.Context //nolint:containedctx // governs the client's connection lifetime
+	// handlers bounds server-initiated request handlers. Close cancels it, so a
+	// handler parked waiting for a person (which the sampling and elicitation
+	// docs tell callers to do) is released instead of leaking with its
+	// semaphore slot. It is a pointer so Client stays comparable.
+	handlers   *handlerLifetime
 	nextID     atomic.Int64
 	namePrefix string
 	clientInfo Implementation
@@ -295,10 +300,19 @@ func NewHTTPClient(ctx context.Context, url string, opts ...Option) (*Client, er
 	return newClient(ctx, t, cfg)
 }
 
+// handlerLifetime carries the context that bounds inbound request handlers.
+// Keeping the func behind a pointer leaves Client comparable.
+type handlerLifetime struct {
+	ctx    context.Context //nolint:containedctx // bounds inbound handler lifetime
+	cancel context.CancelFunc
+}
+
 func newClient(ctx context.Context, t transport, cfg config) (*Client, error) {
+	handlerCtx, handlerCancel := context.WithCancel(ctx)
 	c := &Client{
 		transport:  t,
 		baseCtx:    ctx,
+		handlers:   &handlerLifetime{ctx: handlerCtx, cancel: handlerCancel},
 		namePrefix: cfg.namePrefix,
 		clientInfo: cfg.clientInfo,
 		notifier:   newNotifier(),
@@ -565,6 +579,9 @@ func (c *Client) Close() error {
 // the context-cancellation hook; the underlying transport.close and
 // notifier.stop are each idempotent, so repeated or concurrent calls are safe.
 func (c *Client) closeInternal() error {
+	if c.handlers != nil && c.handlers.cancel != nil {
+		c.handlers.cancel()
+	}
 	err := c.transport.close()
 	c.notifier.stop()
 	// Bounded: a wedged request handler must not make Close hang.

@@ -16,6 +16,11 @@ import (
 
 const maxStdioLineBytes = 16 * 1024 * 1024
 
+// stdioShutdownGrace bounds each step of the teardown: waiting for the reader,
+// waiting again after the kill, and reaping. Every one of them can outlive the
+// server itself when a grandchild still holds the pipes.
+const stdioShutdownGrace = 2 * time.Second
+
 // errTransportClosed is returned when a request is made on a closed transport or
 // the server's stdout closed while a request was in flight.
 var errTransportClosed = errors.New("mcp: transport closed")
@@ -83,8 +88,21 @@ func (t *stdioTransport) supportsInbound() bool { return true }
 // respond writes a response frame for a server-initiated request. write is
 // already serialized by writeMu, so this is safe concurrently with request and
 // notify.
-func (t *stdioTransport) respond(_ context.Context, payload []byte) error {
-	return t.write(payload)
+//
+// The write runs on its own goroutine and the context bounds the wait: respond
+// is called from the read loop, and a server that stops draining its stdin
+// would otherwise park that loop inside write once the pipe buffer filled,
+// stalling every in-flight caller waiting for a response already sitting
+// unread in the pipe.
+func (t *stdioTransport) respond(ctx context.Context, payload []byte) error {
+	done := make(chan error, 1)
+	go func() { done <- t.write(payload) }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (t *stdioTransport) deliverNotification(raw []byte) {
@@ -381,13 +399,30 @@ func (t *stdioTransport) close() error {
 		// the server does not exit promptly, kill it to unblock the reader.
 		select {
 		case <-t.done:
-		case <-time.After(2 * time.Second):
+		case <-time.After(stdioShutdownGrace):
 			if t.cmd.Process != nil {
 				_ = t.cmd.Process.Kill()
 			}
-			<-t.done
+			// The kill does not reach grandchildren, and an npx or uvx wrapper
+			// leaves one holding the stdout pipe, so this wait needs its own
+			// bound: without it Close hangs for as long as that process lives.
+			select {
+			case <-t.done:
+			case <-time.After(stdioShutdownGrace):
+			}
 		}
-		_ = t.cmd.Wait()
+
+		// cmd.Wait is bounded for the same reason: it blocks until every writer
+		// to the pipes is gone, which a surviving grandchild prevents.
+		waited := make(chan struct{})
+		go func() {
+			defer close(waited)
+			_ = t.cmd.Wait()
+		}()
+		select {
+		case <-waited:
+		case <-time.After(stdioShutdownGrace):
+		}
 	})
 	return nil
 }
