@@ -277,13 +277,18 @@ func videoUsage(secondsText, size string) llms.MediaUsage {
 // ApplyMultipartExtra merges a caller's Extra map into a multipart transcription
 // request, returning the files to append.
 //
+// MultipartFile is one part of a multipart request body. It is an alias so
+// callers outside this module can name the return type of ApplyMultipartExtra,
+// which would otherwise be an internal type they cannot spell.
+type MultipartFile = httpclient.MultipartFile
+
 // Keys in reserved are refused with [llms.ErrInvalidParameters] rather than
 // applied: those name a typed option, and letting an extra win would send a
 // request the caller did not ask for (a replaced model bills against the wrong
 // rate; a replaced file transcribes different audio). Scalars become form
 // fields; a []string becomes repeated file parts under that field name;
 // anything else is refused.
-func ApplyMultipartExtra(fields map[string]string, extra map[string]any, reserved ...string) ([]httpclient.MultipartFile, error) {
+func ApplyMultipartExtra(fields map[string]string, extra map[string]any, reserved ...string) ([]MultipartFile, error) {
 	var files []httpclient.MultipartFile
 	for key, value := range extra {
 		for _, name := range reserved {

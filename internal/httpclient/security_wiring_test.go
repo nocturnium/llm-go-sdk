@@ -34,6 +34,13 @@ func (s *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // TestClientValidation_BlocksSSRFByDefault proves the request path rejects
 // private/loopback IPs and the cloud metadata endpoint by default, covering
 // DoJSON, DoRaw and DoStream through one central choke point.
+//
+// Note what it does not prove: the stub transport here is a plain
+// RoundTripper, so this client cannot install the dial guard and relies on the
+// URL string check plus the resolving fallback. The dial-time guard is covered
+// by TestSSRFDialControl and TestSSRFDialerCustomDialContextBlocksResolvedPrivateRemote
+// in ssrf_dial_test.go, and the fallback by
+// TestCustomRoundTripper_FallsBackToResolving.
 func TestClientValidation_BlocksSSRFByDefault(t *testing.T) {
 	st := &stubTransport{}
 	c := NewClient(WithHTTPClient(&http.Client{Transport: st}))

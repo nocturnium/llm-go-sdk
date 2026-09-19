@@ -267,17 +267,43 @@ func validateNotPrivateIP(ip net.IP) error {
 		}
 	}
 
-	// Check for common internal IP ranges not covered by IsPrivate
-	// 100.64.0.0/10 (Carrier-grade NAT)
-	cgnat := net.IPNet{
-		IP:   net.ParseIP("100.64.0.0"),
-		Mask: net.CIDRMask(10, 32),
+	if ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
+		return errors.New("multicast addresses not allowed")
 	}
-	if cgnat.Contains(ip) {
-		return errors.New("carrier-grade NAT addresses not allowed")
+
+	// Ranges that reach infrastructure but are not covered by the checks above.
+	for _, block := range reservedIPBlocks {
+		if block.net.Contains(ip) {
+			return fmt.Errorf("%s addresses not allowed", block.name)
+		}
 	}
 
 	return nil
+}
+
+// reservedIPBlocks are address ranges that are not private by Go's definition
+// but still reach something the caller did not ask for: a router, a test
+// network, or the local host by another name.
+var reservedIPBlocks = []struct {
+	name string
+	net  *net.IPNet
+}{
+	{"carrier-grade NAT", mustCIDR("100.64.0.0/10")},
+	{"this-network", mustCIDR("0.0.0.0/8")},
+	{"IETF protocol assignment", mustCIDR("192.0.0.0/24")},
+	{"benchmarking", mustCIDR("198.18.0.0/15")},
+	{"reserved", mustCIDR("240.0.0.0/4")},
+	{"site-local IPv6", mustCIDR("fec0::/10")},
+	{"6to4", mustCIDR("2002::/16")},
+}
+
+// mustCIDR parses a CIDR block that is known good at build time.
+func mustCIDR(cidr string) *net.IPNet {
+	_, block, err := net.ParseCIDR(cidr)
+	if err != nil {
+		panic("httpclient: bad reserved CIDR " + cidr + ": " + err.Error())
+	}
+	return block
 }
 
 func nat64EmbeddedIPv4(ip net.IP) net.IP {
