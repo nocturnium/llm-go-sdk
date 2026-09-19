@@ -294,18 +294,19 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// here would let a source that ends without one reach CollectStream as a
 		// successful short read.
 		defer sender.EnsureTerminal()
-		// A panic in this goroutine would otherwise close the channel with no
-		// verdict for the consumer, matching neither the trace nor the metrics.
-		defer func() {
-			if r := recover(); r != nil {
-				sender.DeliverTerminal(llms.StreamChunk{
-					Error: fmt.Errorf("panic in stream processing: %v", r),
-					Done:  true,
-				})
-			}
-		}()
 		defer m.decrementActive(ctx, attrs)
 		defer span.End()
+		// Registered after span.End so it runs first: the panic lands on the
+		// span while it is still open, and the consumer is told too. A panic
+		// would otherwise close the channel with no verdict at all.
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic in stream processing: %v", r)
+				span.RecordError(panicErr)
+				span.SetStatus(codes.Error, panicErr.Error())
+				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
+			}
+		}()
 
 		var chunkCount int64
 		var contentBuilder strings.Builder

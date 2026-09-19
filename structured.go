@@ -343,6 +343,9 @@ func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, s
 	if err != nil {
 		return nil, true, err
 	}
+	// An embedded field's property is promoted only when the outer struct does
+	// not already have that name: the shallower field wins, which is the rule
+	// encoding/json applies when it resolves the same conflict.
 	if props, hasProps := embedded["properties"].(map[string]any); hasProps {
 		for k, v := range props {
 			if _, exists := properties[k]; !exists {

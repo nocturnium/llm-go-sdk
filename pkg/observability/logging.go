@@ -344,16 +344,24 @@ func (m *LoggingMiddleware) WithLoggedContent(log bool) *LoggingMiddleware {
 	return m
 }
 
-// scrubContent empties the fields carrying user or model text when content
-// logging is off. It runs on every entry before it reaches the Logger.
+// scrubContent hands the Logger its own copy of the entry, with the fields
+// carrying user or model text emptied when content logging is off.
+//
+// The copy matters on its own: the middleware keeps filling the same entry in
+// after LogRequest has seen it, so a Logger that retains the pointer for an
+// async emit would race the wrapper goroutine. Slice fields still share their
+// backing arrays, which the middleware only ever reassigns, never edits.
 func (m *LoggingMiddleware) scrubContent(entry *LogEntry) *LogEntry {
-	if m.logContent || entry == nil {
-		return entry
+	if entry == nil {
+		return nil
 	}
-	entry.Messages = nil
-	entry.Content = ""
-	entry.ToolCalls = nil
-	return entry
+	snapshot := *entry
+	if !m.logContent {
+		snapshot.Messages = nil
+		snapshot.Content = ""
+		snapshot.ToolCalls = nil
+	}
+	return &snapshot
 }
 
 // WithIDGenerator sets a custom ID generator for request IDs

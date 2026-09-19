@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -106,11 +107,14 @@ func (l *SlogLogger) buildRequestAttrs(entry *LogEntry) []slog.Attr {
 	// than going out raw.
 	if !l.redact && entry.Metadata != nil {
 		for k, v := range entry.Metadata {
-			if text, ok := v.(string); ok {
-				attrs = append(attrs, slog.String(sanitizeLogValue(k), sanitizeLogValue(l.truncate(text))))
-				continue
+			// Every value is rendered and sanitized, not just the strings: a
+			// fmt.Stringer or an error in the map carries user text too, and
+			// slog.Any would emit it unchanged.
+			text, ok := v.(string)
+			if !ok {
+				text = fmt.Sprintf("%v", v)
 			}
-			attrs = append(attrs, slog.Any(sanitizeLogValue(k), v))
+			attrs = append(attrs, slog.String(sanitizeLogValue(k), sanitizeLogValue(l.truncate(text))))
 		}
 	}
 

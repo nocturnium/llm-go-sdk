@@ -444,7 +444,10 @@ func deliverTerminalForContext(ctx context.Context, sender *StreamSender) {
 
 // WrapStreamWithFinalizer is like WrapStream but also calls a finalizer function
 // after all chunks have been processed or when the goroutine exits early.
-// The finalizer receives the last usage seen (may be nil) and any accumulated state.
+// The finalizer takes no arguments: state it needs (the last usage seen, a
+// terminal error) is captured by the processor closure, as in the example
+// below. It runs after the terminal chunk has been delivered, so a processor
+// that records the terminal chunk has already seen it.
 //
 // Example usage for tracking total usage:
 //

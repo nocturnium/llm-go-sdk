@@ -373,8 +373,13 @@ func (rlc *RateLimitedClient) GenerateContent(ctx context.Context, messages []ll
 		return nil, err
 	}
 
-	// Record actual tokens for more accurate limiting
-	rlc.limiter.RecordTokens(resp.Usage.TotalTokens)
+	// Record actual tokens for more accurate limiting. A response that reports
+	// no usage is left alone: recording zero would read as a gross
+	// overestimate and refund the whole reservation, so a provider that never
+	// reports usage would pace at zero tokens per request.
+	if resp != nil && resp.Usage.TotalTokens > 0 {
+		rlc.limiter.RecordTokens(resp.Usage.TotalTokens)
+	}
 
 	return resp, nil
 }
