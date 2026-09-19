@@ -638,6 +638,14 @@ func ProcessStream(
 		}
 		chunksRead++
 
+		// A mid-stream error frame ends the stream: several compatible servers
+		// send one and then [DONE], which would otherwise read as a clean finish
+		// with partial content.
+		if err := chunk.Error.Err(); err != nil {
+			sender.SendFinal(llms.StreamChunk{Error: fmt.Errorf("%s: %w", provider, err)})
+			return
+		}
+
 		if len(chunk.Choices) > 0 {
 			choice := chunk.Choices[0]
 

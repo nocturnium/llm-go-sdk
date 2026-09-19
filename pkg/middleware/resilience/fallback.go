@@ -288,7 +288,16 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, op
 			continue
 		}
 
-		first, ok := <-src
+		// Bounded by the caller's context: a provider that hands back its
+		// channel promptly and then stalls on time to first byte would
+		// otherwise hang Stream forever, cancellation included.
+		var first llms.StreamChunk
+		var ok bool
+		select {
+		case first, ok = <-src:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 		switch {
 		case !ok:
 			// Stream closed without any chunk; treat as an (empty) success.

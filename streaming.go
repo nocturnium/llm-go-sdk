@@ -107,6 +107,65 @@ func (s *StreamSender) Send(chunk StreamChunk) SendResult {
 	}
 }
 
+// terminalChunkFor returns the terminal chunk a SendResult calls for, or
+// ok=false when the send succeeded and no terminal chunk is owed.
+func terminalChunkFor(ctx context.Context, result SendResult) (StreamChunk, bool) {
+	switch result {
+	case SendOK:
+		return StreamChunk{}, false
+	case SendContextCanceled:
+		if err := ctx.Err(); err != nil {
+			return StreamChunk{Error: err}, true
+		}
+		return StreamChunk{Error: context.Canceled}, true
+	case SendTimeout:
+		return StreamChunk{Error: ErrStreamTimeout}, true
+	default:
+		return StreamChunk{Done: true}, true
+	}
+}
+
+// forwardTerminalThroughProcessor delivers the terminal chunk a failed send
+// owes the consumer, first letting the processor observe it. A wrapper whose
+// finalizer inspects terminal chunks (the resilience breaker, for one) would
+// otherwise never see the failure that ended the stream.
+func forwardTerminalThroughProcessor(s *StreamSender, processor StreamProcessor, result SendResult) {
+	chunk, owed := terminalChunkFor(s.ctx, result)
+	if !owed {
+		return
+	}
+	if processor != nil {
+		chunk = processor(chunk)
+	}
+	s.DeliverTerminal(chunk)
+}
+
+// ensureTerminalThroughProcessor is EnsureTerminal with the processor in the
+// path, for the same reason.
+func ensureTerminalThroughProcessor(s *StreamSender, processor StreamProcessor) {
+	if s.terminalSent.Load() {
+		return
+	}
+	chunk := StreamChunk{Done: true}
+	if err := s.ctx.Err(); err != nil {
+		chunk = StreamChunk{Error: err}
+	}
+	if processor != nil {
+		chunk = processor(chunk)
+	}
+	s.DeliverTerminal(chunk)
+}
+
+// drainStream consumes the remainder of an abandoned source on its own
+// goroutine so the producer's sends complete instead of parking for the whole
+// of its send timeout while it holds a breaker permit or rate-limit slot.
+func drainStream(source <-chan StreamChunk) {
+	go func() {
+		for range source { //nolint:revive // draining is the point
+		}
+	}()
+}
+
 // SendOK reports whether the result indicates the chunk was delivered.
 func (r SendResult) SendOK() bool { return r == SendOK }
 
@@ -347,8 +406,9 @@ func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOption
 	go func() {
 		defer close(wrapped)
 		// After the source drains (or this goroutine returns early), guarantee the
-		// consumer observed a terminal chunk rather than a silent close.
-		defer sender.EnsureTerminal()
+		// consumer observed a terminal chunk rather than a silent close. The
+		// processor sees the synthesized chunk too.
+		defer func() { ensureTerminalThroughProcessor(sender, processor) }()
 		for chunk := range source {
 			// Apply processor if provided
 			if processor != nil {
@@ -356,8 +416,11 @@ func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOption
 			}
 			// Use StreamSender to prevent goroutine leak if consumer stops reading.
 			// On early exit, forward a terminal chunk so the consumer never sees a
-			// silent close that looks like a successful completion.
-			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+			// silent close that looks like a successful completion, and drain the
+			// abandoned source so the producer is not left blocked on a send.
+			if result := sender.Send(chunk); !result.SendOK() {
+				drainStream(source)
+				forwardTerminalThroughProcessor(sender, processor, result)
 				return
 			}
 		}
@@ -412,8 +475,11 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 			}
 		}()
 		// Registered last so it runs first (before the finalizer and close):
-		// guarantee the consumer observed a terminal chunk rather than a silent close.
-		defer sender.EnsureTerminal()
+		// guarantee the consumer observed a terminal chunk rather than a silent
+		// close. Synthesized terminal chunks run through the processor too, so a
+		// finalizer that reads the terminal chunk sees an abandoned or timed-out
+		// stream as the failure it is rather than as a clean finish.
+		defer func() { ensureTerminalThroughProcessor(sender, processor) }()
 
 		for chunk := range source {
 			// Apply processor if provided
@@ -423,7 +489,12 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 			// Use StreamSender to prevent goroutine leak if consumer stops reading.
 			// On early exit, forward a terminal chunk so the consumer never sees a
 			// silent close that looks like a successful completion.
-			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+			if result := sender.Send(chunk); !result.SendOK() {
+				// The consumer stopped reading. Drain the source on its own
+				// goroutine so the upstream producer is not left blocked on a
+				// send for the whole of its own timeout.
+				drainStream(source)
+				forwardTerminalThroughProcessor(sender, processor, result)
 				return
 			}
 		}
