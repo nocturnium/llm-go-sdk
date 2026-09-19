@@ -29,11 +29,11 @@ func TestReasoningContent_Basic(t *testing.T) {
 	if resp.ReasoningText() != rc.Content {
 		t.Errorf("ReasoningText = %q, want %q", resp.ReasoningText(), rc.Content)
 	}
-	if rc.Tokens != 50 {
-		t.Errorf("expected 50 tokens, got %d", rc.Tokens)
+	if resp.Reasoning.Tokens != 50 {
+		t.Errorf("Response carries %d reasoning tokens, want 50", resp.Reasoning.Tokens)
 	}
-	if rc.Metadata["mode"] != "enabled" {
-		t.Errorf("expected mode=enabled, got %v", rc.Metadata["mode"])
+	if got := resp.Reasoning.Metadata["mode"]; got != "enabled" {
+		t.Errorf("Response carries metadata mode %v, want enabled", got)
 	}
 }
 

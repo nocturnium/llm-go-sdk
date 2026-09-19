@@ -131,7 +131,8 @@ func ModelInfo(modelID string) *llms.ModelInfo {
 }
 
 // ListModels implements llms.ModelLister for the ZAI Client.
-// Returns the static cached model list with optional type filtering and pagination.
+// It returns the static cached model list with optional type filtering. The
+// list is not paged: HasMore is always false and page options are ignored.
 func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) (*llms.ListModelsResult, error) {
 	select {
 	case <-ctx.Done():
