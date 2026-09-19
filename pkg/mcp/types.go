@@ -5,6 +5,9 @@ import "encoding/json"
 // protocolVersion is the MCP protocol revision this client advertises.
 const protocolVersion = "2025-06-18"
 
+// contentTypeText is the ContentBlock type carrying plain text.
+const contentTypeText = "text"
+
 // Method names for the subset of MCP that this client implements.
 const (
 	methodInitialize    = "initialize"
@@ -190,7 +193,7 @@ type CallToolResult struct {
 func (r *CallToolResult) Text() string {
 	var b []byte
 	for _, c := range r.Content {
-		if c.Type == "text" && c.Text != "" {
+		if c.Type == contentTypeText && c.Text != "" {
 			if len(b) > 0 {
 				b = append(b, '\n')
 			}

@@ -827,7 +827,7 @@ func (e *APIError) Error() string {
 	var sb strings.Builder
 	sb.WriteString("API error")
 
-	sb.WriteString(fmt.Sprintf(" (status %d", e.StatusCode))
+	fmt.Fprintf(&sb, " (status %d", e.StatusCode)
 
 	// Add type and code if present
 	if e.Type != "" {
