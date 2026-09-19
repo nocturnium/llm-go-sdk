@@ -119,8 +119,12 @@ func TestGenerateTyped_InvalidJSON(t *testing.T) {
 	if resp != mock.response {
 		t.Fatal("expected raw response to be returned with error")
 	}
-	if !strings.Contains(err.Error(), "not valid JSON") {
-		t.Fatalf("expected clear invalid JSON error, got %v", err)
+	if !strings.Contains(err.Error(), "does not match the schema") {
+		t.Fatalf("expected a schema-mismatch error, got %v", err)
+	}
+	// The decoder's own diagnosis has to survive: the repair turn quotes it.
+	if !strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("expected the decoder's reason to be preserved, got %v", err)
 	}
 }
 

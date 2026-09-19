@@ -127,17 +127,25 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 // from JSON embedded in markdown fences or surrounding prose.
 func parseTyped[T any](content string) (T, error) {
 	var value T
-	if err := json.Unmarshal([]byte(content), &value); err == nil {
+	directErr := json.Unmarshal([]byte(content), &value)
+	if directErr == nil {
 		return value, nil
 	}
+	// Keep the decoder's own diagnosis: it names the field and the types that
+	// did not match, which is what the repair turn has to tell the model. A
+	// constant string sent the model back to fix "invalid JSON" when the JSON
+	// was valid and only a field's type was wrong.
+	reason := directErr
 	if extracted, ok := extractJSON(content); ok {
 		var v T
-		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
+		extractedErr := json.Unmarshal([]byte(extracted), &v)
+		if extractedErr == nil {
 			return v, nil
 		}
+		reason = extractedErr
 	}
 	var zero T
-	return zero, fmt.Errorf("llms: structured output is not valid JSON")
+	return zero, fmt.Errorf("llms: structured output does not match the schema: %w", reason)
 }
 
 // repairPrompt is the correction instruction sent to the model on a repair turn.

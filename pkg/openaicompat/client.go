@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -66,7 +67,7 @@ func NewClient(config ClientConfig) *Client {
 		mediaPaths:   MediaCapabilities{ImagesPath: config.ImagesPath, ImageEditsPath: config.ImageEditsPath, SpeechPath: config.SpeechPath, TranscriptionsPath: config.TranscriptionsPath, VideosPath: config.VideosPath},
 		baseURL:      config.BaseURL,
 		apiKey:       config.APIKey,
-		headers:      config.Headers,
+		headers:      maps.Clone(config.Headers),
 		azureAPIKey:  config.AzureAPIKey,
 		azureVersion: config.AzureVersion,
 	}
@@ -93,7 +94,12 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req *ChatCompletionRe
 
 // CreateChatCompletionStream sends a streaming chat completion request
 func (c *Client) CreateChatCompletionStream(ctx context.Context, req *ChatCompletionRequest) (*StreamReader, error) {
-	req.Stream = true
+	// Copy before setting Stream: mutating the caller's request races a
+	// concurrent unary call sharing it, and a request reused afterwards would
+	// send "stream":true to the non-streaming endpoint.
+	streamReq := *req
+	streamReq.Stream = true
+	req = &streamReq
 	headers := c.getHeaders()
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{

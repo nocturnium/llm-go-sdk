@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -102,6 +103,9 @@ var apiStatusClassifications = map[int]apiStatusClassification{
 	401: {err: ErrAuthenticationFailed},
 	402: {err: ErrPlanRequired},
 	403: {err: ErrPermissionDenied},
+	// 404 is mapped to ErrModelNotFound because the model path is the common
+	// case, but a mistyped base URL, a deleted batch job or a missing file
+	// reach it too; callers matching on it should confirm with the message.
 	404: {err: ErrModelNotFound},
 	408: {err: ErrTimeout, retryable: true},
 	429: {err: ErrRateLimited, retryable: true},
@@ -305,9 +309,16 @@ func (e *StreamError) Unwrap() error {
 	return e.Cause
 }
 
-// Is reports whether the error matches common stream errors
+// Is reports whether the error matches common stream errors.
+//
+// A StreamError matches ErrStreamInterrupted, which is what it is, and
+// whatever its cause matches. It deliberately does not claim to be every
+// target: the old form asked whether ErrStreamInterrupted matched the target,
+// which is true for any target, so a StreamError wrapping context.Canceled
+// answered yes to everything and IsTemporary told callers to retry a stream
+// the user had canceled.
 func (e *StreamError) Is(target error) bool {
-	if errors.Is(ErrStreamInterrupted, target) {
+	if target == ErrStreamInterrupted {
 		return true
 	}
 	return errors.Is(e.Cause, target)
@@ -386,6 +397,12 @@ func IsTemporary(err error) bool {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.IsRetryable()
+	}
+
+	// A canceled or expired context is the caller's decision, not a transient
+	// provider fault: retrying it wastes a call and ignores the deadline.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
 	}
 
 	// Check common transient errors
