@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The module now requires Go 1.26: `golang.org/x/time` 0.16.0 declares `go 1.26.0`, so the CI test matrix, the workflow toolchains and the docs move with it.
+- OpenTelemetry dependencies move to v1.46.0, and the GitHub Actions used by CI, release and Pages move to their current majors.
+
 ### Added
 
 - OpenRouter usage accounting (`WithUsageAccounting`) filling the new `llms.Usage.Cost` with the charge OpenRouter reports, `PricingModeFor` mapping a served service tier onto a billing lane, and the served tier on a stream's final chunk via the new `llms.StreamChunk.ServiceTier`. `CostTracker` now banks a provider-reported cost in preference to a rate-card estimate.

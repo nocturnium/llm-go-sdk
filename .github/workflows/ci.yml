@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: '1.26'
 
 jobs:
   test:
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.25.x', '1.26.x']
+        go-version: ['1.26.x']
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -48,7 +48,7 @@ jobs:
         run: GOWORK=off go test -tags=integration -run '^$' ./...
 
       - name: Upload coverage to Codecov
-        if: matrix.go-version == '1.25.x'
+        if: matrix.go-version == '1.26.x'
         uses: codecov/codecov-action@v6
         with:
           files: coverage.out
