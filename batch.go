@@ -207,16 +207,25 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	}
 	recordFailure := func(id string, duration time.Duration, err error) {
 		resultsMu.Lock()
+		defer resultsMu.Unlock()
 		results[id] = &BatchResult{
 			ID:       id,
 			Error:    err,
 			Duration: duration,
 		}
 		failureCount++
-		resultsMu.Unlock()
 	}
+	// recordSuccess unlocks with defer and tolerates a nil response: an LLM
+	// that returns (nil, nil) would otherwise panic holding resultsMu, and the
+	// recover handler's own recordFailure would then block on that mutex
+	// forever, hanging ProcessBatch on wg.Wait.
 	recordSuccess := func(id string, duration time.Duration, resp *Response) {
+		if resp == nil {
+			recordFailure(id, duration, fmt.Errorf("%w: provider returned no response and no error", ErrIncompleteResponse))
+			return
+		}
 		resultsMu.Lock()
+		defer resultsMu.Unlock()
 		results[id] = &BatchResult{
 			ID:       id,
 			Response: resp,
@@ -226,7 +235,6 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 		totalUsage.PromptTokens += resp.Usage.PromptTokens
 		totalUsage.CompletionTokens += resp.Usage.CompletionTokens
 		totalUsage.TotalTokens += resp.Usage.TotalTokens
-		resultsMu.Unlock()
 	}
 
 	// Create a cancellable context for stopping all goroutines when ContinueOnError=false

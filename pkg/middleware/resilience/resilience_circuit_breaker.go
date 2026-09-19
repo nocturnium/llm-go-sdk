@@ -209,6 +209,13 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		}
 		cb.halfOpenCount--
 		cb.successes++
+		// Each successful probe pushes the half-open deadline out. The deadline
+		// exists to catch a trial that stalls, not to cap how long collecting
+		// halfOpenMax probes may take: a caller making fewer than halfOpenMax
+		// requests per halfOpenTimeout would otherwise be forced back open by
+		// the watchdog in allowRequest and never close against a healthy
+		// provider.
+		cb.lastStateChange = time.Now()
 		// If we've had enough successes, close the circuit
 		if cb.successes >= cb.halfOpenMax {
 			cb.transitionTo(CircuitClosed)

@@ -527,6 +527,16 @@ func ProcessStream(
 				sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
 				return
 			}
+			// An EOF with neither the [DONE] sentinel nor a finish reason is a
+			// dropped connection, not a finished generation. Report it instead
+			// of delivering a terminal chunk that reads as a clean stop: a
+			// caller acting on half an answer is worse than a caller retrying.
+			if !stream.SawDone() && finishReason == "" {
+				sender.SendFinal(llms.StreamChunk{
+					Error: fmt.Errorf("%s: stream ended before [DONE]: %w", provider, io.ErrUnexpectedEOF),
+				})
+				return
+			}
 			// Apply token estimation if enabled and usage is missing
 			finalUsage := usage
 			if config != nil && config.EstimateTokens && (usage == nil || usage.TotalTokens == 0) {

@@ -153,6 +153,19 @@ func (c *Client) buildURL(path string) string {
 // StreamReader reads streaming responses
 type StreamReader struct {
 	sseReader *httpclient.SSEReader
+	// sawDone records that the server sent the [DONE] sentinel. Without it an
+	// io.EOF from the transport is a dropped connection, not a finished
+	// generation, and the two must not be reported the same way.
+	sawDone bool
+}
+
+// SawDone reports whether the server closed the stream with the [DONE]
+// sentinel. An io.EOF with SawDone false is a truncated stream.
+func (r *StreamReader) SawDone() bool {
+	if r == nil {
+		return false
+	}
+	return r.sawDone
 }
 
 // Read reads the next chunk from the stream
@@ -166,6 +179,7 @@ func (r *StreamReader) Read() (*StreamChunk, error) {
 
 		// Check for [DONE] marker
 		if event.Data == "[DONE]" {
+			r.sawDone = true
 			return nil, io.EOF
 		}
 
