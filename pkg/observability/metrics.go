@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -115,7 +116,11 @@ func WithMetricsCostRecording(record bool) MetricsOption {
 	}
 }
 
-// WithSuccessRateWindow sets the duration for success rate calculation
+// WithSuccessRateWindow sets the duration for success rate calculation.
+//
+// The window is also capped at 10000 entries, so above roughly 33 requests per
+// second sustained the success rate reflects the most recent 10000 requests
+// rather than the full duration set here.
 func WithSuccessRateWindow(duration time.Duration) MetricsOption {
 	return func(m *MetricsMiddleware) {
 		m.windowDuration = duration
@@ -289,6 +294,16 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// here would let a source that ends without one reach CollectStream as a
 		// successful short read.
 		defer sender.EnsureTerminal()
+		// A panic in this goroutine would otherwise close the channel with no
+		// verdict for the consumer, matching neither the trace nor the metrics.
+		defer func() {
+			if r := recover(); r != nil {
+				sender.DeliverTerminal(llms.StreamChunk{
+					Error: fmt.Errorf("panic in stream processing: %v", r),
+					Done:  true,
+				})
+			}
+		}()
 		defer m.decrementActive(ctx, attrs)
 		defer span.End()
 

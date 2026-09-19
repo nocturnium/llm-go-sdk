@@ -379,6 +379,10 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 				panicErr := fmt.Errorf("panic in stream processing: %v", r)
 				m.recordError(ctx, span, panicErr, attrs)
 				hadError = true
+				// The consumer is owed the same verdict the span records.
+				// Reporting the panic only on the span left the caller with a
+				// clean close and a nil error while the trace said failure.
+				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
 			}
 
 			// Always record duration and chunk count

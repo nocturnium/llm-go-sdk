@@ -15,7 +15,14 @@ import (
 // This prevents unbounded memory growth when logging large streaming responses.
 const maxLoggedStreamContent = 100_000 // 100KB
 
-// Logger is the interface for logging LLM requests and responses
+// Logger is the interface for logging LLM requests and responses.
+//
+// Implementations receive raw prompts, completions and tool calls: the
+// middleware does not redact, because the sink is where redaction is
+// configurable (the built-in JSON and slog loggers redact by default). An
+// implementation that ships entries off the machine must redact them itself,
+// or the caller must build the middleware with WithLoggedContent(false), which
+// withholds message content and completions entirely.
 type Logger interface {
 	// LogRequest is called before making an LLM request
 	LogRequest(ctx context.Context, req *LogEntry)
@@ -314,15 +321,39 @@ type LoggingMiddleware struct {
 	llm    llms.LLM
 	logger Logger
 	genID  func() string
+	// logContent controls whether prompts and completions reach the Logger at
+	// all. It defaults to true, matching the built-in sinks' own redaction.
+	logContent bool
 }
 
 // NewLoggingMiddleware creates a new logging middleware
 func NewLoggingMiddleware(llm llms.LLM, logger Logger) *LoggingMiddleware {
 	return &LoggingMiddleware{
-		llm:    llm,
-		logger: logger,
-		genID:  defaultIDGenerator,
+		llm:        llm,
+		logger:     logger,
+		genID:      defaultIDGenerator,
+		logContent: true,
 	}
+}
+
+// WithLoggedContent controls whether message content and completions are
+// handed to the Logger. Set it false for a sink that cannot be trusted with
+// prompts; metadata, usage, timings and errors are still logged.
+func (m *LoggingMiddleware) WithLoggedContent(log bool) *LoggingMiddleware {
+	m.logContent = log
+	return m
+}
+
+// scrubContent empties the fields carrying user or model text when content
+// logging is off. It runs on every entry before it reaches the Logger.
+func (m *LoggingMiddleware) scrubContent(entry *LogEntry) *LogEntry {
+	if m.logContent || entry == nil {
+		return entry
+	}
+	entry.Messages = nil
+	entry.Content = ""
+	entry.ToolCalls = nil
+	return entry
 }
 
 // WithIDGenerator sets a custom ID generator for request IDs
@@ -346,19 +377,19 @@ func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...
 		Streaming: false,
 	}
 
-	m.logger.LogRequest(ctx, entry)
+	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
 	result, err := llms.Call(ctx, m.llm, prompt, options...)
 
 	entry.Duration = time.Since(start)
 
 	if err != nil {
-		m.logger.LogError(ctx, entry, err)
+		m.logger.LogError(ctx, m.scrubContent(entry), err)
 		return "", err
 	}
 
 	entry.Content = result
-	m.logger.LogResponse(ctx, entry)
+	m.logger.LogResponse(ctx, m.scrubContent(entry))
 
 	return result, nil
 }
@@ -378,14 +409,14 @@ func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []llms
 		Streaming: false,
 	}
 
-	m.logger.LogRequest(ctx, entry)
+	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
 	resp, err := m.llm.GenerateContent(ctx, messages, options...)
 
 	entry.Duration = time.Since(start)
 
 	if err != nil {
-		m.logger.LogError(ctx, entry, err)
+		m.logger.LogError(ctx, m.scrubContent(entry), err)
 		return nil, err
 	}
 
@@ -393,7 +424,7 @@ func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []llms
 	entry.Usage = &resp.Usage
 	entry.FinishReason = string(resp.FinishReason)
 	entry.ToolCalls = resp.ToolCalls
-	m.logger.LogResponse(ctx, entry)
+	m.logger.LogResponse(ctx, m.scrubContent(entry))
 
 	return resp, nil
 }
@@ -413,12 +444,12 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		Streaming: true,
 	}
 
-	m.logger.LogRequest(ctx, entry)
+	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
 	stream, err := m.llm.Stream(ctx, messages, options...)
 	if err != nil {
 		entry.Duration = time.Since(start)
-		m.logger.LogError(ctx, entry, err)
+		m.logger.LogError(ctx, m.scrubContent(entry), err)
 		return nil, err
 	}
 
@@ -453,7 +484,7 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 
 			if chunk.Error != nil {
 				entry.Duration = time.Since(start)
-				m.logger.LogError(ctx, entry, chunk.Error)
+				m.logger.LogError(ctx, m.scrubContent(entry), chunk.Error)
 				return
 			}
 
@@ -491,15 +522,15 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// marker was a suffix on Content, which the default redaction strips.
 		if err := ctx.Err(); err != nil {
 			entry.Content += "...[stream canceled]"
-			m.logger.LogError(ctx, entry, err)
+			m.logger.LogError(ctx, m.scrubContent(entry), err)
 			return
 		}
 		if streamInterrupted {
 			entry.Content += "...[stream interrupted]"
-			m.logger.LogError(ctx, entry, llms.ErrStreamTimeout)
+			m.logger.LogError(ctx, m.scrubContent(entry), llms.ErrStreamTimeout)
 			return
 		}
-		m.logger.LogResponse(ctx, entry)
+		m.logger.LogResponse(ctx, m.scrubContent(entry))
 	}()
 
 	return wrappedStream, nil

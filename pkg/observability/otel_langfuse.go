@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -366,6 +367,16 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 		// here would let a source that ends without one reach CollectStream as a
 		// successful short read.
 		defer sender.EnsureTerminal()
+		// A panic in this goroutine would otherwise close the channel with no
+		// verdict for the consumer, matching neither the trace nor the metrics.
+		defer func() {
+			if r := recover(); r != nil {
+				sender.DeliverTerminal(llms.StreamChunk{
+					Error: fmt.Errorf("panic in stream processing: %v", r),
+					Done:  true,
+				})
+			}
+		}()
 		defer span.End()
 
 		var contentBuilder strings.Builder

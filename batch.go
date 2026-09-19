@@ -99,7 +99,7 @@ type BatchOption func(*BatchOptions)
 // ApplyBatchOptions applies options and returns the result.
 func ApplyBatchOptions(opts ...BatchOption) *BatchOptions {
 	options := &BatchOptions{
-		MaxConcurrency:  5,
+		MaxConcurrency:  defaultBatchConcurrency,
 		RequestTimeout:  60 * time.Second,
 		ContinueOnError: true,
 	}
@@ -117,6 +117,10 @@ func WithMaxConcurrency(n int) BatchOption {
 		}
 	}
 }
+
+// defaultBatchConcurrency is the number of requests ProcessBatch runs at once
+// when the caller sets no limit, and the floor a non-positive one falls back to.
+const defaultBatchConcurrency = 5
 
 // WithMaxBatchSize caps how many requests a single ProcessBatch call accepts.
 // When the limit is exceeded, ProcessBatch returns ErrBatchTooLarge. A value of
@@ -188,8 +192,14 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	var totalUsage Usage
 	var successCount, failureCount int
 
-	// Create semaphore for concurrency control
-	sem := make(chan struct{}, opts.MaxConcurrency)
+	// Create semaphore for concurrency control. A non-positive MaxConcurrency
+	// from a hand-rolled option would make an unbuffered channel that no
+	// acquire can ever complete, so treat it as the default.
+	concurrency := opts.MaxConcurrency
+	if concurrency <= 0 {
+		concurrency = defaultBatchConcurrency
+	}
+	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 
 	completed := 0

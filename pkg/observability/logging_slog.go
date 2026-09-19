@@ -101,9 +101,16 @@ func (l *SlogLogger) buildRequestAttrs(entry *LogEntry) []slog.Attr {
 		}
 	}
 
-	if entry.Metadata != nil {
+	// Metadata is caller-supplied and can carry user text, so it follows the
+	// same redaction and sanitizing rules as every other value here rather
+	// than going out raw.
+	if !l.redact && entry.Metadata != nil {
 		for k, v := range entry.Metadata {
-			attrs = append(attrs, slog.Any(k, v))
+			if text, ok := v.(string); ok {
+				attrs = append(attrs, slog.String(sanitizeLogValue(k), sanitizeLogValue(l.truncate(text))))
+				continue
+			}
+			attrs = append(attrs, slog.Any(sanitizeLogValue(k), v))
 		}
 	}
 

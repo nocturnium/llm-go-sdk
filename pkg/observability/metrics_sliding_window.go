@@ -21,7 +21,12 @@ type windowEntry struct {
 	success   bool
 }
 
-// defaultMaxWindowCapacity is the maximum number of entries in the sliding window
+// defaultMaxWindowCapacity caps the sliding window by entry count as well as by
+// time, bounding memory when traffic is heavy. Above roughly 33 requests per
+// second sustained, the count is the binding limit and SuccessRate then covers
+// the last defaultMaxWindowCapacity requests rather than the full configured
+// duration. The reading stays correct for what it covers; it just covers a
+// shorter period than WithSuccessRateWindow names.
 const defaultMaxWindowCapacity = 10000
 
 func newSlidingWindow(duration time.Duration) *slidingWindow {
