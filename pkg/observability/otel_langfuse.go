@@ -361,6 +361,11 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 
 	go func() {
 		defer close(wrappedStream)
+		// Registered after the close defer, so it runs before it: every exit
+		// path owes the consumer exactly one terminal chunk, and a bare close
+		// here would let a source that ends without one reach CollectStream as a
+		// successful short read.
+		defer sender.EnsureTerminal()
 		defer span.End()
 
 		var contentBuilder strings.Builder

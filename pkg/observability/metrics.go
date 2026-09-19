@@ -284,6 +284,11 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// decrementActive so that an observer waiting on ActiveRequests()==0 is
 		// guaranteed the span has already ended.
 		defer close(wrappedStream)
+		// Registered after the close defer, so it runs before it: every exit
+		// path owes the consumer exactly one terminal chunk, and a bare close
+		// here would let a source that ends without one reach CollectStream as a
+		// successful short read.
+		defer sender.EnsureTerminal()
 		defer m.decrementActive(ctx, attrs)
 		defer span.End()
 

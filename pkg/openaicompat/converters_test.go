@@ -314,7 +314,7 @@ func TestAppendOrMergeToolCall(t *testing.T) {
 		},
 	}
 
-	calls = appendOrMergeToolCall(calls, delta)
+	calls, _ = appendOrMergeToolCall(calls, delta)
 
 	if len(calls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(calls))
@@ -332,7 +332,7 @@ func TestAppendOrMergeToolCall(t *testing.T) {
 		},
 	}
 
-	calls = appendOrMergeToolCall(calls, delta2)
+	calls, _ = appendOrMergeToolCall(calls, delta2)
 
 	if len(calls) != 1 {
 		t.Fatalf("expected 1 tool call after merge, got %d", len(calls))
@@ -359,7 +359,7 @@ func TestAppendOrMergeToolCallWithIndex(t *testing.T) {
 		},
 	}
 
-	calls = appendOrMergeToolCall(calls, delta1)
+	calls, _ = appendOrMergeToolCall(calls, delta1)
 
 	if len(calls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(calls))
@@ -379,7 +379,7 @@ func TestAppendOrMergeToolCallWithIndex(t *testing.T) {
 		},
 	}
 
-	calls = appendOrMergeToolCall(calls, delta2)
+	calls, _ = appendOrMergeToolCall(calls, delta2)
 
 	if len(calls) != 1 {
 		t.Fatalf("expected 1 tool call after merge, got %d", len(calls))
@@ -402,7 +402,7 @@ func TestAppendOrMergeToolCallWithIndex(t *testing.T) {
 		},
 	}
 
-	calls = appendOrMergeToolCall(calls, delta3)
+	calls, _ = appendOrMergeToolCall(calls, delta3)
 
 	expectedArgs := `{"action": "fetch_text", "url": "https://example.com"}`
 	if calls[0].Function.Arguments != expectedArgs {
@@ -415,7 +415,7 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 	calls := []llms.ToolCall{}
 
 	// First tool call, first delta
-	calls = appendOrMergeToolCall(calls, ToolCall{
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(0),
 		ID:    "call_1",
 		Type:  "function",
@@ -426,7 +426,7 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 	})
 
 	// Second tool call, first delta
-	calls = appendOrMergeToolCall(calls, ToolCall{
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(1),
 		ID:    "call_2",
 		Type:  "function",
@@ -440,14 +440,14 @@ func TestAppendOrMergeToolCallMultipleWithIndex(t *testing.T) {
 		t.Fatalf("expected 2 tool calls, got %d", len(calls))
 	}
 
-	calls = appendOrMergeToolCall(calls, ToolCall{
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(0),
 		Function: &FunctionCall{
 			Arguments: `{"city": "NYC"}`,
 		},
 	})
 
-	calls = appendOrMergeToolCall(calls, ToolCall{
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(1),
 		Function: &FunctionCall{
 			Arguments: `{"timezone": "EST"}`,
@@ -484,7 +484,7 @@ func TestAppendOrMergeToolCallIndexWithNilFunction(t *testing.T) {
 	calls := []llms.ToolCall{}
 
 	// First delta creates entry with index but no function yet
-	calls = appendOrMergeToolCall(calls, ToolCall{
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(0),
 		ID:    "call_1",
 		Type:  "function",
@@ -495,7 +495,7 @@ func TestAppendOrMergeToolCallIndexWithNilFunction(t *testing.T) {
 	}
 
 	// Second delta adds function details
-	calls = appendOrMergeToolCall(calls, ToolCall{
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{
 		Index: intPtr(0),
 		Function: &FunctionCall{
 			Name:      "test_func",
@@ -518,7 +518,7 @@ func TestAppendOrMergeToolCall_NegativeIndexNoPanic(t *testing.T) {
 	neg := -1
 	// A negative index must leave calls[-1] unindexed rather than panic; it falls through to ID-based
 	// matching and is appended as a new call.
-	calls := appendOrMergeToolCall(nil, ToolCall{Index: &neg, ID: "x", Function: &FunctionCall{Name: "a"}})
+	calls, _ := appendOrMergeToolCall(nil, ToolCall{Index: &neg, ID: "x", Function: &FunctionCall{Name: "a"}})
 	if len(calls) != 1 || calls[0].ID != "x" {
 		t.Fatalf("expected one call via ID fallback, got %+v", calls)
 	}
@@ -527,9 +527,12 @@ func TestAppendOrMergeToolCall_NegativeIndexNoPanic(t *testing.T) {
 func TestAppendOrMergeToolCall_HugeIndexBounded(t *testing.T) {
 	huge := 1 << 30
 	// An absurd index must be rejected, not back-filled (OOM guard).
-	calls := appendOrMergeToolCall(nil, ToolCall{Index: &huge, ID: "x"})
+	calls, err := appendOrMergeToolCall(nil, ToolCall{Index: &huge, ID: "x"})
 	if len(calls) != 0 {
 		t.Fatalf("expected absurd index rejected, got %d calls", len(calls))
+	}
+	if err == nil {
+		t.Error("an out-of-range index was dropped without an error")
 	}
 }
 
@@ -1201,8 +1204,8 @@ func TestProcessStream_CarriesServiceTierAndCost(t *testing.T) {
 // follow must still land instead of being dropped.
 func TestAppendOrMergeToolCall_IDMatchWithNilFunction(t *testing.T) {
 	calls := []llms.ToolCall{{ID: "call_1", Type: "function"}}
-	calls = appendOrMergeToolCall(calls, ToolCall{ID: "call_1", Function: &FunctionCall{Name: "lookup", Arguments: `{"q":`}})
-	calls = appendOrMergeToolCall(calls, ToolCall{ID: "call_1", Function: &FunctionCall{Arguments: `"x"}`}})
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{ID: "call_1", Function: &FunctionCall{Name: "lookup", Arguments: `{"q":`}})
+	calls, _ = appendOrMergeToolCall(calls, ToolCall{ID: "call_1", Function: &FunctionCall{Arguments: `"x"}`}})
 
 	if len(calls) != 1 || calls[0].Function == nil {
 		t.Fatalf("calls = %+v", calls)

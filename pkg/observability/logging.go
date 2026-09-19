@@ -429,6 +429,11 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 
 	go func() {
 		defer close(wrappedStream)
+		// Registered after the close defer, so it runs before it: every exit
+		// path owes the consumer exactly one terminal chunk, and a bare close
+		// here would let a source that ends without one reach CollectStream as a
+		// successful short read.
+		defer sender.EnsureTerminal()
 
 		var contentBuilder strings.Builder
 		var usage *llms.Usage
@@ -476,14 +481,24 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		}
 
 		entry.Duration = time.Since(start)
-		if streamInterrupted {
-			entry.Content = contentBuilder.String() + "...[stream interrupted]"
-		} else {
-			entry.Content = contentBuilder.String()
-		}
+		entry.Content = contentBuilder.String()
 		entry.Usage = usage
 		entry.FinishReason = finishReason
 		entry.ToolCalls = toolCalls
+
+		// A stream that was abandoned or canceled is a failure, and logging it
+		// through LogResponse made it byte-identical to a clean one: the only
+		// marker was a suffix on Content, which the default redaction strips.
+		if err := ctx.Err(); err != nil {
+			entry.Content += "...[stream canceled]"
+			m.logger.LogError(ctx, entry, err)
+			return
+		}
+		if streamInterrupted {
+			entry.Content += "...[stream interrupted]"
+			m.logger.LogError(ctx, entry, llms.ErrStreamTimeout)
+			return
+		}
 		m.logger.LogResponse(ctx, entry)
 	}()
 
