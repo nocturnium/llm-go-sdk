@@ -64,7 +64,7 @@ func (r *GetPromptResult) LLMMessages() []llms.Message {
 	out := make([]llms.Message, 0, len(r.Messages))
 	for _, pm := range r.Messages {
 		msg := llms.Message{Role: promptRole(pm.Role)}
-		if pm.Content.Type == "text" {
+		if pm.Content.Type == contentTypeText {
 			msg.Content = pm.Content.Text
 		}
 		out = append(out, msg)

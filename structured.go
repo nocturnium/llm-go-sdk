@@ -188,6 +188,12 @@ func extractJSON(s string) (string, bool) {
 	return "", false
 }
 
+// JSON Schema keyword and type names used when building a schema from a Go type.
+const (
+	schemaKeyType    = "type"
+	schemaTypeString = "string"
+)
+
 func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any, error) {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -203,20 +209,20 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 
 	switch typ.Kind() {
 	case reflect.Bool:
-		return map[string]any{"type": "boolean"}, nil
+		return map[string]any{schemaKeyType: "boolean"}, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return map[string]any{"type": "integer"}, nil
+		return map[string]any{schemaKeyType: "integer"}, nil
 	case reflect.Float32, reflect.Float64:
-		return map[string]any{"type": "number"}, nil
+		return map[string]any{schemaKeyType: "number"}, nil
 	case reflect.String:
-		return map[string]any{"type": "string"}, nil
+		return map[string]any{schemaKeyType: schemaTypeString}, nil
 	case reflect.Slice, reflect.Array:
 		itemSchema, err := schemaForType(typ.Elem(), seen)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"type": "array", "items": itemSchema}, nil
+		return map[string]any{schemaKeyType: "array", "items": itemSchema}, nil
 	case reflect.Map:
 		// A map has arbitrary string keys, which OpenAI strict mode cannot express
 		// (it requires additionalProperties:false on every object). Emit an
@@ -276,7 +282,7 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 	}
 
 	schema := map[string]any{
-		"type":                 "object",
+		schemaKeyType:          "object",
 		"properties":           properties,
 		"additionalProperties": false,
 	}
@@ -362,13 +368,13 @@ func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
 		return map[string]any{}, true
 	}
 	if typ.Kind() == reflect.Slice && typ.Elem().Kind() == reflect.Uint8 {
-		return map[string]any{"type": "string"}, true
+		return map[string]any{schemaKeyType: schemaTypeString}, true
 	}
 	if typ == reflect.TypeOf(time.Time{}) {
-		return map[string]any{"type": "string", "format": "date-time"}, true
+		return map[string]any{schemaKeyType: schemaTypeString, "format": "date-time"}, true
 	}
 	if implementsMarshaler(typ) {
-		return map[string]any{"type": "string"}, true
+		return map[string]any{schemaKeyType: schemaTypeString}, true
 	}
 	return nil, false
 }

@@ -265,7 +265,7 @@ func samplingFromLLM(llm llms.LLM, extra []llms.CallOption) SamplingHandler {
 		}
 		return SamplingResult{
 			Role:       "assistant",
-			Content:    ContentBlock{Type: "text", Text: resp.Content},
+			Content:    ContentBlock{Type: contentTypeText, Text: resp.Content},
 			Model:      llm.Model(),
 			StopReason: string(resp.FinishReason),
 		}, nil
@@ -286,7 +286,7 @@ func samplingMessages(req SamplingRequest) ([]llms.Message, error) {
 		}
 		msg := llms.Message{Role: role}
 		switch m.Content.Type {
-		case "text":
+		case contentTypeText:
 			msg.Content = m.Content.Text
 		case "image":
 			if m.Content.Data == "" || m.Content.MimeType == "" {

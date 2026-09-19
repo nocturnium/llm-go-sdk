@@ -19,7 +19,7 @@ licensed under the same terms.
 
 ## Prerequisites
 
-- **Go 1.25+** (the module targets `go 1.25.0`; see [`go.mod`](./go.mod)).
+- **Go 1.26+** (the module targets `go 1.26.0`; see [`go.mod`](./go.mod)).
 - Standard Go tooling: `gofmt`, [`goimports`](https://pkg.go.dev/golang.org/x/tools/cmd/goimports),
   and [`golangci-lint`](https://golangci-lint.run/).
 - Optional but recommended: `govulncheck`, `staticcheck`, and

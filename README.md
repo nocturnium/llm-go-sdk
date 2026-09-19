@@ -130,7 +130,7 @@ needs both), `HTTPClient`, and `Extra map[string]string` for provider-specific k
 go get github.com/nocturnium/llm-go-sdk/v6
 ```
 
-Requires **Go 1.25+**.
+Requires **Go 1.26+**.
 
 ## Supported Providers
 
@@ -208,7 +208,7 @@ via the provider's `WithAPIKey(...)` option. Copy [`.env.example`](./.env.exampl
 
 ## Package Layout
 
-The SDK is a single Go module (`github.com/nocturnium/llm-go-sdk/v6`, Go 1.25+) with a
+The SDK is a single Go module (`github.com/nocturnium/llm-go-sdk/v6`, Go 1.26+) with a
 small, deliberately flat public surface. The **core lives in the root package**
 (`package llms`): the `LLM` interface, all shared types and options, errors,
 streaming, and the cost + response-caching middleware. The other public packages

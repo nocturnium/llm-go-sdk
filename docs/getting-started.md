@@ -7,7 +7,7 @@ one-liner, and `Stream`.
 
 ## Prerequisites
 
-- **Go 1.25 or newer.** The module declares `go 1.25.0`. Check your toolchain
+- **Go 1.26 or newer.** The module declares `go 1.26.0`. Check your toolchain
   with `go version`.
 - **An API key** for at least one provider. The examples below use OpenAI, but
   switching to another provider is a one-line change, see
