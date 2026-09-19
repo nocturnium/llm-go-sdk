@@ -381,7 +381,10 @@ func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
 	if typ == reflect.TypeOf(time.Time{}) {
 		return map[string]any{schemaKeyType: schemaTypeString, "format": "date-time"}, true
 	}
-	if implementsMarshaler(typ) {
+	// A custom marshaler is described as a string only when the type can read
+	// one back. Claiming "string" for a write-only marshaler asks the model for
+	// a value the SDK then fails to decode into the field.
+	if implementsMarshaler(typ) && implementsUnmarshaler(typ) {
 		return map[string]any{schemaKeyType: schemaTypeString}, true
 	}
 	return nil, false
@@ -394,6 +397,17 @@ func implementsMarshaler(typ reflect.Type) bool {
 		reflect.PointerTo(typ).Implements(jsonMarshaler) ||
 		typ.Implements(textMarshaler) ||
 		reflect.PointerTo(typ).Implements(textMarshaler)
+}
+
+// implementsUnmarshaler reports whether a value of typ can be decoded from the
+// JSON a custom marshaler produces.
+func implementsUnmarshaler(typ reflect.Type) bool {
+	jsonUnmarshaler := reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+	textUnmarshaler := reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+	return typ.Implements(jsonUnmarshaler) ||
+		reflect.PointerTo(typ).Implements(jsonUnmarshaler) ||
+		typ.Implements(textUnmarshaler) ||
+		reflect.PointerTo(typ).Implements(textUnmarshaler)
 }
 
 func jsonFieldName(field reflect.StructField) (string, bool) {

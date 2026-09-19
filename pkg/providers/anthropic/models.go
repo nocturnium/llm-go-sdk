@@ -111,6 +111,17 @@ var knownModels = map[string]modelMetadata{
 		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:       tokenPricing("claude-sonnet-4-6"),
 	},
+	// Claude Sonnet 4 is the package's default model, so its metadata has to be
+	// listed here or GetModel misses on a client nobody configured. Context,
+	// output and pricing match the registry entry in capabilities_registry.go
+	// and the rate card in cost.go.
+	"claude-sonnet-4-20250514": {
+		displayName:   "Claude Sonnet 4 (2025-05-14)",
+		contextLength: 200000,
+		maxOutput:     64000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-sonnet-4-20250514"),
+	},
 	"claude-sonnet-4-5": {
 		displayName:   "Claude Sonnet 4.5",
 		contextLength: 200000,
