@@ -1,8 +1,7 @@
 // Package runpod provides a RunPod LLM client using native HTTP.
 //
 // This package implements the llms.LLM interface for RunPod's serverless
-// endpoints, supporting both the native RunPod API and OpenAI-compatible
-// endpoints (via vLLM workers).
+// endpoints through their OpenAI-compatible routes (vLLM workers).
 //
 // # Configuration
 //
@@ -28,12 +27,9 @@
 //
 // # Endpoint Types
 //
-// RunPod supports two API styles:
-//   - OpenAI-compatible: Standard /openai/v1 endpoints (default, recommended)
-//   - Native RunPod: Custom /runsync and /run endpoints for more control
-//
-// By default, this package uses OpenAI-compatible mode which works with
-// vLLM-based endpoints.
+// RunPod serves two API styles, OpenAI-compatible /openai/v1 routes and native
+// /runsync and /run routes. This client builds /openai/v1 URLs only; the native
+// routes are not implemented and no option selects them.
 //
 // # Supported Features
 //

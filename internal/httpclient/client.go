@@ -170,7 +170,7 @@ func validateConnRemoteAddr(conn net.Conn) error {
 	if err != nil {
 		host = conn.RemoteAddr().String()
 	}
-	if ip := net.ParseIP(host); ip != nil {
+	if ip := parseIPLiteral(host); ip != nil {
 		return validateNotPrivateIP(ip)
 	}
 	return nil
@@ -185,7 +185,7 @@ func ssrfDialControl(_, address string, _ syscall.RawConn) error {
 	if err != nil {
 		host = address
 	}
-	if ip := net.ParseIP(host); ip != nil {
+	if ip := parseIPLiteral(host); ip != nil {
 		return validateNotPrivateIP(ip)
 	}
 	return nil
@@ -753,17 +753,21 @@ func parseAPIErrorBody(body []byte) (parsedAPIErrorBody, bool) {
 	}
 
 	if len(envelope.Error) > 0 && !bytes.Equal(bytes.TrimSpace(envelope.Error), []byte("null")) {
+		// Code is raw because providers send it both as a string ("invalid_api_key")
+		// and as a number (Google sends the HTTP status). A typed string field
+		// fails the whole decode on the numeric form, which would drop the
+		// message with it.
 		var nested struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
-			Code    string `json:"code"`
-			Param   string `json:"param"`
+			Message string          `json:"message"`
+			Type    string          `json:"type"`
+			Code    json.RawMessage `json:"code"`
+			Param   string          `json:"param"`
 		}
 		if err := json.Unmarshal(envelope.Error, &nested); err == nil && nested.Message != "" {
 			return parsedAPIErrorBody{
 				Message: sanitizeLogValue(nested.Message),
 				Type:    sanitizeLogValue(nested.Type),
-				Code:    sanitizeLogValue(nested.Code),
+				Code:    sanitizeLogValue(decodeErrorCode(nested.Code)),
 				Param:   sanitizeLogValue(nested.Param),
 			}, true
 		}
@@ -782,6 +786,24 @@ func parseAPIErrorBody(body []byte) (parsedAPIErrorBody, bool) {
 	}
 
 	return parsedAPIErrorBody{}, false
+}
+
+// decodeErrorCode renders an error envelope's "code" as a string whether the
+// provider sent a string, a number, or nothing at all.
+func decodeErrorCode(raw json.RawMessage) string {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return ""
+	}
+	var asString string
+	if err := json.Unmarshal(trimmed, &asString); err == nil {
+		return asString
+	}
+	var asNumber json.Number
+	if err := json.Unmarshal(trimmed, &asNumber); err == nil {
+		return asNumber.String()
+	}
+	return ""
 }
 
 // APIError represents an error from the LLM API with full request context

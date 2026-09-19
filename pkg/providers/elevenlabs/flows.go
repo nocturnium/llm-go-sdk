@@ -90,6 +90,20 @@ func mergeExtra(body, extra map[string]any) {
 		body[k] = v
 	}
 }
+
+// mergeExtraReserving merges extras but refuses the keys that carry media
+// references built by inlineReference. Those refs are validated as inline-only
+// (EditImage documents URL and FileID as ErrInvalidParameters), so letting an
+// extra replace them would put an unvalidated reference on the wire.
+func mergeExtraReserving(body, extra map[string]any, reserved ...string) error {
+	for _, key := range reserved {
+		if _, exists := extra[key]; exists {
+			return invalid(fmt.Sprintf("Extra key %q is reserved for the validated media reference", key))
+		}
+	}
+	mergeExtra(body, extra)
+	return nil
+}
 func putString(body map[string]any, key, value string) {
 	if value != "" {
 		body[key] = value
@@ -127,7 +141,9 @@ func imageBody(prompt string, images []llms.MediaInput, o *llms.ImageOptions) (m
 	if len(refs) > 0 {
 		body["images"] = refs
 	}
-	mergeExtra(body, o.Extra)
+	if err := mergeExtraReserving(body, o.Extra, "images"); err != nil {
+		return nil, err
+	}
 	// Validate effective model-specific fields after extras have overridden typed values.
 	model, ok := body["model_id"].(string)
 	if !ok || model == "" {
@@ -233,7 +249,9 @@ func videoBody(prompt string, o *llms.VideoOptions) (map[string]any, error) {
 		}
 		body[key] = ref
 	}
-	mergeExtra(body, o.Extra)
+	if err := mergeExtraReserving(body, o.Extra, "start_frame", "end_frame"); err != nil {
+		return nil, err
+	}
 	if err := validateVideoBody(body); err != nil {
 		return nil, err
 	}

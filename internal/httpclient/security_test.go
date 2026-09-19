@@ -291,3 +291,25 @@ func TestDefaultAllowedHosts(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateURL_ZoneScopedIPv6 pins that a zone-scoped literal is refused.
+// net.ParseIP returns nil for "fe80::1%eth0", so before parseIPLiteral the
+// link-local check the validator advertises was skipped entirely.
+func TestValidateURL_ZoneScopedIPv6(t *testing.T) {
+	opts := DefaultURLValidationOptions()
+	for _, raw := range []string{
+		"https://[fe80::1%25eth0]/v1",
+		"https://[::1%25lo0]/v1",
+	} {
+		if err := ValidateURL(raw, opts); err == nil {
+			t.Errorf("ValidateURL(%q) = nil, want a private-address error", raw)
+		}
+	}
+}
+
+// TestSSRFDialControl_ZoneScopedIPv6 pins the same address class at dial time.
+func TestSSRFDialControl_ZoneScopedIPv6(t *testing.T) {
+	if err := ssrfDialControl("tcp6", "[fe80::1%eth0]:443", nil); err == nil {
+		t.Error("ssrfDialControl accepted a link-local zoned address, want an error")
+	}
+}

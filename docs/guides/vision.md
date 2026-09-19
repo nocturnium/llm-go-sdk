@@ -158,9 +158,10 @@ The SDK accepts four image formats, exposed as media-type constants:
 | `llms.MediaTypeGIF` | `image/gif` |
 | `llms.MediaTypeWebP` | `image/webp` |
 
-The maximum inline image size is `llms.MaxImageSize` (**20 MB**). The file,
-bytes, and reader builders reject anything larger before it ever reaches the
-provider. Most providers enforce a similar 20 MB ceiling on base64 images, so
+The maximum inline image size is `llms.MaxImageSize` (**20 MB**). The file and
+reader builders reject anything larger before it ever reaches the provider;
+`NewImageFromBytes` returns no error, so pass its part through
+`llms.ValidateImageContent` when the bytes came from outside your program. Most providers enforce a similar 20 MB ceiling on base64 images, so
 this guards both against local OOM and remote rejection.
 
 !!! tip "Validate before sending"

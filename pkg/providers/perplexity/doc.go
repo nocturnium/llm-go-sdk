@@ -25,8 +25,10 @@
 //
 //   - Chat completions with web search integration
 //   - Streaming responses
-//   - Citation support in responses
-//   - Search domain filtering
+//
+// Perplexity's citations and search_domain_filter have no typed option here and
+// no field on llms.Response; reach them with llms.WithExtraBodyParam and read
+// the raw body if you need them.
 //
 // # Configuration Options
 //

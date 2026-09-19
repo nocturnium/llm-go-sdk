@@ -352,7 +352,6 @@ func formatGeminiModelName(id string) string {
 	return name
 }
 
-// inferGeminiModelTypes infers the model types from the model ID and supported methods
 // visionCapableGemini reports whether a Gemini id belongs to a family that takes
 // image input. Everything from 1.5 on does, so this is a minimum version check
 // rather than a list that has to grow with each new family.
@@ -373,6 +372,8 @@ func visionCapableGemini(idLower string) bool {
 	return n >= 2
 }
 
+// inferGeminiModelTypes infers the model types from the model ID and the
+// methods the discovery endpoint reports as supported.
 func inferGeminiModelTypes(id string, methods []string) []llms.ModelType {
 	idLower := strings.ToLower(id)
 

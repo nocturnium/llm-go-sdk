@@ -580,3 +580,30 @@ func TestConsolidateSystemMessages_KeepsCacheControl(t *testing.T) {
 		t.Fatal("the default merge path dropped the cache breakpoint")
 	}
 }
+
+// TestMergeConsecutiveMessages_ContentAndPartsThenContent pins the case where
+// the first message carries both Content and Parts. Providers read Parts and
+// ignore Content, so the leading text has to become a part or it is dropped.
+func TestMergeConsecutiveMessages_ContentAndPartsThenContent(t *testing.T) {
+	messages := []Message{
+		{Role: RoleUser, Content: "Leading text", Parts: []ContentPart{{Type: PartTypeText, Text: "First part"}}},
+		{Role: RoleUser, Content: "Trailing text"},
+	}
+
+	result := MergeConsecutiveMessages(messages)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 merged message, got %d", len(result))
+	}
+	if result[0].Content != "" {
+		t.Errorf("Content should have folded into Parts, got %q", result[0].Content)
+	}
+	want := []string{"Leading text", "First part", "Trailing text"}
+	if len(result[0].Parts) != len(want) {
+		t.Fatalf("expected %d parts, got %d: %+v", len(want), len(result[0].Parts), result[0].Parts)
+	}
+	for i, w := range want {
+		if result[0].Parts[i].Text != w {
+			t.Errorf("part %d = %q, want %q", i, result[0].Parts[i].Text, w)
+		}
+	}
+}

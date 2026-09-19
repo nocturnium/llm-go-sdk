@@ -311,3 +311,32 @@ func TestGenerateImage_ExtraCannotBlankPrompt(t *testing.T) {
 		t.Fatalf("err = %v, want ErrEmptyPrompt", err)
 	}
 }
+
+// TestFlows_ExtraCannotReplaceMediaRefs pins that an Extra cannot stand in for
+// a validated media reference. inlineReference accepts inline bytes only, so a
+// URL or file-id smuggled through images/start_frame/end_frame would reach the
+// wire without ever passing that check. The body builders are called directly
+// so the assertion is about this package, not about what a server rejects.
+func TestFlows_ExtraCannotReplaceMediaRefs(t *testing.T) {
+	inline := []llms.MediaInput{{Data: []byte("x"), MIMEType: "image/png"}}
+	imgOpts := llms.ApplyImageOptions(
+		llms.WithImageModel("gemini-3.1-flash-lite-image"),
+		llms.WithImageExtra(map[string]any{
+			"images": []any{map[string]any{"url": "https://example.com/a.png"}},
+		}),
+	)
+	if _, err := imageBody("moon", inline, imgOpts); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Errorf("imageBody accepted an images Extra, err = %v", err)
+	}
+
+	for _, key := range []string{"start_frame", "end_frame"} {
+		vidOpts := llms.ApplyVideoOptions(
+			llms.WithVideoModel("bytedance-seedance-v2"),
+			llms.WithVideoFirstFrame(llms.MediaInput{Data: []byte("x"), MIMEType: "image/png"}),
+			llms.WithVideoExtra(map[string]any{key: map[string]any{"url": "https://example.com/a.png"}}),
+		)
+		if _, err := videoBody("moon", vidOpts); !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Errorf("videoBody accepted a %s Extra, err = %v", key, err)
+		}
+	}
+}

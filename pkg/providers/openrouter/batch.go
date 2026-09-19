@@ -1,6 +1,7 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -104,6 +105,38 @@ type BatchError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Type    string `json:"type"`
+}
+
+// UnmarshalJSON accepts a code sent as either a string or a number. Providers
+// put the HTTP status there as a bare integer, which a plain string field
+// rejects, failing the decode of the whole batch and losing the message with it.
+func (e *BatchError) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Code    json.RawMessage `json:"code"`
+		Message string          `json:"message"`
+		Type    string          `json:"type"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	e.Message = wire.Message
+	e.Type = wire.Type
+	e.Code = ""
+
+	code := bytes.TrimSpace(wire.Code)
+	if len(code) == 0 || bytes.Equal(code, []byte("null")) {
+		return nil
+	}
+	var asString string
+	if err := json.Unmarshal(code, &asString); err == nil {
+		e.Code = asString
+		return nil
+	}
+	var asNumber json.Number
+	if err := json.Unmarshal(code, &asNumber); err == nil {
+		e.Code = asNumber.String()
+	}
+	return nil
 }
 
 // BatchLineResponse is the upstream response captured for one request.

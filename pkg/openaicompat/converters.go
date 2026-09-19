@@ -375,7 +375,7 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 		req.ExtraBody = eb
 	}
 
-	applyReasoning(req, opts.Reasoning)
+	applyReasoning(req, model, opts.Reasoning)
 
 	return req
 }
@@ -385,7 +385,11 @@ func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOpti
 // providers exposing a boolean "thinking" toggle (Z.AI GLM, Qwen) read a
 // {"type":"enabled"|"disabled"} object, which we inject via ExtraBody so it is
 // flattened at the top level. A caller-supplied "thinking" key is left untouched.
-func applyReasoning(req *ChatCompletionRequest, rc *llms.ReasoningConfig) {
+//
+// The thinking toggle is withheld from OpenAI's own reasoning models: they read
+// reasoning_effort and reject an unrecognized top-level field with an HTTP 400,
+// so a neutral Enabled would break the request rather than enable anything.
+func applyReasoning(req *ChatCompletionRequest, model string, rc *llms.ReasoningConfig) {
 	if rc == nil {
 		return
 	}
@@ -402,7 +406,7 @@ func applyReasoning(req *ChatCompletionRequest, rc *llms.ReasoningConfig) {
 	case rc.Enabled != nil && !*rc.Enabled:
 		mode = "disabled"
 	}
-	if mode != "" {
+	if mode != "" && !isOpenAIReasoningModel(model) {
 		if req.ExtraBody == nil {
 			req.ExtraBody = make(map[string]any, 1)
 		}

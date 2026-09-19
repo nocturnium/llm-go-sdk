@@ -109,6 +109,9 @@ func TestLiveResponses_Stream(t *testing.T) {
 	if finish == "" {
 		t.Error("expected a terminal finish reason from response.completed")
 	}
+	if totalTokens == 0 {
+		t.Error("expected authoritative usage on the terminal chunk from /responses")
+	}
 	t.Logf("chunks=%d finish=%q tokens=%d content=%q", chunkCount, finish, totalTokens, content)
 }
 

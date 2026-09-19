@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -142,7 +143,10 @@ func (m *MockOpenAICompatibleServer) StreamRequestClosed() <-chan struct{} {
 }
 
 func (m *MockOpenAICompatibleServer) handle(w http.ResponseWriter, r *http.Request) {
-	body := m.captureRequest(w, r)
+	body, ok := m.captureRequest(w, r)
+	if !ok {
+		return
+	}
 
 	if m.errorStatus != 0 {
 		writeJSON(w, m.errorStatus, m.errorBody)
@@ -218,7 +222,11 @@ func (m *MockOpenAICompatibleServer) handle(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *http.Request) map[string]any {
+// captureRequest records the request for later assertions. ok is false when the
+// body could not be decoded, in which case it has already answered 400 and the
+// caller must stop: capturing an unparseable body as an empty map would let
+// every LastRequest assertion pass on output a real provider would reject.
+func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *http.Request) (map[string]any, bool) {
 	var body map[string]any
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		body = map[string]any{}
@@ -248,7 +256,13 @@ func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *ht
 			}
 		}
 	} else if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
+		// A body that does not decode is answered with 400 rather than captured
+		// as an empty map: the real providers reject it, and a silent empty
+		// capture makes every LastRequest assertion pass on malformed output.
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "mock server: request body is not valid JSON: "+err.Error(), http.StatusBadRequest)
+			return nil, false
+		}
 	}
 	if body == nil {
 		body = map[string]any{}
@@ -261,7 +275,7 @@ func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *ht
 		Body:   body,
 	}
 	m.mu.Unlock()
-	return body
+	return body, true
 }
 
 func (m *MockOpenAICompatibleServer) writeStream(w http.ResponseWriter, r *http.Request) {

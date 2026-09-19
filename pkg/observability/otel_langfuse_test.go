@@ -332,6 +332,34 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithTraceContext(t *testing.T) {
 	if resp.Content != "Response with context" {
 		t.Errorf("expected 'Response with context', got %s", resp.Content)
 	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no span recorded")
+	}
+	attrs := map[string]string{}
+	var tags []string
+	for _, attr := range spans[len(spans)-1].Attributes() {
+		if attr.Value.Type() == attribute.STRINGSLICE {
+			if string(attr.Key) == AttrLangfuseTags {
+				tags = attr.Value.AsStringSlice()
+			}
+			continue
+		}
+		attrs[string(attr.Key)] = attr.Value.AsString()
+	}
+	for key, want := range map[string]string{
+		AttrLangfuseUserID:      "user-456",
+		AttrLangfuseSessionID:   "session-789",
+		"langfuse.metadata.key": "value",
+	} {
+		if attrs[key] != want {
+			t.Errorf("%s = %q, want %q", key, attrs[key], want)
+		}
+	}
+	if len(tags) != 2 || tags[0] != "test" || tags[1] != "langfuse" {
+		t.Errorf("%s = %v, want [test langfuse]", AttrLangfuseTags, tags)
+	}
 }
 
 func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
@@ -379,6 +407,40 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 
 	if resp.Content != "Response with options" {
 		t.Errorf("expected 'Response with options', got %s", resp.Content)
+	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no span recorded")
+	}
+	floats := map[string]float64{}
+	ints := map[string]int64{}
+	var user string
+	for _, attr := range spans[len(spans)-1].Attributes() {
+		switch {
+		case attr.Value.Type() == attribute.FLOAT64:
+			floats[string(attr.Key)] = attr.Value.AsFloat64()
+		case attr.Value.Type() == attribute.INT64:
+			ints[string(attr.Key)] = attr.Value.AsInt64()
+		case attr.Value.Type() == attribute.STRING && string(attr.Key) == AttrLangfuseUserID:
+			user = attr.Value.AsString()
+		}
+	}
+	for key, want := range map[string]float64{
+		AttrGenAIRequestTemperature:      0.8,
+		AttrGenAIRequestTopP:             0.9,
+		AttrGenAIRequestFrequencyPenalty: 0.5,
+		AttrGenAIRequestPresencePenalty:  0.5,
+	} {
+		if floats[key] != want {
+			t.Errorf("%s = %v, want %v", key, floats[key], want)
+		}
+	}
+	if ints[AttrGenAIRequestMaxTokens] != 100 {
+		t.Errorf("%s = %d, want 100", AttrGenAIRequestMaxTokens, ints[AttrGenAIRequestMaxTokens])
+	}
+	if user != "user-override" {
+		t.Errorf("%s = %q, want %q", AttrLangfuseUserID, user, "user-override")
 	}
 }
 
@@ -838,5 +900,49 @@ func TestLangfuseOTelMiddleware_CaptureOffByDefault(t *testing.T) {
 	}
 	if middleware.captureOutput {
 		t.Error("expected captureOutput to be false by default (privacy-safe)")
+	}
+}
+
+// TestLangfuseOTelMiddleware_ResponseModelFollowsOverride pins that a per-call
+// model override lands on gen_ai.response.model too. The response attribute
+// used to report the middleware's default model, so one span claimed two
+// different models for a single generation.
+func TestLangfuseOTelMiddleware_ResponseModelFollowsOverride(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	otel.SetTracerProvider(tracerProvider)
+
+	mock := &mockLangfuseLLM{
+		provider: llms.ProviderOpenAI,
+		model:    "gpt-4",
+		genResp:  &llms.Response{Content: "ok"},
+	}
+	middleware, err := NewLangfuseOTelMiddleware(mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := middleware.GenerateContent(context.Background(),
+		[]llms.Message{{Role: llms.RoleUser, Content: "Hello"}},
+		llms.WithModel("gpt-4o-mini"),
+	); err != nil {
+		t.Fatalf("GenerateContent: %v", err)
+	}
+
+	spans := spanRecorder.Ended()
+	if len(spans) == 0 {
+		t.Fatal("no span recorded")
+	}
+	var request, response string
+	for _, attr := range spans[len(spans)-1].Attributes() {
+		switch string(attr.Key) {
+		case AttrGenAIRequestModel:
+			request = attr.Value.AsString()
+		case AttrGenAIResponseModel:
+			response = attr.Value.AsString()
+		}
+	}
+	if request != "gpt-4o-mini" || response != "gpt-4o-mini" {
+		t.Errorf("request model = %q, response model = %q, want both %q", request, response, "gpt-4o-mini")
 	}
 }

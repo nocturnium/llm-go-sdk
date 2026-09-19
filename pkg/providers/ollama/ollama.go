@@ -75,6 +75,9 @@ func New(opts ...Option) (*Client, error) {
 
 	nativeConfig := ollamaapi.ClientConfig{
 		BaseURL: options.BaseURL,
+		// The management routes (pull, delete, props) need the same credential as
+		// the chat routes; a remote Ollama behind auth refuses them otherwise.
+		APIKey: options.APIKey,
 	}
 	if options.HTTPClient != nil {
 		nativeConfig.HTTPClient = options.HTTPClient

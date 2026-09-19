@@ -209,8 +209,6 @@ type MockServerConfig struct {
 	StatusCode int
 	// Handler function (if set, overrides Response)
 	Handler http.HandlerFunc
-	// Delay before responding
-	Delay int
 }
 
 // NewMockServer creates a new mock HTTP server for testing

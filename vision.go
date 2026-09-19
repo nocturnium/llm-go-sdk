@@ -241,10 +241,13 @@ func (m Message) Images() []*ImageContent {
 
 // detectMediaType determines the media type from file extension and magic bytes.
 func detectMediaType(path string, data []byte) string {
-	// First, try to detect from magic bytes
+	// First, try to detect from magic bytes. DetectContentType also sniffs BMP,
+	// TIFF and ICO, which ValidateImageContent rejects, so only the four types
+	// this SDK supports are accepted here; anything else falls through to the
+	// extension, which returns "" for an unsupported format.
 	if len(data) > 0 {
-		contentType := http.DetectContentType(data)
-		if strings.HasPrefix(contentType, "image/") {
+		switch contentType := http.DetectContentType(data); contentType {
+		case MediaTypePNG, MediaTypeJPEG, MediaTypeGIF, MediaTypeWebP:
 			return contentType
 		}
 	}
@@ -302,16 +305,13 @@ func ValidateImageContent(img *ImageContent) error {
 			return fmt.Errorf("image data appears to exceed maximum allowed size of %d bytes (estimated %d bytes)", MaxImageSize, approxDecodedSize)
 		}
 
-		// Validate base64 encoding without fully decoding to save memory.
-		// For large images, we use a streaming decoder and only read a small sample
-		// to verify the encoding is valid. This avoids allocating ~26MB for a 20MB image.
+		// Validate the whole base64 payload without keeping the decoded bytes:
+		// io.Copy streams through a small buffer, so a 20MB image costs a 32KB
+		// window rather than the ~26MB a full decode would allocate. Sampling
+		// only the head would pass any image whose corruption sits past the
+		// first kilobyte, which is most of them.
 		decoder := base64.NewDecoder(base64.StdEncoding, strings.NewReader(img.Data))
-
-		// Read a small sample to validate the encoding is well-formed.
-		// 1KB is enough to detect most encoding errors without large allocations.
-		sampleBuf := make([]byte, 1024)
-		_, err := io.ReadFull(decoder, sampleBuf)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		if _, err := io.Copy(io.Discard, decoder); err != nil {
 			return fmt.Errorf("invalid base64 data: %w", err)
 		}
 	}

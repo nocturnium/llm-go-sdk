@@ -159,7 +159,11 @@ jobs:
           cache: true
 
       - name: Run benchmarks
-        run: GOWORK=off go test -bench=. -benchmem -run=^$ ./... | tee benchmark.txt
+        # pipefail so a failing benchmark build is not masked by tee's exit code.
+        shell: bash
+        run: |
+          set -o pipefail
+          GOWORK=off go test -bench=. -benchmem -run=^$ ./... | tee benchmark.txt
 
       # Persists benchmark history to a `gh-pages` branch. That branch must be
       # created (and GitHub Pages enabled) for storage to succeed; until then,

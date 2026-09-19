@@ -22,6 +22,18 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Ollama sends its API key on the native management routes (pull, push, delete, copy, show, props), which a remote Ollama behind auth refused.
+- Merging consecutive messages no longer drops the first message's `Content` when it also carries `Parts`: providers read `Parts` and ignore `Content`, so the leading text now becomes a part.
+- Zone-scoped IPv6 literals such as `fe80::1%eth0` are refused by both `ValidateURL` and the dial control; `net.ParseIP` returns nil for them, so the link-local check was skipped entirely.
+- An error envelope whose `code` is a number keeps its message, in the shared HTTP client and in OpenRouter's batch payloads, instead of failing the decode.
+- `CircuitBreaker.Reset` clears the failure and success counters even when the breaker is already closed.
+- A neutral `Reasoning.Enabled` no longer injects the Z.AI/Qwen `thinking` field into OpenAI requests, which answer an unrecognized top-level field with an HTTP 400.
+- Base64 image data is validated end to end rather than for its first kilobyte, and magic-byte sniffing returns only the four media types the SDK supports.
+- Ollama `/api/embed` sends `truncate` even when false, and Infinity rerank sends `return_documents` even when false.
+- An unrecognized value for the Z.AI coding extra is an error rather than a silent fallback to the standard endpoint.
+- Langfuse spans record a per-call model override on `gen_ai.response.model`.
+- ElevenLabs extras can no longer replace validated inline media references (`images`, `start_frame`, `end_frame`).
+- `ProcessBatch` returns the parent context's cancellation when requests were dropped before they started, alongside the partial response.
 - `CostTracker.Reset` now clears the per-mode split, so `GetModeCosts` returns to zero with `GetTotalCost` instead of reporting the previous window's spend.
 - The Responses API's JSON schema is sent as an object again: `ResponsesFormat.Schema` was `[]byte`, which `encoding/json` encodes as base64, so every structured-output request over the Responses path carried `{"schema":"<base64>"}`.
 - A request whose cache key cannot be marshaled gets a key of its own instead of a shared `llms:uncacheable` sentinel, which served the first such request's response to every later one.

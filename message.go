@@ -215,7 +215,7 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 			// Providers read Parts and ignore Content when a message carries both,
 			// so text merged into a multi-part message becomes a text part rather
 			// than sitting in Content unread.
-			if len(msg.Parts) > 0 && current.Content != "" {
+			if current.Content != "" && (len(current.Parts) > 0 || len(msg.Parts) > 0) {
 				current.Parts = append([]ContentPart{{Type: PartTypeText, Text: current.Content}}, current.Parts...)
 				current.Content = ""
 			}

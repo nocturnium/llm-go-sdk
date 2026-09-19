@@ -150,8 +150,9 @@ func (c *Client) getPropsLazy(ctx context.Context) (*llamacppapi.PropsResponse, 
 	}
 
 	// The fetch happens under the lock so one slow server stalls callers rather
-	// than every caller issuing its own /props request; the caller's context
-	// bounds how long that lasts.
+	// than every caller issuing its own /props request. Model and Capabilities
+	// take no context and pass Background, so the HTTP client's timeout is what
+	// bounds the stall, not a caller deadline.
 	props, err := c.nativeClient.GetProps(ctx)
 	if err != nil {
 		return nil, err

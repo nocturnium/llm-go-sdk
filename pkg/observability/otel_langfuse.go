@@ -292,7 +292,7 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 		return nil, err
 	}
 
-	m.setGenAIResponseAttributes(span, resp, duration)
+	m.setGenAIResponseAttributes(span, m.resolveModel(opts), resp, duration)
 
 	// Record token metrics
 	if resp.Usage.TotalTokens > 0 {
@@ -607,9 +607,13 @@ func (m *LangfuseOTelMiddleware) setGenAIRequestAttributes(span trace.Span, opts
 	}
 }
 
-func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, resp *llms.Response, duration time.Duration) {
+// setGenAIResponseAttributes records the response side of the span. model is the
+// resolved request model, not m.llm.Model(): with a per-call override the two
+// differ, and a span whose request and response models disagree cannot be read
+// as one generation.
+func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, model string, resp *llms.Response, duration time.Duration) {
 	span.SetAttributes(
-		keyGenAIResponseModel.String(m.llm.Model()),
+		keyGenAIResponseModel.String(model),
 		keyGenAIResponseFinishReason.String(string(resp.FinishReason)),
 	)
 

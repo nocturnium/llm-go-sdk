@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -566,5 +567,32 @@ func TestConcurrentBatcher_MaxBatchSize(t *testing.T) {
 	}
 	if resp == nil || len(resp.Results) != 2 {
 		t.Fatalf("expected 2 results within limit, got %#v", resp)
+	}
+}
+
+// TestConcurrentBatcher_CancelledBeforeStartReportsError pins that requests
+// dropped before they started are reported. They leave no entry in Results, so
+// a nil error made a short map look like a complete batch.
+func TestConcurrentBatcher_CancelledBeforeStartReportsError(t *testing.T) {
+	llm := &mockBatchLLM{delay: 200 * time.Millisecond}
+	batcher := NewConcurrentBatcher(llm)
+
+	requests := make([]BatchRequest, 8)
+	for i := range requests {
+		requests[i] = NewBatchRequestFromPrompt(fmt.Sprintf("req-%d", i), "test")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	resp, err := batcher.ProcessBatch(ctx, requests, WithMaxConcurrency(1))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if resp == nil {
+		t.Fatal("partial response is nil")
+	}
+	if len(resp.Results) >= len(requests) {
+		t.Errorf("Results has %d entries, want fewer than %d", len(resp.Results), len(requests))
 	}
 }
