@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -40,11 +39,11 @@ type stdioTransport struct {
 	// starts that goroutine on first use.
 	writes    chan *writeRequest
 	writeOnce sync.Once
-	// writerGone is set when the writer goroutine has stopped. A later write
-	// has no consumer, so it is refused rather than left to park until its
-	// context expires, which for a caller passing a context without a
-	// deadline is forever.
-	writerGone atomic.Bool
+	// writerGone is closed when the writer goroutine has stopped. A write that
+	// passes the pre-check and then loses the race to the writer's exit waits
+	// on it too, so a caller with no deadline is not parked forever on a
+	// result nobody will send.
+	writerGone chan struct{}
 
 	mu       sync.Mutex
 	pending  map[int64]chan []byte
@@ -289,7 +288,15 @@ func isNullIDError(line []byte) bool {
 	if err := json.Unmarshal(line, &resp); err != nil {
 		return false
 	}
-	return resp.Error != nil && string(resp.ID) == "null"
+	// An omitted id counts as well as an explicit null: a server that reports
+	// a parse error without echoing the id leaves the waiting caller with
+	// nothing to correlate, and the caller would sit until its deadline
+	// instead of being told the call failed.
+	if resp.Error == nil {
+		return false
+	}
+	id := string(resp.ID)
+	return id == "" || id == "null"
 }
 
 // fail marks the transport closed and unblocks every pending request.
@@ -402,7 +409,7 @@ func (t *stdioTransport) writeOwner() {
 				case req := <-t.writes:
 					req.result <- t.serve(req)
 				case <-grace.C:
-					t.writerGone.Store(true)
+					close(t.writerGone)
 					return
 				}
 			}
@@ -416,6 +423,9 @@ func (t *stdioTransport) ensureWriter() chan *writeRequest {
 	t.writeOnce.Do(func() {
 		if t.writes == nil {
 			t.writes = make(chan *writeRequest, writeQueueDepth)
+		}
+		if t.writerGone == nil {
+			t.writerGone = make(chan struct{})
 		}
 		go t.writeOwner()
 	})
@@ -434,10 +444,12 @@ func (t *stdioTransport) serve(req *writeRequest) error {
 
 // write queues a frame and waits for the writer goroutine, bounded by ctx.
 func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
-	if t.writerGone.Load() {
-		return orClosed(nil)
-	}
 	writes := t.ensureWriter()
+	select {
+	case <-t.writerGone:
+		return orClosed(nil)
+	default:
+	}
 	req := &writeRequest{ctx: ctx, payload: payload, result: make(chan error, 1)}
 	// Only ctx ends the wait. Watching done here would make a close that races
 	// an in-flight call discard a response the server already delivered.
@@ -451,6 +463,16 @@ func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
 		return err
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-t.writerGone:
+		// The writer exited between the check above and now, so this frame
+		// has no consumer. Re-check the result first: the writer may have
+		// served it on its way out.
+		select {
+		case err := <-req.result:
+			return err
+		default:
+			return orClosed(nil)
+		}
 	}
 }
 
@@ -498,16 +520,28 @@ func (t *stdioTransport) close() error {
 			}
 		}
 
-		// cmd.Wait is bounded for the same reason: it blocks until every writer
-		// to the pipes is gone, which a surviving grandchild prevents.
-		waited := make(chan struct{})
-		go func() {
-			defer close(waited)
-			_ = t.cmd.Wait()
-		}()
+		// Reap only once the reader is done. cmd.Wait closes the stdout pipe,
+		// so calling it while readLoop is still blocked on a read replaces the
+		// error that read would have reported with a file-already-closed one.
+		// When the reader never finishes (a grandchild holding the pipe), the
+		// reap runs detached: it cannot be waited on here without reintroducing
+		// the hang the bounds above exist to prevent.
 		select {
-		case <-waited:
-		case <-time.After(stdioShutdownGrace):
+		case <-t.done:
+			waited := make(chan struct{})
+			go func() {
+				defer close(waited)
+				_ = t.cmd.Wait()
+			}()
+			select {
+			case <-waited:
+			case <-time.After(stdioShutdownGrace):
+			}
+		default:
+			go func() {
+				<-t.done
+				_ = t.cmd.Wait()
+			}()
 		}
 	})
 	return nil

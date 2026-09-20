@@ -347,14 +347,12 @@ func sanitizeErrorURL(rawURL string) string {
 		if idx := strings.Index(trimmed, "://"); idx >= 0 {
 			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
 		}
-		// Cut at the last '@' before the path: a password may itself contain
-		// one, and trimming at the first leaves the rest of it in place. An
-		// '@' that appears only in the path is not userinfo and stays.
-		authority := trimmed
-		if idx := strings.Index(trimmed, "/"); idx >= 0 {
-			authority = trimmed[:idx]
-		}
-		if idx := strings.LastIndex(authority, "@"); idx >= 0 {
+		// Cut at the last '@' in what remains. Scanning only up to the first
+		// '/' would stop early on a credential that contains one, handing the
+		// credential back; cutting at the last '@' can lose a path segment
+		// that legitimately contains one, which is the right way to be wrong
+		// in a redactor.
+		if idx := strings.LastIndex(trimmed, "@"); idx >= 0 {
 			trimmed = trimmed[idx+1:]
 		}
 		return scheme + trimmed
@@ -363,6 +361,13 @@ func sanitizeErrorURL(rawURL string) string {
 	u.RawQuery = ""
 	u.ForceQuery = false
 	u.Fragment = ""
+	// An opaque URL ("https:KEY@host/v1", which a misconfigured base URL can
+	// produce) keeps its credential in Opaque rather than in User.
+	if u.Opaque != "" {
+		if idx := strings.LastIndex(u.Opaque, "@"); idx >= 0 {
+			u.Opaque = u.Opaque[idx+1:]
+		}
+	}
 	return u.String()
 }
 
