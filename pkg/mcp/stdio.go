@@ -374,8 +374,24 @@ type writeRequest struct {
 // draining its stdin parks this one goroutine, and callers fall out on their
 // own contexts instead of queueing behind a mutex that will never be released.
 func (t *stdioTransport) writeOwner() {
-	for req := range t.writes {
-		req.result <- t.writeDirect(req.payload)
+	for {
+		select {
+		case req := <-t.writes:
+			req.result <- t.writeDirect(req.payload)
+		case <-t.done:
+			// The transport is finished. Answer whatever is already queued,
+			// then stop: leaving the goroutine parked on the receive would
+			// keep the transport, its pending map and the queue reachable for
+			// the life of the process, one per session opened.
+			for {
+				select {
+				case req := <-t.writes:
+					req.result <- t.writeDirect(req.payload)
+				default:
+					return
+				}
+			}
+		}
 	}
 }
 

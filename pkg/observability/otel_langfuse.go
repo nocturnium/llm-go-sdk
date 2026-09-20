@@ -389,6 +389,9 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 				hadError = true
 				span.RecordError(panicErr)
 				span.SetStatus(codes.Error, panicErr.Error())
+				// This goroutine stopped reading, so the producer is owed the
+				// same release the send-failure path gives it.
+				llms.DrainStream(stream)
 				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
 			}
 

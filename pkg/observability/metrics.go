@@ -320,6 +320,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 				hadError = true
 				m.recordError(ctx, span, panicErr, attrs)
 				m.successRateWindow.Record(false)
+				llms.DrainStream(stream)
 				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
 			}
 

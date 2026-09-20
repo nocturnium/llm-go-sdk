@@ -333,10 +333,24 @@ func (e *StreamError) Is(target error) bool {
 func sanitizeErrorURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		if idx := strings.Index(rawURL, "?"); idx >= 0 {
-			return rawURL[:idx]
+		// The URL is malformed, which is how a misconfigured base URL arrives,
+		// so cut by hand: everything from the first '?' goes, and so does any
+		// userinfo ahead of the host.
+		trimmed := rawURL
+		if idx := strings.Index(trimmed, "?"); idx >= 0 {
+			trimmed = trimmed[:idx]
 		}
-		return rawURL
+		if idx := strings.Index(trimmed, "#"); idx >= 0 {
+			trimmed = trimmed[:idx]
+		}
+		scheme := ""
+		if idx := strings.Index(trimmed, "://"); idx >= 0 {
+			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
+		}
+		if idx := strings.Index(trimmed, "@"); idx >= 0 {
+			trimmed = trimmed[idx+1:]
+		}
+		return scheme + trimmed
 	}
 	u.User = nil
 	u.RawQuery = ""
