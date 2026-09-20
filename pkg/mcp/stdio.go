@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,6 +40,11 @@ type stdioTransport struct {
 	// starts that goroutine on first use.
 	writes    chan *writeRequest
 	writeOnce sync.Once
+	// writerGone is set when the writer goroutine has stopped. A later write
+	// has no consumer, so it is refused rather than left to park until its
+	// context expires, which for a caller passing a context without a
+	// deadline is forever.
+	writerGone atomic.Bool
 
 	mu       sync.Mutex
 	pending  map[int64]chan []byte
@@ -365,6 +371,11 @@ func (t *stdioTransport) notify(ctx context.Context, payload []byte) error {
 
 // writeRequest is one frame queued for the writer goroutine.
 type writeRequest struct {
+	// ctx is the caller's. A frame whose caller has already given up is
+	// dropped rather than written: the caller has been told the call failed,
+	// and executing it anyway duplicates the side effect of a non-idempotent
+	// tool when the caller retries.
+	ctx     context.Context //nolint:containedctx // the queue carries the caller's deadline
 	payload []byte
 	result  chan error
 }
@@ -377,7 +388,7 @@ func (t *stdioTransport) writeOwner() {
 	for {
 		select {
 		case req := <-t.writes:
-			req.result <- t.writeDirect(req.payload)
+			req.result <- t.serve(req)
 		case <-t.done:
 			// The transport is finished, but a caller may be mid-enqueue: a
 			// close that races an in-flight request must not leave it parked
@@ -389,8 +400,9 @@ func (t *stdioTransport) writeOwner() {
 			for {
 				select {
 				case req := <-t.writes:
-					req.result <- t.writeDirect(req.payload)
+					req.result <- t.serve(req)
 				case <-grace.C:
+					t.writerGone.Store(true)
 					return
 				}
 			}
@@ -410,10 +422,23 @@ func (t *stdioTransport) ensureWriter() chan *writeRequest {
 	return t.writes
 }
 
+// serve writes one queued frame, skipping it when its caller has given up.
+func (t *stdioTransport) serve(req *writeRequest) error {
+	if req.ctx != nil {
+		if err := req.ctx.Err(); err != nil {
+			return err
+		}
+	}
+	return t.writeDirect(req.payload)
+}
+
 // write queues a frame and waits for the writer goroutine, bounded by ctx.
 func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
+	if t.writerGone.Load() {
+		return orClosed(nil)
+	}
 	writes := t.ensureWriter()
-	req := &writeRequest{payload: payload, result: make(chan error, 1)}
+	req := &writeRequest{ctx: ctx, payload: payload, result: make(chan error, 1)}
 	// Only ctx ends the wait. Watching done here would make a close that races
 	// an in-flight call discard a response the server already delivered.
 	select {

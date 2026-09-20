@@ -387,8 +387,10 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			if r := recover(); r != nil {
 				panicErr := fmt.Errorf("panic in stream processing: %v", r)
 				hadError = true
-				span.RecordError(panicErr)
-				span.SetStatus(codes.Error, panicErr.Error())
+				// recordError, not span.RecordError: the client error counter
+				// has to move too, or a panicking stream is invisible in the
+				// metric while the span shows the failure.
+				m.recordError(ctx, span, panicErr, attrs)
 				// This goroutine stopped reading, so the producer is owed the
 				// same release the send-failure path gives it.
 				llms.DrainStream(stream)

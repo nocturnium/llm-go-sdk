@@ -317,7 +317,12 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 // whose deadline has passed, while one checking the sentinel still matches.
 func (rl *RateLimiter) waitFailure(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
+		if errors.Is(ctxErr, context.Canceled) {
+			return ctxErr
+		}
+		// Both, so a caller matching the sentinel still matches and one
+		// checking the context learns the deadline is already past.
+		return fmt.Errorf("%w: %w", ErrRateLimitTimeout, ctxErr)
 	}
 	if errors.Is(err, context.Canceled) {
 		return err

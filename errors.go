@@ -347,7 +347,14 @@ func sanitizeErrorURL(rawURL string) string {
 		if idx := strings.Index(trimmed, "://"); idx >= 0 {
 			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
 		}
-		if idx := strings.Index(trimmed, "@"); idx >= 0 {
+		// Cut at the last '@' before the path: a password may itself contain
+		// one, and trimming at the first leaves the rest of it in place. An
+		// '@' that appears only in the path is not userinfo and stays.
+		authority := trimmed
+		if idx := strings.Index(trimmed, "/"); idx >= 0 {
+			authority = trimmed[:idx]
+		}
+		if idx := strings.LastIndex(authority, "@"); idx >= 0 {
 			trimmed = trimmed[idx+1:]
 		}
 		return scheme + trimmed

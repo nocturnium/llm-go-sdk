@@ -17,12 +17,19 @@ func TestRecordTokens_RefundCappedAtWhatWasCharged(t *testing.T) {
 		WithTokenEstimate(5000),
 	)
 
+	// Drain the bucket first: a full bucket is capped by the pre-existing
+	// remaining-room clamp, which would hide the charged clamp this test is
+	// about.
+	rl.tokenLim().ReserveN(time.Now(), 100)
+
 	before := rl.tokenLim().Tokens()
 	rl.RecordTokens(10)
 	after := rl.tokenLim().Tokens()
 
-	if after > before {
-		t.Errorf("token bucket went from %.0f to %.0f: the refund exceeded the charge", before, after)
+	// The wait path could only have charged the burst (100), so at most 90
+	// tokens may come back, not the 4990 the raw estimate implies.
+	if gained := after - before; gained > 90.5 {
+		t.Errorf("refund returned %.0f tokens, want at most 90: the clamp used the estimate, not the charge", gained)
 	}
 }
 
