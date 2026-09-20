@@ -10,7 +10,7 @@ import (
 // that url.Parse rejects (a bad percent-escape from a misconfigured base URL)
 // took a fallback that cut only the query, leaving the password in place.
 func TestAPIError_ErrorRedactsMalformedURL(t *testing.T) {
-	// A control character in the host is what url.Parse actually rejects; an
+	// A control character in the host is what url.Parse rejects; an
 	// invalid percent-escape in the query parses fine and would take the
 	// structured path instead of the fallback this test is about.
 	// Assembled from parts so staticcheck does not evaluate it as a literal

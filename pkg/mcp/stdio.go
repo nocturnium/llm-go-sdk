@@ -517,6 +517,10 @@ func (t *stdioTransport) close() error {
 			select {
 			case <-t.done:
 			case <-time.After(stdioShutdownGrace):
+				// The reader never exited, so it will not fail the pending
+				// requests: do it here, or every in-flight caller waits out
+				// its own deadline on a transport that is already closed.
+				t.fail(errTransportClosed)
 			}
 		}
 
