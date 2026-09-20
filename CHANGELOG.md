@@ -27,6 +27,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- An error string no longer carries credentials: `APIError.Error` strips userinfo, query and fragment from the request URL, including the malformed and opaque forms a misconfigured base URL produces.
+- The JSON logger's default redaction clears `Metadata` and `RequestParameters`, which it marshaled verbatim, and the slog logger sanitizes non-string metadata values.
+- MCP writes are serialized by a writer goroutine rather than a mutex held across the pipe write, so an abandoned write no longer wedges every later request; a frame whose caller gave up is dropped, and `Close` fails in-flight requests when the reader cannot exit.
+- The observability stream wrappers drain an abandoned source on every exit path, and a panic is recorded before the span ends rather than after it has closed as a success.
+- `RateLimiter` charges an oversized token underestimate in bounded installments, refunds no more than it could have charged, and says whether a wait failure belongs to the caller's deadline or its own.
 - A circuit breaker whose caller makes fewer than `halfOpenMax` requests per `halfOpenTimeout` can close again: each successful probe extends the half-open deadline instead of the watchdog forcing the circuit back open against a healthy provider.
 - SSRF checks reach the paths they missed: `DialTLSContext` is guarded like `DialContext`, a redirect keeps credential headers only on the same scheme, host and port, a transport that cannot take the dial guard resolves the host during validation, multicast and six reserved ranges are refused, and `SanitizeModelName` cannot rebuild `..`.
 - A stream that ends without `[DONE]` and without a finish reason is reported as truncated, a mid-stream `error` frame is surfaced, and every observability wrapper delivers the terminal chunk its contract promises.
