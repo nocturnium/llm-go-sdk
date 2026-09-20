@@ -67,6 +67,9 @@ type Client struct {
 	// private/loopback IPs and plain HTTP are rejected unless explicitly allowed.
 	allowPrivateIPs bool
 	allowHTTP       bool
+	// resolveBeforeRequest is set when the transport could not take a dial
+	// guard, so URL validation resolves the host itself instead.
+	resolveBeforeRequest bool
 }
 
 // ClientOption configures the client.
@@ -124,7 +127,12 @@ func (c *Client) installSSRFDialer() {
 	callerProvidedTransport := ok
 	if !ok {
 		if c.httpClient.Transport != nil {
-			return // custom RoundTripper; cannot inject a dialer
+			// A custom RoundTripper (an otelhttp wrapper, for one) cannot take
+			// a dialer, so the dial-time IP check is unavailable. Record that
+			// and fall back to resolving the host before the request; without
+			// it this client would keep only the non-resolving name check.
+			c.resolveBeforeRequest = true
+			return
 		}
 		// No transport configured: start from a clone of the default.
 		if base, baseOK := http.DefaultTransport.(*http.Transport); baseOK {
@@ -142,6 +150,27 @@ func (c *Client) installSSRFDialer() {
 		KeepAlive: 30 * time.Second,
 		Control:   ssrfDialControl,
 	}
+	// DialTLSContext takes precedence over DialContext for https, so a caller
+	// doing cert pinning or mTLS would otherwise reach every address unchecked.
+	// Wrap it the same way, and when it is set for https the guard below still
+	// covers plain http.
+	if originalDialTLS := tr.DialTLSContext; originalDialTLS != nil {
+		tr.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			if err := validateNotPrivateHostFromAddress(address); err != nil {
+				return nil, err
+			}
+			conn, err := originalDialTLS(ctx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateConnRemoteAddr(conn); err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			return conn, nil
+		}
+	}
+
 	if callerProvidedTransport && originalDialContext != nil {
 		tr.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 			if err := validateNotPrivateHostFromAddress(address); err != nil {
@@ -205,7 +234,7 @@ func (c *Client) installRedirectPolicy() {
 		if err := c.validateURL(req.URL.String()); err != nil {
 			return fmt.Errorf("redirect blocked: %w", err)
 		}
-		if len(via) > 0 && !sameRedirectHostname(req, via[0]) {
+		if len(via) > 0 && !sameRedirectOrigin(req, via[0]) {
 			for _, header := range crossHostRedirectCredentialHeaders {
 				req.Header.Del(header)
 			}
@@ -214,11 +243,37 @@ func (c *Client) installRedirectPolicy() {
 	}
 }
 
-func sameRedirectHostname(req, original *http.Request) bool {
+// sameRedirectOrigin reports whether a redirect stayed on the same origin.
+// Scheme and port count, not just the hostname: a redirect from
+// https://host/v1 to http://host/v1 or to host:8080 is a different origin and
+// must not carry the credential headers, even though the name is unchanged.
+func sameRedirectOrigin(req, original *http.Request) bool {
 	if req == nil || req.URL == nil || original == nil || original.URL == nil {
 		return false
 	}
+	if !strings.EqualFold(req.URL.Scheme, original.URL.Scheme) {
+		return false
+	}
+	if defaultedPort(req.URL) != defaultedPort(original.URL) {
+		return false
+	}
 	return strings.EqualFold(req.URL.Hostname(), original.URL.Hostname())
+}
+
+// defaultedPort returns the URL's port, filling in the scheme's default when
+// the URL omits it, so https://host and https://host:443 compare equal.
+func defaultedPort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
 }
 
 // validationOptions builds the URL validation policy from the client's flags.
@@ -234,7 +289,37 @@ func (c *Client) validationOptions() *URLValidationOptions {
 
 // validateURL checks a single URL against the client's SSRF policy.
 func (c *Client) validateURL(rawURL string) error {
-	return ValidateURL(rawURL, c.validationOptions())
+	if err := ValidateURL(rawURL, c.validationOptions()); err != nil {
+		return err
+	}
+	if !c.resolveBeforeRequest || c.allowPrivateIPs {
+		return nil
+	}
+	// Stand in for the dial guard this client could not install: resolve the
+	// host and refuse a private answer. It is weaker than the dial-time check
+	// (the address can change between here and the dial) but it closes the
+	// case where a public name resolves to a private address.
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	host := parsed.Hostname()
+	if host == "" || parseIPLiteral(host) != nil {
+		return nil // a literal was already validated above
+	}
+	addrs, lookupErr := net.DefaultResolver.LookupIPAddr(context.Background(), host)
+	if lookupErr != nil {
+		// A name that does not resolve fails on the dial with a clearer error;
+		// refusing it here would turn every transient DNS blip into an SSRF
+		// rejection.
+		return nil //nolint:nilerr // see above
+	}
+	for _, addr := range addrs {
+		if err := validateNotPrivateIP(addr.IP); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // getEnvTimeout reads a duration from an environment variable.

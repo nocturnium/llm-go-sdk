@@ -27,6 +27,14 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- A circuit breaker whose caller makes fewer than `halfOpenMax` requests per `halfOpenTimeout` can close again: each successful probe extends the half-open deadline instead of the watchdog forcing the circuit back open against a healthy provider.
+- SSRF checks reach the paths they missed: `DialTLSContext` is guarded like `DialContext`, a redirect keeps credential headers only on the same scheme, host and port, a transport that cannot take the dial guard resolves the host during validation, multicast and six reserved ranges are refused, and `SanitizeModelName` cannot rebuild `..`.
+- A stream that ends without `[DONE]` and without a finish reason is reported as truncated, a mid-stream `error` frame is surfaced, and every observability wrapper delivers the terminal chunk its contract promises.
+- `ProcessBatch` no longer deadlocks when a provider returns no response and no error, and a non-positive `MaxConcurrency` falls back to the default.
+- Streamed tool calls drop the placeholders a sparse index leaves behind, merge an index-less continuation into the call in flight, and report an index past the supported range.
+- An oversized token underestimate is charged in installments rather than free, and a response reporting no usage keeps its reservation.
+- MCP `Close` cancels in-flight inbound handlers, `respond` honors its context, and the stdio teardown is bounded at every step.
+- `StreamError` matches only what it is, `IsTemporary` refuses a canceled context, a structured-output repair turn names the field that failed, and `CreateResponse` reports a body whose status is failed.
 - Ollama sends its API key on the native management routes (pull, push, delete, copy, show, props), which a remote Ollama behind auth refused.
 - Merging consecutive messages no longer drops the first message's `Content` when it also carries `Parts`: providers read `Parts` and ignore `Content`, so the leading text now becomes a part.
 - Zone-scoped IPv6 literals such as `fe80::1%eth0` are refused by both `ValidateURL` and the dial control; `net.ParseIP` returns nil for them, so the link-local check was skipped entirely.

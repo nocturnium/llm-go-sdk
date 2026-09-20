@@ -127,17 +127,25 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 // from JSON embedded in markdown fences or surrounding prose.
 func parseTyped[T any](content string) (T, error) {
 	var value T
-	if err := json.Unmarshal([]byte(content), &value); err == nil {
+	directErr := json.Unmarshal([]byte(content), &value)
+	if directErr == nil {
 		return value, nil
 	}
+	// Keep the decoder's own diagnosis: it names the field and the types that
+	// did not match, which is what the repair turn has to tell the model. A
+	// constant string sent the model back to fix "invalid JSON" when the JSON
+	// was valid and only a field's type was wrong.
+	reason := directErr
 	if extracted, ok := extractJSON(content); ok {
 		var v T
-		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
+		extractedErr := json.Unmarshal([]byte(extracted), &v)
+		if extractedErr == nil {
 			return v, nil
 		}
+		reason = extractedErr
 	}
 	var zero T
-	return zero, fmt.Errorf("llms: structured output is not valid JSON")
+	return zero, fmt.Errorf("llms: structured output does not match the schema: %w", reason)
 }
 
 // repairPrompt is the correction instruction sent to the model on a repair turn.
@@ -335,6 +343,9 @@ func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, s
 	if err != nil {
 		return nil, true, err
 	}
+	// An embedded field's property is promoted only when the outer struct does
+	// not already have that name: the shallower field wins, which is the rule
+	// encoding/json applies when it resolves the same conflict.
 	if props, hasProps := embedded["properties"].(map[string]any); hasProps {
 		for k, v := range props {
 			if _, exists := properties[k]; !exists {
@@ -373,7 +384,10 @@ func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
 	if typ == reflect.TypeOf(time.Time{}) {
 		return map[string]any{schemaKeyType: schemaTypeString, "format": "date-time"}, true
 	}
-	if implementsMarshaler(typ) {
+	// A custom marshaler is described as a string only when the type can read
+	// one back. Claiming "string" for a write-only marshaler asks the model for
+	// a value the SDK then fails to decode into the field.
+	if implementsMarshaler(typ) && implementsUnmarshaler(typ) {
 		return map[string]any{schemaKeyType: schemaTypeString}, true
 	}
 	return nil, false
@@ -386,6 +400,17 @@ func implementsMarshaler(typ reflect.Type) bool {
 		reflect.PointerTo(typ).Implements(jsonMarshaler) ||
 		typ.Implements(textMarshaler) ||
 		reflect.PointerTo(typ).Implements(textMarshaler)
+}
+
+// implementsUnmarshaler reports whether a value of typ can be decoded from the
+// JSON a custom marshaler produces.
+func implementsUnmarshaler(typ reflect.Type) bool {
+	jsonUnmarshaler := reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+	textUnmarshaler := reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+	return typ.Implements(jsonUnmarshaler) ||
+		reflect.PointerTo(typ).Implements(jsonUnmarshaler) ||
+		typ.Implements(textUnmarshaler) ||
+		reflect.PointerTo(typ).Implements(textUnmarshaler)
 }
 
 func jsonFieldName(field reflect.StructField) (string, bool) {

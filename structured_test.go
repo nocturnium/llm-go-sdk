@@ -119,8 +119,12 @@ func TestGenerateTyped_InvalidJSON(t *testing.T) {
 	if resp != mock.response {
 		t.Fatal("expected raw response to be returned with error")
 	}
-	if !strings.Contains(err.Error(), "not valid JSON") {
-		t.Fatalf("expected clear invalid JSON error, got %v", err)
+	if !strings.Contains(err.Error(), "does not match the schema") {
+		t.Fatalf("expected a schema-mismatch error, got %v", err)
+	}
+	// The decoder's own diagnosis has to survive: the repair turn quotes it.
+	if !strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("expected the decoder's reason to be preserved, got %v", err)
 	}
 }
 
@@ -192,6 +196,15 @@ func (*structuredJSONMarshaler) MarshalJSON() ([]byte, error) {
 	return []byte(`"custom"`), nil
 }
 
+func (*structuredJSONMarshaler) UnmarshalJSON([]byte) error { return nil }
+
+// structuredWriteOnlyMarshaler can produce JSON but cannot read it back.
+type structuredWriteOnlyMarshaler struct{ Field string }
+
+func (structuredWriteOnlyMarshaler) MarshalJSON() ([]byte, error) {
+	return []byte(`"written"`), nil
+}
+
 type structuredMarshalerSchemaResult struct {
 	Text structuredTextMarshaler `json:"text"`
 	JSON structuredJSONMarshaler `json:"json"`
@@ -211,6 +224,32 @@ func TestSchemaFrom_MarshalerTypes(t *testing.T) {
 	properties := schemaProperties(t, decoded)
 	assertSchema(t, properties["text"], map[string]any{"type": "string"})
 	assertSchema(t, properties["json"], map[string]any{"type": "string"})
+}
+
+// TestSchemaFrom_WriteOnlyMarshalerKeepsStructuralSchema pins that a type which
+// marshals to a string but cannot unmarshal one is described structurally. The
+// schema used to ask the model for a string the SDK then failed to decode.
+func TestSchemaFrom_WriteOnlyMarshalerKeepsStructuralSchema(t *testing.T) {
+	type result struct {
+		Value structuredWriteOnlyMarshaler `json:"value"`
+	}
+
+	schema, err := SchemaFrom[result]()
+	if err != nil {
+		t.Fatalf("SchemaFrom returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(schema, &decoded); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+
+	value, ok := schemaProperties(t, decoded)["value"].(map[string]any)
+	if !ok {
+		t.Fatalf("value property is not an object")
+	}
+	if value[schemaKeyType] == schemaTypeString {
+		t.Error("a write-only marshaler was described as a string the SDK cannot decode")
+	}
 }
 
 func schemaProperties(t *testing.T, schema map[string]any) map[string]any {

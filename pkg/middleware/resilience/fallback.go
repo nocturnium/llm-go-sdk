@@ -288,7 +288,16 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, op
 			continue
 		}
 
-		first, ok := <-src
+		// Bounded by the caller's context: a provider that hands back its
+		// channel promptly and then stalls on time to first byte would
+		// otherwise hang Stream forever, cancellation included.
+		var first llms.StreamChunk
+		var ok bool
+		select {
+		case first, ok = <-src:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 		switch {
 		case !ok:
 			// Stream closed without any chunk; treat as an (empty) success.
@@ -372,7 +381,14 @@ func forwardStream(ctx context.Context, opts *llms.CallOptions, first llms.Strea
 			if chunk.Error != nil {
 				termErr = chunk.Error
 			}
-			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+			if result := sender.Send(chunk); !result.SendOK() {
+				// Drain what the abandoned provider still has to send, or it
+				// stays blocked on a send while holding its breaker permit.
+				go func() {
+					for range src { //nolint:revive // draining is the point
+					}
+				}()
+				sender.ForwardTerminalOnEarlyExit(result)
 				return
 			}
 		}

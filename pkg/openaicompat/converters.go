@@ -204,7 +204,7 @@ func mergeIndexedToolCall(calls []llms.ToolCall, idx int, delta ToolCall) []llms
 // appendOrMergeToolCall appends a new tool call or merges delta into an existing
 // one while a stream accumulates arguments. OpenAI sends the id and name on the
 // first delta and only an index plus argument text after that.
-func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCall {
+func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) ([]llms.ToolCall, error) {
 	// First try to match by index (OpenAI streaming format). A negative index is
 	// malformed (a hostile/buggy server could send -1 to panic calls[-1]); fall
 	// through to ID-based matching for it.
@@ -213,14 +213,17 @@ func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCal
 		// back-fill (OOM) via an absurd index; OpenAI only ever increments by one.
 		const maxStreamedToolCalls = 1024
 		if idx := *delta.Index; idx < maxStreamedToolCalls {
-			return mergeIndexedToolCall(calls, idx, delta)
+			return mergeIndexedToolCall(calls, idx, delta), nil
 		}
-		return calls
+		// Dropping it silently would finish the stream with finish_reason
+		// tool_calls and no tool to call.
+		return calls, fmt.Errorf("tool call index %d exceeds the %d supported per stream: %w",
+			*delta.Index, maxStreamedToolCalls, llms.ErrInvalidToolResponse)
 	}
 
 	// Fall back to ID-based matching (for non-OpenAI providers or edge cases)
 	for i := range calls {
-		if calls[i].ID != "" && calls[i].ID == delta.ID {
+		if delta.ID != "" && calls[i].ID != "" && calls[i].ID == delta.ID {
 			if delta.Function != nil {
 				// A first delta that carried only the id leaves Function nil, so
 				// the arguments that follow would otherwise be dropped.
@@ -232,8 +235,24 @@ func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCal
 				}
 				calls[i].Function.Arguments += delta.Function.Arguments
 			}
-			return calls
+			return calls, nil
 		}
+	}
+
+	// A delta with neither an index nor an id is a continuation of the call in
+	// flight, which is how several OpenAI-compatible servers stream arguments.
+	// Starting a new call for it would split one call across two entries, each
+	// with half the argument JSON.
+	if delta.ID == "" && delta.Index == nil && len(calls) > 0 && delta.Function != nil {
+		last := len(calls) - 1
+		if calls[last].Function == nil {
+			calls[last].Function = &llms.FunctionCall{}
+		}
+		if calls[last].Function.Name == "" {
+			calls[last].Function.Name = delta.Function.Name
+		}
+		calls[last].Function.Arguments += delta.Function.Arguments
+		return calls, nil
 	}
 
 	newCall := llms.ToolCall{
@@ -246,7 +265,58 @@ func appendOrMergeToolCall(calls []llms.ToolCall, delta ToolCall) []llms.ToolCal
 			Arguments: delta.Function.Arguments,
 		}
 	}
-	return append(calls, newCall)
+	return append(calls, newCall), nil
+}
+
+// forwardDelta sends a chunk's content and reasoning to the consumer. It
+// reports true when the consumer stopped reading and the caller must return.
+func forwardDelta(sender *llms.StreamSender, content, reasoning string) bool {
+	if content != "" {
+		if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Content: content})) {
+			return true
+		}
+	}
+	// Reasoning is streamed separately so a consumer can show it live. Both
+	// "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic, Qwen) land here.
+	if reasoning != "" {
+		if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{
+			Reasoning: &llms.ReasoningContent{Content: reasoning},
+		})) {
+			return true
+		}
+	}
+	return false
+}
+
+// accumulateToolCallDeltas folds a chunk's tool-call deltas into the calls
+// accumulated so far, stopping at the first delta it cannot place.
+func accumulateToolCallDeltas(calls []llms.ToolCall, deltas []ToolCall) ([]llms.ToolCall, error) {
+	for _, delta := range deltas {
+		merged, err := appendOrMergeToolCall(calls, delta)
+		if err != nil {
+			return calls, err
+		}
+		calls = merged
+	}
+	return calls, nil
+}
+
+// compactToolCalls drops the placeholder entries a sparse index back-fill
+// leaves behind. A server that opens at index 2 creates entries 0 and 1 that
+// no delta ever fills, and a caller reading tc.Function.Name on one of those
+// panics.
+func compactToolCalls(calls []llms.ToolCall) []llms.ToolCall {
+	kept := calls[:0]
+	for _, call := range calls {
+		if call.ID == "" && call.Function == nil {
+			continue
+		}
+		if call.Function == nil {
+			call.Function = &llms.FunctionCall{}
+		}
+		kept = append(kept, call)
+	}
+	return kept
 }
 
 // ConvertResponse converts an OpenAI-compatible response to llms.Response.
@@ -527,6 +597,16 @@ func ProcessStream(
 				sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
 				return
 			}
+			// An EOF with neither the [DONE] sentinel nor a finish reason is a
+			// dropped connection, not a finished generation. Report it instead
+			// of delivering a terminal chunk that reads as a clean stop: a
+			// caller acting on half an answer is worse than a caller retrying.
+			if !stream.SawDone() && finishReason == "" {
+				sender.SendFinal(llms.StreamChunk{
+					Error: fmt.Errorf("%s: stream ended before [DONE]: %w", provider, io.ErrUnexpectedEOF),
+				})
+				return
+			}
 			// Apply token estimation if enabled and usage is missing
 			finalUsage := usage
 			if config != nil && config.EstimateTokens && (usage == nil || usage.TotalTokens == 0) {
@@ -535,7 +615,7 @@ func ProcessStream(
 			}
 
 			sender.SendFinal(llms.StreamChunk{
-				ToolCalls:    accumulatedToolCalls,
+				ToolCalls:    compactToolCalls(accumulatedToolCalls),
 				FinishReason: finishReason,
 				Usage:        finalUsage,
 				ServiceTier:  serviceTier,
@@ -558,6 +638,14 @@ func ProcessStream(
 		}
 		chunksRead++
 
+		// A mid-stream error frame ends the stream: several compatible servers
+		// send one and then [DONE], which would otherwise read as a clean finish
+		// with partial content.
+		if err := chunk.Error.Err(); err != nil {
+			sender.SendFinal(llms.StreamChunk{Error: fmt.Errorf("%s: %w", provider, err)})
+			return
+		}
+
 		if len(chunk.Choices) > 0 {
 			choice := chunk.Choices[0]
 
@@ -567,28 +655,19 @@ func ProcessStream(
 					lastContent = content
 					accumulatedContent += content // Accumulate for estimation
 					bytesRead += int64(len(content))
-					if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{Content: content})) {
-						return
-					}
 				}
-
-				// Accumulate reasoning content separately
-				// Handles both "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic/Qwen Thinking)
-				if reasoning := choice.Delta.ReasoningText(); reasoning != "" {
-					// Send reasoning in chunks for real-time display
-					rc := &llms.ReasoningContent{Content: reasoning}
-					if sender.ForwardTerminalOnEarlyExit(sender.Send(llms.StreamChunk{
-						Reasoning: rc,
-					})) {
-						return
-					}
+				if forwardDelta(sender, content, choice.Delta.ReasoningText()) {
+					return
 				}
 			}
 
 			if choice.Delta != nil && len(choice.Delta.ToolCalls) > 0 {
-				for _, tc := range choice.Delta.ToolCalls {
-					accumulatedToolCalls = appendOrMergeToolCall(accumulatedToolCalls, tc)
+				merged, mergeErr := accumulateToolCallDeltas(accumulatedToolCalls, choice.Delta.ToolCalls)
+				if mergeErr != nil {
+					sender.SendFinal(llms.StreamChunk{Error: fmt.Errorf("%s: %w", provider, mergeErr)})
+					return
 				}
+				accumulatedToolCalls = merged
 			}
 
 			if choice.FinishReason != "" {

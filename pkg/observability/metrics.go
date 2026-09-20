@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -115,7 +116,11 @@ func WithMetricsCostRecording(record bool) MetricsOption {
 	}
 }
 
-// WithSuccessRateWindow sets the duration for success rate calculation
+// WithSuccessRateWindow sets the duration for success rate calculation.
+//
+// The window is also capped at 10000 entries, so above roughly 33 requests per
+// second sustained the success rate reflects the most recent 10000 requests
+// rather than the full duration set here.
 func WithSuccessRateWindow(duration time.Duration) MetricsOption {
 	return func(m *MetricsMiddleware) {
 		m.windowDuration = duration
@@ -284,8 +289,24 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// decrementActive so that an observer waiting on ActiveRequests()==0 is
 		// guaranteed the span has already ended.
 		defer close(wrappedStream)
+		// Registered after the close defer, so it runs before it: every exit
+		// path owes the consumer exactly one terminal chunk, and a bare close
+		// here would let a source that ends without one reach CollectStream as a
+		// successful short read.
+		defer sender.EnsureTerminal()
 		defer m.decrementActive(ctx, attrs)
 		defer span.End()
+		// Registered after span.End so it runs first: the panic lands on the
+		// span while it is still open, and the consumer is told too. A panic
+		// would otherwise close the channel with no verdict at all.
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic in stream processing: %v", r)
+				span.RecordError(panicErr)
+				span.SetStatus(codes.Error, panicErr.Error())
+				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
+			}
+		}()
 
 		var chunkCount int64
 		var contentBuilder strings.Builder

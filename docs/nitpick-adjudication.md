@@ -109,3 +109,33 @@ search_domain_filter that the package exposes no way to reach.
 | Perplexity registers no provider factory | `pkg/providers/perplexity/register.go` calls `llms.RegisterProvider("perplexity", ...)`, and `pkg/providers/all/all_test.go` asserts the name resolves. The reviewer saw a subset of the package. |
 | OpenRouter speech and video should reject reserved Extra keys rather than drop them | The marshalers drop reserved keys by design, matching `SpeechRequest.MarshalJSON` in openaicompat; only the togetherai image path errors, and that difference is deliberate. |
 | OpenRouter documents typed media options as silently dropped | Same policy question as the main run, unchanged: rejecting them is a behavior change across every media provider, not a fix to this package. |
+
+## Adversarial Go review (2026-09-19, branch fix/adversarial-review)
+
+A hostile-reviewer pass over the tree at v6.9.3 returned 29 findings: 5
+ship-blockers, 13 high, 9 medium and 2 low. All 29 were triaged against this
+file; 25 were fixed, 2 were documented rather than changed (404 mapping to
+ErrModelNotFound, the 10000-entry success-rate cap), and the otel panic policy
+was hardened without a test, which cannot be driven from outside the package.
+
+The five blockers were a circuit breaker that could not close below three
+requests per half-open window, an SSRF dialer that missed `DialTLSContext`, a
+redirect check that compared hostnames without scheme or port, an EOF that
+could not be told from `[DONE]`, and a nil response that deadlocked
+`ProcessBatch` with the results mutex held.
+
+Two adjudications from earlier rounds were overturned by this review and the
+fixes now stand: the truncated-stream EOF (anthropic already distinguished it,
+so the "changing one would split the behavior" reason was wrong) and the
+breaker-permit leak (neither stream wrapper drained its source, contrary to the
+reason recorded for rejecting it).
+
+Validation reran both `full-review` (177 findings, 5 error) and `repo-score`
+(171 findings, 3 error). Four of those errors were real and fixed: a
+write-only marshaler described as a string, the anthropic default model missing
+from `knownModels`, a model-name sanitizer that could rebuild `..`, and a
+failed Responses body returned as a success. The rest were the classes already
+rejected above. repo-score put the tree at 0.10 slop, 1.91 bugs and 0.07
+security weighted findings per thousand lines, over the files a model answered
+for: two batches failed provider-side, leaving 12 files outside the
+denominator.

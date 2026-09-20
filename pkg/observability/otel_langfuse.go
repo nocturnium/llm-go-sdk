@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -361,7 +362,23 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 
 	go func() {
 		defer close(wrappedStream)
+		// Registered after the close defer, so it runs before it: every exit
+		// path owes the consumer exactly one terminal chunk, and a bare close
+		// here would let a source that ends without one reach CollectStream as a
+		// successful short read.
+		defer sender.EnsureTerminal()
 		defer span.End()
+		// Registered after span.End so it runs first: the panic is recorded on
+		// the span while it is still open, and the consumer is told too. A
+		// panic would otherwise close the channel with no verdict at all.
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic in stream processing: %v", r)
+				span.RecordError(panicErr)
+				span.SetStatus(codes.Error, panicErr.Error())
+				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
+			}
+		}()
 
 		var contentBuilder strings.Builder
 		var contentTruncated bool

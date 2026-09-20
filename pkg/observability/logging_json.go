@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 )
 
 // JSONLogger logs entries as JSON lines
@@ -113,6 +114,12 @@ func (l *JSONLogger) writeEntry(entryType string, entry *LogEntry) {
 	}
 
 	encoded = append(encoded, '\n')
+	// A nil sink is a caller mistake, not a reason to take the process down on
+	// the first log line: report it through the error callback instead.
+	if l.write == nil {
+		l.reportError(errors.New("observability: JSON logger has no write function"))
+		return
+	}
 	if err := l.write(encoded); err != nil {
 		l.reportError(err)
 	}

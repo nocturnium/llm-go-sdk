@@ -267,17 +267,43 @@ func validateNotPrivateIP(ip net.IP) error {
 		}
 	}
 
-	// Check for common internal IP ranges not covered by IsPrivate
-	// 100.64.0.0/10 (Carrier-grade NAT)
-	cgnat := net.IPNet{
-		IP:   net.ParseIP("100.64.0.0"),
-		Mask: net.CIDRMask(10, 32),
+	if ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
+		return errors.New("multicast addresses not allowed")
 	}
-	if cgnat.Contains(ip) {
-		return errors.New("carrier-grade NAT addresses not allowed")
+
+	// Ranges that reach infrastructure but are not covered by the checks above.
+	for _, block := range reservedIPBlocks {
+		if block.net.Contains(ip) {
+			return fmt.Errorf("%s addresses not allowed", block.name)
+		}
 	}
 
 	return nil
+}
+
+// reservedIPBlocks are address ranges that are not private by Go's definition
+// but still reach something the caller did not ask for: a router, a test
+// network, or the local host by another name.
+var reservedIPBlocks = []struct {
+	name string
+	net  *net.IPNet
+}{
+	{"carrier-grade NAT", mustCIDR("100.64.0.0/10")},
+	{"this-network", mustCIDR("0.0.0.0/8")},
+	{"IETF protocol assignment", mustCIDR("192.0.0.0/24")},
+	{"benchmarking", mustCIDR("198.18.0.0/15")},
+	{"reserved", mustCIDR("240.0.0.0/4")},
+	{"site-local IPv6", mustCIDR("fec0::/10")},
+	{"6to4", mustCIDR("2002::/16")},
+}
+
+// mustCIDR parses a CIDR block that is known good at build time.
+func mustCIDR(cidr string) *net.IPNet {
+	_, block, err := net.ParseCIDR(cidr)
+	if err != nil {
+		panic("httpclient: bad reserved CIDR " + cidr + ": " + err.Error())
+	}
+	return block
 }
 
 func nat64EmbeddedIPv4(ip net.IP) net.IP {
@@ -294,19 +320,25 @@ func nat64EmbeddedIPv4(ip net.IP) net.IP {
 // SanitizeModelName removes potentially dangerous characters from model names
 // that could be used in URL path traversal attacks
 func SanitizeModelName(model string) string {
-	// Remove path traversal sequences
-	model = strings.ReplaceAll(model, "..", "")
-	model = strings.ReplaceAll(model, "/", "-")
-	model = strings.ReplaceAll(model, "\\", "-")
-
-	// Drop control characters (including the null byte and DEL); printable
-	// characters are kept, ASCII and non-ASCII alike.
+	// Drop control characters first (including the null byte and DEL);
+	// printable characters are kept, ASCII and non-ASCII alike. Removing them
+	// after the traversal strip would let ".\x00." close back up into ".."
+	// once the control character was gone.
 	var sanitized strings.Builder
 	for _, r := range model {
 		if r >= 32 && r != 127 {
 			sanitized.WriteRune(r)
 		}
 	}
+	model = sanitized.String()
 
-	return sanitized.String()
+	// Remove path traversal sequences, repeatedly: "....//" collapses to ".."
+	// in one pass, so one pass is not enough.
+	for strings.Contains(model, "..") {
+		model = strings.ReplaceAll(model, "..", "")
+	}
+	model = strings.ReplaceAll(model, "/", "-")
+	model = strings.ReplaceAll(model, "\\", "-")
+
+	return model
 }

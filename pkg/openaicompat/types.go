@@ -6,6 +6,8 @@ package openaicompat
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
@@ -270,6 +272,35 @@ type StreamChunk struct {
 	// ServiceTier names the capacity tier serving the request, when the provider
 	// reports one. It repeats on every chunk rather than arriving once.
 	ServiceTier string `json:"service_tier,omitempty"`
+	// Error carries a mid-stream error frame. OpenRouter, vLLM and LiteLLM all
+	// emit `data: {"error": {...}}` and then [DONE] when the upstream dies, so
+	// without this field the caller would receive partial content and no error.
+	Error *StreamErrorPayload `json:"error,omitempty"`
+}
+
+// StreamErrorPayload is the error object a compatible server may send mid-stream.
+type StreamErrorPayload struct {
+	Message string `json:"message"`
+	Type    string `json:"type,omitempty"`
+	Code    any    `json:"code,omitempty"`
+}
+
+// Err renders the payload as an error, or nil when it carries nothing.
+func (p *StreamErrorPayload) Err() error {
+	if p == nil {
+		return nil
+	}
+	message := p.Message
+	if message == "" && p.Type == "" {
+		return nil
+	}
+	if message == "" {
+		message = p.Type
+	}
+	if p.Code != nil {
+		return fmt.Errorf("%s (code %v)", message, p.Code)
+	}
+	return errors.New(message)
 }
 
 // ToolChoiceFunction is used when specifying a specific function

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -66,7 +67,7 @@ func NewClient(config ClientConfig) *Client {
 		mediaPaths:   MediaCapabilities{ImagesPath: config.ImagesPath, ImageEditsPath: config.ImageEditsPath, SpeechPath: config.SpeechPath, TranscriptionsPath: config.TranscriptionsPath, VideosPath: config.VideosPath},
 		baseURL:      config.BaseURL,
 		apiKey:       config.APIKey,
-		headers:      config.Headers,
+		headers:      maps.Clone(config.Headers),
 		azureAPIKey:  config.AzureAPIKey,
 		azureVersion: config.AzureVersion,
 	}
@@ -93,7 +94,12 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req *ChatCompletionRe
 
 // CreateChatCompletionStream sends a streaming chat completion request
 func (c *Client) CreateChatCompletionStream(ctx context.Context, req *ChatCompletionRequest) (*StreamReader, error) {
-	req.Stream = true
+	// Copy before setting Stream: mutating the caller's request races a
+	// concurrent unary call sharing it, and a request reused afterwards would
+	// send "stream":true to the non-streaming endpoint.
+	streamReq := *req
+	streamReq.Stream = true
+	req = &streamReq
 	headers := c.getHeaders()
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
@@ -153,6 +159,19 @@ func (c *Client) buildURL(path string) string {
 // StreamReader reads streaming responses
 type StreamReader struct {
 	sseReader *httpclient.SSEReader
+	// sawDone records that the server sent the [DONE] sentinel. Without it an
+	// io.EOF from the transport is a dropped connection, not a finished
+	// generation, and the two must not be reported the same way.
+	sawDone bool
+}
+
+// SawDone reports whether the server closed the stream with the [DONE]
+// sentinel. An io.EOF with SawDone false is a truncated stream.
+func (r *StreamReader) SawDone() bool {
+	if r == nil {
+		return false
+	}
+	return r.sawDone
 }
 
 // Read reads the next chunk from the stream
@@ -166,6 +185,7 @@ func (r *StreamReader) Read() (*StreamChunk, error) {
 
 		// Check for [DONE] marker
 		if event.Data == "[DONE]" {
+			r.sawDone = true
 			return nil, io.EOF
 		}
 

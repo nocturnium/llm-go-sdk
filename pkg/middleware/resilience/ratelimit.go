@@ -268,9 +268,21 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 
 	switch {
 	case actualTokens > rl.tokenEstimate:
-		// If we underestimated, reserve additional tokens.
+		// If we underestimated, reserve additional tokens. ReserveN refuses any
+		// count above the burst and charges nothing for it, so a large
+		// underestimate (a 200k-token request against a smaller burst) used to
+		// cost the limiter zero. Charge it in burst-sized installments instead,
+		// which is the same clamp the Wait paths document.
 		extra := actualTokens - rl.tokenEstimate
-		tokenLimiter.ReserveN(time.Now(), extra)
+		burst := rl.tokenBucketBurst()
+		if burst <= 0 {
+			return
+		}
+		for extra > 0 {
+			n := min(extra, burst)
+			tokenLimiter.ReserveN(time.Now(), n)
+			extra -= n
+		}
 	case actualTokens < rl.tokenEstimate:
 		// If we overestimated, refund unused tokens without exceeding burst.
 		refund := rl.tokenEstimate - actualTokens
@@ -361,8 +373,13 @@ func (rlc *RateLimitedClient) GenerateContent(ctx context.Context, messages []ll
 		return nil, err
 	}
 
-	// Record actual tokens for more accurate limiting
-	rlc.limiter.RecordTokens(resp.Usage.TotalTokens)
+	// Record actual tokens for more accurate limiting. A response that reports
+	// no usage is left alone: recording zero would read as a gross
+	// overestimate and refund the whole reservation, so a provider that never
+	// reports usage would pace at zero tokens per request.
+	if resp != nil && resp.Usage.TotalTokens > 0 {
+		rlc.limiter.RecordTokens(resp.Usage.TotalTokens)
+	}
 
 	return resp, nil
 }
