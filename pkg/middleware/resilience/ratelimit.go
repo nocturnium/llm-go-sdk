@@ -70,6 +70,10 @@ func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 	return rl
 }
 
+// maxTokenInstallments bounds how many burst-sized charges RecordTokens will
+// make for one request. A provider-reported token count is untrusted input.
+const maxTokenInstallments = 64
+
 // tokenBucketBurst returns the configured token burst, defaulting to a full
 // minute's budget (tokensPerMin) when WithTokenBurst was not set. A full-minute
 // default is required because a single request may legitimately consume many
@@ -278,9 +282,18 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		if burst <= 0 {
 			return
 		}
-		for extra > 0 {
+		// ReserveN refuses any count above the burst and charges nothing for
+		// it, so a large debt has to go in burst-sized installments. The count
+		// comes from the provider, so the installments are capped: past
+		// maxTokenInstallments the caller is already paced into the ground and
+		// the remainder buys nothing but CPU.
+		now := time.Now()
+		for range maxTokenInstallments {
+			if extra <= 0 {
+				break
+			}
 			n := min(extra, burst)
-			tokenLimiter.ReserveN(time.Now(), n)
+			tokenLimiter.ReserveN(now, n)
 			extra -= n
 		}
 	case actualTokens < rl.tokenEstimate:

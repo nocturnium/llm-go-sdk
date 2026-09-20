@@ -21,6 +21,9 @@ const maxStdioLineBytes = 16 * 1024 * 1024
 // server itself when a grandchild still holds the pipes.
 const stdioShutdownGrace = 2 * time.Second
 
+// writeQueueDepth bounds the frames waiting on the writer goroutine.
+const writeQueueDepth = 64
+
 // errTransportClosed is returned when a request is made on a closed transport or
 // the server's stdout closed while a request was in flight.
 var errTransportClosed = errors.New("mcp: transport closed")
@@ -30,9 +33,12 @@ var errTransportClosed = errors.New("mcp: transport closed")
 // background goroutine reads responses and dispatches them to waiting callers by
 // id, so concurrent requests and context cancellation are handled safely.
 type stdioTransport struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	writeMu sync.Mutex
+	cmd   *exec.Cmd
+	stdin io.WriteCloser
+	// writes feeds the single writer goroutine; see writeOwner. writeOnce
+	// starts that goroutine on first use.
+	writes    chan *writeRequest
+	writeOnce sync.Once
 
 	mu       sync.Mutex
 	pending  map[int64]chan []byte
@@ -78,31 +84,21 @@ func (t *stdioTransport) deliverRequest(raw []byte, id json.RawMessage) {
 		return
 	}
 	// Best effort: the read loop must keep serving responses regardless.
-	_ = t.write(payload)
+	ctx, cancel := context.WithTimeout(context.Background(), inboundShutdownTimeout)
+	defer cancel()
+	_ = t.write(ctx, payload)
 }
 
 // supportsInbound reports true: stdio is bidirectional and the write path is
 // serialized, so server-initiated requests arrive and responses can be sent.
 func (t *stdioTransport) supportsInbound() bool { return true }
 
-// respond writes a response frame for a server-initiated request. write is
-// already serialized by writeMu, so this is safe concurrently with request and
-// notify.
-//
-// The write runs on its own goroutine and the context bounds the wait: respond
-// is called from the read loop, and a server that stops draining its stdin
-// would otherwise park that loop inside write once the pipe buffer filled,
-// stalling every in-flight caller waiting for a response already sitting
-// unread in the pipe.
+// respond writes a response frame for a server-initiated request. The writer
+// goroutine serializes it against request and notify, and ctx bounds the wait:
+// respond runs on the read loop, which must not park inside a write to a
+// server that stopped draining its stdin.
 func (t *stdioTransport) respond(ctx context.Context, payload []byte) error {
-	done := make(chan error, 1)
-	go func() { done <- t.write(payload) }()
-	select {
-	case err := <-done:
-		return err
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return t.write(ctx, payload)
 }
 
 func (t *stdioTransport) deliverNotification(raw []byte) {
@@ -144,6 +140,7 @@ func newStdioTransport(ctx context.Context, command string, args, env []string, 
 	t := &stdioTransport{
 		cmd:     cmd,
 		stdin:   stdin,
+		writes:  make(chan *writeRequest, writeQueueDepth),
 		pending: make(map[int64]chan []byte),
 		done:    make(chan struct{}),
 	}
@@ -316,7 +313,7 @@ func (t *stdioTransport) request(ctx context.Context, id int64, payload []byte) 
 	t.pending[id] = ch
 	t.mu.Unlock()
 
-	if err := t.write(payload); err != nil {
+	if err := t.write(ctx, payload); err != nil {
 		t.removePending(id)
 		return nil, err
 	}
@@ -363,12 +360,57 @@ func (t *stdioTransport) notify(ctx context.Context, payload []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return t.write(payload)
+	return t.write(ctx, payload)
 }
 
-func (t *stdioTransport) write(payload []byte) error {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
+// writeRequest is one frame queued for the writer goroutine.
+type writeRequest struct {
+	payload []byte
+	result  chan error
+}
+
+// writeOwner serializes every write to the subprocess. Nothing else touches
+// stdin, so no caller ever holds a lock across the write: a server that stops
+// draining its stdin parks this one goroutine, and callers fall out on their
+// own contexts instead of queueing behind a mutex that will never be released.
+func (t *stdioTransport) writeOwner() {
+	for req := range t.writes {
+		req.result <- t.writeDirect(req.payload)
+	}
+}
+
+// ensureWriter starts the writer goroutine on first use, so a transport built
+// without newStdioTransport (the tests do) still has one.
+func (t *stdioTransport) ensureWriter() chan *writeRequest {
+	t.writeOnce.Do(func() {
+		if t.writes == nil {
+			t.writes = make(chan *writeRequest, writeQueueDepth)
+		}
+		go t.writeOwner()
+	})
+	return t.writes
+}
+
+// write queues a frame and waits for the writer goroutine, bounded by ctx.
+func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
+	writes := t.ensureWriter()
+	req := &writeRequest{payload: payload, result: make(chan error, 1)}
+	// Only ctx ends the wait. Watching done here would make a close that races
+	// an in-flight call discard a response the server already delivered.
+	select {
+	case writes <- req:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-req.result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (t *stdioTransport) writeDirect(payload []byte) error {
 	if _, err := t.stdin.Write(payload); err != nil {
 		return fmt.Errorf("mcp: write request: %w", err)
 	}

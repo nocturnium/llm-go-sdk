@@ -94,6 +94,12 @@ func (l *JSONLogger) prepareEntry(entry *LogEntry, _ bool) *LogEntry {
 		e.InputJSON = ""
 		e.OutputJSON = ""
 		e.ToolCalls = nil
+		// Metadata and RequestParameters are caller-supplied maps that routinely
+		// carry prompts and credentials, and writeEntry marshals the whole
+		// struct: leaving them meant the redacting default still emitted them
+		// verbatim.
+		e.Metadata = nil
+		e.RequestParameters = nil
 	} else {
 		e.Content = truncateString(e.Content, l.maxLength)
 	}

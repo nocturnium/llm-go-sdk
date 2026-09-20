@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -139,7 +141,7 @@ func (e *APIError) Error() string {
 			result += e.RequestMethod + " "
 		}
 		if e.RequestURL != "" {
-			result += e.RequestURL
+			result += sanitizeErrorURL(e.RequestURL)
 		}
 		result += "]"
 	}
@@ -322,6 +324,25 @@ func (e *StreamError) Is(target error) bool {
 		return true
 	}
 	return errors.Is(e.Cause, target)
+}
+
+// sanitizeErrorURL strips the parts of a URL that carry credentials before it
+// reaches an error string. Providers put API keys in the query (Gemini) and
+// userinfo survives a misconfigured base URL, and an error string is the one
+// value callers are certain to log.
+func sanitizeErrorURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		if idx := strings.Index(rawURL, "?"); idx >= 0 {
+			return rawURL[:idx]
+		}
+		return rawURL
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	return u.String()
 }
 
 // ProviderError wraps an error with provider context for consistent error handling

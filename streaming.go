@@ -156,10 +156,12 @@ func ensureTerminalThroughProcessor(s *StreamSender, processor StreamProcessor) 
 	s.DeliverTerminal(chunk)
 }
 
-// drainStream consumes the remainder of an abandoned source on its own
+// DrainStream consumes the remainder of an abandoned source on its own
 // goroutine so the producer's sends complete instead of parking for the whole
-// of its send timeout while it holds a breaker permit or rate-limit slot.
-func drainStream(source <-chan StreamChunk) {
+// of its send timeout while it holds a breaker permit, a rate-limit slot or an
+// open HTTP body. Every wrapper that stops reading a stream early owes its
+// producer this call.
+func DrainStream(source <-chan StreamChunk) {
 	go func() {
 		for range source { //nolint:revive // draining is the point
 		}
@@ -419,7 +421,7 @@ func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOption
 			// silent close that looks like a successful completion, and drain the
 			// abandoned source so the producer is not left blocked on a send.
 			if result := sender.Send(chunk); !result.SendOK() {
-				drainStream(source)
+				DrainStream(source)
 				forwardTerminalThroughProcessor(sender, processor, result)
 				return
 			}
@@ -496,7 +498,7 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 				// The consumer stopped reading. Drain the source on its own
 				// goroutine so the upstream producer is not left blocked on a
 				// send for the whole of its own timeout.
-				drainStream(source)
+				DrainStream(source)
 				forwardTerminalThroughProcessor(sender, processor, result)
 				return
 			}

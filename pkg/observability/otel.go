@@ -432,7 +432,11 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			// Use StreamSender to handle backpressure. On early exit a terminal
 			// chunk is forwarded so the consumer never sees a silent close.
 			sendResult := sender.Send(chunk)
-			if sender.ForwardTerminalOnEarlyExit(sendResult) {
+			if !sendResult.SendOK() {
+				// The consumer stopped reading. Release the provider rather than
+				// leaving it parked on a send with its HTTP body still open.
+				llms.DrainStream(stream)
+				sender.ForwardTerminalOnEarlyExit(sendResult)
 				hadError = true
 				m.recordError(ctx, span, streamSendResultError(ctx, sendResult), attrs)
 				return
