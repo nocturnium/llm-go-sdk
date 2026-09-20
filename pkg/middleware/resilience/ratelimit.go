@@ -203,7 +203,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		requests = b
 	}
 	if err := requestLimiter.WaitN(waitCtx, requests); err != nil {
-		if failure := rl.waitFailure(ctx, err); failure != nil {
+		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
 			return failure
 		}
 		if errors.Is(err, context.Canceled) {
@@ -220,7 +220,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 			tokens = b
 		}
 		if err := tokenLimiter.WaitN(waitCtx, tokens); err != nil {
-			if failure := rl.waitFailure(ctx, err); failure != nil {
+			if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
 				return failure
 			}
 		}
@@ -315,7 +315,7 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 // binding one carries context.DeadlineExceeded as well as the sentinel: a
 // retry layer that checks the context is then told not to retry a request
 // whose deadline has passed, while one checking the sentinel still matches.
-func (rl *RateLimiter) waitFailure(ctx context.Context, err error) error {
+func (rl *RateLimiter) waitFailure(ctx, waitCtx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		if errors.Is(ctxErr, context.Canceled) {
 			return ctxErr
@@ -327,13 +327,14 @@ func (rl *RateLimiter) waitFailure(ctx context.Context, err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
-	// waitCtx's deadline is the earlier of the caller's and the limiter's wait
-	// timeout. When the caller's is the earlier one it is the binding
-	// constraint, so a deadline-shaped failure is the caller's deadline
-	// talking and is reported as both. A deadline further out than the wait
-	// timeout leaves the limiter's own timeout binding, and that stays a plain
-	// ErrRateLimitTimeout the caller may retry.
-	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= rl.waitTimeout {
+	// waitCtx carries the earlier of the caller's deadline and the limiter's
+	// wait timeout, so comparing the two deadlines says which one bound the
+	// wait. Comparing against the raw wait timeout instead would call the
+	// limiter's own timeout a caller deadline once an earlier stage had
+	// consumed part of the budget.
+	callerDeadline, hasCaller := ctx.Deadline()
+	waitDeadline, hasWait := waitCtx.Deadline()
+	if hasCaller && (!hasWait || !callerDeadline.After(waitDeadline)) {
 		return fmt.Errorf("%w: %w", ErrRateLimitTimeout, context.DeadlineExceeded)
 	}
 	// What is left is the limiter's own wait timeout, or rate's "would exceed

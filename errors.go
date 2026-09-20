@@ -337,23 +337,23 @@ func sanitizeErrorURL(rawURL string) string {
 		// so cut by hand: everything from the first '?' goes, and so does any
 		// userinfo ahead of the host.
 		trimmed := rawURL
+		scheme := ""
+		if idx := strings.Index(trimmed, "://"); idx >= 0 {
+			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
+		}
+		// The credential goes first, before the query and fragment are cut: a
+		// password containing '?' or '#' would otherwise have its tail removed
+		// here and its head left behind with no '@' for the scan to find.
+		// Cutting at the last '@' can lose a path segment that legitimately
+		// contains one, which is the right way to be wrong in a redactor.
+		if idx := strings.LastIndex(trimmed, "@"); idx >= 0 {
+			trimmed = trimmed[idx+1:]
+		}
 		if idx := strings.Index(trimmed, "?"); idx >= 0 {
 			trimmed = trimmed[:idx]
 		}
 		if idx := strings.Index(trimmed, "#"); idx >= 0 {
 			trimmed = trimmed[:idx]
-		}
-		scheme := ""
-		if idx := strings.Index(trimmed, "://"); idx >= 0 {
-			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
-		}
-		// Cut at the last '@' in what remains. Scanning only up to the first
-		// '/' would stop early on a credential that contains one, handing the
-		// credential back; cutting at the last '@' can lose a path segment
-		// that legitimately contains one, which is the right way to be wrong
-		// in a redactor.
-		if idx := strings.LastIndex(trimmed, "@"); idx >= 0 {
-			trimmed = trimmed[idx+1:]
 		}
 		return scheme + trimmed
 	}
