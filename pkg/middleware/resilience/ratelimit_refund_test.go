@@ -56,4 +56,34 @@ func TestWaitN_ReportsCallerDeadline(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("err = %v, want context.DeadlineExceeded", err)
 	}
+	if !errors.Is(err, ErrRateLimitTimeout) {
+		t.Errorf("err = %v, want it to keep matching ErrRateLimitTimeout", err)
+	}
+}
+
+// TestWaitN_LimiterTimeoutIsNotACallerDeadline pins the other side: a caller
+// deadline further out than the limiter's own wait timeout leaves the limiter
+// binding, and that failure must not claim the caller ran out of time.
+func TestWaitN_LimiterTimeoutIsNotACallerDeadline(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(1),
+		WithRequestBurst(1),
+		WithBlocking(true),
+		WithWaitTimeout(20*time.Millisecond),
+	)
+
+	if err := rl.Wait(context.Background()); err != nil {
+		t.Fatalf("first wait: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	err := rl.Wait(ctx)
+
+	if !errors.Is(err, ErrRateLimitTimeout) {
+		t.Errorf("err = %v, want ErrRateLimitTimeout", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v claims the caller's deadline passed, but it is an hour away", err)
+	}
 }

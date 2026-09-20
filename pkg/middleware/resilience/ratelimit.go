@@ -327,6 +327,12 @@ func (rl *RateLimiter) waitFailure(ctx context.Context, err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
+	// waitCtx's deadline is the earlier of the caller's and the limiter's wait
+	// timeout. When the caller's is the earlier one it is the binding
+	// constraint, so a deadline-shaped failure is the caller's deadline
+	// talking and is reported as both. A deadline further out than the wait
+	// timeout leaves the limiter's own timeout binding, and that stays a plain
+	// ErrRateLimitTimeout the caller may retry.
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= rl.waitTimeout {
 		return fmt.Errorf("%w: %w", ErrRateLimitTimeout, context.DeadlineExceeded)
 	}

@@ -9,8 +9,11 @@ import (
 // count cannot drive unbounded work. Charging in burst-sized installments with
 // no cap ran millions of ReserveN calls for one response.
 func TestRecordTokens_HugeCountIsBounded(t *testing.T) {
+	// A slow refill keeps the bucket still while the charge is measured: at a
+	// high rate the tokens the 64 reservations cost come back during the call
+	// itself and the assertion reads a wash.
 	rl := NewRateLimiter(
-		WithTokensPerMinute(10_000_000),
+		WithTokensPerMinute(60),
 		WithTokenBurst(1),
 		WithTokenEstimate(0),
 	)
