@@ -41,8 +41,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      # Pinned to a commit, not a tag or @latest. The binary decides which
+      # config fields parse, so an unpinned upgrade fails the job on a field
+      # rather than on anything in the diff: v1.12.0 rejects this repo's
+      # models.*.service_tier. The v2 tags are not installable either, since
+      # the module path is still github.com/jdziat/open-nitpick with no /v2.
       - name: Install open-nitpick
-        run: go install github.com/jdziat/open-nitpick/cmd/nitpick@latest
+        run: go install github.com/jdziat/open-nitpick/cmd/nitpick@7379c73ca953
 
       - name: Review the pull request
         env:
