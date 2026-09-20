@@ -320,19 +320,25 @@ func nat64EmbeddedIPv4(ip net.IP) net.IP {
 // SanitizeModelName removes potentially dangerous characters from model names
 // that could be used in URL path traversal attacks
 func SanitizeModelName(model string) string {
-	// Remove path traversal sequences
-	model = strings.ReplaceAll(model, "..", "")
-	model = strings.ReplaceAll(model, "/", "-")
-	model = strings.ReplaceAll(model, "\\", "-")
-
-	// Drop control characters (including the null byte and DEL); printable
-	// characters are kept, ASCII and non-ASCII alike.
+	// Drop control characters first (including the null byte and DEL);
+	// printable characters are kept, ASCII and non-ASCII alike. Removing them
+	// after the traversal strip would let ".\x00." close back up into ".."
+	// once the control character was gone.
 	var sanitized strings.Builder
 	for _, r := range model {
 		if r >= 32 && r != 127 {
 			sanitized.WriteRune(r)
 		}
 	}
+	model = sanitized.String()
 
-	return sanitized.String()
+	// Remove path traversal sequences, repeatedly: "....//" collapses to ".."
+	// in one pass, so one pass is not enough.
+	for strings.Contains(model, "..") {
+		model = strings.ReplaceAll(model, "..", "")
+	}
+	model = strings.ReplaceAll(model, "/", "-")
+	model = strings.ReplaceAll(model, "\\", "-")
+
+	return model
 }

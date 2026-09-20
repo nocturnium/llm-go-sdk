@@ -276,6 +276,13 @@ func (c *Client) CreateResponse(ctx context.Context, req *ResponsesRequest) (*Re
 	if err != nil {
 		return nil, err
 	}
+	// A 200 carrying status "failed" or an error object is a failure. Returning
+	// it as a success left a direct caller of this method reading an empty
+	// response with a nil error; the provider path checks this too, and a
+	// second check costs nothing.
+	if ferr := responsesResponseError(&response); ferr != nil {
+		return nil, ferr
+	}
 	return &response, nil
 }
 
