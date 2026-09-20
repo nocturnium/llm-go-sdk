@@ -379,15 +379,18 @@ func (t *stdioTransport) writeOwner() {
 		case req := <-t.writes:
 			req.result <- t.writeDirect(req.payload)
 		case <-t.done:
-			// The transport is finished. Answer whatever is already queued,
-			// then stop: leaving the goroutine parked on the receive would
-			// keep the transport, its pending map and the queue reachable for
-			// the life of the process, one per session opened.
+			// The transport is finished, but a caller may be mid-enqueue: a
+			// close that races an in-flight request must not leave it parked
+			// on a result nobody will send, and some callers pass a context
+			// with no deadline. Keep answering for a grace period, then stop
+			// so the goroutine does not outlive the transport.
+			grace := time.NewTimer(stdioShutdownGrace)
+			defer grace.Stop()
 			for {
 				select {
 				case req := <-t.writes:
 					req.result <- t.writeDirect(req.payload)
-				default:
+				case <-grace.C:
 					return
 				}
 			}
