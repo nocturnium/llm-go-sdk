@@ -296,17 +296,6 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		defer sender.EnsureTerminal()
 		defer m.decrementActive(ctx, attrs)
 		defer span.End()
-		// Registered after span.End so it runs first: the panic lands on the
-		// span while it is still open, and the consumer is told too. A panic
-		// would otherwise close the channel with no verdict at all.
-		defer func() {
-			if r := recover(); r != nil {
-				panicErr := fmt.Errorf("panic in stream processing: %v", r)
-				span.RecordError(panicErr)
-				span.SetStatus(codes.Error, panicErr.Error())
-				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
-			}
-		}()
 
 		var chunkCount int64
 		var contentBuilder strings.Builder
@@ -322,6 +311,19 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		contentBuilder.Grow(1024)
 
 		defer func() {
+			// The recover lives here rather than in a defer of its own: a
+			// separate one runs after this block under LIFO, so the metrics
+			// and the span status would already have been recorded as a
+			// success before the panic was seen.
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic in stream processing: %v", r)
+				hadError = true
+				m.recordError(ctx, span, panicErr, attrs)
+				m.successRateWindow.Record(false)
+				llms.DrainStream(stream)
+				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
+			}
+
 			duration := time.Since(start).Seconds()
 			m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 			if chunkCount > 0 {
@@ -362,7 +364,11 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		for chunk := range stream {
 			chunkCount++
 			sendResult := sender.Send(chunk)
-			if sender.ForwardTerminalOnEarlyExit(sendResult) {
+			if !sendResult.SendOK() {
+				// The consumer stopped reading. Release the provider rather than
+				// leaving it parked on a send with its HTTP body still open.
+				llms.DrainStream(stream)
+				sender.ForwardTerminalOnEarlyExit(sendResult)
 				hadError = true
 				m.recordError(ctx, span, streamSendResultError(ctx, sendResult), attrs)
 				m.successRateWindow.Record(false)

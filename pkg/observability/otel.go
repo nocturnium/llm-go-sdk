@@ -379,9 +379,10 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 				panicErr := fmt.Errorf("panic in stream processing: %v", r)
 				m.recordError(ctx, span, panicErr, attrs)
 				hadError = true
-				// The consumer is owed the same verdict the span records.
-				// Reporting the panic only on the span left the caller with a
-				// clean close and a nil error while the trace said failure.
+				// The consumer is owed the same verdict the span records, and
+				// the producer the same release the send-failure path gives
+				// it: this goroutine has stopped reading either way.
+				llms.DrainStream(stream)
 				sender.DeliverTerminal(llms.StreamChunk{Error: panicErr, Done: true})
 			}
 
@@ -432,7 +433,11 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			// Use StreamSender to handle backpressure. On early exit a terminal
 			// chunk is forwarded so the consumer never sees a silent close.
 			sendResult := sender.Send(chunk)
-			if sender.ForwardTerminalOnEarlyExit(sendResult) {
+			if !sendResult.SendOK() {
+				// The consumer stopped reading. Release the provider rather than
+				// leaving it parked on a send with its HTTP body still open.
+				llms.DrainStream(stream)
+				sender.ForwardTerminalOnEarlyExit(sendResult)
 				hadError = true
 				m.recordError(ctx, span, streamSendResultError(ctx, sendResult), attrs)
 				return

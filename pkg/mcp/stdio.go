@@ -21,6 +21,9 @@ const maxStdioLineBytes = 16 * 1024 * 1024
 // server itself when a grandchild still holds the pipes.
 const stdioShutdownGrace = 2 * time.Second
 
+// writeQueueDepth bounds the frames waiting on the writer goroutine.
+const writeQueueDepth = 64
+
 // errTransportClosed is returned when a request is made on a closed transport or
 // the server's stdout closed while a request was in flight.
 var errTransportClosed = errors.New("mcp: transport closed")
@@ -30,9 +33,17 @@ var errTransportClosed = errors.New("mcp: transport closed")
 // background goroutine reads responses and dispatches them to waiting callers by
 // id, so concurrent requests and context cancellation are handled safely.
 type stdioTransport struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	writeMu sync.Mutex
+	cmd   *exec.Cmd
+	stdin io.WriteCloser
+	// writes feeds the single writer goroutine; see writeOwner. writeOnce
+	// starts that goroutine on first use.
+	writes    chan *writeRequest
+	writeOnce sync.Once
+	// writerGone is closed when the writer goroutine has stopped. A write that
+	// passes the pre-check and then loses the race to the writer's exit waits
+	// on it too, so a caller with no deadline is not parked forever on a
+	// result nobody will send.
+	writerGone chan struct{}
 
 	mu       sync.Mutex
 	pending  map[int64]chan []byte
@@ -78,31 +89,21 @@ func (t *stdioTransport) deliverRequest(raw []byte, id json.RawMessage) {
 		return
 	}
 	// Best effort: the read loop must keep serving responses regardless.
-	_ = t.write(payload)
+	ctx, cancel := context.WithTimeout(context.Background(), inboundShutdownTimeout)
+	defer cancel()
+	_ = t.write(ctx, payload)
 }
 
 // supportsInbound reports true: stdio is bidirectional and the write path is
 // serialized, so server-initiated requests arrive and responses can be sent.
 func (t *stdioTransport) supportsInbound() bool { return true }
 
-// respond writes a response frame for a server-initiated request. write is
-// already serialized by writeMu, so this is safe concurrently with request and
-// notify.
-//
-// The write runs on its own goroutine and the context bounds the wait: respond
-// is called from the read loop, and a server that stops draining its stdin
-// would otherwise park that loop inside write once the pipe buffer filled,
-// stalling every in-flight caller waiting for a response already sitting
-// unread in the pipe.
+// respond writes a response frame for a server-initiated request. The writer
+// goroutine serializes it against request and notify, and ctx bounds the wait:
+// respond runs on the read loop, which must not park inside a write to a
+// server that stopped draining its stdin.
 func (t *stdioTransport) respond(ctx context.Context, payload []byte) error {
-	done := make(chan error, 1)
-	go func() { done <- t.write(payload) }()
-	select {
-	case err := <-done:
-		return err
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return t.write(ctx, payload)
 }
 
 func (t *stdioTransport) deliverNotification(raw []byte) {
@@ -144,6 +145,7 @@ func newStdioTransport(ctx context.Context, command string, args, env []string, 
 	t := &stdioTransport{
 		cmd:     cmd,
 		stdin:   stdin,
+		writes:  make(chan *writeRequest, writeQueueDepth),
 		pending: make(map[int64]chan []byte),
 		done:    make(chan struct{}),
 	}
@@ -286,7 +288,15 @@ func isNullIDError(line []byte) bool {
 	if err := json.Unmarshal(line, &resp); err != nil {
 		return false
 	}
-	return resp.Error != nil && string(resp.ID) == "null"
+	// An omitted id counts as well as an explicit null: a server that reports
+	// a parse error without echoing the id leaves the waiting caller with
+	// nothing to correlate, and the caller would sit until its deadline
+	// instead of being told the call failed.
+	if resp.Error == nil {
+		return false
+	}
+	id := string(resp.ID)
+	return id == "" || id == "null"
 }
 
 // fail marks the transport closed and unblocks every pending request.
@@ -316,7 +326,7 @@ func (t *stdioTransport) request(ctx context.Context, id int64, payload []byte) 
 	t.pending[id] = ch
 	t.mu.Unlock()
 
-	if err := t.write(payload); err != nil {
+	if err := t.write(ctx, payload); err != nil {
 		t.removePending(id)
 		return nil, err
 	}
@@ -363,12 +373,110 @@ func (t *stdioTransport) notify(ctx context.Context, payload []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return t.write(payload)
+	return t.write(ctx, payload)
 }
 
-func (t *stdioTransport) write(payload []byte) error {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
+// writeRequest is one frame queued for the writer goroutine.
+type writeRequest struct {
+	// ctx is the caller's. A frame whose caller has already given up is
+	// dropped rather than written: the caller has been told the call failed,
+	// and executing it anyway duplicates the side effect of a non-idempotent
+	// tool when the caller retries.
+	ctx     context.Context //nolint:containedctx // the queue carries the caller's deadline
+	payload []byte
+	result  chan error
+}
+
+// writeOwner serializes every write to the subprocess. Nothing else touches
+// stdin, so no caller ever holds a lock across the write: a server that stops
+// draining its stdin parks this one goroutine, and callers fall out on their
+// own contexts instead of queueing behind a mutex that will never be released.
+func (t *stdioTransport) writeOwner() {
+	for {
+		select {
+		case req := <-t.writes:
+			req.result <- t.serve(req)
+		case <-t.done:
+			// The transport is finished, but a caller may be mid-enqueue: a
+			// close that races an in-flight request must not leave it parked
+			// on a result nobody will send, and some callers pass a context
+			// with no deadline. Keep answering for a grace period, then stop
+			// so the goroutine does not outlive the transport.
+			grace := time.NewTimer(stdioShutdownGrace)
+			defer grace.Stop()
+			for {
+				select {
+				case req := <-t.writes:
+					req.result <- t.serve(req)
+				case <-grace.C:
+					close(t.writerGone)
+					return
+				}
+			}
+		}
+	}
+}
+
+// ensureWriter starts the writer goroutine on first use, so a transport built
+// without newStdioTransport (the tests do) still has one.
+func (t *stdioTransport) ensureWriter() chan *writeRequest {
+	t.writeOnce.Do(func() {
+		if t.writes == nil {
+			t.writes = make(chan *writeRequest, writeQueueDepth)
+		}
+		if t.writerGone == nil {
+			t.writerGone = make(chan struct{})
+		}
+		go t.writeOwner()
+	})
+	return t.writes
+}
+
+// serve writes one queued frame, skipping it when its caller has given up.
+func (t *stdioTransport) serve(req *writeRequest) error {
+	if req.ctx != nil {
+		if err := req.ctx.Err(); err != nil {
+			return err
+		}
+	}
+	return t.writeDirect(req.payload)
+}
+
+// write queues a frame and waits for the writer goroutine, bounded by ctx.
+func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
+	writes := t.ensureWriter()
+	select {
+	case <-t.writerGone:
+		return orClosed(nil)
+	default:
+	}
+	req := &writeRequest{ctx: ctx, payload: payload, result: make(chan error, 1)}
+	// Only ctx ends the wait. Watching done here would make a close that races
+	// an in-flight call discard a response the server already delivered.
+	select {
+	case writes <- req:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-req.result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.writerGone:
+		// The writer exited between the check above and now, so this frame
+		// has no consumer. Re-check the result first: the writer may have
+		// served it on its way out.
+		select {
+		case err := <-req.result:
+			return err
+		default:
+			return orClosed(nil)
+		}
+	}
+}
+
+func (t *stdioTransport) writeDirect(payload []byte) error {
 	if _, err := t.stdin.Write(payload); err != nil {
 		return fmt.Errorf("mcp: write request: %w", err)
 	}
@@ -409,19 +517,35 @@ func (t *stdioTransport) close() error {
 			select {
 			case <-t.done:
 			case <-time.After(stdioShutdownGrace):
+				// The reader never exited, so it will not fail the pending
+				// requests: do it here, or every in-flight caller waits out
+				// its own deadline on a transport that is already closed.
+				t.fail(errTransportClosed)
 			}
 		}
 
-		// cmd.Wait is bounded for the same reason: it blocks until every writer
-		// to the pipes is gone, which a surviving grandchild prevents.
-		waited := make(chan struct{})
-		go func() {
-			defer close(waited)
-			_ = t.cmd.Wait()
-		}()
+		// Reap only once the reader is done. cmd.Wait closes the stdout pipe,
+		// so calling it while readLoop is still blocked on a read replaces the
+		// error that read would have reported with a file-already-closed one.
+		// When the reader never finishes (a grandchild holding the pipe), the
+		// reap runs detached: it cannot be waited on here without reintroducing
+		// the hang the bounds above exist to prevent.
 		select {
-		case <-waited:
-		case <-time.After(stdioShutdownGrace):
+		case <-t.done:
+			waited := make(chan struct{})
+			go func() {
+				defer close(waited)
+				_ = t.cmd.Wait()
+			}()
+			select {
+			case <-waited:
+			case <-time.After(stdioShutdownGrace):
+			}
+		default:
+			go func() {
+				<-t.done
+				_ = t.cmd.Wait()
+			}()
 		}
 	})
 	return nil

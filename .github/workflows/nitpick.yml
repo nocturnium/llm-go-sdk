@@ -1,0 +1,68 @@
+# Reviews every pull request against main with open-nitpick, which reports
+# correctness, concurrency, security and slop findings inline on the PR.
+#
+# The job needs OPENROUTER_API_KEY in the repository secrets. A pull request
+# from a fork has no access to it, so the review is skipped there rather than
+# failing: fork PRs are reviewed after they land on a branch in this repo.
+name: Nitpick Review
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  GO_VERSION: '1.26'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The review diffs against the base, so the merge-base has to exist.
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # Pinned to a commit, not a tag or @latest. The binary decides which
+      # config fields parse, so an unpinned upgrade fails the job on a field
+      # rather than on anything in the diff: v1.12.0 rejects this repo's
+      # models.*.service_tier. The v2 tags are not installable either, since
+      # the module path is still github.com/jdziat/open-nitpick with no /v2.
+      - name: Install open-nitpick
+        run: go install github.com/jdziat/open-nitpick/cmd/nitpick@7379c73ca953
+
+      - name: Review the pull request
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::notice::OPENROUTER_API_KEY is not set; skipping the nitpick review."
+            exit 0
+          fi
+          nitpick review \
+            -repo . \
+            -base "origin/${{ github.base_ref }}" \
+            -owner "${{ github.repository_owner }}" \
+            -repo-name "${{ github.event.repository.name }}" \
+            -pr "${{ github.event.pull_request.number }}" \
+            -skip-draft \
+            -fail-on error

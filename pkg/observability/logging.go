@@ -485,7 +485,11 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			// Use StreamSender to handle backpressure - if consumer stops reading,
 			// we don't block forever and can log what we have. On early exit a
 			// terminal chunk is forwarded so the consumer never sees a silent close.
-			if sender.ForwardTerminalOnEarlyExit(sender.Send(chunk)) {
+			if result := sender.Send(chunk); !result.SendOK() {
+				// The consumer stopped reading. Release the provider rather than
+				// leaving it parked on a send with its HTTP body still open.
+				llms.DrainStream(stream)
+				sender.ForwardTerminalOnEarlyExit(result)
 				streamInterrupted = true
 				break
 			}

@@ -70,6 +70,10 @@ func NewRateLimiter(opts ...RateLimitOption) *RateLimiter {
 	return rl
 }
 
+// maxTokenInstallments bounds how many burst-sized charges RecordTokens will
+// make for one request. A provider-reported token count is untrusted input.
+const maxTokenInstallments = 64
+
 // tokenBucketBurst returns the configured token burst, defaulting to a full
 // minute's budget (tokensPerMin) when WithTokenBurst was not set. A full-minute
 // default is required because a single request may legitimately consume many
@@ -199,9 +203,8 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		requests = b
 	}
 	if err := requestLimiter.WaitN(waitCtx, requests); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) ||
-			errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
-			return ErrRateLimitTimeout
+		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
+			return failure
 		}
 		if errors.Is(err, context.Canceled) {
 			return err
@@ -217,14 +220,9 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 			tokens = b
 		}
 		if err := tokenLimiter.WaitN(waitCtx, tokens); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) ||
-				errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
-				return ErrRateLimitTimeout
+			if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
+				return failure
 			}
-			if errors.Is(err, context.Canceled) {
-				return err
-			}
-			return ErrRateLimitTimeout
 		}
 	}
 
@@ -278,14 +276,30 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		if burst <= 0 {
 			return
 		}
-		for extra > 0 {
+		// ReserveN refuses any count above the burst and charges nothing for
+		// it, so a large debt has to go in burst-sized installments. The count
+		// comes from the provider, so the installments are capped: past
+		// maxTokenInstallments the caller is already paced into the ground and
+		// the remainder buys nothing but CPU.
+		now := time.Now()
+		for range maxTokenInstallments {
+			if extra <= 0 {
+				break
+			}
 			n := min(extra, burst)
-			tokenLimiter.ReserveN(time.Now(), n)
+			tokenLimiter.ReserveN(now, n)
 			extra -= n
 		}
 	case actualTokens < rl.tokenEstimate:
 		// If we overestimated, refund unused tokens without exceeding burst.
-		refund := rl.tokenEstimate - actualTokens
+		// The wait path clamps its charge to the burst, so an estimate above
+		// the burst was never charged in full and must not be refunded in
+		// full: that would hand the limiter tokens nobody paid for.
+		charged := min(rl.tokenEstimate, rl.tokenBucketBurst())
+		refund := charged - actualTokens
+		if refund < 0 {
+			refund = 0
+		}
 		if remaining := rl.tokenBucketBurst() - int(tokenLimiter.Tokens()); refund > remaining {
 			refund = remaining
 		}
@@ -293,6 +307,39 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 			tokenLimiter.ReserveN(time.Now(), -refund)
 		}
 	}
+}
+
+// waitFailure classifies a limiter wait failure.
+//
+// A wait that ran out of time because the caller's own deadline was the
+// binding one carries context.DeadlineExceeded as well as the sentinel: a
+// retry layer that checks the context is then told not to retry a request
+// whose deadline has passed, while one checking the sentinel still matches.
+func (rl *RateLimiter) waitFailure(ctx, waitCtx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if errors.Is(ctxErr, context.Canceled) {
+			return ctxErr
+		}
+		// Both, so a caller matching the sentinel still matches and one
+		// checking the context learns the deadline is already past.
+		return fmt.Errorf("%w: %w", ErrRateLimitTimeout, ctxErr)
+	}
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	// waitCtx carries the earlier of the caller's deadline and the limiter's
+	// wait timeout, so comparing the two deadlines says which one bound the
+	// wait. Comparing against the raw wait timeout instead would call the
+	// limiter's own timeout a caller deadline once an earlier stage had
+	// consumed part of the budget.
+	callerDeadline, hasCaller := ctx.Deadline()
+	waitDeadline, hasWait := waitCtx.Deadline()
+	if hasCaller && (!hasWait || !callerDeadline.After(waitDeadline)) {
+		return fmt.Errorf("%w: %w", ErrRateLimitTimeout, context.DeadlineExceeded)
+	}
+	// What is left is the limiter's own wait timeout, or rate's "would exceed
+	// context deadline" against that timeout rather than the caller's.
+	return ErrRateLimitTimeout
 }
 
 // RequestsRemaining returns the approximate number of requests that can be made immediately

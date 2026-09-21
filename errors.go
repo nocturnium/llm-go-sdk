@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -139,7 +141,7 @@ func (e *APIError) Error() string {
 			result += e.RequestMethod + " "
 		}
 		if e.RequestURL != "" {
-			result += e.RequestURL
+			result += sanitizeErrorURL(e.RequestURL)
 		}
 		result += "]"
 	}
@@ -322,6 +324,51 @@ func (e *StreamError) Is(target error) bool {
 		return true
 	}
 	return errors.Is(e.Cause, target)
+}
+
+// sanitizeErrorURL strips the parts of a URL that carry credentials before it
+// reaches an error string. Providers put API keys in the query (Gemini) and
+// userinfo survives a misconfigured base URL, and an error string is the one
+// value callers are certain to log.
+func sanitizeErrorURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		// The URL is malformed, which is how a misconfigured base URL arrives,
+		// so cut by hand: everything from the first '?' goes, and so does any
+		// userinfo ahead of the host.
+		trimmed := rawURL
+		scheme := ""
+		if idx := strings.Index(trimmed, "://"); idx >= 0 {
+			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
+		}
+		// The credential goes first, before the query and fragment are cut: a
+		// password containing '?' or '#' would otherwise have its tail removed
+		// here and its head left behind with no '@' for the scan to find.
+		// Cutting at the last '@' can lose a path segment that legitimately
+		// contains one, which is the right way to be wrong in a redactor.
+		if idx := strings.LastIndex(trimmed, "@"); idx >= 0 {
+			trimmed = trimmed[idx+1:]
+		}
+		if idx := strings.Index(trimmed, "?"); idx >= 0 {
+			trimmed = trimmed[:idx]
+		}
+		if idx := strings.Index(trimmed, "#"); idx >= 0 {
+			trimmed = trimmed[:idx]
+		}
+		return scheme + trimmed
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	// An opaque URL ("https:KEY@host/v1", which a misconfigured base URL can
+	// produce) keeps its credential in Opaque rather than in User.
+	if u.Opaque != "" {
+		if idx := strings.LastIndex(u.Opaque, "@"); idx >= 0 {
+			u.Opaque = u.Opaque[idx+1:]
+		}
+	}
+	return u.String()
 }
 
 // ProviderError wraps an error with provider context for consistent error handling
