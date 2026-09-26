@@ -86,14 +86,19 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	}
 	prepared = llms.DropForeignReplay(prepared, llms.ProviderGemini)
 
-	req, err := c.buildRequest(prepared, opts)
-	if err != nil {
-		return nil, err
-	}
-
 	model := c.options.Model
 	if opts.Model != "" {
 		model = opts.Model
+	}
+	var adjustments []string
+	prepared, skipped := skipValidationForUnsignedCalls(prepared, model)
+	if skipped {
+		adjustments = append(adjustments, adjustmentSignatureValidatorSkipped)
+	}
+
+	req, err := c.buildRequest(prepared, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.client.GenerateContent(ctx, model, req)
@@ -116,6 +121,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	}
 
 	llms.StampResponse(result, llms.ProviderGemini, model)
+	result.Adjustments = adjustments
 	return result, nil
 }
 
@@ -157,14 +163,19 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	}
 	prepared = llms.DropForeignReplay(prepared, llms.ProviderGemini)
 
-	req, err := c.buildRequest(prepared, opts)
-	if err != nil {
-		return nil, err
-	}
-
 	model := c.options.Model
 	if opts.Model != "" {
 		model = opts.Model
+	}
+	var adjustments []string
+	prepared, skipped := skipValidationForUnsignedCalls(prepared, model)
+	if skipped {
+		adjustments = append(adjustments, adjustmentSignatureValidatorSkipped)
+	}
+
+	req, err := c.buildRequest(prepared, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	stream, err := c.client.GenerateContentStream(ctx, model, req)
@@ -181,6 +192,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	go func() {
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		sender.SetIdentity(llms.ProviderGemini, model)
+		sender.SetAdjustments(adjustments)
 
 		defer close(chunks)
 		// A malformed/hostile provider response must never crash the host process.
@@ -451,7 +463,7 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) (
 		case llms.ResponseFormatJSONSchema:
 			config.ResponseMimeType = "application/json"
 			if opts.ResponseFormat.JSONSchema != nil {
-				config.ResponseSchema = opts.ResponseFormat.JSONSchema.Schema
+				config.ResponseJSONSchema = opts.ResponseFormat.JSONSchema.Schema
 			}
 		case llms.ResponseFormatJSONObject:
 			config.ResponseMimeType = "application/json"

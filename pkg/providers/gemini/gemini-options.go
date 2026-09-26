@@ -34,7 +34,7 @@ type options struct {
 // defaultOptions returns the default options for Gemini.
 func defaultOptions() *options {
 	return &options{
-		Model:              "gemini-2.5-flash",
+		Model:              "gemini-3.5-flash",
 		ImageModel:         "gemini-3.1-flash-image",
 		VideoModel:         "veo-3.1-lite-generate-preview",
 		SpeechModel:        "gemini-3.1-flash-tts-preview",

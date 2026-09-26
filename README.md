@@ -108,7 +108,7 @@ import (
 
 // By name. llms.Config carries the common construction settings.
 client, err := llms.New("anthropic", llms.Config{
-	Model: "claude-sonnet-4-20250514",
+	Model: "claude-sonnet-5",
 })
 
 // Entirely from env: LLM_PROVIDER (required) + LLM_MODEL (optional),
@@ -148,8 +148,8 @@ schema); "Native" providers implement a provider-specific wire format.
 | OpenAI | `pkg/providers/openai` | `OPENAI_API_KEY` | Native (OpenAI) | `gpt-4o` (default); chat, streaming, tools, vision, JSON mode, embeddings (`text-embedding-3-*`), custom base URL |
 | ElevenLabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | Speech, Scribe transcription, SFX/music, Pro-plan Flows image/video; direct-construct, no chat |
 | OpenRouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` (default); images, speech, transcription, async video, model discovery |
-| Anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | **Native** (Messages API) | `claude-sonnet-4-20250514` (default); chat, streaming, tools, vision, extended thinking, prompt caching (`cache_control`) |
-| Gemini | `pkg/providers/gemini` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | **Native** (Gemini API) | `gemini-2.5-flash` (default); chat, streaming, tools, vision, embeddings (`text-embedding-004`), JSON mode, safety settings |
+| Anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | **Native** (Messages API) | `claude-sonnet-5` (default); chat, streaming, tools, vision, extended thinking, prompt caching (`cache_control`) |
+| Gemini | `pkg/providers/gemini` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | **Native** (Gemini API) | `gemini-3.5-flash` (default); chat, streaming, tools, vision, embeddings (`text-embedding-004`), JSON mode, safety settings |
 | Azure OpenAI | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` or `AZURE_OPENAI_KEY`; `AZURE_OPENAI_ENDPOINT`; `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | Deployment-based; chat, streaming, tools, JSON mode, embeddings; API version default `2024-02-15-preview`; enterprise/PTU/content filtering |
 | Groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` (default); LPU ultra-low-latency; Llama/Mixtral/Gemma; tools, JSON mode |
 | Cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `llama3.1-70b` (default), `llama3.1-8b`; wafer-scale fast inference; tools, JSON mode |
@@ -891,7 +891,7 @@ import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
 
 client, err := anthropic.New(
     anthropic.WithAPIKey("sk-ant-..."), // Or use ANTHROPIC_API_KEY env
-    anthropic.WithModel("claude-sonnet-4-20250514"),
+    anthropic.WithModel("claude-sonnet-5"),
 )
 ```
 
@@ -902,7 +902,7 @@ import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/gemini"
 
 client, err := gemini.New(
     gemini.WithAPIKey("..."), // Or use GEMINI_API_KEY / GOOGLE_API_KEY env
-    gemini.WithModel("gemini-2.5-flash"),
+    gemini.WithModel("gemini-3.5-flash"),
 )
 ```
 
@@ -961,7 +961,7 @@ go build -o llms-cli ./cmd
 ./llms-cli chat -p openai "What is the capital of France?"
 
 # With options
-./llms-cli chat -p anthropic -m claude-sonnet-4-20250514 -t 0.5 "Explain Go interfaces"
+./llms-cli chat -p anthropic -m claude-sonnet-5 -t 0.5 "Explain Go interfaces"
 
 # Simple completion
 ./llms-cli complete -p gemini "The sky is"

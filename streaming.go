@@ -44,6 +44,22 @@ type StreamSender struct {
 	// chunk this sender delivers (see StampResponse).
 	identityProvider Provider
 	identityModel    string
+	// adjustments, when set by SetAdjustments, ride on the final chunk. It is
+	// a pointer so StreamSender stays comparable.
+	adjustments *[]string
+}
+
+// SetAdjustments makes the sender report adjustments on the final chunk as
+// [StreamChunk.Adjustments], for a provider that changed the request so it
+// would be accepted. A final chunk that already names adjustments keeps its
+// own. Like SetIdentity, call it before the first Send.
+func (s *StreamSender) SetAdjustments(adjustments []string) {
+	if len(adjustments) == 0 {
+		s.adjustments = nil
+		return
+	}
+	own := append([]string(nil), adjustments...)
+	s.adjustments = &own
 }
 
 // SetIdentity makes the sender stamp each chunk it delivers with the provider
@@ -58,8 +74,11 @@ func (s *StreamSender) SetIdentity(p Provider, model string) {
 	s.identityModel = model
 }
 
-// stamp applies the sender's identity to chunk, if it has one.
+// stamp applies the sender's identity and adjustments to chunk, if it has them.
 func (s *StreamSender) stamp(chunk StreamChunk) StreamChunk {
+	if s.adjustments != nil && chunk.Done && chunk.Error == nil && len(chunk.Adjustments) == 0 {
+		chunk.Adjustments = *s.adjustments
+	}
 	if s.identityProvider == "" {
 		return chunk
 	}

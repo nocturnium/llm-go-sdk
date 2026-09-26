@@ -28,7 +28,12 @@ func TestClient_GenerateContent_JSONSchemaResponseFormatWireRequest(t *testing.T
 		if config["responseMimeType"] != "application/json" {
 			t.Fatalf("responseMimeType = %v, want application/json", config["responseMimeType"])
 		}
-		geminiAssertJSONValueEqual(t, config["responseSchema"], schema)
+		// JSON Schema goes in responseJsonSchema: the OpenAPI-subset
+		// responseSchema field rejects additionalProperties with a 400.
+		if _, ok := config["responseSchema"]; ok {
+			t.Error("schema sent in responseSchema, which rejects JSON Schema keywords")
+		}
+		geminiAssertJSONValueEqual(t, config["responseJsonSchema"], schema)
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
