@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - Served-by identity: `Response.Provider`, `Response.Model` (the requested model ID) and `Response.ModelVersion` (the version the API reported), also on the final `StreamChunk` and on `StreamResult`. A fallback chain reports the entry that answered.
 - Reasoning provenance: `ReasoningContent.Provider`/`Model` and `ToolCall.SignatureProvider`, stamped by every provider (`StampResponse`, `StreamSender.SetIdentity`) and honored by `DropForeignReplay`, `ReasoningContent.ReplayableBy` and `ToolCall.SignatureReplayableBy`.
 - `Response.Adjustments` and `StreamChunk.Adjustments` for naming changes a provider makes to a request so it is accepted.
+- Providers now adjust a request that would otherwise be rejected after a conversation moved between providers, and name each adjustment in `Response.Adjustments`: Anthropic suspends manual extended thinking for one request when no assistant message of the current tool turn carries a thinking block it can replay (`anthropic.thinking_suspended`; adaptive-thinking and always-on models are unaffected); Gemini 3 marks the first function call of each step of the current turn that lacks Gemini's own signature with Google's `skip_thought_signature_validator` placeholder (`gemini.signature_validator_skipped`); Mistral rewrites tool-call IDs that are not nine alphanumerics to a deterministic hash (`mistral.tool_ids_rewritten`, via the new `openaicompat.ProviderConfig.ToolCallIDFormat`). Adds `CurrentTurnStart` and `StreamSender.SetAdjustments`.
 - `NewToolCallID` and `EnsureToolCallIDs` for session-unique tool-call IDs, `ReasoningContent.Clone`, and `ToolRegistry.Handler` for callers that report handler errors through their own path.
 - The `StreamChunk.ToolCalls` contract is now documented: tool calls arrive complete on the final chunk only.
 
@@ -36,6 +37,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- An Anthropic thinking block with empty text (recent models return signature-only blocks) is replayed with its `thinking` field, which the API requires; it was dropped as empty and the next turn failed with "thinking: Field required".
+- The Anthropic default model is now `claude-sonnet-5` (was `claude-sonnet-4-20250514`, which the API now answers with 404) and the Gemini default is `gemini-3.5-flash` (was `gemini-2.5-flash`, which Gemini no longer offers to new users). Both were found by the llmadk live gate.
+- Gemini tool parameters and response schemas are sent as JSON Schema (`parametersJsonSchema`, `responseJsonSchema`). The OpenAPI-subset fields they went in before answer standard keywords such as `additionalProperties`, present in every schema generated from a Go struct, with a 400.
 - An error string no longer carries credentials: `APIError.Error` strips userinfo, query and fragment from the request URL, including the malformed and opaque forms a misconfigured base URL produces.
 - The JSON logger's default redaction clears `Metadata` and `RequestParameters`, which it marshaled verbatim, and the slog logger sanitizes non-string metadata values.
 - MCP writes are serialized by a writer goroutine rather than a mutex held across the pipe write, so an abandoned write no longer wedges every later request; a frame whose caller gave up is dropped, and `Close` fails in-flight requests when the reader cannot exit.

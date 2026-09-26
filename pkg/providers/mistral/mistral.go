@@ -28,6 +28,10 @@ var providerConfig = openaicompat.ProviderConfig{
 		MaxContextTokens: 131072, // 128k for latest models
 		MaxOutputTokens:  8192,
 	},
+	// Mistral rejects tool-call IDs that are not nine characters of
+	// [a-zA-Z0-9], which is what an OpenAI or Anthropic ID left in history by a
+	// fallback or a model switch looks like.
+	ToolCallIDFormat: openaicompat.ToolCallIDNineChar,
 }
 
 // Client is a Mistral AI LLM client.

@@ -174,6 +174,10 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	if err != nil {
 		return nil, err
 	}
+	var adjustments []string
+	if thinkingSuspended(c.requestModel(opts), opts, prepared) {
+		adjustments = append(adjustments, adjustmentThinkingSuspended)
+	}
 
 	resp, err := c.client.CreateMessage(ctx, req)
 	if err != nil {
@@ -188,6 +192,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	}
 
 	llms.StampResponse(result, llms.ProviderAnthropic, req.Model)
+	result.Adjustments = adjustments
 	return result, nil
 }
 
@@ -226,6 +231,10 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	if err != nil {
 		return nil, err
 	}
+	var adjustments []string
+	if thinkingSuspended(c.requestModel(opts), opts, prepared) {
+		adjustments = append(adjustments, adjustmentThinkingSuspended)
+	}
 
 	stream, err := c.client.CreateMessageStream(ctx, req)
 	if err != nil {
@@ -241,6 +250,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	go func() {
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		sender.SetIdentity(llms.ProviderAnthropic, req.Model)
+		sender.SetAdjustments(adjustments)
 
 		defer close(chunks)
 		// A malformed/hostile provider response must never crash the host process.
@@ -551,7 +561,11 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 	}
 
 	structuredName := structuredOutputToolNameFor(opts)
-	applyThinking(req, gen, opts.Reasoning, structuredName != "")
+	reasoning := opts.Reasoning
+	if thinkingSuspended(model, opts, messages) {
+		reasoning = nil
+	}
+	applyThinking(req, gen, reasoning, structuredName != "")
 
 	// Prompt caching. Caching the system prompt is on by default (preserving prior
 	// behavior); WithCache/WithCacheTTL additionally cache the tool definitions,

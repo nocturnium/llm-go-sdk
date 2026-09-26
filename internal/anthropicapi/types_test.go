@@ -2,6 +2,7 @@ package anthropicapi
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -320,5 +321,19 @@ func TestToolChoiceTypes(t *testing.T) {
 				t.Errorf("expected %s, got %s", tc.expected, string(data))
 			}
 		})
+	}
+}
+
+func TestContentPart_ThinkingAlwaysCarriesText(t *testing.T) {
+	b, err := json.Marshal(ContentPart{Type: "thinking", Signature: "sig"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"thinking":""`) {
+		t.Errorf("empty thinking block marshals as %s, without the required thinking field", b)
+	}
+	b, _ = json.Marshal(ContentPart{Type: "text", Text: "hi"})
+	if strings.Contains(string(b), "thinking") {
+		t.Errorf("text block carries a thinking field: %s", b)
 	}
 }

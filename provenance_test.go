@@ -281,3 +281,18 @@ func TestProvenanceSurvivesCopies(t *testing.T) {
 		}
 	})
 }
+
+func TestStreamSender_SetAdjustments(t *testing.T) {
+	ch := make(chan StreamChunk, 2)
+	s := NewStreamSender(context.Background(), ch, 0)
+	s.SetAdjustments([]string{"p.changed"})
+	s.Send(StreamChunk{Content: "x"})
+	s.SendFinal(StreamChunk{})
+	close(ch)
+	if first := <-ch; first.Adjustments != nil {
+		t.Errorf("non-final chunk carries adjustments %v", first.Adjustments)
+	}
+	if final := <-ch; len(final.Adjustments) != 1 || final.Adjustments[0] != "p.changed" {
+		t.Errorf("final adjustments = %v", final.Adjustments)
+	}
+}
