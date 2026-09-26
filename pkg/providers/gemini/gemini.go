@@ -86,14 +86,19 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	}
 	prepared = llms.DropForeignReplay(prepared, llms.ProviderGemini)
 
-	req, err := c.buildRequest(prepared, opts)
-	if err != nil {
-		return nil, err
-	}
-
 	model := c.options.Model
 	if opts.Model != "" {
 		model = opts.Model
+	}
+	var adjustments []string
+	prepared, skipped := skipValidationForUnsignedCalls(prepared, model)
+	if skipped {
+		adjustments = append(adjustments, adjustmentSignatureValidatorSkipped)
+	}
+
+	req, err := c.buildRequest(prepared, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.client.GenerateContent(ctx, model, req)
@@ -116,6 +121,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	}
 
 	llms.StampResponse(result, llms.ProviderGemini, model)
+	result.Adjustments = adjustments
 	return result, nil
 }
 
@@ -157,14 +163,19 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	}
 	prepared = llms.DropForeignReplay(prepared, llms.ProviderGemini)
 
-	req, err := c.buildRequest(prepared, opts)
-	if err != nil {
-		return nil, err
-	}
-
 	model := c.options.Model
 	if opts.Model != "" {
 		model = opts.Model
+	}
+	var adjustments []string
+	prepared, skipped := skipValidationForUnsignedCalls(prepared, model)
+	if skipped {
+		adjustments = append(adjustments, adjustmentSignatureValidatorSkipped)
+	}
+
+	req, err := c.buildRequest(prepared, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	stream, err := c.client.GenerateContentStream(ctx, model, req)
@@ -271,6 +282,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					FinishReason: finishReason,
 					Usage:        finalUsage,
 					ModelVersion: modelVersion,
+					Adjustments:  adjustments,
 				})
 				return
 			}
