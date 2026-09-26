@@ -144,6 +144,20 @@ func convertUsageMetadata(um *geminiapi.UsageMetadata) llms.Usage {
 // returns ErrInvalidParameters for content Gemini cannot accept, such as
 // URL-sourced images.
 func convertMessages(messages []llms.Message) ([]geminiapi.Content, error) {
+	return convertMessagesFor(messages, false)
+}
+
+// convertMessagesFor is convertMessages, also echoing tool-call IDs on replayed
+// function calls and on function responses when sendIDs is set. Gemini 3 pairs a
+// response with its call by that ID; earlier models pair by name and are sent
+// none, since they never issued one.
+func convertMessagesFor(messages []llms.Message, sendIDs bool) ([]geminiapi.Content, error) {
+	id := func(s string) string {
+		if sendIDs {
+			return s
+		}
+		return ""
+	}
 	var result []geminiapi.Content
 	// callNames maps each assistant tool-call ID seen so far to its function
 	// name, for tool results that carry only the ID.
@@ -182,6 +196,7 @@ func convertMessages(messages []llms.Message) ([]geminiapi.Content, error) {
 			}
 			parts = append(parts, geminiapi.Part{
 				FunctionResponse: &geminiapi.FunctionResponse{
+					ID:       id(msg.ToolCallID),
 					Name:     name,
 					Response: respData,
 				},
@@ -213,6 +228,7 @@ func convertMessages(messages []llms.Message) ([]geminiapi.Content, error) {
 
 				parts = append(parts, geminiapi.Part{
 					FunctionCall: &geminiapi.FunctionCall{
+						ID:   id(tc.ID),
 						Name: tc.Function.Name,
 						Args: args,
 					},

@@ -420,8 +420,12 @@ func splitSystemInstruction(messages []llms.Message) (*geminiapi.Content, []llms
 }
 
 func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) (*geminiapi.GenerateContentRequest, error) {
+	model := c.options.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
 	systemInstruction, contents := splitSystemInstruction(messages)
-	converted, err := convertMessages(contents)
+	converted, err := convertMessagesFor(contents, isGemini3OrLater(model))
 	if err != nil {
 		return nil, err
 	}

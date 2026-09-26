@@ -164,3 +164,57 @@ func TestStream_IdentityAndToolCallContract(t *testing.T) {
 		t.Errorf("signature stamps = %q/%q", final.ToolCalls[0].SignatureProvider, final.ToolCalls[1].SignatureProvider)
 	}
 }
+
+// TestGenerateContent_EchoesCallIDsToGemini3 checks that requests to Gemini 3
+// carry each call's ID on the replayed functionCall and on its functionResponse,
+// which Gemini 3 pairs by ID, and that earlier models, which never issued IDs,
+// are sent none.
+func TestGenerateContent_EchoesCallIDsToGemini3(t *testing.T) {
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{
+			{ID: "fc_one", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "f", Arguments: "{}"}},
+			{ID: "fc_two", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "f", Arguments: "{}"}},
+		}},
+		{Role: llms.RoleTool, ToolCallID: "fc_one", Content: "{}"},
+		{Role: llms.RoleTool, ToolCallID: "fc_two", Content: "{}"},
+	}
+	for _, tt := range []struct {
+		model string
+		want  bool
+	}{{"gemini-3-pro", true}, {"gemini-2.5-flash", false}} {
+		c, last := geminiServer(t, `{"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":"ok"}]}}]}`)
+		if _, err := c.GenerateContent(context.Background(), msgs, llms.WithModel(tt.model)); err != nil {
+			t.Fatal(err)
+		}
+		var req struct {
+			Contents []struct {
+				Parts []struct {
+					FunctionCall     *struct{ ID string } `json:"functionCall"`
+					FunctionResponse *struct{ ID string } `json:"functionResponse"`
+				} `json:"parts"`
+			} `json:"contents"`
+		}
+		if err := json.Unmarshal([]byte(*last), &req); err != nil {
+			t.Fatal(err)
+		}
+		var calls, responses []string
+		for _, content := range req.Contents {
+			for _, p := range content.Parts {
+				if p.FunctionCall != nil {
+					calls = append(calls, p.FunctionCall.ID)
+				}
+				if p.FunctionResponse != nil {
+					responses = append(responses, p.FunctionResponse.ID)
+				}
+			}
+		}
+		want := []string{"", ""}
+		if tt.want {
+			want = []string{"fc_one", "fc_two"}
+		}
+		if strings.Join(calls, ",") != strings.Join(want, ",") || strings.Join(responses, ",") != strings.Join(want, ",") {
+			t.Errorf("%s: call IDs %v, response IDs %v, want %v on both", tt.model, calls, responses, want)
+		}
+	}
+}
