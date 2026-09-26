@@ -116,11 +116,13 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           PREVIOUS: ${{ needs.version.outputs.previous }}
         run: |
-          RANGE="${VERSION}"
+          # The first release has no previous tag to start a range from, so it
+          # takes the latest release section instead.
+          RANGE=(--latest)
           if [ "${PREVIOUS}" != none ]; then
-            RANGE="${PREVIOUS}..${VERSION}"
+            RANGE=("${PREVIOUS}..${VERSION}")
           fi
           git cliff --config cliff.toml --tag-pattern '^llmadk/v[0-9]+\.' \
-            --include-path 'llmadk/**' --strip header "${RANGE}" > notes.md
+            --include-path 'llmadk/**' --strip header "${RANGE[@]}" > notes.md
           gh release create "${VERSION}" --title "llmadk ${VERSION#llmadk/}" \
             --notes-file notes.md --latest=false
