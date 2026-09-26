@@ -6,10 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Gemini tool calls get the API's native ID when it returns one and a minted nine-character ID otherwise, instead of the function name, which repeated across parallel calls and turns and made frameworks that pair calls with results by ID (Google ADK) mis-pair them. A tool result that carries only `ToolCallID` is still named after its call, and an ID that matches no earlier call is still taken as the function name, so existing callers keep working. OpenAI-compatible servers that omit or repeat tool-call IDs get minted ones too.
+- Each provider now sends back only the reasoning and tool-call signatures it issued, dropping those another provider stamped. A conversation moved between providers by a fallback chain or an agent framework no longer draws a 400 for a foreign thinking signature. Unstamped reasoning, including all reasoning built before this release, replays as before.
+
 - The module now requires Go 1.26: `golang.org/x/time` 0.16.0 declares `go 1.26.0`, so the CI test matrix, the workflow toolchains and the docs move with it.
 - OpenTelemetry dependencies move to v1.46.0, and the GitHub Actions used by CI, release and Pages move to their current majors.
 
 ### Added
+
+- Served-by identity: `Response.Provider`, `Response.Model` (the requested model ID) and `Response.ModelVersion` (the version the API reported), also on the final `StreamChunk` and on `StreamResult`. A fallback chain reports the entry that answered.
+- Reasoning provenance: `ReasoningContent.Provider`/`Model` and `ToolCall.SignatureProvider`, stamped by every provider (`StampResponse`, `StreamSender.SetIdentity`) and honored by `DropForeignReplay`, `ReasoningContent.ReplayableBy` and `ToolCall.SignatureReplayableBy`.
+- `Response.Adjustments` and `StreamChunk.Adjustments` for naming changes a provider makes to a request so it is accepted.
+- `NewToolCallID` and `EnsureToolCallIDs` for session-unique tool-call IDs, `ReasoningContent.Clone`, and `ToolRegistry.Handler` for callers that report handler errors through their own path.
+- The `StreamChunk.ToolCalls` contract is now documented: tool calls arrive complete on the final chunk only.
 
 - OpenRouter usage accounting (`WithUsageAccounting`) filling the new `llms.Usage.Cost` with the charge OpenRouter reports, `PricingModeFor` mapping a served service tier onto a billing lane, and the served tier on a stream's final chunk via the new `llms.StreamChunk.ServiceTier`. `CostTracker` now banks a provider-reported cost in preference to a rate-card estimate.
 

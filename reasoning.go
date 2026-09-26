@@ -69,6 +69,37 @@ type ReasoningContent struct {
 	Signature string `json:"signature,omitempty"`
 	// Metadata carries provider-specific reasoning details.
 	Metadata map[string]any `json:"metadata,omitempty"`
+
+	// Provider and Model record who produced this reasoning. A signature or
+	// encrypted payload is only valid for the provider that issued it, so each
+	// provider replays reasoning stamped with its own name and drops reasoning
+	// stamped with another's (see [ReasoningContent.ReplayableBy]). Providers
+	// stamp what they return; reasoning built by hand is unstamped and replays
+	// everywhere, as it did before stamps existed.
+	Provider Provider `json:"provider,omitempty"`
+	Model    string   `json:"model,omitempty"`
+}
+
+// ReplayableBy reports whether provider p may send r back in a request: true
+// when r is unstamped or was produced by p. It is false for a nil r.
+func (r *ReasoningContent) ReplayableBy(p Provider) bool {
+	return r != nil && (r.Provider == "" || r.Provider == p)
+}
+
+// Clone returns a copy of r that shares nothing mutable with it: Metadata is
+// copied one level deep. It returns nil for a nil r.
+func (r *ReasoningContent) Clone() *ReasoningContent {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	if r.Metadata != nil {
+		c.Metadata = make(map[string]any, len(r.Metadata))
+		for k, v := range r.Metadata {
+			c.Metadata[k] = v
+		}
+	}
+	return &c
 }
 
 // ReasoningBudgetForEffort maps a qualitative ReasoningEffort to a default

@@ -1,0 +1,166 @@
+package gemini
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	llms "github.com/nocturnium/llm-go-sdk/v6"
+)
+
+// geminiServer answers every request with body and records the last request.
+func geminiServer(t *testing.T, body string) (*Client, *string) {
+	t.Helper()
+	var last string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		last = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	c, err := New(WithAPIKey("k"), WithBaseURL(server.URL), WithAllowPrivateIPs(), WithAllowHTTP())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c, &last
+}
+
+func TestGenerateContent_ToolCallIDs(t *testing.T) {
+	t.Run("native ID is kept and repeated names get distinct IDs", func(t *testing.T) {
+		c, _ := geminiServer(t, `{"modelVersion":"gemini-reported","candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[
+			{"functionCall":{"id":"fc_native","name":"get_weather","args":{"city":"a"}}},
+			{"functionCall":{"name":"get_weather","args":{"city":"b"}}},
+			{"functionCall":{"name":"get_weather","args":{"city":"c"}}}
+		]}}]}`)
+		resp, err := c.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "weather"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.ToolCalls[0].ID != "fc_native" {
+			t.Errorf("native ID = %q, want fc_native", resp.ToolCalls[0].ID)
+		}
+		seen := map[string]bool{}
+		for _, tc := range resp.ToolCalls {
+			if tc.ID == "" || tc.ID == "get_weather" || seen[tc.ID] {
+				t.Errorf("IDs not unique minted IDs: %+v", resp.ToolCalls)
+			}
+			seen[tc.ID] = true
+		}
+		if resp.Provider != llms.ProviderGemini || resp.Model != c.Model() || resp.ModelVersion != "gemini-reported" {
+			t.Errorf("identity = %q/%q/%q", resp.Provider, resp.Model, resp.ModelVersion)
+		}
+	})
+
+	t.Run("tool result with only an ID is named after its call", func(t *testing.T) {
+		c, last := geminiServer(t, `{"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":"ok"}]}}]}`)
+		msgs := []llms.Message{
+			{Role: llms.RoleUser, Content: "weather"},
+			{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{
+				{ID: "abc123XYZ", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "get_weather", Arguments: "{}"}},
+			}},
+			{Role: llms.RoleTool, ToolCallID: "abc123XYZ", Content: `{"temp":1}`},
+			{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{
+				{ID: "legacy_name", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "legacy_name", Arguments: "{}"}},
+			}},
+			{Role: llms.RoleTool, ToolCallID: "unmatched_fn", Content: `{"x":2}`},
+		}
+		if _, err := c.GenerateContent(context.Background(), msgs); err != nil {
+			t.Fatal(err)
+		}
+		var req struct {
+			Contents []struct {
+				Parts []struct {
+					FunctionResponse *struct {
+						Name string `json:"name"`
+					} `json:"functionResponse"`
+				} `json:"parts"`
+			} `json:"contents"`
+		}
+		if err := json.Unmarshal([]byte(*last), &req); err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, content := range req.Contents {
+			for _, p := range content.Parts {
+				if p.FunctionResponse != nil {
+					names = append(names, p.FunctionResponse.Name)
+				}
+			}
+		}
+		if len(names) != 2 || names[0] != "get_weather" || names[1] != "unmatched_fn" {
+			t.Errorf("function response names = %v, want [get_weather unmatched_fn]", names)
+		}
+	})
+}
+
+func TestGenerateContent_DropsForeignSignatures(t *testing.T) {
+	c, last := geminiServer(t, `{"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":"ok"}]}}]}`)
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{
+			{ID: "own1abcde", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "f", Arguments: "{}"},
+				Signature: "own-sig", SignatureProvider: llms.ProviderGemini},
+			{ID: "for1abcde", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "g", Arguments: "{}"},
+				Signature: "foreign-sig", SignatureProvider: llms.ProviderAnthropic},
+		}},
+		{Role: llms.RoleTool, ToolCallID: "own1abcde", Name: "f", Content: "{}"},
+		{Role: llms.RoleTool, ToolCallID: "for1abcde", Name: "g", Content: "{}"},
+	}
+	if _, err := c.GenerateContent(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(*last, "own-sig") {
+		t.Errorf("own signature missing: %s", *last)
+	}
+	if strings.Contains(*last, "foreign-sig") {
+		t.Errorf("foreign signature sent: %s", *last)
+	}
+}
+
+func TestStream_IdentityAndToolCallContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, ev := range []string{
+			`{"modelVersion":"gemini-reported","candidates":[{"content":{"role":"model","parts":[{"text":"thinking","thought":true}]}}]}`,
+			`{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"f","args":{}},"thoughtSignature":"sig"}]}}]}`,
+			`{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"f","args":{"n":2}}}]},"finishReason":"STOP"}]}`,
+		} {
+			_, _ = w.Write([]byte("data: " + ev + "\n\n"))
+		}
+	}))
+	defer server.Close()
+	c, err := New(WithAPIKey("k"), WithBaseURL(server.URL), WithAllowPrivateIPs(), WithAllowHTTP())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := c.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "go"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var final llms.StreamChunk
+	for ch := range stream {
+		if ch.Error != nil {
+			t.Fatal(ch.Error)
+		}
+		if !ch.Done && len(ch.ToolCalls) > 0 {
+			t.Errorf("non-final chunk carries tool calls: %+v", ch.ToolCalls)
+		}
+		if ch.Done {
+			final = ch
+		}
+	}
+	if final.Provider != llms.ProviderGemini || final.Model != c.Model() || final.ModelVersion != "gemini-reported" {
+		t.Errorf("final identity = %q/%q/%q", final.Provider, final.Model, final.ModelVersion)
+	}
+	if len(final.ToolCalls) != 2 || final.ToolCalls[0].ID == final.ToolCalls[1].ID || final.ToolCalls[0].ID == "f" {
+		t.Errorf("final tool call IDs = %+v, want two distinct minted IDs", final.ToolCalls)
+	}
+	if final.ToolCalls[0].SignatureProvider != llms.ProviderGemini || final.ToolCalls[1].SignatureProvider != "" {
+		t.Errorf("signature stamps = %q/%q", final.ToolCalls[0].SignatureProvider, final.ToolCalls[1].SignatureProvider)
+	}
+}

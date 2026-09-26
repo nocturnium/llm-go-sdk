@@ -51,7 +51,7 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil {
 				tc := llms.ToolCall{
-					ID:   part.FunctionCall.Name, // Gemini doesn't have IDs, use name
+					ID:   part.FunctionCall.ID,
 					Type: llms.ToolTypeFunction,
 					Function: &llms.FunctionCall{
 						Name:      part.FunctionCall.Name,
@@ -64,6 +64,11 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 		}
 	}
 
+	// The API returns an ID only on some models and endpoints; the rest are
+	// minted, never the function name, which repeats across parallel calls and
+	// turns.
+	llms.EnsureToolCallIDs(response.ToolCalls)
+	response.ModelVersion = resp.ModelVersion
 	response.FinishReason = llms.FinishReason(geminiapi.GetFinishReason(candidate.FinishReason))
 	// Gemini returns STOP even when the response contains function calls; normalize
 	// to the cross-provider tool-calls finish reason so callers keying on it work.
@@ -140,9 +145,17 @@ func convertUsageMetadata(um *geminiapi.UsageMetadata) llms.Usage {
 // URL-sourced images.
 func convertMessages(messages []llms.Message) ([]geminiapi.Content, error) {
 	var result []geminiapi.Content
+	// callNames maps each assistant tool-call ID seen so far to its function
+	// name, for tool results that carry only the ID.
+	callNames := map[string]string{}
 
 	for _, msg := range messages {
 		role := convertRole(msg.Role)
+		for _, tc := range msg.ToolCalls {
+			if tc.Function != nil {
+				callNames[tc.ID] = tc.Function.Name
+			}
+		}
 
 		var parts []geminiapi.Part
 
@@ -156,10 +169,14 @@ func convertMessages(messages []llms.Message) ([]geminiapi.Content, error) {
 				respData = map[string]any{"result": msg.Content}
 			}
 
-			// Gemini identifies the call being answered by name, and this
-			// provider issues the function name as the tool-call ID, so a
-			// caller that only round-trips ToolCallID still matches.
+			// Gemini identifies the call being answered by name. A caller that
+			// sends only ToolCallID gets the name of the call it answers; an ID
+			// that matches no earlier call is taken as the name, which is what
+			// this provider issued as the ID before it minted unique ones.
 			name := msg.Name
+			if name == "" {
+				name = callNames[msg.ToolCallID]
+			}
 			if name == "" {
 				name = msg.ToolCallID
 			}
