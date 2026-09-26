@@ -50,6 +50,12 @@ var knownModels = map[string]modelMetadata{
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
 		pricing:     tokenPricing("gemini-3.6-flash"),
 	},
+	// Gemini 3.8 Flash, the current stable Flash model and the default.
+	"gemini-3.8-flash": {
+		displayName: "Gemini 3.8 Flash",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     tokenPricing("gemini-3.8-flash"),
+	},
 	"gemini-3.5-flash": {
 		displayName: "Gemini 3.5 Flash",
 		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},

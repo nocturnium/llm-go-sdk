@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- The Gemini default model is now `gemini-3.8-flash`, Google's current stable Flash model (`gemini-3.5-flash` is labeled legacy). Its pricing is the rate Google bills through 2026-12-31 (0.75 input, 3.75 output, 0.075 cache read per 1M tokens), which doubles on 2027-01-01.
+
+### Changed
+
 - Gemini tool calls get the API's native ID when it returns one and a minted nine-character ID otherwise, instead of the function name, which repeated across parallel calls and turns and made frameworks that pair calls with results by ID (Google ADK) mis-pair them. Requests to Gemini 3 echo the ID on the replayed call and on its function response, which Gemini 3 pairs by ID. A tool result that carries only `ToolCallID` is named after its call when the call is in the history, and an ID that matches no earlier call is still taken as the function name; a trimmed history that keeps a result but drops its call now needs `Message.Name` set. OpenAI-compatible servers that omit tool-call IDs, or repeat one within a response, get minted ones too.
 - Each provider now sends back only the reasoning and tool-call signatures it issued, dropping those another provider stamped. A conversation moved between providers by a fallback chain or an agent framework no longer draws a 400 for a foreign thinking signature. Unstamped reasoning, including all reasoning built before this release, replays as before.
 

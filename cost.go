@@ -315,6 +315,10 @@ var DefaultPricing = map[string]Pricing{
 	// Pro tiers reprice above 200K input tokens, carried as a Tier below; base rates
 	// are the ≤200K tier. Text rates are used where a model prices audio separately.
 	// 2.0 models shut down 2026-06-01.
+	// Gemini 3.8 Flash bills these rates through 2026-12-31 and doubles them from
+	// 2027-01-01 (Input 1.50, Output 7.50, CacheRead 0.15), per Google's pricing
+	// page; TestGemini38FlashRateChange fails from that date as the reminder.
+	"gemini:gemini-3.8-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
 	"gemini:gemini-3.6-flash":      {Input: 1.50, Output: 7.50, CacheRead: 0.15},
 	"gemini:gemini-3.5-flash":      {Input: 1.50, Output: 9.00, CacheRead: 0.15},
 	"gemini:gemini-3.5-flash-lite": {Input: 0.30, Output: 2.50, CacheRead: 0.03},
