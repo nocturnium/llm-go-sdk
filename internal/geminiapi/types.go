@@ -70,7 +70,11 @@ type Tool struct {
 type FunctionDeclaration struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Parameters  any    `json:"parameters,omitempty"`
+	// Parameters takes Gemini's OpenAPI subset, which rejects standard JSON
+	// Schema keywords such as additionalProperties. ParametersJSONSchema takes
+	// JSON Schema as is and is what the provider sends; set one or the other.
+	Parameters           any `json:"parameters,omitempty"`
+	ParametersJSONSchema any `json:"parametersJsonSchema,omitempty"`
 }
 
 // GenerationConfig contains generation settings
@@ -80,14 +84,17 @@ type GenerationConfig struct {
 	SpeechConfig       *SpeechConfig `json:"speechConfig,omitempty"`
 	// Temperature and TopP are pointers so an explicit 0.0 is serialized while an
 	// unset (nil) value is omitted, letting the model apply its own default.
-	Temperature      *float64        `json:"temperature,omitempty"`
-	TopP             *float64        `json:"topP,omitempty"`
-	TopK             int             `json:"topK,omitempty"`
-	MaxOutputTokens  int             `json:"maxOutputTokens,omitempty"`
-	StopSequences    []string        `json:"stopSequences,omitempty"`
-	ResponseMimeType string          `json:"responseMimeType,omitempty"`
-	ResponseSchema   any             `json:"responseSchema,omitempty"`
-	ThinkingConfig   *ThinkingConfig `json:"thinkingConfig,omitempty"`
+	Temperature      *float64 `json:"temperature,omitempty"`
+	TopP             *float64 `json:"topP,omitempty"`
+	TopK             int      `json:"topK,omitempty"`
+	MaxOutputTokens  int      `json:"maxOutputTokens,omitempty"`
+	StopSequences    []string `json:"stopSequences,omitempty"`
+	ResponseMimeType string   `json:"responseMimeType,omitempty"`
+	ResponseSchema   any      `json:"responseSchema,omitempty"`
+	// ResponseJSONSchema is ResponseSchema in standard JSON Schema; see
+	// FunctionDeclaration.ParametersJSONSchema.
+	ResponseJSONSchema any             `json:"responseJsonSchema,omitempty"`
+	ThinkingConfig     *ThinkingConfig `json:"thinkingConfig,omitempty"`
 }
 
 // ThinkingConfig configures Gemini 2.5+ thinking. ThinkingBudget caps thinking

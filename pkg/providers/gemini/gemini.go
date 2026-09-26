@@ -463,7 +463,7 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) (
 		case llms.ResponseFormatJSONSchema:
 			config.ResponseMimeType = "application/json"
 			if opts.ResponseFormat.JSONSchema != nil {
-				config.ResponseSchema = opts.ResponseFormat.JSONSchema.Schema
+				config.ResponseJSONSchema = opts.ResponseFormat.JSONSchema.Schema
 			}
 		case llms.ResponseFormatJSONObject:
 			config.ResponseMimeType = "application/json"

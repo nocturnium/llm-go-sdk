@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Gemini tool parameters and response schemas are sent as JSON Schema (`parametersJsonSchema`, `responseJsonSchema`). The OpenAPI-subset fields they went in before answer standard keywords such as `additionalProperties`, present in every schema generated from a Go struct, with a 400.
 - An error string no longer carries credentials: `APIError.Error` strips userinfo, query and fragment from the request URL, including the malformed and opaque forms a misconfigured base URL produces.
 - The JSON logger's default redaction clears `Metadata` and `RequestParameters`, which it marshaled verbatim, and the slog logger sanitizes non-string metadata values.
 - MCP writes are serialized by a writer goroutine rather than a mutex held across the pipe write, so an abandoned write no longer wedges every later request; a frame whose caller gave up is dropped, and `Close` fails in-flight requests when the reader cannot exit.
