@@ -31,6 +31,29 @@ updates:
     reviewers:
       - "jdziat"
 
+  # The nested llmadk module (Google ADK bridge) resolves its own dependencies.
+  - package-ecosystem: "gomod"
+    directory: "/llmadk"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      llmadk-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

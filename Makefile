@@ -4,7 +4,7 @@
 # Project info
 PROJECT_NAME := llms
 MODULE := github.com/nocturnium/llm-go-sdk/v6
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "v0.0.0-dev")
+VERSION := $(shell git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo "v0.0.0-dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
@@ -209,7 +209,7 @@ version:
 # would replace the curated entries. Copy anything useful in by hand.
 changelog:
 	@if command -v git-cliff >/dev/null 2>&1; then \
-		git-cliff --unreleased; \
+		git-cliff --unreleased --exclude-path 'llmadk/**'; \
 	else \
 		echo "git-cliff not installed. Run 'make install-tools' first."; \
 		exit 1; \

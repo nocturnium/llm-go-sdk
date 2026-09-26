@@ -2,8 +2,8 @@ name: Auto Release
 
 # Automatically cuts a release when releasable conventional commits land on main.
 #
-# git-cliff computes the next semantic version from the commits since the latest
-# tag (feat gives minor, fix gives patch, ! or BREAKING CHANGE gives major). If nothing
+# scripts/release-decide.sh computes the next semantic version from the commits since
+# the latest root tag (feat gives minor, fix gives patch, ! or BREAKING CHANGE gives major). If nothing
 # releasable landed (only docs/chore/ci/refactor/style/test/build commits), the
 # run skips without tagging.
 #
@@ -39,6 +39,7 @@ jobs:
     outputs:
       release: ${{ steps.decide.outputs.release }}
       version: ${{ steps.decide.outputs.version }}
+      previous: ${{ steps.decide.outputs.previous }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -62,39 +63,13 @@ jobs:
 
       - name: Decide whether to release
         id: decide
-        run: |
-          LATEST="$(git describe --tags --abbrev=0 2>/dev/null || echo none)"
-          # A release is warranted only when a feat/fix/perf/breaking commit landed
-          # since the last tag (feat gives minor, fix and perf give patch, a breaking change gives major).
-          # NOTE: `git cliff --bumped-version` alone bumps a patch for any commit
-          # (including docs/chore/ci), so we must gate on the count of releasable
-          # commits rather than on "did the version change". Other types
-          # (docs/chore/ci/refactor/style/test/build) intentionally do not release.
-          RELEASABLE="$(git cliff --config cliff.toml --unreleased --bump --context 2>/dev/null \
-            | jq '[.[].commits[]? | select(.group=="Features" or .group=="Bug Fixes" or .group=="Performance" or .breaking==true)] | length' 2>/dev/null)"
-          case "$RELEASABLE" in ''|*[!0-9]*) RELEASABLE=0 ;; esac
-          echo "Releasable (feat/fix/breaking) commits since ${LATEST}: ${RELEASABLE}"
-          if [ "$RELEASABLE" -eq 0 ]; then
-            echo "::notice::No releasable feat/fix/breaking commits since ${LATEST}; skipping release."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          NEXT="$(git cliff --config cliff.toml --bumped-version 2>/dev/null | tr -d '[:space:]')"
-          # Fail closed: never release on an unparseable version.
-          if ! printf '%s' "$NEXT" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
-            echo "::error::git-cliff returned an unparseable version ('${NEXT}'); not releasing."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          case "$NEXT" in v*) ;; *) NEXT="v${NEXT}" ;; esac
-          if [ "$NEXT" = "$LATEST" ]; then
-            echo "::warning::Releasable commits found but computed version ${NEXT} equals latest tag; skipping."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "::notice::Releasing ${NEXT} (previous tag ${LATEST}; ${RELEASABLE} releasable commit(s))."
-          echo "release=true" >> "$GITHUB_OUTPUT"
-          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
+        # scripts/release-decide.sh matches only root tags (vX.Y.Z) and counts only
+        # commits touching paths outside llmadk/ and its workflows; llmadk releases
+        # on its own lane
+        # (llmadk-release.yml). A bare `git describe` would return an llmadk/ tag
+        # when it is the newest one. scripts/release-decide_test.sh dry-runs the
+        # lane rules against a scratch repository in CI.
+        run: scripts/release-decide.sh root
 
   release:
     name: Tag & Release
@@ -144,6 +119,10 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pinned so GoReleaser never infers either tag: an llmadk/ tag can sit on
+          # the same commit as the root tag.
+          GORELEASER_CURRENT_TAG: ${{ needs.version.outputs.version }}
+          GORELEASER_PREVIOUS_TAG: ${{ needs.version.outputs.previous }}
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7
