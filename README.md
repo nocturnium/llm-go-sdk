@@ -815,6 +815,20 @@ resp, err := client.GenerateContent(ctx, messages,
 See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md#observability) for the full
 observability design.
 
+## Google ADK Go
+
+The nested module `github.com/nocturnium/llm-go-sdk/llmadk` runs any provider in
+this SDK as the model behind a [Google ADK Go](https://github.com/google/adk-go)
+agent:
+
+```go
+model, err := llmadk.NewModel(claude) // any llms.LLM, middleware included
+agent, err := llmagent.New(llmagent.Config{Name: "assistant", Model: model, Tools: tools})
+```
+
+See the [ADK guide](docs/guides/adk.md) for options and the provider
+compatibility matrix.
+
 ## Provider Configuration
 
 All providers share the functional-options pattern (`provider.New(provider.WithX(...))`).

@@ -83,6 +83,7 @@ nav:
       - Streaming: guides/streaming.md
       - Tool Calling & Agents: guides/tools.md
       - MCP (Model Context Protocol): guides/mcp.md
+      - Google ADK Go: guides/adk.md
       - Structured Outputs: guides/structured-outputs.md
       - Reasoning: guides/reasoning.md
       - Prompt Caching: guides/caching.md

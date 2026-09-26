@@ -533,3 +533,48 @@ other result becomes `{"result": v}` with strings kept as strings.
   documented as a behavior difference.
 - OpenRouter credits were exhausted on 2026-09-25 (separate project); live rows via
   OpenRouter may wait on a top-up.
+
+## 14. Implementation notes (2026-09-26)
+
+Changes from the approved design made during implementation, each driven by a
+live-gate failure (evidence: llmadk/testdata/live/2026-09-26.md):
+
+- 6.4 envelope carrier: Gemini's own signatures are stored as the raw bytes
+  Gemini issued, not in an envelope, and every other provider's envelope lives
+  in Part.PartMetadata["llmgo.reasoning"], not ThoughtSignature. ADK's native
+  Gemini model sends ThoughtSignature to Gemini unchanged and Gemini answered
+  "Corrupted thought signature" for envelopes. Envelopes still found in
+  ThoughtSignature are read for compatibility.
+- 7.1: the first function call of a response without a Gemini signature carries
+  Google's skip_thought_signature_validator placeholder, so a session can move to
+  ADK's native Gemini model (Gemini 3 otherwise answers "Function call is missing
+  a thought_signature"). The root R7 still covers users of the Gemini provider
+  outside the bridge.
+- 6.4: hidden Gemini reasoning without a signature is not kept (Gemini never
+  needs its text back).
+- Root fixes found by the gate and added to packet R-b: Gemini tool and response
+  schemas go in parametersJsonSchema/responseJsonSchema; retired Anthropic and
+  Gemini defaults replaced; empty Anthropic thinking blocks keep their field.
+- Web search (Z.AI) could not be verified live: the general endpoint has no
+  balance and the GLM coding endpoint does not run the web_search tool; it is
+  unit-verified only, where 10.6 planned fixture-verified. Z.AI chat and tool
+  loops are live-verified on the coding endpoint.
+- 10.5: fixtures record responses only; replay does not compare request bodies
+  or hashes (minted tool-call IDs differ per run) but checks every request
+  against its family's wire rules (wire_test.go: Gemini schema field and
+  first-call signature, Anthropic tool_result pairing, chat and Responses
+  call/result pairing, Responses reasoning items). The Anthropic empty
+  thinking-field rule is enforced there too but no recorded fixture holds an
+  empty thinking block, so that fix is guarded by the root unit test.
+- 10.2: statement coverage is 88%, below the 95% target; the gap is mostly
+  defensive branches for malformed genai input.
+- Deferred from 10.4/10.5, with reasons: compaction driven by cached usage (the
+  usage arithmetic is unit-tested; an ADK compaction run needs a summarizer
+  model and a long session); a recorded Anthropic cache-hit fixture (needs a
+  1024-token cached prefix per run); quirk rows for Groq, Cerebras, Mistral,
+  DeepSeek, Perplexity and Ollama (no keys; their rules are covered by root
+  tests). HITL confirmation, long-running completion, mid-stream cancel,
+  thought-only single call and envelope fuzzing are covered.
+- FallbackChain rows (10.6) were added after the first review round and pass
+  live in both directions.
+
