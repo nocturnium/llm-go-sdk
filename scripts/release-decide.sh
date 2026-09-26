@@ -64,15 +64,24 @@ range=()
 if [ "$previous" != none ]; then
 	range=("${previous}..HEAD")
 fi
-context="$("$cliff" --config "$config" --tag-pattern "$pattern" "${pathflag[@]}" --context "${range[@]}" 2>/dev/null || echo '[]')"
+# A git-cliff or jq failure stops the run: reading it as "nothing releasable"
+# would skip a release without anyone noticing.
+if ! context="$("$cliff" --config "$config" --tag-pattern "$pattern" "${pathflag[@]}" --context "${range[@]}")"; then
+	echo "::error::git-cliff failed for lane ${lane}; not deciding a release" >&2
+	exit 1
+fi
 count() {
-	jq "[.[].commits[]? | select($1)] | length" <<<"$context" 2>/dev/null || echo 0
+	jq "[.[].commits[]? | select($1)] | length" <<<"$context"
 }
 breaking="$(count '.breaking==true')"
 features="$(count '.group=="Features"')"
 fixes="$(count '.group=="Bug Fixes" or .group=="Performance"')"
 for n in breaking features fixes; do
-	case "${!n}" in '' | *[!0-9]*) printf -v "$n" 0 ;; esac
+	case "${!n}" in '' | *[!0-9]*)
+		echo "::error::could not count ${n} commits for lane ${lane}" >&2
+		exit 1
+		;;
+	esac
 done
 releasable=$((breaking + features + fixes))
 echo "lane=${lane} previous=${previous} breaking=${breaking} features=${features} fixes=${fixes}"

@@ -96,6 +96,14 @@ CASE=v0-breaking
 commit "feat(llmadk)!: break adapter" llmadk/model.go
 expect llmadk true llmadk/v0.2.0
 
+CASE=git-cliff-fails
+if GIT_CLIFF=false "$decide" root >/dev/null 2>&1; then
+	echo "FAIL ${CASE}: a failing git-cliff was read as a decision"
+	failures=$((failures + 1))
+else
+	echo "ok   ${CASE} decision refused"
+fi
+
 if [ "$failures" -gt 0 ]; then
 	echo "${failures} failure(s)"
 	exit 1
