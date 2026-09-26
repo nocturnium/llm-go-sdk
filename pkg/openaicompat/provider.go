@@ -35,7 +35,25 @@ type ProviderConfig struct {
 	// Responses API (POST /responses) instead of /chat/completions. Only
 	// meaningful for providers whose endpoint implements the Responses API (OpenAI).
 	UseResponsesAPI bool
+
+	// ToolCallIDFormat, when set, rewrites every tool-call ID in a request that
+	// is not already in the format, on the assistant's call and on the tool
+	// result alike, for a provider that accepts only IDs of one form. A request
+	// with any ID rewritten reports "<provider>.tool_ids_rewritten" in its
+	// Response.Adjustments.
+	ToolCallIDFormat ToolCallIDFormat
 }
+
+// ToolCallIDFormat names a tool-call ID form a provider requires.
+type ToolCallIDFormat string
+
+const (
+	// ToolCallIDAny accepts every ID as it is. It is the zero value.
+	ToolCallIDAny ToolCallIDFormat = ""
+	// ToolCallIDNineChar requires exactly nine characters from [a-zA-Z0-9]
+	// (Mistral); see [NineCharToolCallID].
+	ToolCallIDNineChar ToolCallIDFormat = "nine_char"
+)
 
 // BaseProvider provides common functionality for OpenAI-compatible providers.
 // Embed this in your provider's Client struct to get shared implementations.
@@ -121,6 +139,7 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 		return nil, err
 	}
 	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
+	prepared, adjustments := p.normalizeToolCallIDs(prepared)
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -150,6 +169,7 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	}
 
 	llms.StampResponse(result, p.config.Provider, model)
+	result.Adjustments = adjustments
 	return result, nil
 }
 
@@ -173,6 +193,7 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 		return nil, err
 	}
 	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
+	prepared, adjustments := p.normalizeToolCallIDs(prepared)
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -180,6 +201,7 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	chunks := make(chan llms.StreamChunk, bufferSize)
 	sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 	sender.SetIdentity(p.config.Provider, model)
+	sender.SetAdjustments(adjustments)
 
 	// Configure stream processing with token estimation if enabled
 	var config *StreamConfig
