@@ -84,6 +84,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 	if err != nil {
 		return nil, err
 	}
+	prepared = llms.DropForeignReplay(prepared, llms.ProviderGemini)
 
 	req, err := c.buildRequest(prepared, opts)
 	if err != nil {
@@ -114,6 +115,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		result.Usage = llms.EstimateUsageFromMessages(prepared, result.Content)
 	}
 
+	llms.StampResponse(result, llms.ProviderGemini, model)
 	return result, nil
 }
 
@@ -153,6 +155,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	if err != nil {
 		return nil, err
 	}
+	prepared = llms.DropForeignReplay(prepared, llms.ProviderGemini)
 
 	req, err := c.buildRequest(prepared, opts)
 	if err != nil {
@@ -177,6 +180,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 	go func() {
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+		sender.SetIdentity(llms.ProviderGemini, model)
 
 		defer close(chunks)
 		// A malformed/hostile provider response must never crash the host process.
@@ -207,6 +211,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		var finishReason llms.FinishReason
 		var rawFinishReason string
 		var usage *llms.Usage
+		var modelVersion string
 		var bytesRead int64
 		var chunksRead int
 		var lastContent string
@@ -259,11 +264,13 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					return
 				}
 
+				llms.EnsureToolCallIDs(accumulatedToolCalls)
 				sender.SendFinal(llms.StreamChunk{
 					Reasoning:    finalReasoning,
 					ToolCalls:    accumulatedToolCalls,
 					FinishReason: finishReason,
 					Usage:        finalUsage,
+					ModelVersion: modelVersion,
 				})
 				return
 			}
@@ -297,6 +304,9 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				return
 			}
 
+			if chunk.ModelVersion != "" {
+				modelVersion = chunk.ModelVersion
+			}
 			if len(chunk.Candidates) > 0 {
 				candidate := chunk.Candidates[0]
 
@@ -329,7 +339,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					for _, part := range candidate.Content.Parts {
 						if part.FunctionCall != nil {
 							tc := llms.ToolCall{
-								ID:   part.FunctionCall.Name, // Gemini doesn't have IDs
+								ID:   part.FunctionCall.ID,
 								Type: llms.ToolTypeFunction,
 								Function: &llms.FunctionCall{
 									Name:      part.FunctionCall.Name,
@@ -410,8 +420,12 @@ func splitSystemInstruction(messages []llms.Message) (*geminiapi.Content, []llms
 }
 
 func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions) (*geminiapi.GenerateContentRequest, error) {
+	model := c.options.Model
+	if opts.Model != "" {
+		model = opts.Model
+	}
 	systemInstruction, contents := splitSystemInstruction(messages)
-	converted, err := convertMessages(contents)
+	converted, err := convertMessagesFor(contents, isGemini3OrLater(model))
 	if err != nil {
 		return nil, err
 	}

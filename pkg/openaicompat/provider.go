@@ -120,6 +120,7 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	if err := llms.ValidateToolCallIDs(prepared); err != nil {
 		return nil, err
 	}
+	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -148,6 +149,7 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 		result.Usage = llms.EstimateUsageFromMessages(prepared, result.Content)
 	}
 
+	llms.StampResponse(result, p.config.Provider, model)
 	return result, nil
 }
 
@@ -170,12 +172,14 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	if err := llms.ValidateToolCallIDs(prepared); err != nil {
 		return nil, err
 	}
+	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
 
 	model := effectiveModel(p.model, opts.Model)
 
 	bufferSize := llms.GetBufferSize(opts)
 	chunks := make(chan llms.StreamChunk, bufferSize)
 	sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+	sender.SetIdentity(p.config.Provider, model)
 
 	// Configure stream processing with token estimation if enabled
 	var config *StreamConfig

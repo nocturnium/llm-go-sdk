@@ -45,12 +45,18 @@ type InlineData struct {
 
 // FunctionCall represents a function call from the model
 type FunctionCall struct {
+	// ID is the call's identifier. Gemini 3 returns one with every call and maps
+	// each functionResponse back to its call by it, so requests to Gemini 3 echo
+	// it on the replayed call and on the response.
+	ID   string         `json:"id,omitempty"`
 	Name string         `json:"name"`
 	Args map[string]any `json:"args,omitempty"`
 }
 
 // FunctionResponse represents a function response from the user
 type FunctionResponse struct {
+	// ID names the call this responds to; see FunctionCall.ID.
+	ID       string         `json:"id,omitempty"`
 	Name     string         `json:"name"`
 	Response map[string]any `json:"response"`
 }

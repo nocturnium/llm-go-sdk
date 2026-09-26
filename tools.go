@@ -43,6 +43,16 @@ type ToolCall struct {
 	// providers that do not issue per-call signatures. This is the tool-call
 	// analog of ReasoningContent.Signature.
 	Signature string `json:"signature,omitempty"`
+	// SignatureProvider is the provider that issued Signature. A provider replays
+	// only its own signatures (see [ToolCall.SignatureReplayableBy]). Empty for a
+	// signature from before stamps existed, which replays as it always did.
+	SignatureProvider Provider `json:"signature_provider,omitempty"`
+}
+
+// SignatureReplayableBy reports whether provider p may send tc.Signature back:
+// true when there is a signature and it is unstamped or was issued by p.
+func (tc ToolCall) SignatureReplayableBy(p Provider) bool {
+	return tc.Signature != "" && (tc.SignatureProvider == "" || tc.SignatureProvider == p)
 }
 
 // FunctionCall contains the function name and arguments
@@ -323,6 +333,17 @@ func (r *ToolRegistry) Tools() []Tool {
 		result[i] = tool
 	}
 	return result
+}
+
+// Handler returns the handler registered for the tool named name, and whether
+// one is registered. Unlike [ToolRegistry.Handle], it hands the handler's error
+// back to the caller instead of folding it into a tool message, for callers such
+// as agent frameworks that report tool failures through their own error path.
+func (r *ToolRegistry) Handler(name string) (ToolHandler, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	h, ok := r.handlers[name]
+	return h, ok
 }
 
 // Handle executes the appropriate handler for a tool call and returns a tool message.

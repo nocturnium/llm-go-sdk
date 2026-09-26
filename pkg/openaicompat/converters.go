@@ -322,7 +322,7 @@ func compactToolCalls(calls []llms.ToolCall) []llms.ToolCall {
 // ConvertResponse converts an OpenAI-compatible response to llms.Response.
 func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
 	if len(resp.Choices) == 0 {
-		return &llms.Response{ID: resp.ID, ServiceTier: resp.ServiceTier}
+		return &llms.Response{ID: resp.ID, ServiceTier: resp.ServiceTier, ModelVersion: resp.Model}
 	}
 
 	choice := resp.Choices[0]
@@ -330,11 +330,15 @@ func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
 		ID:           resp.ID,
 		FinishReason: llms.FinishReason(choice.FinishReason),
 		ServiceTier:  resp.ServiceTier,
+		ModelVersion: resp.Model,
 	}
 
 	if choice.Message != nil {
 		response.Content = choice.Message.RawContent()
 		response.ToolCalls = convertToolCallsToLLMs(choice.Message.ToolCalls)
+		// Several compatible servers (llama.cpp, older Ollama) omit tool-call IDs
+		// or repeat them; a caller pairing results by ID needs each one distinct.
+		llms.EnsureToolCallIDs(response.ToolCalls)
 
 		// Surface reasoning content if present. Providers use different field names:
 		// "reasoning_content" (Z.AI GLM) and "reasoning" (Synthetic/Qwen Thinking).
@@ -576,6 +580,9 @@ func ProcessStream(
 	// The served capacity tier repeats on every chunk; the last one seen rides
 	// out on the final chunk, where Response carries it on the unary path.
 	var serviceTier string
+	// The model version the server reports; like the tier, the last one seen
+	// rides out on the final chunk.
+	var modelVersion string
 	var bytesRead int64
 	var chunksRead int
 	var lastContent string
@@ -614,11 +621,14 @@ func ProcessStream(
 				finalUsage = &estimated
 			}
 
+			finalCalls := compactToolCalls(accumulatedToolCalls)
+			llms.EnsureToolCallIDs(finalCalls)
 			sender.SendFinal(llms.StreamChunk{
-				ToolCalls:    compactToolCalls(accumulatedToolCalls),
+				ToolCalls:    finalCalls,
 				FinishReason: finishReason,
 				Usage:        finalUsage,
 				ServiceTier:  serviceTier,
+				ModelVersion: modelVersion,
 			})
 			return
 		}
@@ -681,6 +691,9 @@ func ProcessStream(
 		}
 		if chunk.ServiceTier != "" {
 			serviceTier = chunk.ServiceTier
+		}
+		if chunk.Model != "" {
+			modelVersion = chunk.Model
 		}
 	}
 }

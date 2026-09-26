@@ -67,6 +67,7 @@ func convertResponse(resp *anthropicapi.MessagesResponse, structuredToolName ...
 		Content:      anthropicapi.ExtractTextContent(resp.Content),
 		FinishReason: convertStopReason(resp.StopReason),
 		Usage:        convertUsage(resp.Usage),
+		ModelVersion: resp.Model,
 	}
 
 	// Extract tool calls and extended-thinking blocks.

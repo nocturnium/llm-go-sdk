@@ -204,6 +204,7 @@ func finalChunkFromResponse(resp *ResponsesResponse, config *StreamConfig, accum
 	converted := ConvertResponsesResponse(resp)
 	final.ToolCalls = converted.ToolCalls
 	final.FinishReason = converted.FinishReason
+	final.ModelVersion = converted.ModelVersion
 
 	// Carry the reasoning metadata (e.g. encrypted reasoning items for stateless
 	// multi-turn replay) and token count on the terminal chunk. The reasoning TEXT
@@ -211,11 +212,8 @@ func finalChunkFromResponse(resp *ResponsesResponse, config *StreamConfig, accum
 	// duplicating it when the caller aggregates via CollectStream.
 	if converted.Reasoning != nil &&
 		(converted.Reasoning.Metadata != nil || converted.Reasoning.Signature != "" || converted.Reasoning.Tokens != 0) {
-		final.Reasoning = &llms.ReasoningContent{
-			Signature: converted.Reasoning.Signature,
-			Tokens:    converted.Reasoning.Tokens,
-			Metadata:  converted.Reasoning.Metadata,
-		}
+		final.Reasoning = converted.Reasoning.Clone()
+		final.Reasoning.Content = ""
 	}
 
 	usage := converted.Usage

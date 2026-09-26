@@ -153,3 +153,46 @@ func TestFinalChunkFromResponse_CarriesReasoningMetadata(t *testing.T) {
 		t.Errorf("terminal reasoning content should be empty (streamed via deltas), got %q", chunk.Reasoning.Content)
 	}
 }
+
+// TestProcessResponsesStream_ProvenanceContract checks the Responses stream
+// against the StreamChunk contract: tool calls only on the final chunk, and the
+// final chunk carrying the identity, the reported model and the stamped
+// encrypted reasoning, which the final chunk builds from a clone rather than
+// field by field.
+func TestProcessResponsesStream_ProvenanceContract(t *testing.T) {
+	completed := `{"type":"response.completed","response":{"id":"r","model":"gpt-reported","status":"completed","output":[` +
+		`{"type":"reasoning","id":"rs_1","encrypted_content":"ENC","summary":[{"type":"summary_text","text":"t"}]},` +
+		`{"type":"function_call","call_id":"call_1","name":"f","arguments":"{}"}]}}`
+	body := sseBody([][2]string{
+		{"response.reasoning_summary_text.delta", `{"type":"response.reasoning_summary_text.delta","delta":"t"}`},
+		{"response.completed", completed},
+	})
+	reader := &ResponsesStreamReader{sse: httpclient.NewSSEReader(body)}
+	chunks := make(chan llms.StreamChunk, 8)
+	sender := llms.NewStreamSender(context.Background(), chunks, 0)
+	sender.SetIdentity(llms.ProviderOpenAI, "gpt")
+	go ProcessResponsesStream(context.Background(), reader, chunks, sender, "openai", nil)
+
+	var final llms.StreamChunk
+	for chunk := range chunks {
+		if chunk.Error != nil {
+			t.Fatal(chunk.Error)
+		}
+		if !chunk.Done && len(chunk.ToolCalls) > 0 {
+			t.Errorf("non-final chunk carries tool calls: %+v", chunk.ToolCalls)
+		}
+		if chunk.Done {
+			final = chunk
+		}
+	}
+	if final.Provider != llms.ProviderOpenAI || final.Model != "gpt" || final.ModelVersion != "gpt-reported" {
+		t.Errorf("final identity = %q/%q/%q", final.Provider, final.Model, final.ModelVersion)
+	}
+	if final.Reasoning == nil || final.Reasoning.Provider != llms.ProviderOpenAI || final.Reasoning.Content != "" ||
+		final.Reasoning.Metadata[MetadataKeyResponsesReasoning] == nil {
+		t.Errorf("final reasoning = %+v, want stamped metadata without repeated text", final.Reasoning)
+	}
+	if len(final.ToolCalls) != 1 || final.ToolCalls[0].ID != "call_1" {
+		t.Errorf("final tool calls = %+v", final.ToolCalls)
+	}
+}

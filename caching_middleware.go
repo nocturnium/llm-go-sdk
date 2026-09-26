@@ -218,15 +218,10 @@ func cloneResponse(resp *Response) *Response {
 		}
 	}
 
-	if resp.Reasoning != nil {
-		rc := *resp.Reasoning
-		if resp.Reasoning.Metadata != nil {
-			rc.Metadata = make(map[string]any, len(resp.Reasoning.Metadata))
-			for mk, mv := range resp.Reasoning.Metadata {
-				rc.Metadata[mk] = mv
-			}
-		}
-		cp.Reasoning = &rc
+	cp.Reasoning = resp.Reasoning.Clone()
+
+	if resp.Adjustments != nil {
+		cp.Adjustments = append([]string(nil), resp.Adjustments...)
 	}
 
 	return &cp

@@ -510,7 +510,7 @@ func convertResponsesFormat(format *llms.ResponseFormat) *ResponsesFormat {
 
 // ConvertResponsesResponse maps a Responses API response to the neutral llms.Response.
 func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
-	result := &llms.Response{ID: resp.ID}
+	result := &llms.Response{ID: resp.ID, ModelVersion: resp.Model}
 
 	var content, reasoning, refusal string
 	var reasoningItems []ResponsesReasoningItem
@@ -557,6 +557,7 @@ func ConvertResponsesResponse(resp *ResponsesResponse) *llms.Response {
 		}
 		result.SetReasoning(rc)
 	}
+	llms.EnsureToolCallIDs(result.ToolCalls)
 	result.FinishReason = responsesFinishReason(resp, len(result.ToolCalls) > 0)
 
 	// A safety refusal is distinct from an empty completion: surface the refusal

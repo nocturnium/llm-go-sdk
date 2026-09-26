@@ -186,9 +186,10 @@ func TestClient_GenerateContent_WithTools(t *testing.T) {
 		t.Fatal("expected get_weather tool call")
 	}
 
-	// Gemini uses function name as ID
-	if tc.ID != "get_weather" {
-		t.Errorf("unexpected tool call ID: %s", tc.ID)
+	// The API returned no ID, so one is minted rather than reusing the function
+	// name, which repeats across turns and parallel calls.
+	if tc.ID == "" || tc.ID == "get_weather" {
+		t.Errorf("tool call ID = %q, want a minted ID", tc.ID)
 	}
 
 	type Args struct {
