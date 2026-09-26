@@ -39,6 +39,16 @@ jobs:
           fi
           echo "Releasing version: ${TAG}"
 
+      # GoReleaser infers the previous tag with a bare `git describe`, which returns
+      # an llmadk/ tag when one is newer; pin both tags to the root lane.
+      - name: Resolve root tags
+        id: tags
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          PREVIOUS="$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${TAG}^" 2>/dev/null || true)"
+          echo "current=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "previous=${PREVIOUS}" >> "$GITHUB_OUTPUT"
+
       - name: Run tests
         run: go test -race ./...
 
@@ -55,6 +65,8 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.tags.outputs.current }}
+          GORELEASER_PREVIOUS_TAG: ${{ steps.tags.outputs.previous }}
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7

@@ -1,0 +1,126 @@
+name: llmadk Release
+
+# Release lane for the nested llmadk module (github.com/nocturnium/llm-go-sdk/llmadk).
+#
+# It mirrors auto-release.yml for the root module but reads only llmadk/ commits and
+# llmadk/vX.Y.Z tags (scripts/release-decide.sh llmadk), so the two lanes never see
+# each other's tags or commits. The module is a library with no binaries, so the
+# release is a tag plus GitHub release notes; the Go proxy serves the module from
+# the tag.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'llmadk/**'
+
+concurrency:
+  group: llmadk-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26'
+  GIT_CLIFF_VERSION: '2.13.1'
+  GIT_CLIFF_SHA256: '9a1263f24e59a2f508c7b3d3283c9dea94a8bf697f96dbc18cc783cac6284546'
+
+jobs:
+  version:
+    name: Compute next llmadk version
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      version: ${{ steps.decide.outputs.version }}
+      previous: ${{ steps.decide.outputs.previous }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        run: |
+          curl -fsSL -o git-cliff.tar.gz "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${GIT_CLIFF_SHA256}  git-cliff.tar.gz" | sha256sum -c -
+          tar xzf git-cliff.tar.gz
+          echo "${PWD}/git-cliff-${GIT_CLIFF_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Decide whether to release
+        id: decide
+        run: scripts/release-decide.sh llmadk
+
+  release:
+    name: Tag & Release llmadk
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # A tagged module must resolve for every consumer: no local replace, and the
+      # root requirement must be a released root tag.
+      - name: Check module is releasable
+        working-directory: llmadk
+        run: |
+          if GOWORK=off go mod edit -json | jq -e '.Replace != null and (.Replace | length) > 0' >/dev/null; then
+            echo "::error::llmadk/go.mod has a replace directive; remove it before releasing."
+            exit 1
+          fi
+          ROOT_VERSION="$(GOWORK=off go mod edit -json | jq -r '.Require[] | select(.Path=="github.com/nocturnium/llm-go-sdk/v6") | .Version')"
+          if ! git rev-parse -q --verify "refs/tags/${ROOT_VERSION}" >/dev/null; then
+            echo "::error::llmadk requires root ${ROOT_VERSION}, which is not a released tag."
+            exit 1
+          fi
+          echo "llmadk requires released root ${ROOT_VERSION}"
+
+      - name: Run tests
+        working-directory: llmadk
+        run: GOWORK=off go test -race ./...
+
+      - name: Create and push tag
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "Tag ${VERSION} already exists; aborting to avoid clobber."
+            exit 1
+          fi
+          git tag -a "${VERSION}" -m "${VERSION}"
+          git push origin "${VERSION}"
+
+      - name: Install git-cliff
+        run: |
+          curl -fsSL -o git-cliff.tar.gz "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${GIT_CLIFF_SHA256}  git-cliff.tar.gz" | sha256sum -c -
+          tar xzf git-cliff.tar.gz
+          echo "${PWD}/git-cliff-${GIT_CLIFF_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PREVIOUS: ${{ needs.version.outputs.previous }}
+        run: |
+          RANGE="${VERSION}"
+          if [ "${PREVIOUS}" != none ]; then
+            RANGE="${PREVIOUS}..${VERSION}"
+          fi
+          git cliff --config cliff.toml --tag-pattern '^llmadk/v[0-9]+\.' \
+            --include-path 'llmadk/**' --strip header "${RANGE}" > notes.md
+          gh release create "${VERSION}" --title "llmadk ${VERSION#llmadk/}" \
+            --notes-file notes.md --latest=false
