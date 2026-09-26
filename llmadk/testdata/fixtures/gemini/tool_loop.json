@@ -1,0 +1,22 @@
+{
+  "scenario": "tool_loop",
+  "family": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "recorded_at": "2026-09-26T15:39:55Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"functionCall\": {\n              \"name\": \"get_weather\",\n              \"args\": {\n                \"city\": \"Oslo\"\n              },\n              \"id\": \"call_378968\"\n            },\n            \"thoughtSignature\": \"EmAKXgFpFH0TbF9FWMBAZE2yZmCNjvKgPmCNtnPqlvHBd7ItnHkpcPFAPuPpKZu1qBwzC0ppH/15CnJQ2hG2rwqxUNp+8Ts9U7PkckPDsvbiMSwhuFx1K5ehiI8faOY9vGc=\"\n          },\n          {\n            \"functionCall\": {\n              \"name\": \"get_weather\",\n              \"args\": {\n                \"city\": \"Rome\"\n              },\n              \"id\": \"call_378969\"\n            }\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0,\n      \"finishMessage\": \"Model generated function call(s).\"\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 97,\n    \"candidatesTokenCount\": 33,\n    \"totalTokenCount\": 130,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 97\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"See3av-2CuKJ_uMPrcHAqAI\"\n}\n"
+    },
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"The weather in Oslo and Rome is currently 4 degrees.\",\n            \"thoughtSignature\": \"EmAKXgFpFH0TQAErz5LH2IjaiisTYiimynF7Jm+FfxIHFbWp4ra+uDBQeFC9nll5On7yJdexAAykUDGkqtsR+gClBjzlG+q4QuhDl5SBDHF5h8DSe90eIMo2IlL75o/N48U=\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 166,\n    \"candidatesTokenCount\": 12,\n    \"totalTokenCount\": 178,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 166\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"See3aqf_LNKa_uMPtvjt4Q0\"\n}\n"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "scenario": "thinking_tools",
+  "family": "anthropic",
+  "model": "claude-haiku-4-5",
+  "recorded_at": "2026-09-26T15:40:10Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/messages",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfSJXggVhiE1P5VZgj4F3\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"The user is asking about the weather in two cities: Oslo and Rome. I need to call the get_weather function for both cities. Since these are independent calls with no dependencies between them, I should make both calls in the same function_calls block.\",\"signature\":\"EvkDCpoBCBIYAipARv9vdX5blImCITmj5Q05J2FqbTApC2J5WQFWgoT7I8UoeeJSZTSJR963WuR0F9eb9DhMKeQMpBwcSmWDXzPcszIZY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMTgAQgh0aGlua2luZ1okZGI4ZjU1YjYtYzM0MC00NjhjLTljYzEtNmY2MmI3NzdkYjM0qAHZzt/VBhIMpZKGx6aSYcZphBdJGgxOFoYwikzChbU86WAiMI7lyy7yny2ZKZKeST1Hiif4ZRAsjq/0Q9GOqyUBHZIu4TcPvXXdd+n6C5SiLSlr1yqLAubls0nrDZXw3tSPeNgbjIJ+FbMuZKtRBBaVblZBSV3Gg/NiDS58v8LaBPTuraPE+LqI+V2mebSmeFIt37YevQALyezqSiL1czsI7skcrfe1I6Vc6tvlw3r3+s60h9LkYiXFml6MhnOffZZ+6XOQ9FNC1ZLTpV/NQ3W9aRfOPB6pWoplPEf/EHtGnWdYH42tJyi96hiPra0Qm/6w+Pfohq7/Vb/yYe0E1Rlh11O+mmgwftVItZDMD3y9kv3Mz4D0H3RoMaSOdFqBf98Gs8yJhq58oX1iKtgJNdmuWHAHkaqXiiMYzkAl85uX5PypyeN9qo3qsc+kqPqeFRy03Hn5EO5bpmWtMwJSXue12RgB\"},{\"type\":\"tool_use\",\"id\":\"toolu_018j5tTf7FQtpVspaRg72fnU\",\"name\":\"get_weather\",\"input\":{\"city\":\"Oslo\"},\"caller\":{\"type\":\"direct\"}},{\"type\":\"tool_use\",\"id\":\"toolu_01K9xEBEwNKzRNN8PoiYZkdY\",\"name\":\"get_weather\",\"input\":{\"city\":\"Rome\"},\"caller\":{\"type\":\"direct\"}}],\"container\":null,\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":647,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":149,\"output_tokens_details\":{\"thinking_tokens\":57},\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}"
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfSJXnJa78vxjVh9StwFN\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Oslo and Rome are both currently 4°C.\"}],\"container\":null,\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":875,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":14,\"output_tokens_details\":{\"thinking_tokens\":0},\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}"
+    }
+  ]
+}

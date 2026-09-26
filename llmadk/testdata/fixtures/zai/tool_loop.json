@@ -1,0 +1,22 @@
+{
+  "scenario": "tool_loop",
+  "family": "zai",
+  "model": "glm-4.7",
+  "recorded_at": "2026-09-26T17:07:57Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/chat/completions",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"message\":{\"content\":\"\",\"reasoning_content\":\"The user wants weather for Oslo and Rome. These are independent calls, so I should make both calls in the same block.\",\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Oslo\\\"}\",\"name\":\"get_weather\"},\"id\":\"call_-7227535265940628728\",\"index\":0,\"type\":\"function\"},{\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Rome\\\"}\",\"name\":\"get_weather\"},\"id\":\"call_-7227535265940628727\",\"index\":1,\"type\":\"function\"}]}}],\"created\":1790442470,\"id\":\"20260927010743284f9b2fe63140bb\",\"model\":\"glm-5.3-flash\",\"object\":\"chat.completion\",\"request_id\":\"20260927010743284f9b2fe63140bb\",\"usage\":{\"completion_tokens\":49,\"completion_tokens_details\":{\"reasoning_tokens\":25},\"prompt_tokens\":211,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_tokens\":260}}"
+    },
+    {
+      "method": "POST",
+      "path": "/chat/completions",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"It's currently 4°C in Oslo and 4°C in Rome.\",\"reasoning_content\":\"Both calls returned. Oslo is 4°C and Rome is 4°C. Answer in one short sentence.\",\"role\":\"assistant\"}}],\"created\":1790442477,\"id\":\"20260927010750ba6cfcfb27e74212\",\"model\":\"glm-5.3-flash\",\"object\":\"chat.completion\",\"request_id\":\"20260927010750ba6cfcfb27e74212\",\"usage\":{\"completion_tokens\":39,\"completion_tokens_details\":{\"reasoning_tokens\":22},\"prompt_tokens\":261,\"prompt_tokens_details\":{\"cached_tokens\":192},\"total_tokens\":300}}"
+    }
+  ]
+}

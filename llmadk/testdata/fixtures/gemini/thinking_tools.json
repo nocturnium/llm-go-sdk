@@ -1,0 +1,22 @@
+{
+  "scenario": "thinking_tools",
+  "family": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "recorded_at": "2026-09-26T15:40:13Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"Here's my thought process:\\n\\n**Efficiently Retrieving and Presenting Weather Data**\\n\\nOkay, the user needs weather information for Oslo and Rome. My task is straightforward: I need to efficiently gather this data and present it concisely in a single response. That means I *must* call the `get_weather` function twice – once for each city – *within this turn*. There's no point in making multiple interactions when I can get it all done at once. Then, and this is key, I have to formulate a single, brief sentence to deliver the combined information. I need to be as direct and clear as possible, considering the user's expertise. Right, time to execute.\\n\\n\\n\",\n            \"thought\": true\n          },\n          {\n            \"functionCall\": {\n              \"name\": \"get_weather\",\n              \"args\": {\n                \"city\": \"Oslo\"\n              },\n              \"id\": \"call_793766\"\n            },\n            \"thoughtSignature\": \"EoQCCoECAWkUfRO41egY1JZSDHlwrpelrOKLi/sPIPNdigLYAeiadhYFquO5IWt2r0EFoqo5yLw55kg0t25OdUezZGFm8VFUn0YMEzO016evNaOFR8kHEJzDpC9gEE6hKahIyMf8reeMRJQu/MREAY3M9KiIGM+SwqvCAtmV6bfbcPz3BpgHitnGuZ4bdt4jUCEOqGx2Rxav/NUysvQjD7qxFiaNh8lCGFY6DIKNiNCtHCTQnyQZ5quQ+XQnsvxfmFUheRsXotzGSP50FX5THARcvOF8ljpMoUsg9/haam9ZptFg2k3BXb9P3TZFJnXuSOVtsWD0o550vardzQxQa4DsqQm1ceg=\"\n          },\n          {\n            \"functionCall\": {\n              \"name\": \"get_weather\",\n              \"args\": {\n                \"city\": \"Rome\"\n              },\n              \"id\": \"call_793767\"\n            }\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0,\n      \"finishMessage\": \"Model generated function call(s).\"\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 97,\n    \"candidatesTokenCount\": 33,\n    \"totalTokenCount\": 171,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 97\n      }\n    ],\n    \"thoughtsTokenCount\": 41,\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"Wue3auSFLYad_uMPsqCzyA0\"\n}\n"
+    },
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"The weather in Oslo is 4 degrees and in Rome it is also 4 degrees.\",\n            \"thoughtSignature\": \"EmAKXgFpFH0TgF5u6Q7MyEFAbCS8CUCdmtE1x+TgjUHJRAKMBoKRA4xCkgym75T6PYHoE4taxFn19BQz7dgSp2W3pNQlvA43Af8zZX4emV3pUWPFGSlyMpCBgb4iJb3uf5U=\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 207,\n    \"candidatesTokenCount\": 18,\n    \"totalTokenCount\": 225,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 207\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"XOe3at7ALKya_uMPjtuVyAk\"\n}\n"
+    }
+  ]
+}

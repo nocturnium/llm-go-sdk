@@ -1,0 +1,22 @@
+{
+  "scenario": "structured_tools",
+  "family": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "recorded_at": "2026-09-26T15:40:17Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"functionCall\": {\n              \"name\": \"get_weather\",\n              \"args\": {\n                \"city\": \"Oslo\"\n              },\n              \"id\": \"call_316722\"\n            },\n            \"thoughtSignature\": \"EmAKXgFpFH0TWcaky11GhfqgAw0GBzEtxejjvOoLctpGebWgC1bmmX/sQ8l9mBKz2qROvg3WpnOYoTbU08+RdWU1OrTtjTsdSjoBmXPnygZZC8jRBElIoaFXDJ+2GlkxR50=\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0,\n      \"finishMessage\": \"Model generated function call(s).\"\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 217,\n    \"candidatesTokenCount\": 17,\n    \"totalTokenCount\": 234,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 217\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"YOe3aqqEKuDI_uMPkLabqQk\"\n}\n"
+    },
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"functionCall\": {\n              \"name\": \"set_model_response\",\n              \"args\": {\n                \"summary\": \"The weather in Oslo is currently 4 degrees.\"\n              },\n              \"id\": \"call_651204\"\n            },\n            \"thoughtSignature\": \"EmAKXgFpFH0TkGaIAC9tmaRZUIFA3bP2mvweCkEmR61zn9TG4wCosrzpL9TnJucBjMD7dBVcUdAeAyfle5BHzwaZBMCiwoYgk/GTLxFa5XHw8UxPkFIWJEqbPs/g8u/lThA=\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0,\n      \"finishMessage\": \"Model generated function call(s).\"\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 253,\n    \"candidatesTokenCount\": 27,\n    \"totalTokenCount\": 280,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 253\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"Yee3aqi8F4SM_PUPpKyrkA4\"\n}\n"
+    }
+  ]
+}
