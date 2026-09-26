@@ -40,7 +40,7 @@ code works regardless of which provider you picked.
 | elevenlabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | n/a (no chat) | Speech, Scribe STT, SFX/music; Pro-plan Flows images/video; direct-construct |
 | openrouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` | Images, async video, speech, transcription; async Batch API and service tiers; embeddings require a model option |
 | anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | Native (Messages) | `claude-sonnet-5` | Vision, tools, thinking, prompt caching |
-| gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-3.5-flash` | Vision, tools, embeddings (`text-embedding-004`) |
+| gemini | `pkg/providers/gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Native (`generateContent`) | `gemini-3.8-flash` | Vision, tools, embeddings (`text-embedding-004`) |
 | azure | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` (or `AZURE_OPENAI_KEY`) + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | deployment-dependent | Uses deployment + endpoint, not a model name |
 | groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` | Fast inference; WAV speech, transcription/translation; no embeddings |
 | cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `llama3.1-70b` | Fast inference; no embeddings |

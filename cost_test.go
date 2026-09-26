@@ -724,3 +724,12 @@ func TestCostTrackerResetClearsModeCosts(t *testing.T) {
 		t.Fatalf("GetTotalCost after Reset = %v", total)
 	}
 }
+
+// TestGemini38FlashRateChange fails from 2027-01-01, when Google doubles Gemini
+// 3.8 Flash's rates to Input 1.50, Output 7.50 and CacheRead 0.15 per 1M
+// tokens. Update the entry in DefaultPricing, then delete this test.
+func TestGemini38FlashRateChange(t *testing.T) {
+	if !time.Now().Before(time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatal("Gemini 3.8 Flash's introductory rates ended on 2026-12-31; update gemini:gemini-3.8-flash in DefaultPricing to 1.50/7.50/0.15")
+	}
+}

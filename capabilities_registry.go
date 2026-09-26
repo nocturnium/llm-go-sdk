@@ -390,7 +390,7 @@ func (r *CapabilityRegistry) registerDefaults() {
 	// 65,536 out), so limits here match the existing gemini-2.5 entries. Reasoning is
 	// flagged below for pro/flash, mirroring the 2.5 treatment (flash-lite unflagged).
 	for _, id := range []string{
-		"gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
+		"gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
 		"gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview",
 	} {
 		r.capabilities["gemini:"+id] = ModelCapabilities{
@@ -589,7 +589,7 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 		"anthropic:claude-opus-4-6", "anthropic:claude-opus-4-5", "anthropic:claude-opus-4-5-20251101",
 		"gemini:gemini-2.5-pro", "gemini:gemini-2.5-flash",
 		// Gemini 3.x pro/flash, mirroring the 2.5 treatment (flash-lite left unflagged).
-		"gemini:gemini-3.1-pro-preview", "gemini:gemini-3.6-flash", "gemini:gemini-3.5-flash",
+		"gemini:gemini-3.1-pro-preview", "gemini:gemini-3.8-flash", "gemini:gemini-3.6-flash", "gemini:gemini-3.5-flash",
 		"gemini:gemini-3-flash-preview",
 	}
 	for _, key := range reasoningModels {
