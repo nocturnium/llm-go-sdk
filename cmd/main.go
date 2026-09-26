@@ -262,13 +262,13 @@ func providersAction(out io.Writer) error {
 	type row struct{ name, model, env string }
 	chat := []row{
 		{"openai", "gpt-4o", "OPENAI_API_KEY"},
-		{"anthropic", "claude-sonnet-4-20250514", "ANTHROPIC_API_KEY"},
+		{"anthropic", "claude-sonnet-5", "ANTHROPIC_API_KEY"},
 		{"azure", "(deployment)", "AZURE_OPENAI_API_KEY"},
 		{"cerebras", "llama3.1-70b", "CEREBRAS_API_KEY"},
 		{"deepseek", "deepseek-chat", "DEEPSEEK_API_KEY"},
 		{"featherless", "Qwen/Qwen3-32B", "FEATHERLESS_API_KEY"},
 		{"fireworks", "llama-v3p1-70b-instruct", "FIREWORKS_API_KEY"},
-		{"gemini", "gemini-2.5-flash", "GEMINI_API_KEY / GOOGLE_API_KEY"},
+		{"gemini", "gemini-3.5-flash", "GEMINI_API_KEY / GOOGLE_API_KEY"},
 		{"groq", "llama-3.3-70b-versatile", "GROQ_API_KEY"},
 		{"llamacpp", "(from server /props)", "LLAMA_CPP_HOST"},
 		{"mistral", "mistral-large-latest", "MISTRAL_API_KEY"},

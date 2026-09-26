@@ -25,7 +25,7 @@ type options struct {
 // defaultOptions returns the default options for Anthropic.
 func defaultOptions() *options {
 	return &options{
-		Model: "claude-sonnet-4-20250514",
+		Model: "claude-sonnet-5",
 	}
 }
 

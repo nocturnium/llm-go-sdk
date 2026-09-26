@@ -39,7 +39,7 @@
 //
 //	client, err := gemini.New(
 //	    gemini.WithAPIKey("..."),
-//	    gemini.WithModel("gemini-2.5-flash"),
+//	    gemini.WithModel("gemini-3.5-flash"),
 //	    gemini.WithEmbeddingModel("text-embedding-004"),
 //	    gemini.WithHTTPClient(customHTTPClient),
 //	)
@@ -56,7 +56,7 @@
 //
 // # Default Model
 //
-// The default chat model is gemini-2.5-flash. Override with WithModel.
+// The default chat model is gemini-3.5-flash. Override with WithModel.
 // Media defaults are gemini-3.1-flash-image, veo-3.1-lite-generate-preview,
 // gemini-3.1-flash-tts-preview (voice Kore), and gemini-3.5-transcribe.
 // Override with WithImageModel, WithVideoModel, WithSpeechModel, WithSpeechVoice,
