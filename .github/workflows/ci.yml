@@ -57,6 +57,28 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  release-lanes:
+    name: Release lanes (dry run)
+    runs-on: ubuntu-latest
+    env:
+      GIT_CLIFF_VERSION: '2.13.1'
+      GIT_CLIFF_SHA256: '9a1263f24e59a2f508c7b3d3283c9dea94a8bf697f96dbc18cc783cac6284546'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install git-cliff
+        run: |
+          curl -fsSL -o git-cliff.tar.gz "https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${GIT_CLIFF_SHA256}  git-cliff.tar.gz" | sha256sum -c -
+          tar xzf git-cliff.tar.gz
+          echo "${PWD}/git-cliff-${GIT_CLIFF_VERSION}" >> "$GITHUB_PATH"
+
+      # Root and llmadk release independently; this proves each lane ignores the
+      # other's tags and commits against a scratch repository.
+      - name: Dry-run the release decision
+        run: scripts/release-decide_test.sh
+
   api-check:
     name: API compatibility
     runs-on: ubuntu-latest
