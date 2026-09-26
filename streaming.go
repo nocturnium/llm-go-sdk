@@ -58,7 +58,8 @@ func (s *StreamSender) SetAdjustments(adjustments []string) {
 		s.adjustments = nil
 		return
 	}
-	s.adjustments = &adjustments
+	own := append([]string(nil), adjustments...)
+	s.adjustments = &own
 }
 
 // SetIdentity makes the sender stamp each chunk it delivers with the provider

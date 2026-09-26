@@ -85,3 +85,30 @@ func TestBaseProvider_ToolCallIDFormat(t *testing.T) {
 		}
 	})
 }
+
+func TestBaseProvider_ToolCallIDFormatStream(t *testing.T) {
+	server := testutil.NewMockOpenAICompatibleServer(testutil.WithStreamResponse(
+		streamContentChunk("ok"),
+		streamFinishChunk("stop", nil),
+	))
+	defer server.Close()
+	client := openaicompat.NewClient(openaicompat.ClientConfig{BaseURL: server.URL(), APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
+	p := openaicompat.NewBaseProvider(client, openaicompat.ProviderConfig{
+		Provider: llms.ProviderMistral, DefaultModel: "m", ToolCallIDFormat: openaicompat.ToolCallIDNineChar,
+	})
+	stream, err := p.Stream(context.Background(), []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{{ID: "toolu_01XYZ", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "f", Arguments: "{}"}}}},
+		{Role: llms.RoleTool, ToolCallID: "toolu_01XYZ", Content: "r"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := llms.CollectStream(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Adjustments) != 1 || res.Adjustments[0] != "mistral.tool_ids_rewritten" {
+		t.Errorf("stream Adjustments = %v", res.Adjustments)
+	}
+}

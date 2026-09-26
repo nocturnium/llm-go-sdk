@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	"github.com/nocturnium/llm-go-sdk/v6/internal/anthropicapi"
 )
 
 func call(id string) []llms.ToolCall {
@@ -54,22 +55,53 @@ func TestSuspendThinkingForUnsignedTurn(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			got := thinkingSuspended(tt.model, opts, prepared)
+			if got != tt.want {
+				t.Fatalf("suspended = %v, want %v", got, tt.want)
+			}
 			req, err := c.buildRequest(prepared, opts, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			hadThinking := req.Thinking != nil
-			got := suspendThinkingForUnsignedTurn(req, prepared)
-			if got != tt.want {
-				t.Fatalf("suspended = %v, want %v", got, tt.want)
-			}
 			if got && req.Thinking != nil {
-				t.Error("reported suspension but thinking is still set")
-			}
-			if !got && hadThinking && req.Thinking == nil {
-				t.Error("thinking removed without reporting it")
+				t.Error("suspension reported but the request still asks for thinking")
 			}
 		})
+	}
+}
+
+// TestSuspendedRequestKeepsSettings checks that a request whose thinking is
+// suspended is built as a thinking-free one: budget thinking would have
+// softened a forced tool choice to auto and cleared the sampling settings.
+func TestSuspendedRequestKeepsSettings(t *testing.T) {
+	c := newTestClientFor(t, "claude-opus-4-5")
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, Reasoning: signed(llms.ProviderGemini), ToolCalls: call("toolu_1")},
+		{Role: llms.RoleTool, ToolCallID: "toolu_1", Content: "r"},
+	}
+	opts := llms.ApplyOptions(
+		llms.WithReasoningBudget(2048),
+		llms.WithTools([]llms.Tool{llms.NewFunctionTool("f", "f", map[string]any{"type": "object"})}),
+		llms.WithToolChoiceTool("f"),
+		llms.WithTemperature(0.3),
+	)
+	prepared, err := prepare(msgs, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := c.buildRequest(prepared, opts, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Thinking != nil {
+		t.Fatal("thinking not suspended")
+	}
+	if tc, ok := req.ToolChoice.(anthropicapi.ToolChoiceTool); !ok || tc.Name != "f" {
+		t.Errorf("tool choice = %#v, want the forced tool f", req.ToolChoice)
+	}
+	if req.Temperature == nil || *req.Temperature != 0.3 {
+		t.Errorf("temperature = %v, want 0.3", req.Temperature)
 	}
 }
 
@@ -100,5 +132,37 @@ func TestGenerateContent_ReportsThinkingSuspension(t *testing.T) {
 	}
 	if len(resp.Adjustments) != 1 || resp.Adjustments[0] != adjustmentThinkingSuspended {
 		t.Errorf("Adjustments = %v, want [%s]", resp.Adjustments, adjustmentThinkingSuspended)
+	}
+}
+
+func TestStream_ReportsThinkingSuspension(t *testing.T) {
+	c := sseServer(t, []string{
+		sseMessageStart,
+		`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+		`event: content_block_stop
+data: {"type":"content_block_stop","index":0}`,
+		`event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
+		`event: message_stop
+data: {"type":"message_stop"}`,
+	})
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, Reasoning: signed(llms.ProviderOpenAI), ToolCalls: call("call_1")},
+		{Role: llms.RoleTool, ToolCallID: "call_1", Content: "r"},
+	}
+	stream, err := c.Stream(context.Background(), msgs, llms.WithModel("claude-opus-4-5"), llms.WithReasoningBudget(2048))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := llms.CollectStream(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Adjustments) != 1 || res.Adjustments[0] != adjustmentThinkingSuspended {
+		t.Errorf("stream Adjustments = %v", res.Adjustments)
 	}
 }
