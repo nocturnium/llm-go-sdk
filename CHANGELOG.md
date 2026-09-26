@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- An Anthropic thinking block with empty text (recent models return signature-only blocks) is replayed with its `thinking` field, which the API requires; it was dropped as empty and the next turn failed with "thinking: Field required".
 - The Anthropic default model is now `claude-sonnet-5` (was `claude-sonnet-4-20250514`, which the API now answers with 404) and the Gemini default is `gemini-3.5-flash` (was `gemini-2.5-flash`, which Gemini no longer offers to new users). Both were found by the llmadk live gate.
 - Gemini tool parameters and response schemas are sent as JSON Schema (`parametersJsonSchema`, `responseJsonSchema`). The OpenAPI-subset fields they went in before answer standard keywords such as `additionalProperties`, present in every schema generated from a Go struct, with a 400.
 - An error string no longer carries credentials: `APIError.Error` strips userinfo, query and fragment from the request URL, including the malformed and opaque forms a misconfigured base URL produces.

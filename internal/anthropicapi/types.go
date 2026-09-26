@@ -269,3 +269,18 @@ func (e *StreamEvent) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+// MarshalJSON always writes a thinking block's "thinking" field. Recent models
+// can return a thinking block whose text is empty, with only a signature, and
+// the API rejects the block when it is replayed without the field ("thinking:
+// Field required"), which omitempty would otherwise do.
+func (p ContentPart) MarshalJSON() ([]byte, error) {
+	type plain ContentPart
+	if p.Type != "thinking" {
+		return json.Marshal(plain(p))
+	}
+	return json.Marshal(struct {
+		plain
+		Thinking string `json:"thinking"`
+	}{plain(p), p.Thinking})
+}
