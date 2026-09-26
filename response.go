@@ -48,6 +48,27 @@ type Response struct {
 	// endpoint's rate. Requesting a tier is provider-specific (see
 	// openrouter.WithServiceTier); pricing it is [WithPricingMode].
 	ServiceTier string `json:"service_tier,omitempty"`
+
+	// Provider and Model identify what served this request: the provider that
+	// answered and the model ID that was requested of it (a [WithModel] override,
+	// else the client's default). Model is the requested ID, never the snapshot
+	// the API reports back, so it compares equal to the configured model; the
+	// reported snapshot is ModelVersion. Middleware that routes between clients,
+	// such as a fallback chain, passes the serving client's values through, so
+	// these may differ from the Provider and Model methods of the LLM that was
+	// called. Empty when the answering client does not report them.
+	Provider Provider `json:"provider,omitempty"`
+	Model    string   `json:"model,omitempty"`
+	// ModelVersion is the model version the provider reported serving (for
+	// example a dated snapshot of an alias), when it reports one.
+	ModelVersion string `json:"model_version,omitempty"`
+
+	// Adjustments names the changes a provider made to the request so that it
+	// would be accepted, such as suspending extended thinking for one turn whose
+	// history no longer carries a replayable thinking block. Each entry is a
+	// stable dotted name ("anthropic.thinking_suspended"). Empty when the request
+	// was sent as given.
+	Adjustments []string `json:"adjustments,omitempty"`
 }
 
 // SetReasoning sets the canonical Reasoning field. Providers use this to
@@ -102,7 +123,11 @@ type StreamChunk struct {
 	// when the provider/model supports it.
 	Reasoning *ReasoningContent `json:"reasoning,omitempty"`
 
-	// ToolCalls contains any tool calls in this chunk (may be partial)
+	// ToolCalls holds the stream's tool calls. Every provider in this module
+	// delivers them complete, arguments and all, on the final (Done) chunk only;
+	// chunks before it carry none. Middleware that re-emits a stream preserves
+	// that, so a consumer reads tool calls from the Done chunk (as
+	// [CollectStream] does).
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 
 	// FinishReason is set on the final chunk
@@ -115,6 +140,13 @@ type StreamChunk struct {
 	// that sell more than one grade of capacity per model and report which one
 	// ran. It is carried on the final chunk, matching [Response.ServiceTier].
 	ServiceTier string `json:"service_tier,omitempty"`
+
+	// Provider, Model, ModelVersion and Adjustments are carried on the final
+	// chunk and mean what they mean on [Response].
+	Provider     Provider `json:"provider,omitempty"`
+	Model        string   `json:"model,omitempty"`
+	ModelVersion string   `json:"model_version,omitempty"`
+	Adjustments  []string `json:"adjustments,omitempty"`
 
 	// Error is set if an error occurred during streaming
 	Error error `json:"-"`

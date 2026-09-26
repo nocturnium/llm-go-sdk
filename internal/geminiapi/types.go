@@ -45,6 +45,9 @@ type InlineData struct {
 
 // FunctionCall represents a function call from the model
 type FunctionCall struct {
+	// ID is the call's identifier, when the API returns one. Requests never set
+	// it: the Gemini API pairs a functionResponse with its call by name.
+	ID   string         `json:"id,omitempty"`
 	Name string         `json:"name"`
 	Args map[string]any `json:"args,omitempty"`
 }

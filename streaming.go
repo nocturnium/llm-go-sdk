@@ -39,6 +39,31 @@ type StreamSender struct {
 	ctx          context.Context
 	timedOut     atomic.Bool // tracks if we've already timed out
 	terminalSent atomic.Bool // tracks if a terminal (Done/Error) chunk was delivered
+
+	// identityProvider and identityModel, when set by SetIdentity, stamp every
+	// chunk this sender delivers (see StampResponse).
+	identityProvider Provider
+	identityModel    string
+}
+
+// SetIdentity makes the sender stamp each chunk it delivers with the provider
+// and requested model that are producing the stream: reasoning and tool-call
+// signatures are stamped with the provider, and the final chunk carries both as
+// [StreamChunk.Provider] and [StreamChunk.Model]. Provider stream goroutines call
+// it once before sending; middleware that forwards another client's stream does
+// not, so the stamps of the client that answered pass through unchanged. Call it
+// before the first Send; it is not safe to call concurrently with sending.
+func (s *StreamSender) SetIdentity(p Provider, model string) {
+	s.identityProvider = p
+	s.identityModel = model
+}
+
+// stamp applies the sender's identity to chunk, if it has one.
+func (s *StreamSender) stamp(chunk StreamChunk) StreamChunk {
+	if s.identityProvider == "" {
+		return chunk
+	}
+	return stampChunk(chunk, s.identityProvider, s.identityModel)
 }
 
 // NewStreamSender creates a new StreamSender with the configured timeout.
@@ -70,6 +95,7 @@ func (s *StreamSender) Send(chunk StreamChunk) SendResult {
 	if s.timedOut.Load() {
 		return SendTimeout
 	}
+	chunk = s.stamp(chunk)
 
 	// Fast path: buffered stream channels almost always have room, so avoid
 	// allocating a timer unless the send would block.
@@ -247,6 +273,7 @@ func (s *StreamSender) DeliverTerminal(chunk StreamChunk) {
 	if !s.terminalSent.CompareAndSwap(false, true) {
 		return
 	}
+	chunk = s.stamp(chunk)
 
 	// Fast path: buffered channel almost always accepts a single terminal chunk.
 	select {
@@ -306,6 +333,12 @@ type StreamResult struct {
 	ToolCalls    []ToolCall
 	FinishReason FinishReason
 	Usage        *Usage
+	// Provider, Model, ModelVersion and Adjustments come from the final chunk and
+	// mean what they mean on [Response].
+	Provider     Provider
+	Model        string
+	ModelVersion string
+	Adjustments  []string
 }
 
 // CollectStream drains stream into a StreamResult.
@@ -323,6 +356,10 @@ func CollectStream(stream <-chan StreamChunk) (StreamResult, error) {
 	var reasoningSignature string
 	var reasoningMetadata map[string]any
 	var reasoningTokens int
+	// The provenance stamp travels with the reasoning chunks (last non-empty
+	// wins, like the signature) so a collected stream replays where it may.
+	var reasoningProvider Provider
+	var reasoningModel string
 
 	buildReasoning := func() *ReasoningContent {
 		if reasoning.Len() == 0 && reasoningSignature == "" && reasoningMetadata == nil && reasoningTokens == 0 {
@@ -333,6 +370,8 @@ func CollectStream(stream <-chan StreamChunk) (StreamResult, error) {
 			Signature: reasoningSignature,
 			Tokens:    reasoningTokens,
 			Metadata:  reasoningMetadata,
+			Provider:  reasoningProvider,
+			Model:     reasoningModel,
 		}
 	}
 
@@ -355,11 +394,19 @@ func CollectStream(stream <-chan StreamChunk) (StreamResult, error) {
 			if chunk.Reasoning.Tokens != 0 {
 				reasoningTokens = chunk.Reasoning.Tokens
 			}
+			if chunk.Reasoning.Provider != "" {
+				reasoningProvider = chunk.Reasoning.Provider
+				reasoningModel = chunk.Reasoning.Model
+			}
 		}
 		if chunk.Done {
 			result.FinishReason = chunk.FinishReason
 			result.Usage = chunk.Usage
 			result.ToolCalls = chunk.ToolCalls
+			result.Provider = chunk.Provider
+			result.Model = chunk.Model
+			result.ModelVersion = chunk.ModelVersion
+			result.Adjustments = chunk.Adjustments
 		}
 	}
 
