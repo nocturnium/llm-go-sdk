@@ -108,7 +108,7 @@ import (
 
 // By name. llms.Config carries the common construction settings.
 client, err := llms.New("anthropic", llms.Config{
-	Model: "claude-sonnet-4-20250514",
+	Model: "claude-sonnet-5",
 })
 
 // Entirely from env: LLM_PROVIDER (required) + LLM_MODEL (optional),
@@ -891,7 +891,7 @@ import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
 
 client, err := anthropic.New(
     anthropic.WithAPIKey("sk-ant-..."), // Or use ANTHROPIC_API_KEY env
-    anthropic.WithModel("claude-sonnet-4-20250514"),
+    anthropic.WithModel("claude-sonnet-5"),
 )
 ```
 
@@ -902,7 +902,7 @@ import "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/gemini"
 
 client, err := gemini.New(
     gemini.WithAPIKey("..."), // Or use GEMINI_API_KEY / GOOGLE_API_KEY env
-    gemini.WithModel("gemini-2.5-flash"),
+    gemini.WithModel("gemini-3.5-flash"),
 )
 ```
 
@@ -961,7 +961,7 @@ go build -o llms-cli ./cmd
 ./llms-cli chat -p openai "What is the capital of France?"
 
 # With options
-./llms-cli chat -p anthropic -m claude-sonnet-4-20250514 -t 0.5 "Explain Go interfaces"
+./llms-cli chat -p anthropic -m claude-sonnet-5 -t 0.5 "Explain Go interfaces"
 
 # Simple completion
 ./llms-cli complete -p gemini "The sky is"
