@@ -1,0 +1,22 @@
+{
+  "scenario": "tool_loop_stream",
+  "family": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "recorded_at": "2026-09-26T15:40:04Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:streamGenerateContent",
+      "status": 200,
+      "content_type": "text/event-stream",
+      "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\",\"args\": {\"city\": \"Oslo\"},\"id\": \"call_141989\"},\"thoughtSignature\": \"EmAKXgFpFH0TIEm+YCUAnyH0zwRxIaDAmded+N8TnhfxI242T/cRa1Zxj11Hvl1G+Xlthmtp/1oVaVYMOGyoD38LA3f9isScEYHeLKCUHWQBnEtkcQweA4OZAqU6XG8T55I=\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 97,\"candidatesTokenCount\": 17,\"totalTokenCount\": 114,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 97}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash-lite\",\"responseId\": \"U-e3aoPRE8yY_uMPtLGg2A0\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\",\"args\": {\"city\": \"Rome\"},\"id\": \"call_141992\"}}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 97,\"candidatesTokenCount\": 33,\"totalTokenCount\": 130,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 97}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash-lite\",\"responseId\": \"U-e3aoPRE8yY_uMPtLGg2A0\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 97,\"candidatesTokenCount\": 33,\"totalTokenCount\": 130,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 97}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash-lite\",\"responseId\": \"U-e3aoPRE8yY_uMPtLGg2A0\"}\r\n\r\n"
+    },
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:streamGenerateContent",
+      "status": 200,
+      "content_type": "text/event-stream",
+      "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The temperature is 4 degrees in both Oslo and Rome.\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 166,\"candidatesTokenCount\": 12,\"totalTokenCount\": 178,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 166}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash-lite\",\"responseId\": \"VOe3at-vBNyM_PUP4sqdsQI\"}\r\n\r\ndata: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\",\"thoughtSignature\": \"EmAKXgFpFH0TOzoKzRypF7FOQpAElwu7spgOy/dQLKN77LjAVtEK3qx8eKoDyDThjsTyeMbQQZp6tlMzd2PyJrKi/Oy6jYyhEPgTylEXsokA+wN9daIT5xfTiavz9J2DMIw=\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 166,\"candidatesTokenCount\": 12,\"totalTokenCount\": 178,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 166}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-3.5-flash-lite\",\"responseId\": \"VOe3at-vBNyM_PUP4sqdsQI\"}\r\n\r\n"
+    }
+  ]
+}

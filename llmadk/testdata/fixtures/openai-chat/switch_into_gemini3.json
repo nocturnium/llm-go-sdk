@@ -1,0 +1,15 @@
+{
+  "scenario": "switch_into_gemini3",
+  "family": "openai-chat",
+  "model": "gpt-5.4-mini",
+  "recorded_at": "2026-09-26T15:40:28Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/chat/completions",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\n  \"id\": \"chatcmpl-ESOnjYaCiFKCAel41MXdwr89JMsX2\",\n  \"object\": \"chat.completion\",\n  \"created\": 1790437227,\n  \"model\": \"gpt-5.4-mini-2026-03-17\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n            \"id\": \"call_u09keYNyt83ZhOkPEr9DLWOB\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"get_weather\",\n              \"arguments\": \"{\\\"city\\\":\\\"Oslo\\\"}\"\n            }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"finish_reason\": \"tool_calls\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 175,\n    \"completion_tokens\": 18,\n    \"total_tokens\": 193,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": null\n}\n"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "scenario": "switch_into_gemini3",
+  "family": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "recorded_at": "2026-09-26T15:40:28Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/models/gemini-3.5-flash-lite:generateContent",
+      "status": 200,
+      "content_type": "application/json; charset=UTF-8",
+      "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"The weather in Oslo is currently 4 degrees.\",\n            \"thoughtSignature\": \"EmAKXgFpFH0TkuLaH4588KO73vrjiI/itYKZ1yBQLDHa6/oAFTWZ8Nowzd4xW0rxHcel0svMFy05bP7PYxRBXX4t+TwTAnO+WbyBMfDn2mpOgf7dhGiz5ZpU8795LN4CC9E=\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 130,\n    \"candidatesTokenCount\": 10,\n    \"totalTokenCount\": 140,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 130\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-3.5-flash-lite\",\n  \"responseId\": \"bOe3apnqEerf_uMPsreaoAE\"\n}\n"
+    }
+  ]
+}

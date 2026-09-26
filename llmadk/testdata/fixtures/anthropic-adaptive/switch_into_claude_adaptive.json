@@ -1,0 +1,15 @@
+{
+  "scenario": "switch_into_claude_adaptive",
+  "family": "anthropic-adaptive",
+  "model": "claude-sonnet-4-6",
+  "recorded_at": "2026-09-26T15:40:22Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/messages",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CfSJYcu4Pj8zvcGQFY5ys\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"The weather in Oslo is currently a chilly 4°C!\"}],\"container\":null,\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":689,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":17,\"output_tokens_details\":{\"thinking_tokens\":0},\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null}"
+    }
+  ]
+}

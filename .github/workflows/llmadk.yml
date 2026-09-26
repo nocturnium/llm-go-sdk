@@ -1,0 +1,162 @@
+name: llmadk
+
+# CI for the nested llmadk module. The root workflows run `./...` from the
+# repository root, which never descends into a nested module, so llmadk needs its
+# own build, test, lint, vulnerability and API checks. The weekly schedule is the
+# upstream canary: it tests against the newest ADK and genai releases so breaking
+# upstream changes surface before a user reports them.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'llmadk/**'
+      - '.github/workflows/llmadk.yml'
+  pull_request:
+    paths:
+      - 'llmadk/**'
+      - '.github/workflows/llmadk.yml'
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26'
+  GOLANGCI_LINT_VERSION: 'v2.13.2'
+  GOWORK: 'off'
+
+defaults:
+  run:
+    working-directory: llmadk
+
+jobs:
+  test:
+    name: Test
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: llmadk/go.sum
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Compile integration tests (keyless)
+        run: go test -tags=integration -run '^$' ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: llmadk/coverage.out
+          flags: llmadk
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  lint:
+    name: Lint
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: llmadk
+          args: --timeout=5m --config=../.golangci.yml
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  api-check:
+    name: API compatibility
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: llmadk/go.sum
+
+      - name: Install apidiff
+        run: go install golang.org/x/exp/cmd/apidiff@latest
+
+      - name: Check public API against baseline
+        run: |
+          out="$(apidiff api.txt github.com/nocturnium/llm-go-sdk/llmadk 2>&1 || true)"
+          if [ -n "$out" ]; then
+            echo "Public API changed since llmadk/api.txt:"
+            echo "$out"
+            echo "If intentional, re-baseline with 'make -C llmadk apidiff-baseline'."
+            exit 1
+          fi
+
+  canary:
+    name: Canary (ADK and genai @latest)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Upgrade ADK and genai
+        run: |
+          go get google.golang.org/adk/v2@latest google.golang.org/genai@latest
+          go mod tidy
+          go list -m google.golang.org/adk/v2 google.golang.org/genai
+
+      - name: Test against latest upstream
+        id: test
+        run: go test -race ./...
+
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSIONS="$(go list -m google.golang.org/adk/v2 google.golang.org/genai 2>/dev/null | tr '\n' ' ')"
+          gh issue create --title "llmadk canary failed against ${VERSIONS}" \
+            --body "The weekly llmadk canary failed against the latest upstream modules (${VERSIONS}). Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --label dependencies

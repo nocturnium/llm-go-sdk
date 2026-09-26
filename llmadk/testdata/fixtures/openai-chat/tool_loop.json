@@ -1,0 +1,22 @@
+{
+  "scenario": "tool_loop",
+  "family": "openai-chat",
+  "model": "gpt-5.4-mini",
+  "recorded_at": "2026-09-26T15:39:48Z",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/chat/completions",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\n  \"id\": \"chatcmpl-ESOn57sVxavbjuX6Nz5feSWF54BY8\",\n  \"object\": \"chat.completion\",\n  \"created\": 1790437187,\n  \"model\": \"gpt-5.4-mini-2026-03-17\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"tool_calls\": [\n          {\n            \"id\": \"call_eIALQuC9xeb5tPrMX6E7UuFc\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"get_weather\",\n              \"arguments\": \"{\\\"city\\\": \\\"Oslo\\\"}\"\n            }\n          },\n          {\n            \"id\": \"call_BHpQk68S8v5JE4zyZ8fHXv7R\",\n            \"type\": \"function\",\n            \"function\": {\n              \"name\": \"get_weather\",\n              \"arguments\": \"{\\\"city\\\": \\\"Rome\\\"}\"\n            }\n          }\n        ],\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"finish_reason\": \"tool_calls\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 178,\n    \"completion_tokens\": 48,\n    \"total_tokens\": 226,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": null\n}\n"
+    },
+    {
+      "method": "POST",
+      "path": "/chat/completions",
+      "status": 200,
+      "content_type": "application/json",
+      "body": "{\n  \"id\": \"chatcmpl-ESOn6JMaKd9dt97UcxGqMUVnb8XcX\",\n  \"object\": \"chat.completion\",\n  \"created\": 1790437188,\n  \"model\": \"gpt-5.4-mini-2026-03-17\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"Oslo and Rome are both 4°C.\",\n        \"refusal\": null,\n        \"annotations\": []\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 265,\n    \"completion_tokens\": 13,\n    \"total_tokens\": 278,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\": 0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\": \"default\",\n  \"system_fingerprint\": null\n}\n"
+    }
+  ]
+}
