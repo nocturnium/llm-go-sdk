@@ -218,3 +218,34 @@ func TestGenerateContent_EchoesCallIDsToGemini3(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateContent_ToolSchemasAreJSONSchema checks that tool parameters go
+// in parametersJsonSchema. Gemini's parameters field takes an OpenAPI subset and
+// answers additionalProperties, present in every schema generated from a Go
+// struct, with a 400.
+func TestGenerateContent_ToolSchemasAreJSONSchema(t *testing.T) {
+	c, last := geminiServer(t, `{"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":"ok"}]}}]}`)
+	tool := llms.NewFunctionTool("f", "f", map[string]any{
+		"type": "object", "additionalProperties": false,
+		"properties": map[string]any{"q": map[string]any{"type": "string"}},
+	})
+	if _, err := c.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "q"}}, llms.WithTools([]llms.Tool{tool})); err != nil {
+		t.Fatal(err)
+	}
+	var req struct {
+		Tools []struct {
+			FunctionDeclarations []map[string]any `json:"functionDeclarations"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal([]byte(*last), &req); err != nil {
+		t.Fatal(err)
+	}
+	decl := req.Tools[0].FunctionDeclarations[0]
+	if _, ok := decl["parameters"]; ok {
+		t.Error("tool schema sent in parameters")
+	}
+	schema, _ := decl["parametersJsonSchema"].(map[string]any)
+	if schema["additionalProperties"] != false {
+		t.Errorf("parametersJsonSchema = %v", decl["parametersJsonSchema"])
+	}
+}

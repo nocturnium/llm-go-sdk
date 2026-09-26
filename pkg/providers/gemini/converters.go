@@ -304,7 +304,11 @@ func convertTools(tools []llms.Tool) []geminiapi.Tool {
 			declarations = append(declarations, geminiapi.FunctionDeclaration{
 				Name:        t.Function.Name,
 				Description: t.Function.Description,
-				Parameters:  t.Function.Parameters,
+				// Tool parameters are JSON Schema, which Gemini's OpenAPI-subset
+				// parameters field rejects as soon as it meets a keyword such as
+				// additionalProperties, as every schema generated from a Go struct
+				// has.
+				ParametersJSONSchema: t.Function.Parameters,
 			})
 		}
 	}
