@@ -65,14 +65,14 @@
 //
 //	client, err := anthropic.New(
 //	    anthropic.WithAPIKey("sk-ant-..."),
-//	    anthropic.WithModel("claude-sonnet-4-20250514"),
+//	    anthropic.WithModel("claude-sonnet-5"),
 //	    anthropic.WithBaseURL("https://custom-endpoint.com"),
 //	    anthropic.WithHTTPClient(customHTTPClient),
 //	)
 //
 // # Default Model
 //
-// The default model is claude-sonnet-4-20250514. Override with WithModel.
+// The default model is claude-sonnet-5. Override with WithModel.
 //
 // # Thread Safety
 //

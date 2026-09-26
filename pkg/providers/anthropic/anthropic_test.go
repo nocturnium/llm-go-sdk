@@ -13,8 +13,8 @@ import (
 func TestDefaultOptions(t *testing.T) {
 	opts := defaultOptions()
 
-	if opts.Model != "claude-sonnet-4-20250514" {
-		t.Errorf("expected default model to be claude-sonnet-4-20250514, got %s", opts.Model)
+	if opts.Model != "claude-sonnet-5" {
+		t.Errorf("expected default model to be claude-sonnet-5, got %s", opts.Model)
 	}
 	if opts.APIKey != "" {
 		t.Error("expected default API key to be empty")
@@ -80,7 +80,7 @@ func TestNewClientWithEnvAPIKey(t *testing.T) {
 	if client.Provider() != llms.ProviderAnthropic {
 		t.Errorf("expected provider to be anthropic, got %s", client.Provider())
 	}
-	if client.Model() != "claude-sonnet-4-20250514" {
+	if client.Model() != "claude-sonnet-5" {
 		t.Errorf("expected default model, got %s", client.Model())
 	}
 }
