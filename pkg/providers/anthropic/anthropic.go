@@ -175,7 +175,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		return nil, err
 	}
 	var adjustments []string
-	if suspendThinkingForUnsignedTurn(req, prepared) {
+	if thinkingSuspended(c.requestModel(opts), opts, prepared) {
 		adjustments = append(adjustments, adjustmentThinkingSuspended)
 	}
 
@@ -232,7 +232,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		return nil, err
 	}
 	var adjustments []string
-	if suspendThinkingForUnsignedTurn(req, prepared) {
+	if thinkingSuspended(c.requestModel(opts), opts, prepared) {
 		adjustments = append(adjustments, adjustmentThinkingSuspended)
 	}
 
@@ -250,6 +250,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	go func() {
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		sender.SetIdentity(llms.ProviderAnthropic, req.Model)
+		sender.SetAdjustments(adjustments)
 
 		defer close(chunks)
 		// A malformed/hostile provider response must never crash the host process.
@@ -351,7 +352,6 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				FinishReason: finishReason,
 				Usage:        finalUsage,
 				ModelVersion: modelVersion,
-				Adjustments:  adjustments,
 			})
 		}
 
@@ -561,7 +561,11 @@ func (c *Client) buildRequest(messages []llms.Message, opts *llms.CallOptions, s
 	}
 
 	structuredName := structuredOutputToolNameFor(opts)
-	applyThinking(req, gen, opts.Reasoning, structuredName != "")
+	reasoning := opts.Reasoning
+	if thinkingSuspended(model, opts, messages) {
+		reasoning = nil
+	}
+	applyThinking(req, gen, reasoning, structuredName != "")
 
 	// Prompt caching. Caching the system prompt is on by default (preserving prior
 	// behavior); WithCache/WithCacheTTL additionally cache the tool definitions,

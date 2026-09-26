@@ -2,6 +2,8 @@ package gemini
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -73,5 +75,33 @@ func TestGenerateContent_ReportsSignatureValidatorSkipped(t *testing.T) {
 	}
 	if len(resp.Adjustments) != 1 || resp.Adjustments[0] != adjustmentSignatureValidatorSkipped {
 		t.Errorf("Adjustments = %v", resp.Adjustments)
+	}
+}
+
+func TestStream_ReportsSignatureValidatorSkipped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}` + "\n\n"))
+	}))
+	defer server.Close()
+	c, err := New(WithAPIKey("k"), WithBaseURL(server.URL), WithAllowPrivateIPs(), WithAllowHTTP())
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{geminiCall("c1", "", "")}},
+		{Role: llms.RoleTool, ToolCallID: "c1", Name: "f", Content: "{}"},
+	}
+	stream, err := c.Stream(context.Background(), msgs, llms.WithModel("gemini-3-pro"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := llms.CollectStream(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Adjustments) != 1 || res.Adjustments[0] != adjustmentSignatureValidatorSkipped {
+		t.Errorf("stream Adjustments = %v", res.Adjustments)
 	}
 }

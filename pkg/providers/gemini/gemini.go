@@ -192,6 +192,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 	go func() {
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
 		sender.SetIdentity(llms.ProviderGemini, model)
+		sender.SetAdjustments(adjustments)
 
 		defer close(chunks)
 		// A malformed/hostile provider response must never crash the host process.
@@ -282,7 +283,6 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					FinishReason: finishReason,
 					Usage:        finalUsage,
 					ModelVersion: modelVersion,
-					Adjustments:  adjustments,
 				})
 				return
 			}
