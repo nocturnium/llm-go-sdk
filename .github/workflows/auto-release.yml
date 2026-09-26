@@ -64,7 +64,8 @@ jobs:
       - name: Decide whether to release
         id: decide
         # scripts/release-decide.sh matches only root tags (vX.Y.Z) and counts only
-        # commits touching paths outside llmadk/, which releases on its own lane
+        # commits touching paths outside llmadk/ and its workflows; llmadk releases
+        # on its own lane
         # (llmadk-release.yml). A bare `git describe` would return an llmadk/ tag
         # when it is the newest one. scripts/release-decide_test.sh dry-runs the
         # lane rules against a scratch repository in CI.

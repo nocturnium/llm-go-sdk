@@ -6,6 +6,7 @@
 #   b) a commit touching both trees cuts a release in both lanes
 #   c) the first llmadk release, with no llmadk tag yet, is llmadk/v0.1.0
 #   d) root and llmadk tags on the same commit each resolve to their own lane
+#   e) llmadk's own workflow files count for the llmadk lane only
 # plus the plain root paths (docs-only skips, fix bumps patch, feat bumps minor).
 #
 # Usage: GIT_CLIFF=/path/to/git-cliff scripts/release-decide_test.sh
@@ -85,6 +86,11 @@ expect root false -
 expect llmadk true llmadk/v0.1.1
 commit "fix: root fix" llms.go
 expect root true v6.10.1
+
+CASE=llmadk-workflow
+git tag -a v6.10.1 -m v6.10.1
+commit "feat(llmadk): run CI on the module" llmadk/model.go .github/workflows/llmadk.yml
+expect root false -
 
 CASE=v0-breaking
 commit "feat(llmadk)!: break adapter" llmadk/model.go

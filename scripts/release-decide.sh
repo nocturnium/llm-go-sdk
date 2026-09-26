@@ -6,7 +6,7 @@
 # independently:
 #
 #   root    module github.com/nocturnium/llm-go-sdk/v6, tags vX.Y.Z, every path
-#           except llmadk/
+#           except llmadk/ and llmadk's own workflows
 #   llmadk  module github.com/nocturnium/llm-go-sdk/llmadk, tags llmadk/vX.Y.Z,
 #           only llmadk/
 #
@@ -29,7 +29,7 @@ case "$lane" in
 root)
 	match='v[0-9]*'
 	pattern='^v[0-9]+\.'
-	pathflag=(--exclude-path 'llmadk/**')
+	pathflag=(--exclude-path 'llmadk/**' --exclude-path '.github/workflows/llmadk*.yml')
 	prefix='v'
 	;;
 llmadk)
