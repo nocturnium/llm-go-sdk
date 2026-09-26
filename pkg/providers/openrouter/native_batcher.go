@@ -104,7 +104,7 @@ func (b *NativeBatcher) ProcessBatch(ctx context.Context, requests []llms.BatchR
 	if batch.Status != BatchCompleted {
 		return nil, openaicompat.WrapError(b.client.Provider(), "process batch", batchStatusError(batch))
 	}
-	return collectBatchResults(requests, batch, time.Since(start)), nil
+	return collectBatchResults(requests, batch, b.client.Model(), time.Since(start)), nil
 }
 
 // buildSubmission converts neutral batch requests into one chat-completions
@@ -180,7 +180,10 @@ func batchStatusError(batch *Batch) error {
 
 // collectBatchResults maps result lines back onto the submitted request IDs. A
 // request with no line is recorded as a failure so the counts stay honest.
-func collectBatchResults(requests []llms.BatchRequest, batch *Batch, duration time.Duration) *llms.BatchResponse {
+//
+// Each response is stamped with the model its request asked for, the request's
+// WithModel override or else defaultModel, like a synchronous call's.
+func collectBatchResults(requests []llms.BatchRequest, batch *Batch, defaultModel string, duration time.Duration) *llms.BatchResponse {
 	out := &llms.BatchResponse{Results: make(map[string]*llms.BatchResult, len(requests)), Duration: duration}
 	lines := make(map[string]BatchResultLine, len(batch.Results))
 	for _, line := range batch.Results {
@@ -199,6 +202,11 @@ func collectBatchResults(requests []llms.BatchRequest, batch *Batch, duration ti
 			out.FailureCount++
 			continue
 		}
+		requestModel := llms.ApplyOptions(request.Options...).Model
+		if requestModel == "" {
+			requestModel = defaultModel
+		}
+		llms.StampResponse(response, llms.ProviderOpenRouter, requestModel)
 		out.Results[request.ID] = &llms.BatchResult{ID: request.ID, Response: response}
 		out.SuccessCount++
 		out.TotalUsage.PromptTokens += response.Usage.PromptTokens

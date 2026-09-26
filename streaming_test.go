@@ -272,3 +272,24 @@ func TestCollectStream_PreservesReasoningSignature(t *testing.T) {
 		t.Errorf("reasoning metadata dropped: got %v", res.Reasoning.Metadata)
 	}
 }
+
+// TestWrapStream_PassesProvenanceThrough covers the shared wrapper the cost,
+// rate-limit and resilience middleware use: stamps set by the answering client
+// reach the consumer unchanged.
+func TestWrapStream_PassesProvenanceThrough(t *testing.T) {
+	src := make(chan StreamChunk, 2)
+	s := NewStreamSender(context.Background(), src, 0)
+	s.SetIdentity(ProviderGemini, "gemini")
+	s.Send(StreamChunk{Reasoning: &ReasoningContent{Content: "r"}})
+	s.SendFinal(StreamChunk{})
+	close(src)
+
+	out := WrapStream(context.Background(), src, DefaultCallOptions(), func(c StreamChunk) StreamChunk { return c })
+	res, err := CollectStream(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Provider != ProviderGemini || res.Model != "gemini" || res.Reasoning.Provider != ProviderGemini {
+		t.Errorf("WrapStream changed the stamps: %+v reasoning %+v", res, res.Reasoning)
+	}
+}

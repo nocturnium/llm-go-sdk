@@ -8,9 +8,10 @@ import (
 // the reasoning and tool-call signatures in it with that provider. It fills only
 // fields that are empty, so a value a provider set more precisely, or a stamp
 // that came from further down a middleware chain, is kept. model is the
-// requested model ID (see [Response.Model]). A nil resp is a no-op.
+// requested model ID (see [Response.Model]). A nil resp, or an empty p, is a
+// no-op, matching [StreamSender.SetIdentity].
 func StampResponse(resp *Response, p Provider, model string) {
-	if resp == nil {
+	if resp == nil || p == "" {
 		return
 	}
 	if resp.Provider == "" {
@@ -44,7 +45,9 @@ func stampToolCall(tc *ToolCall, p Provider) {
 
 // stampChunk is StampResponse for one stream chunk. The chunk is a value whose
 // Reasoning pointer and ToolCalls slice may be shared with the producer's own
-// state, so both are copied before they are written.
+// state, so both are copied before they are written. That costs one small
+// allocation per reasoning delta, which is cheap next to the network read that
+// produced it and keeps producers free to reuse what they send.
 func stampChunk(chunk StreamChunk, p Provider, model string) StreamChunk {
 	if chunk.Reasoning != nil && chunk.Reasoning.Provider == "" {
 		chunk.Reasoning = chunk.Reasoning.Clone()
