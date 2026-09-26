@@ -139,3 +139,17 @@ rejected above. repo-score put the tree at 0.10 slop, 1.91 bugs and 0.07
 security weighted findings per thousand lines, over the files a model answered
 for: two batches failed provider-side, leaving 12 files outside the
 denominator.
+
+## llmadk and the provenance packets (2026-09-26)
+
+`nitpick review` of the whole stack (base 704041b, reviewer
+`poolside/laguna-s-2.1`) read 116 of 118 changed files and reported 2 errors;
+24 files failed provider-side with stream errors. A `nitpick full-review` of
+the 11 core files among them (llmadk request, response, model, options, fields,
+errors and tools, the fixture and live harnesses, the wire checks, and
+`openaicompat/converters.go`) reported nothing.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| Gemini streamed tool calls get empty IDs on models before Gemini 3 (`gemini.go`) | The stream path calls `llms.EnsureToolCallIDs` on the accumulated calls before the final chunk, so an absent native ID is minted; `TestStream_IdentityAndToolCallContract` asserts two distinct minted IDs. |
+| The new Gemini default `gemini-3.5-flash` does not exist | It is in the live `models.list` response for the account and answered a live call on 2026-09-26; the llmadk live gate ran the 3.5 family. |
