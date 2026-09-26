@@ -156,7 +156,8 @@ func prepare(messages []llms.Message, opts *llms.CallOptions) ([]llms.Message, e
 	if err := llms.ValidateToolCallIDs(prepared); err != nil {
 		return nil, err
 	}
-	return prepared, nil
+	// A thinking signature minted by another provider draws a 400 here.
+	return llms.DropForeignReplay(prepared, llms.ProviderAnthropic), nil
 }
 
 // GenerateContent generates content with more control over messages.
@@ -186,6 +187,7 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		result.Usage = llms.EstimateUsageFromMessages(prepared, result.Content)
 	}
 
+	llms.StampResponse(result, llms.ProviderAnthropic, req.Model)
 	return result, nil
 }
 
@@ -238,6 +240,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 	go func() {
 		sender := llms.NewStreamSender(ctx, chunks, opts.StreamSendTimeout)
+		sender.SetIdentity(llms.ProviderAnthropic, req.Model)
 
 		defer close(chunks)
 		// A malformed/hostile provider response must never crash the host process.
@@ -271,6 +274,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		var currentToolArgs string
 		var finishReason llms.FinishReason
 		var usage *llms.Usage
+		var modelVersion string
 		var bytesRead int64
 		var chunksRead int
 		var lastContent string
@@ -337,6 +341,7 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 				ToolCalls:    accumulatedToolCalls,
 				FinishReason: finishReason,
 				Usage:        finalUsage,
+				ModelVersion: modelVersion,
 			})
 		}
 
@@ -379,6 +384,9 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 
 			switch event.Type {
 			case "message_start":
+				if event.Message != nil {
+					modelVersion = event.Message.Model
+				}
 				if event.Message != nil && event.Message.Usage.InputTokens > 0 {
 					u := convertUsage(event.Message.Usage)
 					u.CompletionTokens = 0

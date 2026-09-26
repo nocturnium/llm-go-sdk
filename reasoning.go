@@ -69,6 +69,45 @@ type ReasoningContent struct {
 	Signature string `json:"signature,omitempty"`
 	// Metadata carries provider-specific reasoning details.
 	Metadata map[string]any `json:"metadata,omitempty"`
+
+	// Provider and Model record who produced this reasoning. A signature or
+	// encrypted payload is only valid for the provider that issued it, so each
+	// provider replays reasoning stamped with its own name and drops reasoning
+	// stamped with another's (see [ReasoningContent.ReplayableBy]). Providers
+	// stamp what they return; reasoning built by hand is unstamped and replays
+	// everywhere, as it did before stamps existed.
+	//
+	// The stamp names the client, not the endpoint: an Anthropic client pointed
+	// at a third-party Anthropic-compatible server with WithBaseURL stamps
+	// "anthropic" all the same. Model is recorded but replay is not restricted
+	// by it, since no provider here is known to reject reasoning from another of
+	// its own models.
+	Provider Provider `json:"provider,omitempty"`
+	Model    string   `json:"model,omitempty"`
+}
+
+// ReplayableBy reports whether provider p may send r back in a request: true
+// when r is unstamped or was produced by p. It is false for a nil r.
+func (r *ReasoningContent) ReplayableBy(p Provider) bool {
+	return r != nil && (r.Provider == "" || r.Provider == p)
+}
+
+// Clone returns a copy of r with its own Metadata map. The map is copied one
+// level deep, so slice or map values inside it (Anthropic's redacted_thinking
+// blocks, the Responses reasoning items) are shared with r. It returns nil for a
+// nil r.
+func (r *ReasoningContent) Clone() *ReasoningContent {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	if r.Metadata != nil {
+		c.Metadata = make(map[string]any, len(r.Metadata))
+		for k, v := range r.Metadata {
+			c.Metadata[k] = v
+		}
+	}
+	return &c
 }
 
 // ReasoningBudgetForEffort maps a qualitative ReasoningEffort to a default
