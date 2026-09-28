@@ -7,7 +7,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/nocturnium/llm-go-sdk/v6 v6.11.0
 	google.golang.org/adk/v2 v2.4.0
-	google.golang.org/genai v1.70.0
+	google.golang.org/genai v1.71.0
 	gorm.io/gorm v1.31.2
 )
 
