@@ -278,7 +278,7 @@ func TestConcurrentModelInfo(t *testing.T) {
 	wg.Wait()
 }
 func TestKnownMediaPricing(t *testing.T) {
-	expected := map[string]llms.MediaRate{"eleven_turbo_v2_5": {Unit: llms.MediaUnitKChar, USD: 0.05}, "eleven_turbo_v2": {Unit: llms.MediaUnitKChar, USD: 0.05}, "eleven_flash_v2": {Unit: llms.MediaUnitKChar, USD: 0.05}, "eleven_v3": {Unit: llms.MediaUnitKChar, USD: 0.1}, "eleven_multilingual_v2": {Unit: llms.MediaUnitKChar, USD: 0.1}, "eleven_v3_conversational": {Unit: llms.MediaUnitKChar, USD: 0.05}, "eleven_flash_v2_5": {Unit: llms.MediaUnitKChar, USD: 0.05}, "scribe_v2": {Unit: llms.MediaUnitMinute, USD: 0.0036667}, "eleven_text_to_sound_v2": {Unit: llms.MediaUnitMinute, USD: 0.12}, "music_v2": {Unit: llms.MediaUnitMinute, USD: 0.15}}
+	expected := map[string]llms.MediaRate{"eleven_turbo_v2_5": {Unit: llms.MediaUnitKChar, USD: 0.04}, "eleven_turbo_v2": {Unit: llms.MediaUnitKChar, USD: 0.04}, "eleven_flash_v2": {Unit: llms.MediaUnitKChar, USD: 0.04}, "eleven_v3": {Unit: llms.MediaUnitKChar, USD: 0.08}, "eleven_multilingual_v2": {Unit: llms.MediaUnitKChar, USD: 0.08}, "eleven_v3_conversational": {Unit: llms.MediaUnitKChar, USD: 0.04}, "eleven_flash_v2_5": {Unit: llms.MediaUnitKChar, USD: 0.04}, "scribe_v2": {Unit: llms.MediaUnitMinute, USD: 0.0036667}, "eleven_text_to_sound_v2": {Unit: llms.MediaUnitMinute, USD: 0.12}, "music_v2": {Unit: llms.MediaUnitMinute, USD: 0.15}}
 	for _, m := range knownModels {
 		rate, priced := llms.GetMediaRate("elevenlabs", m.ID)
 		want, expectedPrice := expected[m.ID]

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -38,6 +39,22 @@ func TestNewClient_WithRetryPolicy(t *testing.T) {
 
 	if client.retryPolicy.MaxRetries != 0 {
 		t.Error("expected no retry policy to be applied")
+	}
+}
+
+func TestClient_LegacyDialTLSCannotBypassPrivateAddressCheck(t *testing.T) {
+	called := false
+	transport := &http.Transport{DialTLS: func(_, _ string) (net.Conn, error) {
+		called = true
+		return nil, errors.New("should not dial")
+	}}
+	client := NewClient(WithHTTPClient(&http.Client{Transport: transport}))
+	guarded := client.httpClient.Transport.(*http.Transport)
+	if _, err := guarded.DialTLS("tcp", "127.0.0.1:443"); err == nil {
+		t.Fatal("DialTLS allowed a loopback destination")
+	}
+	if called {
+		t.Fatal("legacy DialTLS was invoked for a blocked private address")
 	}
 }
 

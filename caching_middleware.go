@@ -195,6 +195,10 @@ func cloneResponse(resp *Response) *Response {
 		return nil
 	}
 	cp := *resp // value fields (ID, Content, FinishReason, Usage) copy directly
+	if resp.Usage.Cost != nil {
+		cost := *resp.Usage.Cost
+		cp.Usage.Cost = &cost
+	}
 
 	if resp.ToolCalls != nil {
 		cp.ToolCalls = make([]ToolCall, len(resp.ToolCalls))

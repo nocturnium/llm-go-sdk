@@ -31,7 +31,6 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 		{ProviderFireworks, "accounts/fireworks/models/llama-v3p1-70b-instruct"},
 		{ProviderPerplexity, "sonar"},
 		{ProviderZAI, "glm-4.7"},
-		{ProviderZAI, "glm-4.7-Flash"},
 	}
 	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
 	for _, c := range cases {
@@ -42,6 +41,13 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 		if got <= 0 {
 			t.Errorf("%s:%s estimated at $%v, expected > 0", c.provider, c.model, got)
 		}
+	}
+}
+
+func TestEstimateCost_KnownFreeModel(t *testing.T) {
+	cost, known := EstimateCost(ProviderZAI, "glm-4.7-Flash", Usage{PromptTokens: 1000, CompletionTokens: 1000})
+	if !known || cost != 0 {
+		t.Fatalf("known free model = (%v, %v), want (0, true)", cost, known)
 	}
 }
 
@@ -488,6 +494,49 @@ func TestCostMiddleware_GenerateContent(t *testing.T) {
 	usage := tracker.GetUsage(ProviderAnthropic, "claude-3-opus-20240229")
 	if usage.CompletionTokens != 50 {
 		t.Errorf("CompletionTokens = %d, want 50", usage.CompletionTokens)
+	}
+}
+
+func TestCostMiddleware_GenerateContent_UsesServedModel(t *testing.T) {
+	llm := &mockCostLLM{provider: ProviderOpenAI, model: "gpt-4o-mini", genResp: &Response{
+		Provider: ProviderOpenAI,
+		Model:    "gpt-4o",
+		Usage:    Usage{PromptTokens: 1_000_000},
+	}}
+	tracker := NewCostTracker()
+	_, err := NewCostMiddleware(llm, tracker).GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "Hi"}}, WithModel("gpt-4o"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tracker.GetUsage(ProviderOpenAI, "gpt-4o"); got == nil || got.EstimatedCost != 2.50 {
+		t.Fatalf("served gpt-4o usage = %#v, want $2.50", got)
+	}
+	if got := tracker.GetUsage(ProviderOpenAI, "gpt-4o-mini"); got != nil {
+		t.Fatalf("configured model unexpectedly charged: %#v", got)
+	}
+}
+
+func TestCostTracker_GetPricingReturnsIndependentTiers(t *testing.T) {
+	tracker := NewCostTracker()
+	p, ok := tracker.GetPricing(ProviderOpenAI, "gpt-5.6-luna")
+	if !ok || len(p.Tiers) == 0 {
+		t.Fatal("expected tiered pricing")
+	}
+	p.Tiers[0].Input = 999
+	again, _ := tracker.GetPricing(ProviderOpenAI, "gpt-5.6-luna")
+	if again.Tiers[0].Input == 999 {
+		t.Fatal("mutating returned tiers changed tracker pricing")
+	}
+}
+
+func TestCostTracker_UnknownPricingIsReported(t *testing.T) {
+	tracker := NewCostTracker()
+	if _, known := tracker.Record(ProviderOpenAI, "unpriced-future-model", Usage{PromptTokens: 1}); known {
+		t.Fatal("unknown model reported as priced")
+	}
+	u := tracker.GetUsage(ProviderOpenAI, "unpriced-future-model")
+	if u == nil || u.UnpricedRequests != 1 || u.EstimatedCost != 0 {
+		t.Fatalf("unknown pricing usage = %#v", u)
 	}
 }
 

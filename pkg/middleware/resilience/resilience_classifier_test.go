@@ -2,6 +2,7 @@ package resilience
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"syscall"
@@ -38,6 +39,10 @@ func TestClassifierAgreement(t *testing.T) {
 		{"503", &llms.APIError{StatusCode: 503}, true},
 		{"504", &llms.APIError{StatusCode: 504}, true},
 		{"529 overloaded", &llms.APIError{StatusCode: 529}, true},
+		{"wrapped rate limit sentinel", fmt.Errorf("provider: %w", llms.ErrRateLimited), true},
+		{"wrapped service unavailable sentinel", fmt.Errorf("provider: %w", llms.ErrServiceUnavailable), true},
+		{"wrapped timeout sentinel", fmt.Errorf("provider: %w", llms.ErrTimeout), true},
+		{"wrapped server error sentinel", fmt.Errorf("provider: %w", llms.ErrServerError), true},
 		{"streaming rate_limit_error (status 0)", &llms.APIError{Type: "rate_limit_error"}, true},
 		{"429 insufficient_quota (terminal)", &llms.APIError{StatusCode: 429, Code: "insufficient_quota"}, false},
 		{"400 bad request", &llms.APIError{StatusCode: 400}, false},

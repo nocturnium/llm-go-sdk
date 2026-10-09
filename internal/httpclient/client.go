@@ -170,6 +170,25 @@ func (c *Client) installSSRFDialer() {
 			return conn, nil
 		}
 	}
+	// DialTLS is deprecated but still supported and takes precedence over
+	// DialContext for HTTPS. It has no context argument, so it needs its own
+	// wrapper rather than relying on the DialTLSContext guard above.
+	if originalDialTLS := tr.DialTLS; originalDialTLS != nil {
+		tr.DialTLS = func(network, address string) (net.Conn, error) {
+			if err := validateNotPrivateHostFromAddress(address); err != nil {
+				return nil, err
+			}
+			conn, err := originalDialTLS(network, address)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateConnRemoteAddr(conn); err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			return conn, nil
+		}
+	}
 
 	if callerProvidedTransport && originalDialContext != nil {
 		tr.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {

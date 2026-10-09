@@ -80,6 +80,16 @@ func isTransientProviderError(err error) bool {
 		return apiErr.IsRetryable()
 	}
 
+	// Providers that do not expose structured HTTP errors use the SDK's sentinel
+	// error contract. Keep their retry and breaker behavior consistent with the
+	// core llms.IsTemporary classifier.
+	if errors.Is(err, llms.ErrRateLimited) ||
+		errors.Is(err, llms.ErrServerError) ||
+		errors.Is(err, llms.ErrServiceUnavailable) ||
+		errors.Is(err, llms.ErrTimeout) {
+		return true
+	}
+
 	// Transient transport failures from the provider connection.
 	if errors.Is(err, io.EOF) ||
 		errors.Is(err, io.ErrUnexpectedEOF) ||

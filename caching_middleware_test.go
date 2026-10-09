@@ -115,6 +115,24 @@ func TestCachedClient_ReturnsCopy(t *testing.T) {
 	}
 }
 
+func TestCachedClient_ReturnsIndependentUsageCost(t *testing.T) {
+	cost := 1.0
+	client := NewCachedClient(NewMockLLM(WithMockGenerateResponse(&Response{Content: "ok", Usage: Usage{Cost: &cost}})))
+	msgs := []Message{{Role: RoleUser, Content: "hi"}}
+	first, err := client.GenerateContent(context.Background(), msgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*first.Usage.Cost = 999
+	hit, err := client.GenerateContent(context.Background(), msgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hit.Usage.Cost == nil || *hit.Usage.Cost != 1 {
+		t.Fatalf("cached cost = %v, want 1", hit.Usage.Cost)
+	}
+}
+
 // TestCachedClient_ConcurrentHitsIsolated exercises the -race detector: many
 // goroutines take the same cache hit and mutate their returned copy's reference
 // fields. If Get handed back aliased slices/maps, these mutations would race.

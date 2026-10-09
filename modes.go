@@ -111,11 +111,19 @@ func deriveAnthropicBatchPricing(base Pricing, known bool) (Pricing, bool) {
 		return Pricing{}, false
 	}
 	input := base.Input * anthropicBatchDiscount
+	cacheRead := base.CacheRead * anthropicBatchDiscount
+	cacheWrite := base.CacheWrite * anthropicBatchDiscount
+	if base.CacheRead == 0 {
+		cacheRead = input * anthropicCacheReadRatio
+	}
+	if base.CacheWrite == 0 {
+		cacheWrite = input * anthropicCacheWriteRatio
+	}
 	derived := Pricing{
 		Input:      input,
 		Output:     base.Output * anthropicBatchDiscount,
-		CacheRead:  input * anthropicCacheReadRatio,
-		CacheWrite: input * anthropicCacheWriteRatio,
+		CacheRead:  cacheRead,
+		CacheWrite: cacheWrite,
 	}
 	// Anthropic's long-context pricing is flat, so a standard card carries no
 	// tiers; if that ever changes, carry them so the derived card tiers too.

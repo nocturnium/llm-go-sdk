@@ -483,14 +483,19 @@ func TestConcurrentBatcher_ProgressCallback(t *testing.T) {
 }
 
 func TestConcurrentBatcher_TokenUsageAggregation(t *testing.T) {
+	cost := 1.0
 	llm := &mockBatchLLM{
 		callFn: func(_ []Message) (*Response, error) {
 			return &Response{
 				Content: "ok",
 				Usage: Usage{
-					PromptTokens:     10,
-					CompletionTokens: 20,
-					TotalTokens:      30,
+					PromptTokens:        10,
+					CompletionTokens:    20,
+					TotalTokens:         30,
+					CacheReadTokens:     40,
+					CacheCreationTokens: 5,
+					ReasoningTokens:     6,
+					Cost:                &cost,
 				},
 			}, nil
 		},
@@ -516,6 +521,12 @@ func TestConcurrentBatcher_TokenUsageAggregation(t *testing.T) {
 	}
 	if resp.TotalUsage.TotalTokens != 90 {
 		t.Errorf("TotalTokens = %d, want 90", resp.TotalUsage.TotalTokens)
+	}
+	if resp.TotalUsage.CacheReadTokens != 120 || resp.TotalUsage.CacheCreationTokens != 15 || resp.TotalUsage.ReasoningTokens != 18 {
+		t.Errorf("nonstandard usage totals = %+v, want cache read/create/reasoning 120/15/18", resp.TotalUsage)
+	}
+	if resp.TotalUsage.Cost == nil || *resp.TotalUsage.Cost != 3 {
+		t.Errorf("Cost = %v, want 3", resp.TotalUsage.Cost)
 	}
 }
 

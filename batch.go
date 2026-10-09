@@ -190,6 +190,8 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	results := make(map[string]*BatchResult)
 	var resultsMu sync.Mutex
 	var totalUsage Usage
+	var totalCost float64
+	allCostsReported := true
 	var successCount, failureCount int
 
 	// Create semaphore for concurrency control. A non-positive MaxConcurrency
@@ -245,6 +247,14 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 		totalUsage.PromptTokens += resp.Usage.PromptTokens
 		totalUsage.CompletionTokens += resp.Usage.CompletionTokens
 		totalUsage.TotalTokens += resp.Usage.TotalTokens
+		totalUsage.CacheReadTokens += resp.Usage.CacheReadTokens
+		totalUsage.CacheCreationTokens += resp.Usage.CacheCreationTokens
+		totalUsage.ReasoningTokens += resp.Usage.ReasoningTokens
+		if resp.Usage.Cost == nil {
+			allCostsReported = false
+		} else {
+			totalCost += *resp.Usage.Cost
+		}
 	}
 
 	// Create a cancellable context for stopping all goroutines when ContinueOnError=false
@@ -334,6 +344,9 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	}
 
 	wg.Wait()
+	if allCostsReported && successCount > 0 {
+		totalUsage.Cost = &totalCost
+	}
 
 	response := &BatchResponse{
 		Results:      results,

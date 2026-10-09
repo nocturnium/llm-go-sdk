@@ -42,6 +42,13 @@ type Pricing struct {
 	Tiers []PricingTier `json:"tiers,omitempty"`
 }
 
+// clonePricing returns an ownership-safe copy of a pricing card. Pricing.Tiers
+// is mutable caller-owned data, so copying Pricing by value is insufficient.
+func clonePricing(p Pricing) Pricing {
+	p.Tiers = append([]PricingTier(nil), p.Tiers...)
+	return p
+}
+
 // PricingTier is a set of rates that replaces a Pricing's base rates once a
 // request's total input token count reaches MinInputTokens. It is deliberately
 // not an embedded Pricing: tiers do not nest, and the flat fields make that
@@ -226,6 +233,26 @@ var DefaultPricing = map[string]Pricing{
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
 			Input: 0.40, Output: 1.80, CacheRead: 0.04, CacheWrite: 0.50}},
 	},
+	"openai:gpt-6.1-sol": {
+		Input: 2.00, Output: 10.00, CacheRead: 0.10, CacheWrite: 2.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 4.00, Output: 15.00, CacheRead: 0.20, CacheWrite: 5.00}},
+	},
+	"openai:gpt-6-sol": {
+		Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 4.00, Output: 15.00, CacheRead: 0.40, CacheWrite: 5.00}},
+	},
+	"openai:gpt-6-astra": {
+		Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 20.00, Output: 75.00, CacheRead: 2.00, CacheWrite: 25.00}},
+	},
+	"openai:gpt-6-luna": {
+		Input: 0.10, Output: 0.50, CacheRead: 0.01, CacheWrite: 0.125,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 0.20, Output: 0.75, CacheRead: 0.02, CacheWrite: 0.25}},
+	},
 	"openai:gpt-5":        {Input: 1.25, Output: 10.00, CacheRead: 0.125},
 	"openai:gpt-5-mini":   {Input: 0.25, Output: 2.00, CacheRead: 0.025},
 	"openai:gpt-5-nano":   {Input: 0.05, Output: 0.40, CacheRead: 0.005},
@@ -282,10 +309,18 @@ var DefaultPricing = map[string]Pricing{
 	// The table records the standard $3/$15 rate: a static map cannot express a
 	// time-boxed promotion, and estimates that silently expire are worse than
 	// estimates that are consistently conservative.
-	"anthropic:claude-fable-5":             {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
-	"anthropic:claude-mythos-5":            {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
-	"anthropic:claude-opus-5":              {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
-	"anthropic:claude-sonnet-5":            {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-fable-5":    {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-mythos-5":   {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-opus-5":     {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-sonnet-5":   {Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50},
+	"anthropic:claude-fable-5-1":  {Input: 10.00, Output: 50.00, CacheRead: 0.25, CacheWrite: 12.50},
+	"anthropic:claude-opus-5-5":   {Input: 4.00, Output: 20.00, CacheRead: 0.20, CacheWrite: 5.00},
+	"anthropic:claude-sonnet-5-5": {Input: 2.00, Output: 10.00, CacheRead: 0.10, CacheWrite: 2.50},
+	"anthropic:claude-haiku-5-5": {
+		Input: 0.10, Output: 0.50, CacheRead: 0.01, CacheWrite: 0.125,
+		Tiers: []PricingTier{{MinInputTokens: 100001,
+			Input: 0.50, Output: 2.50, CacheRead: 0.05, CacheWrite: 0.625}},
+	},
 	"anthropic:claude-opus-4-8":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
 	"anthropic:claude-opus-4-7":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
 	"anthropic:claude-opus-4-6":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
@@ -319,7 +354,8 @@ var DefaultPricing = map[string]Pricing{
 	// 2027-01-01 (Input 1.50, Output 7.50, CacheRead 0.15), per Google's pricing
 	// page; TestGemini38FlashRateChange fails from that date as the reminder.
 	"gemini:gemini-3.8-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
-	"gemini:gemini-3.6-flash":      {Input: 1.50, Output: 7.50, CacheRead: 0.15},
+	"gemini:gemini-3.6-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
+	"gemini:gemini-3.7-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
 	"gemini:gemini-3.5-flash":      {Input: 1.50, Output: 9.00, CacheRead: 0.15},
 	"gemini:gemini-3.5-flash-lite": {Input: 0.30, Output: 2.50, CacheRead: 0.03},
 	"gemini:gemini-3.1-pro-preview": {
@@ -371,10 +407,15 @@ var DefaultPricing = map[string]Pricing{
 	"zai:glm-4.6":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
 	"zai:glm-4.5":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
 	"zai:glm-4.5-air":                                             {Input: 0.20, Output: 1.10}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7-Flash":                                           {Input: 0.06, Output: 0.40}, // Z.AI GLM-4.7-Flash (pricepertoken.com/z-ai/glm-4.7-flash), verified 2026-06
+	"zai:glm-4.7-Flash":                                           {},                          // Free (Z.AI direct pricing, verified 2026-10)
 
 	// TogetherAI (varies by model, these are examples)
-	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 0.88, Output: 0.88},
+	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 1.04, Output: 1.04},
+	"togetherai:MiniMaxAI/MiniMax-M3":                          {Input: 0.30, Output: 1.20, CacheRead: 0.06},
+	"togetherai:zai-org/GLM-5.3":                               {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"togetherai:zai-org/GLM-5.3-Flash":                         {Input: 0.15, Output: 0.50, CacheRead: 0.03},
+	"togetherai:deepseek-ai/DeepSeek-V4.1-Flash":               {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"togetherai:deepseek-ai/DeepSeek-V4-Pro-0813":              {Input: 1.32, Output: 3.96, CacheRead: 0.13},
 	"togetherai:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {Input: 3.50, Output: 3.50},
 	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {Input: 0.88, Output: 0.88},
 	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {Input: 0.18, Output: 0.18},
@@ -399,16 +440,20 @@ func ModelTokenPricing(provider Provider, model string) (*Pricing, bool) {
 
 // ModelUsage tracks usage for a specific model.
 type ModelUsage struct {
-	Provider            Provider  `json:"provider"`
-	Model               string    `json:"model"`
-	PromptTokens        int64     `json:"prompt_tokens"`
-	CompletionTokens    int64     `json:"completion_tokens"`
-	CacheReadTokens     int64     `json:"cache_read_tokens"`
-	CacheCreationTokens int64     `json:"cache_creation_tokens"`
-	Requests            int64     `json:"requests"`
-	EstimatedCost       float64   `json:"estimated_cost_usd"`
-	FirstUsed           time.Time `json:"first_used"`
-	LastUsed            time.Time `json:"last_used"`
+	Provider            Provider `json:"provider"`
+	Model               string   `json:"model"`
+	PromptTokens        int64    `json:"prompt_tokens"`
+	CompletionTokens    int64    `json:"completion_tokens"`
+	CacheReadTokens     int64    `json:"cache_read_tokens"`
+	CacheCreationTokens int64    `json:"cache_creation_tokens"`
+	Requests            int64    `json:"requests"`
+	// UnpricedRequests counts requests for which no rate card or provider-reported
+	// cost was available. Their tokens are included above, but EstimatedCost
+	// excludes them, so a non-zero value makes a partial report explicit.
+	UnpricedRequests int64     `json:"unpriced_requests,omitempty"`
+	EstimatedCost    float64   `json:"estimated_cost_usd"`
+	FirstUsed        time.Time `json:"first_used"`
+	LastUsed         time.Time `json:"last_used"`
 }
 
 // CostTracker tracks token usage and estimated costs across providers/models.
@@ -437,11 +482,11 @@ func NewCostTracker(customPricing ...map[string]Pricing) *CostTracker {
 	// Merge default and custom pricing
 	pricing := make(map[string]Pricing)
 	for k, v := range DefaultPricing {
-		pricing[k] = v
+		pricing[k] = clonePricing(v)
 	}
 	for _, cp := range customPricing {
 		for k, v := range cp {
-			pricing[k] = v
+			pricing[k] = clonePricing(v)
 		}
 	}
 
@@ -535,7 +580,10 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 
 	// Check for potential overflow before adding (extremely conservative).
 	// In practice, this would require processing quadrillions of tokens.
-	if u.PromptTokens > maxSafeTokenCount || u.CompletionTokens > maxSafeTokenCount {
+	if wouldOverflow(u.PromptTokens, int64(usage.PromptTokens)) ||
+		wouldOverflow(u.CompletionTokens, int64(usage.CompletionTokens)) ||
+		wouldOverflow(u.CacheReadTokens, int64(usage.CacheReadTokens)) ||
+		wouldOverflow(u.CacheCreationTokens, int64(usage.CacheCreationTokens)) {
 		// Counters have reached safe maximum - skip this record to prevent overflow.
 		// In production, consider rotating to a new tracking window or alerting.
 		u.LastUsed = now
@@ -547,10 +595,17 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 	u.CacheReadTokens += int64(usage.CacheReadTokens)
 	u.CacheCreationTokens += int64(usage.CacheCreationTokens)
 	u.Requests++
+	if !known {
+		u.UnpricedRequests++
+	}
 	u.LastUsed = now
 	u.EstimatedCost += cost
 	t.modeCost[mode] += cost
 	return cost, known
+}
+
+func wouldOverflow(total, add int64) bool {
+	return add < 0 || total > maxSafeTokenCount || add > maxSafeTokenCount-total
 }
 
 // SetModePricing registers a rate card for a provider/model under a billing
@@ -566,7 +621,7 @@ func (t *CostTracker) SetModePricing(provider Provider, model string, mode Prici
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.modePricing[modePricingKey(provider, model, mode)] = pricing
+	t.modePricing[modePricingKey(provider, model, mode)] = clonePricing(pricing)
 }
 
 // GetModeCosts returns accumulated cost broken down by billing mode. The
@@ -671,7 +726,7 @@ func (t *CostTracker) Reset() {
 func (t *CostTracker) SetPricing(provider Provider, model string, pricing Pricing) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pricing[t.makeKey(provider, model)] = pricing
+	t.pricing[t.makeKey(provider, model)] = clonePricing(pricing)
 }
 
 // GetPricing returns pricing for a model.
@@ -679,7 +734,7 @@ func (t *CostTracker) GetPricing(provider Provider, model string) (Pricing, bool
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	p, ok := t.pricing[t.makeKey(provider, model)]
-	return p, ok
+	return clonePricing(p), ok
 }
 
 func (t *CostTracker) makeKey(provider Provider, model string) string {
@@ -730,7 +785,9 @@ func (m *CostMiddleware) GenerateContent(ctx context.Context, messages []Message
 
 	// Options are applied only after the call succeeds so the error path does not
 	// pay for a CallOptions allocation it will not use.
-	m.tracker.RecordMode(m.llm.Provider(), m.llm.Model(), resp.Usage, ApplyOptions(options...).PricingMode)
+	opts := ApplyOptions(options...)
+	provider, model := m.servedIdentity(resp.Provider, resp.Model, opts)
+	m.tracker.RecordMode(provider, model, resp.Usage, opts.PricingMode)
 	return resp, nil
 }
 
@@ -743,20 +800,42 @@ func (m *CostMiddleware) Stream(ctx context.Context, messages []Message, options
 
 	opts := ApplyOptions(options...)
 	var lastUsage *Usage
+	var streamProvider Provider
+	var streamModel string
 
 	return WrapStreamWithFinalizer(ctx, stream, opts,
 		func(chunk StreamChunk) StreamChunk {
 			if chunk.Usage != nil {
 				lastUsage = chunk.Usage
+				if chunk.Provider != "" || chunk.Model != "" {
+					streamProvider, streamModel = chunk.Provider, chunk.Model
+				}
 			}
 			return chunk
 		},
 		func() {
 			if lastUsage != nil {
-				m.tracker.RecordMode(m.llm.Provider(), m.llm.Model(), *lastUsage, opts.PricingMode)
+				provider, model := m.servedIdentity(streamProvider, streamModel, opts)
+				m.tracker.RecordMode(provider, model, *lastUsage, opts.PricingMode)
 			}
 		},
 	), nil
+}
+
+// servedIdentity uses the provider's response provenance when available. An
+// explicit WithModel override remains the best fallback when a provider does
+// not populate response metadata.
+func (m *CostMiddleware) servedIdentity(provider Provider, model string, opts *CallOptions) (Provider, string) {
+	if provider == "" {
+		provider = m.llm.Provider()
+	}
+	if model == "" {
+		model = opts.Model
+	}
+	if model == "" {
+		model = m.llm.Model()
+	}
+	return provider, model
 }
 
 // Provider returns the underlying LLM's provider.
