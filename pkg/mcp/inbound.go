@@ -228,7 +228,7 @@ func invokeGuarded(ctx context.Context, handler requestHandler, params json.RawM
 	result, err := handler(ctx, params)
 	if err != nil {
 		var typed *RPCError
-		if errors.As(err, &typed) {
+		if errors.As(err, &typed) && typed != nil {
 			return nil, typed
 		}
 		return nil, &RPCError{Code: CodeInternalError, Message: err.Error()}

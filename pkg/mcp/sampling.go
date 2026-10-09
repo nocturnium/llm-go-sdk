@@ -263,6 +263,9 @@ func samplingFromLLM(llm llms.LLM, extra []llms.CallOption) SamplingHandler {
 		if err != nil {
 			return SamplingResult{}, fmt.Errorf("mcp: sampling completion failed: %w", err)
 		}
+		if resp == nil {
+			return SamplingResult{}, fmt.Errorf("mcp: sampling completion returned no response")
+		}
 		return SamplingResult{
 			Role:       "assistant",
 			Content:    ContentBlock{Type: contentTypeText, Text: resp.Content},

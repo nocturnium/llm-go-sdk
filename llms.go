@@ -59,6 +59,9 @@ func Call(ctx context.Context, llm LLM, prompt string, options ...CallOption) (s
 	if err != nil {
 		return "", err
 	}
+	if resp == nil {
+		return "", ErrIncompleteResponse
+	}
 	return resp.Content, nil
 }
 

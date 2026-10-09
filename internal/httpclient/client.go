@@ -454,10 +454,8 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	}
 
 	// Set GetBody to enable retries - the body bytes are captured in the closure
-	if len(bodyBytes) > 0 {
-		httpReq.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
-		}
+	httpReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bodyBytes)), nil
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")

@@ -25,6 +25,7 @@ build:
 # Build for all platforms
 build-all:
 	@echo "Building for all platforms..."
+	mkdir -p dist
 	GOOS=linux GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-amd64 ./cmd
 	GOOS=linux GOARCH=arm64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-arm64 ./cmd
 	GOOS=darwin GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-darwin-amd64 ./cmd

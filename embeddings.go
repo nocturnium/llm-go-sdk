@@ -35,7 +35,7 @@ func EmbedQuery(ctx context.Context, e Embedder, text string, options ...EmbedOp
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.Embeddings) == 0 {
+	if resp == nil || len(resp.Embeddings) == 0 {
 		return nil, ErrEmptyInput
 	}
 	return resp.Embeddings[0].Vector, nil
@@ -49,6 +49,9 @@ func EmbedDocuments(ctx context.Context, e Embedder, texts []string, options ...
 		return nil, err
 	}
 
+	if resp == nil {
+		return nil, ErrEmptyInput
+	}
 	result := make([][]float32, len(resp.Embeddings))
 	for i, emb := range resp.Embeddings {
 		result[i] = emb.Vector

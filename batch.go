@@ -331,6 +331,8 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 				if !opts.ContinueOnError {
 					// Cancel all pending requests
 					cancelBatch()
+					progressReported = true
+					reportProgress()
 					return
 				}
 			} else {
@@ -476,7 +478,11 @@ func (b *BatchBuilder) Requests() []BatchRequest {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	result := make([]BatchRequest, len(b.requests))
-	copy(result, b.requests)
+	for i, request := range b.requests {
+		result[i] = request
+		result[i].Messages = append([]Message(nil), request.Messages...)
+		result[i].Options = append([]CallOption(nil), request.Options...)
+	}
 	return result
 }
 

@@ -192,11 +192,24 @@ func SortModelsByCreatedAt(models []ModelInfo, descending bool) []ModelInfo {
 func FindModelByID(models []ModelInfo, id string) *ModelInfo {
 	for _, m := range models {
 		if m.ID == id {
-			result := m // Copy the value
+			result := cloneModelInfo(m)
 			return &result
 		}
 	}
 	return nil
+}
+
+func cloneModelInfo(model ModelInfo) ModelInfo {
+	model.Types = append([]ModelType(nil), model.Types...)
+	if model.Pricing != nil {
+		pricing := clonePricing(*model.Pricing)
+		model.Pricing = &pricing
+	}
+	if model.DeprecatedAt != nil {
+		deprecatedAt := *model.DeprecatedAt
+		model.DeprecatedAt = &deprecatedAt
+	}
+	return model
 }
 
 // GroupModelsByProvider groups models by their provider.
