@@ -462,6 +462,9 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 	if tokenLimiter == nil {
 		return
 	}
+	if actualTokens < 0 {
+		return
+	}
 
 	switch {
 	case actualTokens > rl.tokenEstimate:

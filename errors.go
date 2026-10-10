@@ -346,23 +346,31 @@ func sanitizeErrorURL(rawURL string) string {
 		if idx := strings.Index(trimmed, "://"); idx >= 0 {
 			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
 		}
-		// The credential goes first, before the query and fragment are cut: a
-		// password containing '?' or '#' would otherwise have its tail removed
-		// here and its head left behind with no '@' for the scan to find.
-		// Cutting at the last '@' can lose a path segment that legitimately
-		// contains one, which is the right way to be wrong in a redactor.
-		if idx := strings.LastIndex(trimmed, "@"); idx >= 0 {
-			trimmed = trimmed[idx+1:]
+		// Credentials can contain reserved characters that make url.Parse fail.
+		// The last '@' before the first '?' or '#' is the userinfo terminator; a
+		// path may contain '@' after the authority, but keeping it is safer than
+		// leaving any head of a credential behind. Strip query and fragment from
+		// the remainder so keys in either do not leak.
+		candidate := trimmed
+		if at := strings.LastIndex(candidate, "@"); at >= 0 {
+			candidate = candidate[at+1:]
 		}
-		if idx := strings.Index(trimmed, "?"); idx >= 0 {
-			trimmed = trimmed[:idx]
+		if idx := strings.IndexAny(candidate, "?#"); idx >= 0 {
+			candidate = candidate[:idx]
 		}
-		if idx := strings.Index(trimmed, "#"); idx >= 0 {
-			trimmed = trimmed[:idx]
-		}
-		return scheme + trimmed
+		return scheme + candidate
 	}
 	u.User = nil
+	// A reserved character in a password (for example a slash) makes
+	// url.Parse treat the credential as part of the path while leaving the
+	// trailing "@host" in Host. If the path contains an '@', drop everything
+	// through it so the head of a split credential cannot survive.
+	if at := strings.Index(u.Path, "@"); at >= 0 {
+		u.Path = u.Path[at+1:]
+	}
+	if at := strings.Index(u.RawPath, "@"); at >= 0 {
+		u.RawPath = u.RawPath[at+1:]
+	}
 	u.RawQuery = ""
 	u.ForceQuery = false
 	u.Fragment = ""

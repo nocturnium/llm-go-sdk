@@ -965,6 +965,16 @@ func TestConvertEmbeddingResponse(t *testing.T) {
 	}
 }
 
+func TestConvertEmbeddingResponse_ZeroUsage(t *testing.T) {
+	resp := &EmbeddingResponse{
+		Data: []EmbeddingData{{Index: 0, Embedding: []float32{0.1}, Object: "embedding"}},
+	}
+	result := ConvertEmbeddingResponse(resp)
+	if result.Usage.PromptTokens != 0 || result.Usage.TotalTokens != 0 {
+		t.Fatalf("usage = %+v, want zero", result.Usage)
+	}
+}
+
 func TestBuildChatRequest(t *testing.T) {
 	messages := []llms.Message{
 		{Role: llms.RoleUser, Content: "Hello"},

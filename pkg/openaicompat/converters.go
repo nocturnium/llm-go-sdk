@@ -396,10 +396,17 @@ func ConvertEmbeddingResponse(resp *EmbeddingResponse) *llms.EmbeddingResponse {
 	return &llms.EmbeddingResponse{
 		Embeddings: embeddings,
 		Model:      resp.Model,
-		Usage: llms.EmbeddingUsage{
-			PromptTokens: resp.Usage.PromptTokens,
-			TotalTokens:  resp.Usage.TotalTokens,
-		},
+		Usage:      convertEmbeddingUsage(&resp.Usage),
+	}
+}
+
+func convertEmbeddingUsage(usage *EmbeddingUsage) llms.EmbeddingUsage {
+	if usage == nil {
+		return llms.EmbeddingUsage{}
+	}
+	return llms.EmbeddingUsage{
+		PromptTokens: usage.PromptTokens,
+		TotalTokens:  usage.TotalTokens,
 	}
 }
 

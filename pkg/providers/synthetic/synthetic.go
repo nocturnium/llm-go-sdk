@@ -16,7 +16,7 @@ var providerConfig = openaicompat.ProviderConfig{
 		Streaming:        true,
 		Tools:            true,
 		Vision:           true,
-		Embeddings:       false,
+		Embeddings:       true,
 		Batch:            false,
 		JSONMode:         true,
 		MaxContextTokens: 0, // Model dependent; use capability registry/model metadata

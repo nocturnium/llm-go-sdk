@@ -231,6 +231,15 @@ func TestRateLimiter_RefundIsConsumedByNextRequest(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_RecordTokensIgnoresNegativeUsage(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(600), WithTokenEstimate(200))
+	before := rl.TokensRemaining()
+	rl.RecordTokens(-5)
+	if got := rl.TokensRemaining(); got != before {
+		t.Fatalf("TokensRemaining = %d after negative usage, want %d", got, before)
+	}
+}
+
 func TestRateLimiter_RequestsRemaining(t *testing.T) {
 	rl := NewRateLimiter(WithRequestsPerMinute(10), WithRequestBurst(10))
 

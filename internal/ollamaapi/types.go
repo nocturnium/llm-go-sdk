@@ -193,9 +193,10 @@ type ChatResponse struct {
 type EmbedRequest struct {
 	Model string `json:"model"`
 	Input any    `json:"input"` // string or []string
-	// Truncate is sent unconditionally: Ollama defaults it to true, so omitting
-	// a false value would silently truncate input the caller asked to reject.
-	Truncate  bool           `json:"truncate"`
+	// Truncate uses Ollama's default (true) when unset. A pointer preserves
+	// the caller's explicit false without serializing it for zero-value
+	// requests that want server-side truncation.
+	Truncate  *bool          `json:"truncate,omitempty"`
 	KeepAlive string         `json:"keep_alive,omitempty"`
 	Options   map[string]any `json:"options,omitempty"`
 }
