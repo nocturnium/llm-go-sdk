@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -828,6 +829,43 @@ func TestCostTrackerResetClearsModeCosts(t *testing.T) {
 // TestGemini38FlashRateChange fails from 2027-01-01, when Google doubles Gemini
 // 3.8 Flash's rates to Input 1.50, Output 7.50 and CacheRead 0.15 per 1M
 // tokens. Update the entry in DefaultPricing, then delete this test.
+// A RecordMode that interleaves with Reset must not repopulate the tracker after
+// the reset returns. The cost used to be computed under a read lock and applied
+// under a separately acquired write lock, leaving that window open.
+func TestCostTrackerRecordModeResetIsAtomic(t *testing.T) {
+	tracker := NewCostTracker()
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				tracker.RecordMode(ProviderOpenAI, "gpt-5.6-sol", Usage{PromptTokens: 10}, PricingModeBatch)
+			}
+		}()
+	}
+	for i := 0; i < 200; i++ {
+		tracker.Reset()
+	}
+	close(stop)
+	wg.Wait()
+
+	// After the final Reset and the writers draining, one more Reset must leave
+	// the tracker empty.
+	tracker.Reset()
+	if modes := tracker.GetModeCosts(); len(modes) != 0 {
+		t.Fatalf("GetModeCosts after Reset = %v, want empty", modes)
+	}
+	if total := tracker.GetTotalCost(); total != 0 {
+		t.Fatalf("GetTotalCost after Reset = %v, want 0", total)
+	}
+}
 func TestGemini38FlashRateChange(t *testing.T) {
 	if !time.Now().Before(time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatal("Gemini 3.8 Flash's introductory rates ended on 2026-12-31; update gemini:gemini-3.8-flash in DefaultPricing to 1.50/7.50/0.15")

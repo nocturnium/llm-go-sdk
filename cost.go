@@ -602,9 +602,6 @@ const maxSafeTokenCount = 1<<62 - 1
 // SetPricing.
 // If token counts approach overflow (extremely unlikely), the record is skipped
 // to prevent data corruption.
-//
-// Lock contention optimization: Cost calculation is performed before acquiring
-// the write lock to minimize lock hold time under high concurrency.
 func (t *CostTracker) Record(provider Provider, model string, usage Usage) (float64, bool) {
 	return t.RecordMode(provider, model, usage, PricingModeStandard)
 }
@@ -650,15 +647,15 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 	key := t.makeKey(provider, model)
 	now := time.Now()
 
-	// Pre-calculate cost OUTSIDE the write lock to minimize lock hold time.
-	// Mode resolution reads the tracker's overlay, so it shares this read lock.
-	t.mu.RLock()
-	cost, known := t.costFor(provider, model, key, usage, mode)
-	t.mu.RUnlock()
-
-	// Now acquire write lock for minimal duration
+	// Price and update under one write lock. Cost resolution reads the tracker's
+	// pricing overlay, and a concurrent Reset clears the usage map and mode costs;
+	// computing the cost under a read lock and then reacquiring the write lock let
+	// a Reset land between the two, after which this call repopulated the tracker
+	// the operator had just cleared. Holding the write lock for the whole update
+	// makes Reset and RecordMode atomic with respect to each other.
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	cost, known := t.costFor(provider, model, key, usage, mode)
 
 	u, ok := t.usage[key]
 	if !ok {

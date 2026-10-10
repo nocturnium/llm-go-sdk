@@ -569,3 +569,16 @@ matching the promoted-embedding case.
 | `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event; recurring false positive (rounds 50, 52–56). |
 | `pkg/providers/mistral/transcription.go:74` ignores `TranscribeOptions.ResponseFormat` | `llms.TranscribeOptions` has no `ResponseFormat` field; a caller can only set it through `Extra`, which the code reads into `format` and rejects for non-JSON. |
 | `structured.go:453` nested pointer fields accept null despite a non-null schema | Pointer fields accept null by design (round 53, documented in the code and `docs/nitpick-adjudication.md`): a nil pointer is the field's natural zero, and the generated schema advertises the pointee because OpenAI strict mode rejects nullable unions. |
+
+Round 59 (2026-10-10) reported 7 errors. Fixed: `CostTracker.RecordMode`
+computes its cost and applies its usage under one write lock, so a concurrent
+`Reset` can no longer land between the two and then be undone by the pending
+record.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/release.yml:22` references unpublished action majors | Same recurring false positive as rounds 54–58: `checkout@v7`, `setup-go@v7`, `upload-artifact@v7`, `download-artifact@v8`, and `goreleaser-action@v7` are published. |
+| `internal/httpclient/multipart.go:83` panics on a typed nil target | The `target == nil` guard already runs before the assignment in both cases (the targets are re-checked inside the type switch). |
+| `pkg/observability/terminal_chunk_test.go:38` closes a shared `drained` channel twice | The fixture has no `drained` field; the stale comment was removed when the test was written. `TestStreamWrappers_DrainAfterErrorChunk` passes. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls it on the terminal event; recurring false positive (rounds 50–58). |
+| `structured.go:181` returns the first quoted prose value for a string target | Inherently ambiguous: when the content is not valid JSON and contains several quoted strings, no rule can know which is intended. The documented behavior takes the first candidate that decodes into `T`, and `TestParseTyped_TriesEveryScalarCandidate` pins the useful case (a non-string scalar before the intended string). |
