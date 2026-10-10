@@ -270,6 +270,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	}
 
 	var systemParts []string
+	systemCount := 0
 	var nonSystemMessages []Message
 	// A cache breakpoint on a system message survives consolidation: the merged
 	// message is the one a provider turns into its system block, so dropping it
@@ -279,6 +280,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
+			systemCount++
 			// Use Text so a system message built from Parts (rather than
 			// the simple Content field) is not silently dropped.
 			if text := msg.Text(); text != "" {
@@ -293,7 +295,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	}
 
 	// If no system messages, return original
-	if len(systemParts) == 0 {
+	if systemCount == 0 {
 		return messages
 	}
 

@@ -519,14 +519,14 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-	r.capabilities["synthetic:hf:Qwen/Qwen3-Coder-480B-A35B-Instruct"] = ModelCapabilities{
+	r.capabilities["synthetic:hf:qwen/qwen3-coder-480b-a35b-instruct"] = ModelCapabilities{
 		MaxContextTokens:  256000,
 		MaxOutputTokens:   8192,
 		SupportsTools:     true,
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-	r.capabilities["synthetic:hf:Qwen/Qwen3-VL-235B-A22B-Instruct"] = ModelCapabilities{
+	r.capabilities["synthetic:hf:qwen/qwen3-vl-235b-a22b-instruct"] = ModelCapabilities{
 		MaxContextTokens:  250000,
 		MaxOutputTokens:   8192,
 		SupportsVision:    true,

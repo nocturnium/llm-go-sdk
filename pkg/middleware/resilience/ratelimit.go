@@ -223,6 +223,10 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 			if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
 				return failure
 			}
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			return ErrRateLimitTimeout
 		}
 	}
 

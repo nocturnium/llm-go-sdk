@@ -376,7 +376,9 @@ func WithTimeout(timeout time.Duration) ClientOption {
 // with resilience.NewResilientClient instead, so retries have a single authority.
 func WithRetryPolicy(policy *RetryPolicy) ClientOption {
 	return func(c *Client) {
-		c.retryPolicy = policy
+		if policy != nil {
+			c.retryPolicy = policy
+		}
 	}
 }
 
@@ -474,8 +476,19 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	}
 
 	if response != nil {
-		// Bound the body so a hostile server can't exhaust memory.
-		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(response); err != nil {
+		// Read one byte beyond the limit so a valid JSON prefix cannot hide an
+		// oversized response after Decoder.Decode stops at the first value.
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
+		if err != nil {
+			return fmt.Errorf("failed to read response: %w", err)
+		}
+		if int64(len(body)) > maxResponseSize {
+			return fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
+		}
+		if len(body) == 0 {
+			return nil
+		}
+		if err := json.Unmarshal(body, response); err != nil {
 			// A 204, or a 200 with no payload, leaves the target at its zero
 			// value rather than failing: the request succeeded and the endpoint
 			// returned no payload.

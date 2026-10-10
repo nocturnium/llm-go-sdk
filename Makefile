@@ -85,9 +85,9 @@ vulncheck:
 # Format code
 fmt:
 	@echo "Formatting code..."
-	gofmt -w .
+	@find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -w
 	@if command -v goimports >/dev/null 2>&1; then \
-		goimports -w -local github.com/nocturnium/llm-go-sdk/v6 .; \
+		find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 goimports -w -local github.com/nocturnium/llm-go-sdk/v6; \
 	fi
 
 # Check formatting

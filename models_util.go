@@ -226,7 +226,12 @@ func GroupModelsByProvider(models []ModelInfo) map[Provider][]ModelInfo {
 func GroupModelsByType(models []ModelInfo) map[ModelType][]ModelInfo {
 	result := make(map[ModelType][]ModelInfo)
 	for _, m := range models {
+		seen := make(map[ModelType]struct{}, len(m.Types))
 		for _, t := range m.Types {
+			if _, ok := seen[t]; ok {
+				continue
+			}
+			seen[t] = struct{}{}
 			result[t] = append(result[t], m)
 		}
 	}

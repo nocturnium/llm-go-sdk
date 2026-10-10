@@ -35,6 +35,13 @@ type ClientConfig struct {
 
 // NewClient creates a new llama.cpp native API client.
 func NewClient(config ClientConfig) *Client {
+	baseURL := strings.TrimSuffix(config.BaseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+		config.AllowPrivateIPs = true
+		config.AllowHTTP = true
+	}
 	var hcOpts []httpclient.ClientOption
 	if config.HTTPClient != nil {
 		hcOpts = append(hcOpts, httpclient.WithHTTPClient(config.HTTPClient))
@@ -47,12 +54,6 @@ func NewClient(config ClientConfig) *Client {
 		httpclient.WithAllowHTTP(config.AllowHTTP),
 	)
 	httpClient := httpclient.NewClient(hcOpts...)
-
-	baseURL := strings.TrimSuffix(config.BaseURL, "/")
-	baseURL = strings.TrimSuffix(baseURL, "/v1")
-	if baseURL == "" {
-		baseURL = defaultBaseURL
-	}
 
 	return &Client{
 		httpClient: httpClient,
