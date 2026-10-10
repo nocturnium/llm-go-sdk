@@ -227,3 +227,34 @@ below.
 | `llms.go:92` function pointers do not uniquely identify wrapper values | Function pointers can collide for closures from one code object, which is why `seenKey` only uses the pointer as a fallback key; cycle detection still terminates and the reviewer supplied no concrete collision. |
 | Capping a token charge at the bucket burst silently under-enforces the limit | The cap only applies to a single request larger than the bucket, which would otherwise fail permanently; the case is documented in the code and covered by the rate-limit tests. |
 | Mode pricing ignores long-context tiers | Known and documented in `resolveModePricing` and pinned by `TestBuiltInModeCardsCarryNoLongContextTier`; the published long-context Batch/Flex columns are not transcribed rather than guessed. |
+
+Rounds 24 through 26 kept rotating the error set (19, 10, and 18 errors) while
+the branch tests stayed green. Each round's real findings were reproduced before
+fixing. Fixed across those rounds: a split CRLF pair, delivered across a buffer
+boundary, that the old lookahead treated as an event separator; a provider
+lookup that returned the first empty `ProviderError` instead of the inner one
+that named the provider; unexported anonymous structs whose exported fields
+`encoding/json` promotes but the schema generator dropped; Z.AI speaker IDs
+returned still quoted when the API sends a JSON string; decoded-image size not
+enforced after the padded `DecodedLen` estimate; MCP tool and prompt pagination
+that only caught an immediately repeated cursor, not a cycling one; a public
+circuit-breaker result that classified its probe flag outside the state lock and
+leaked a closed-state in-flight mark when a retry released its permit; JSON
+extraction that stopped at the first balanced-but-invalid bracket pair in prose;
+two direct fields sharing a JSON name producing a schema `encoding/json` then
+ignores; self-referential `genai.Schema` values recursing to a stack overflow; a
+mixed text/image system message whose parts were reordered during consolidation;
+and a llamacpp model listing that ignored the properties call's cancellation.
+Also refreshed the verified rate cards for the same providers and extended
+`ModelInfo` copy isolation to Anthropic and Synthetic.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `Example_messages` and `Example_streaming` fail example validation | `go vet` and `go test` both accept them; a suffix after `Example_` that matches no exported identifier is allowed and only skips the output check. |
+| `OpenRouter` drops `Extra["input_references"]` | `videoFor` reads that key into the typed `InputReferences` field, which is what marshals; the merge switch then correctly refuses to overwrite it. |
+| `ProcessStream` never writes to its `chunks` parameter | `sender` is constructed over that same channel (`NewStreamSender(ctx, chunks, ...)`), so closing it here and sending through `sender` are the two halves of one channel. |
+| `GetWithDefaults` should apply boolean capability defaults | Documented and pinned as numeric-only; a false cannot be distinguished from a deliberate false, so booleans have no default to apply. |
+| `llmadk` omits a pending result when a tool call is not immediately followed by a tool message | `repairToolResults` walks the following run of tool messages, and a regression test confirms the placeholder is inserted when a user message intervenes. |
+| `.github/workflows/*` reference unreleased `actions/checkout@v7` | The tags exist: the GitHub tags API returns `v7.0.1`/`v7` for checkout and `v7.0.0`/`v7` for setup-go. |
+| `scripts/release-decide.sh` uses an undefined `$1` in `count()` | The filter is passed as `count`'s first positional argument, which `jq` receives through shell interpolation of `$1`; a direct invocation of the same function returns the expected count. |
+| `pkg/observability/otel_langfuse_test.go` leaves later tests on the wrong recorder | The suite passes with `-shuffle` seeds 1-8 after the global-provider cleanup the file already performs. |
