@@ -75,7 +75,12 @@ type Wrapper interface {
 
 // UnwrapAll recursively unwraps all middleware to get the base LLM implementation.
 func UnwrapAll(llm LLM) LLM {
+	seen := make(map[LLM]struct{})
 	for {
+		if _, ok := seen[llm]; ok {
+			return llm
+		}
+		seen[llm] = struct{}{}
 		wrapper, ok := llm.(Wrapper)
 		if !ok {
 			return llm
@@ -89,7 +94,12 @@ func UnwrapAll(llm LLM) LLM {
 func GetMiddleware(llm LLM) []Wrapper {
 	var middleware []Wrapper
 	current := llm
+	seen := make(map[LLM]struct{})
 	for {
+		if _, ok := seen[current]; ok {
+			break
+		}
+		seen[current] = struct{}{}
 		wrapper, ok := current.(Wrapper)
 		if !ok {
 			break

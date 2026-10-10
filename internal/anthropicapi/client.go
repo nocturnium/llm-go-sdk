@@ -287,7 +287,7 @@ func ExtractTextContent(content []ContentPart) string {
 
 // IsEndOfStream checks if an event signals end of stream.
 func IsEndOfStream(event *StreamEvent) bool {
-	return event.Type == eventMessageStop
+	return event != nil && event.Type == eventMessageStop
 }
 
 // IsStreamError checks if there was a streaming error.

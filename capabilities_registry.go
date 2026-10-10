@@ -469,8 +469,9 @@ func (r *CapabilityRegistry) registerDefaults() {
 
 	// Infinity serves embeddings and reranking, not chat completions.
 	r.defaults[ProviderInfinity] = ModelCapabilities{
-		MaxContextTokens: 8192,
-		MaxOutputTokens:  0,
+		MaxContextTokens:   8192,
+		MaxOutputTokens:    0,
+		SupportsEmbeddings: true,
 	}
 
 	// Z.AI defaults cover GLM-4.x chat models; vision is model-dependent.

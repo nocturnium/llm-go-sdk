@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"math"
 	"unicode"
 )
 
@@ -101,7 +102,7 @@ func (e *TokenEstimator) EstimateTokens(text string) int {
 	estimate := charBasedEstimate + float64(punctCount)*0.8 + float64(wordCount)*0.1
 
 	// Round up to be conservative (better to overestimate than underestimate)
-	result := int(estimate + 0.5)
+	result := int(math.Ceil(estimate))
 	if result < 1 && len(text) > 0 {
 		result = 1
 	}

@@ -297,7 +297,7 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 //	    return map[string]any{"temperature": 72}, nil
 //	})
 func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Context, T) (any, error)) {
-	if tool.Function == nil {
+	if tool.Function == nil || handler == nil {
 		return
 	}
 

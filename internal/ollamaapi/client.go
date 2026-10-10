@@ -261,6 +261,9 @@ func (c *Client) GetVersion(ctx context.Context) (string, error) {
 
 // Generate sends a completion request to /api/generate.
 func (c *Client) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	if req == nil {
+		return nil, WrapError("generate", errors.New("request is required"))
+	}
 	request := *req
 	request.Stream = false
 
@@ -282,6 +285,9 @@ func (c *Client) Generate(ctx context.Context, req *GenerateRequest) (*GenerateR
 
 // GenerateStream sends a streaming completion request.
 func (c *Client) GenerateStream(ctx context.Context, req *GenerateRequest) (*StreamReader, error) {
+	if req == nil {
+		return nil, WrapError("generate stream", errors.New("request is required"))
+	}
 	request := *req
 	request.Stream = true
 
@@ -304,6 +310,9 @@ func (c *Client) GenerateStream(ctx context.Context, req *GenerateRequest) (*Str
 
 // Chat sends a chat request to /api/chat.
 func (c *Client) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+	if req == nil {
+		return nil, WrapError("chat", errors.New("request is required"))
+	}
 	request := *req
 	request.Stream = false
 
@@ -325,6 +334,9 @@ func (c *Client) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, err
 
 // ChatStream sends a streaming chat request.
 func (c *Client) ChatStream(ctx context.Context, req *ChatRequest) (*ChatStreamReader, error) {
+	if req == nil {
+		return nil, WrapError("chat stream", errors.New("request is required"))
+	}
 	request := *req
 	request.Stream = true
 
