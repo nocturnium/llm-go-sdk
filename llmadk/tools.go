@@ -3,6 +3,7 @@ package llmadk
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"google.golang.org/adk/v2/agent"
@@ -82,6 +83,25 @@ func bridgeHandler(h llms.ToolHandler) functiontool.Func[map[string]any, map[str
 		if m, ok := result.(map[string]any); ok {
 			return m, nil
 		}
+		if m, ok := stringKeyedMap(result); ok {
+			return m, nil
+		}
 		return map[string]any{"result": result}, nil
 	}
+}
+
+// stringKeyedMap converts any map with string keys (map[string]string,
+// map[string]int, a named map type) to map[string]any so ADK receives the map's
+// fields rather than a {"result": ...} wrapper.
+func stringKeyedMap(v any) (map[string]any, bool) {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() || rv.Kind() != reflect.Map || rv.Type().Key().Kind() != reflect.String {
+		return nil, false
+	}
+	out := make(map[string]any, rv.Len())
+	iter := rv.MapRange()
+	for iter.Next() {
+		out[iter.Key().String()] = iter.Value().Interface()
+	}
+	return out, true
 }

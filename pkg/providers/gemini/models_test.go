@@ -425,7 +425,9 @@ func TestClientImplementsModelLister(_ *testing.T) {
 func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/missing-model" {
-			t.Fatalf("unexpected path %q", r.URL.Path)
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)

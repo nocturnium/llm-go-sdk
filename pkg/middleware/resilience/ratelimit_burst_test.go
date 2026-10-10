@@ -143,3 +143,23 @@ func TestRateLimiter_PartialCreditDoesNotOverchargeOversizedRequest(t *testing.T
 		t.Errorf("debt after a 2000-token request with 500 credit = %d, want 500", debt)
 	}
 }
+
+// Credit that offsets part of the debt must leave the debt with it. With 100
+// owed, 50 credit, and a 50-token burst, only the 50 uncovered tokens are
+// charged; leaving the credited half on the books would bill it a second time.
+func TestRateLimiter_SettleTokenDebtRemovesPartialCredit(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(50), WithTokenEstimate(10))
+	rl.mu.Lock()
+	rl.tokenDebt = 100
+	rl.tokenCredit = 50
+	rl.mu.Unlock()
+
+	rl.settleTokenDebt(context.Background(), rl.tokenLim(), time.Now())
+
+	rl.mu.RLock()
+	debt, credit := rl.tokenDebt, rl.tokenCredit
+	rl.mu.RUnlock()
+	if debt != 0 || credit != 0 {
+		t.Fatalf("after settling: debt=%d credit=%d, want both 0", debt, credit)
+	}
+}

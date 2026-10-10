@@ -640,3 +640,23 @@ longer adds a phantom required `Node` property to the schema, matching how
 | `ratelimit.go:574` refund can exceed what was charged for an oversized estimate | With burst 100, estimate 5000 and actual 10, the 4900 of debt is cancelled first, leaving a refund of 90 against the 100 charged to the bucket, so the net charge is 10. `TestRecordTokens_RefundCappedAtWhatWasCharged` covers it. |
 | `pkg/observability/metrics_test.go:136` fixture lacks `callResp` | Recurring false positive (round 61); the test passes. |
 | `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring false positive; `speech.go` calls it on the terminal event. |
+
+Round 64 (2026-10-10) reported 12 errors. Fixed: `settleTokenDebt` removes
+partially-applied credit from the debt along with the reserved installment (the
+credit used to be spent but the debt it covered stayed on the books, billing it
+twice); the Anthropic tool-result decoder trims leading whitespace before
+choosing the string or array form; the llmadk tool bridge passes any
+string-keyed map result through as its fields instead of wrapping it in
+`{"result": ...}`; and a Gemini model test reports an unexpected path with
+`t.Errorf` instead of `t.Fatalf` from the handler goroutine.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/release.yml:22` action majors are unpublished | Recurring false positive; those majors are published. |
+| `Makefile:155` `make ci` lacks the API baseline | `api/v6.txt` is tracked and `make apidiff` passes (round 58). |
+| `llmadk/config.go:94` labels silently discarded | Deliberate and listed in the field table as `ignored` (`fields.go`): they are billing metadata ADK sets on every agent, so rejecting them would break ADK. |
+| `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (round 62); a zero-value config leaves reasoning unset by design. |
+| `resilience_circuit_breaker.go:402` FIFO public permits misattribute completions | Documented contract for the token-less `Allow()`/`Record*` pair (rounds 52, 61). |
+| `featherless.go:71` speech usage handler discarded | Recurring false positive; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
+| `structured.go:450` pointer fields accept null | By design (round 53). |
+| `tokens.go:58` `isNilInterface` undefined | Defined in `llms.go:120`; the package builds. |

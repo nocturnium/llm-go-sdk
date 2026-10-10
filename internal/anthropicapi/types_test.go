@@ -409,3 +409,15 @@ func TestStreamEvent_MessageDeltaHasNoContentDelta(t *testing.T) {
 		t.Errorf("message_delta also set Delta = %+v; want nil", event.Delta)
 	}
 }
+
+func TestToolResultContent_UnmarshalLeadingWhitespace(t *testing.T) {
+	var msg struct {
+		Content ToolResultContent `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(`{"content":  "result"}`), &msg); err != nil {
+		t.Fatalf("unmarshal string with leading whitespace: %v", err)
+	}
+	if msg.Content.Text != "result" {
+		t.Errorf("Text = %q, want result", msg.Content.Text)
+	}
+}

@@ -7,6 +7,7 @@
 package anthropicapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -165,6 +166,7 @@ func (c ToolResultContent) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON accepts the string and array forms Anthropic may return.
 func (c *ToolResultContent) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
 	if len(data) == 0 || string(data) == "null" {
 		*c = ToolResultContent{}
 		return nil
