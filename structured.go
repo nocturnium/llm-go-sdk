@@ -155,15 +155,30 @@ func repairPrompt(parseErr error) string {
 		"no markdown code fences, no explanation."
 }
 
-// extractJSON finds the first balanced JSON object or array embedded in s,
-// ignoring braces inside strings. It handles markdown code fences and prose
-// around the JSON. The boolean is false when no balanced JSON value is found.
+// extractJSON finds the first balanced JSON object or array embedded in s that
+// also parses as JSON, ignoring braces inside strings. It handles markdown code
+// fences and prose around the JSON. Candidates are tried left to right: prose
+// such as "Here is [the JSON] {"name":"Ada"}" has a balanced but invalid first
+// bracket pair, and the scanner must continue to the valid object after it. The
+// boolean is false when no balanced, parseable JSON value is found.
 func extractJSON(s string) (string, bool) {
-	start := strings.IndexAny(s, "{[")
-	if start < 0 {
-		return "", false
+	for i := 0; i < len(s); i++ {
+		if s[i] != '{' && s[i] != '[' {
+			continue
+		}
+		if candidate, ok := balancedJSONAt(s, i); ok {
+			if json.Valid([]byte(candidate)) {
+				return candidate, true
+			}
+		}
 	}
+	return "", false
+}
 
+// balancedJSONAt scans from a bracketing byte at start and returns the shortest
+// balanced object/array beginning there, ignoring structural characters inside
+// string literals.
+func balancedJSONAt(s string, start int) (string, bool) {
 	open := s[start]
 	closeCh := byte('}')
 	if open == '[' {
@@ -264,7 +279,11 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 	// depth as ambiguous, so the schema must drop it too rather than ask the
 	// model for a value Unmarshal will discard.
 	promoted := make(map[string]int)
-	direct := make(map[string]bool)
+	// directCount counts named fields at this struct's own depth that share a
+	// JSON name. encoding/json treats two same-depth duplicate names as
+	// ambiguous and ignores the value, so a schema that required the field would
+	// accept a response whose Go field stays zero.
+	directCount := make(map[string]int)
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -319,14 +338,20 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			fieldSchema = map[string]any{schemaKeyType: schemaTypeString}
 		}
 		properties[name] = fieldSchema
-		direct[name] = true
+		directCount[name]++
+		if directCount[name] > 1 {
+			// The second same-depth field makes the name ambiguous; keep the
+			// property out of the schema entirely so the model is not asked for a
+			// value Unmarshal will discard.
+			delete(properties, name)
+		}
 	}
 
 	// A direct field shadows any embedded field of the same name, so only a
 	// collision among embedded structs is ambiguous. Drop those from the
 	// properties; the required list is rebuilt from what survives.
 	for name, count := range promoted {
-		if count > 1 && !direct[name] {
+		if count > 1 && directCount[name] == 0 {
 			delete(properties, name)
 		}
 	}

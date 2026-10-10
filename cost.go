@@ -198,6 +198,11 @@ const (
 // conflicting public prices for the current version; Azure, RunPod, Infinity,
 // Featherless, and Synthetic are BYO deployment/subscription or volatile model
 // ID surfaces without stable per-token list pricing.
+//
+// Configure this table before concurrent use; concurrent mutation while a
+// lookup runs is a data race, the same rule [MediaPricing] documents. A tracker
+// snapshots it at construction, so pass custom rates to [NewCostTracker] or
+// [CostTracker.SetPricing] rather than editing the global map at runtime.
 var DefaultPricing = map[string]Pricing{
 	// OpenAI (cached input billed at ~0.5×; automatic caching has no write cost).
 	"openai:gpt-4o":                 {Input: 2.50, Output: 10.00, CacheRead: 1.25},

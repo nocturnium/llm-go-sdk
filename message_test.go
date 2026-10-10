@@ -202,6 +202,33 @@ func TestConsolidateSystemMessages_MultipleSystemMessages(t *testing.T) {
 // from Parts (rather than the simple Content field) is included in the
 // consolidated system message rather than being silently dropped. This is part
 // of the FIX 5 acceptance coverage.
+// A mixed system message must keep its part order: text and images refer to
+// each other, so regrouping all text in front of all images changes the prompt.
+func TestConsolidateSystemMessages_MixedPartsKeepOrder(t *testing.T) {
+	img := func(tag string) ContentPart {
+		return NewImageBase64Part(tag, MediaTypePNG)
+	}
+	messages := []Message{
+		{Role: RoleSystem, Parts: []ContentPart{img("a"), NewTextPart("caption"), img("b")}},
+		{Role: RoleUser, Content: "hi"},
+	}
+
+	result := ConsolidateSystemMessages(messages)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result))
+	}
+	parts := result[0].Parts
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 parts, got %d: %+v", len(parts), parts)
+	}
+	if parts[0].Type != PartTypeImage || parts[1].Type != PartTypeText || parts[2].Type != PartTypeImage {
+		t.Fatalf("part order = %v, %v, %v; want image, text, image", parts[0].Type, parts[1].Type, parts[2].Type)
+	}
+	if parts[1].Text != "caption" {
+		t.Errorf("middle text = %q, want caption", parts[1].Text)
+	}
+}
+
 func TestConsolidateSystemMessages_PartsBased(t *testing.T) {
 	messages := []Message{
 		{Role: RoleSystem, Parts: []ContentPart{NewTextPart("You are helpful")}},

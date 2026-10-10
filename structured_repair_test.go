@@ -56,6 +56,11 @@ func TestExtractJSON(t *testing.T) {
 		{"escaped quote in string", `{"k":"a\"} still in"}`, `{"k":"a\"} still in"}`, true},
 		{"no json", `just some prose`, "", false},
 		{"unbalanced", `{"k": "v"`, "", false},
+		// A balanced but non-JSON bracket group (prose in brackets) must not stop
+		// the scan before the real object later in the string.
+		{"prose bracket before object", `Here is [the JSON] {"name":"Ada"}`, `{"name":"Ada"}`, true},
+		{"prose brace before array", `note {see below} [1,2]`, `[1,2]`, true},
+		{"only prose brackets", `Here is [the JSON]`, "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

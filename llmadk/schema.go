@@ -29,9 +29,17 @@ func schemaJSON(v any) (json.RawMessage, error) {
 		if s == nil {
 			return nil, nil
 		}
-		return json.Marshal(genaiSchema(s))
+		converted, err := genaiSchema(s, map[*genai.Schema]bool{})
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(converted)
 	case genai.Schema:
-		return json.Marshal(genaiSchema(&s))
+		converted, err := genaiSchema(&s, map[*genai.Schema]bool{})
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(converted)
 	case json.RawMessage:
 		return s, nil
 	case []byte:
@@ -50,8 +58,19 @@ func schemaJSON(v any) (json.RawMessage, error) {
 
 // genaiSchema converts a genai.Schema, Gemini's OpenAPI subset, to a JSON
 // Schema object. PropertyOrdering and Example have no JSON Schema meaning a
-// provider acts on and are dropped.
-func genaiSchema(s *genai.Schema) map[string]any {
+// provider acts on and are dropped. seen guards against a caller's self-referential
+// schema, which has no JSON Schema representation and would otherwise recurse
+// until the stack overflows.
+func genaiSchema(s *genai.Schema, seen map[*genai.Schema]bool) (map[string]any, error) {
+	if s == nil {
+		return nil, nil
+	}
+	if seen[s] {
+		return nil, fmt.Errorf("%w: schema references itself", ErrUnsupportedConfigField)
+	}
+	seen[s] = true
+	defer delete(seen, s)
+
 	out := map[string]any{}
 	typ := jsonSchemaType(s.Type)
 	switch {
@@ -79,13 +98,21 @@ func genaiSchema(s *genai.Schema) map[string]any {
 		out["default"] = s.Default
 	}
 	if s.Items != nil {
-		out["items"] = genaiSchema(s.Items)
+		items, err := genaiSchema(s.Items, seen)
+		if err != nil {
+			return nil, err
+		}
+		out["items"] = items
 	}
 	if len(s.Properties) > 0 {
 		props := make(map[string]any, len(s.Properties))
 		for name, p := range s.Properties {
 			if p != nil {
-				props[name] = genaiSchema(p)
+				converted, err := genaiSchema(p, seen)
+				if err != nil {
+					return nil, err
+				}
+				props[name] = converted
 			}
 		}
 		out["properties"] = props
@@ -99,7 +126,11 @@ func genaiSchema(s *genai.Schema) map[string]any {
 		anyOf := make([]any, 0, len(s.AnyOf))
 		for _, a := range s.AnyOf {
 			if a != nil {
-				anyOf = append(anyOf, genaiSchema(a))
+				converted, err := genaiSchema(a, seen)
+				if err != nil {
+					return nil, err
+				}
+				anyOf = append(anyOf, converted)
 			}
 		}
 		out["anyOf"] = anyOf
@@ -121,7 +152,7 @@ func genaiSchema(s *genai.Schema) map[string]any {
 	if s.Maximum != nil {
 		out["maximum"] = *s.Maximum
 	}
-	return out
+	return out, nil
 }
 
 // jsonSchemaType maps a genai type to its JSON Schema name; unspecified maps

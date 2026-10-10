@@ -340,6 +340,35 @@ func TestSchemaFrom_UnexportedEmbeddedStructPromoted(t *testing.T) {
 	}
 }
 
+// Two direct fields sharing a JSON name are ambiguous to encoding/json; the
+// schema must drop the name rather than require a value Unmarshal discards.
+func TestSchemaFrom_DuplicateDirectJSONNamesDropped(t *testing.T) {
+	// reflect.StructOf avoids a literal duplicate json tag, which go vet flags in
+	// source even though the ambiguity is exactly what this test exercises.
+	dup := reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: reflect.TypeOf(""), Tag: `json:"x"`},
+		{Name: "B", Type: reflect.TypeOf(""), Tag: `json:"x"`},
+		{Name: "C", Type: reflect.TypeOf(""), Tag: `json:"keep"`},
+	})
+	schema, err := schemaForType(dup, map[reflect.Type]bool{})
+	if err != nil {
+		t.Fatalf("schemaForType: %v", err)
+	}
+	properties := schemaProperties(t, schema)
+	if _, ok := properties["x"]; ok {
+		t.Errorf("ambiguous name x kept in schema: %#v", properties)
+	}
+	if _, ok := properties["keep"]; !ok {
+		t.Errorf("unambiguous field missing: %#v", properties)
+	}
+	// The schema builder's required list stores names in its own []string form;
+	// assert membership directly rather than through the []any helper.
+	required, _ := schema["required"].([]string)
+	if len(required) != 1 || required[0] != "keep" {
+		t.Errorf("required = %v, want [keep]", required)
+	}
+}
+
 func TestSchemaFrom_AmbiguousEmbeddedFieldsDropped(t *testing.T) {
 	embedded := reflect.StructOf([]reflect.StructField{{
 		Name: "Name",

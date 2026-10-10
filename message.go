@@ -284,8 +284,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 		return messages
 	}
 
-	var systemParts []string
-	var systemContentParts []ContentPart
+	var systemMessages []Message
 	systemCount := 0
 	var nonSystemMessages []Message
 	// A cache breakpoint on a system message survives consolidation: the merged
@@ -297,16 +296,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
 			systemCount++
-			// Use Text so a system message built from Parts (rather than
-			// the simple Content field) is not silently dropped.
-			if text := msg.Text(); text != "" {
-				systemParts = append(systemParts, text)
-			}
-			for _, part := range msg.Parts {
-				if part.Type != PartTypeText {
-					systemContentParts = append(systemContentParts, part)
-				}
-			}
+			systemMessages = append(systemMessages, msg)
 			if systemCacheControl == nil {
 				systemCacheControl = msg.CacheControl
 			}
@@ -320,16 +310,12 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 		return messages
 	}
 
-	content := joinStrings(systemParts, "\n\n")
-	if len(systemContentParts) > 0 && content != "" {
-		systemContentParts = append([]ContentPart{{Type: PartTypeText, Text: content}}, systemContentParts...)
-		content = ""
-	}
+	content, parts := mergeSystemContent(systemMessages)
 	result := make([]Message, 0, len(nonSystemMessages)+1)
 	result = append(result, Message{
 		Role:         RoleSystem,
 		Content:      content,
-		Parts:        systemContentParts,
+		Parts:        parts,
 		CacheControl: systemCacheControl,
 	})
 	result = append(result, nonSystemMessages...)
@@ -337,7 +323,41 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	return result
 }
 
-// joinStrings joins strings with a separator (avoids importing strings package)
+// mergeSystemContent flattens system messages into one system message while
+// preserving the sequence of parts. A message using the simple Content field
+// contributes one text part; a Parts-based message keeps each part in place, so
+// a system message of image, text, image stays in that order instead of being
+// regrouped into text, image, image. Pure text collapses back to Content.
+func mergeSystemContent(messages []Message) (string, []ContentPart) {
+	var parts []ContentPart
+	var texts []string
+	for _, msg := range messages {
+		if len(msg.Parts) == 0 {
+			if msg.Content != "" {
+				parts = append(parts, NewTextPart(msg.Content))
+				texts = append(texts, msg.Content)
+			}
+			continue
+		}
+		for _, part := range msg.Parts {
+			parts = append(parts, part)
+			if part.Type == PartTypeText {
+				texts = append(texts, part.Text)
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", nil
+	}
+	for _, part := range parts {
+		if part.Type != PartTypeText {
+			return "", parts
+		}
+	}
+	return joinStrings(texts, "\n\n"), nil
+}
+
 func joinStrings(parts []string, sep string) string {
 	if len(parts) == 0 {
 		return ""

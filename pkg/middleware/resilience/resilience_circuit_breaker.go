@@ -332,15 +332,20 @@ func (cb *CircuitBreaker) recordFailureLocked(halfOpenProbe bool) {
 }
 
 // releasePermit abandons an allowed request without treating it as provider
-// health evidence. In half-open it returns the in-flight probe permit; a stale
-// closed-state request holds none, so the flag guards against decrementing a
-// permit that belongs to a real probe.
+// health evidence. In half-open it returns the in-flight probe permit; a
+// closed-state request instead retires its inflightClosed mark, which a later
+// half-open window would otherwise misread as a stale request and use to refuse
+// a real probe's success.
 func (cb *CircuitBreaker) releasePermit(halfOpenProbe bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	if halfOpenProbe && cb.state == CircuitHalfOpen && cb.halfOpenCount > 0 {
 		cb.halfOpenCount--
+		return
+	}
+	if !halfOpenProbe && cb.inflightClosed > 0 {
+		cb.inflightClosed--
 	}
 }
 

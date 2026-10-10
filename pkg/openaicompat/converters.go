@@ -378,6 +378,9 @@ func convertUsage(u *Usage) llms.Usage {
 
 // ConvertEmbeddingResponse converts an OpenAI-compatible embedding response to llms.EmbeddingResponse.
 func ConvertEmbeddingResponse(resp *EmbeddingResponse) *llms.EmbeddingResponse {
+	if resp == nil {
+		return nil
+	}
 	embeddings := make([]llms.Embedding, len(resp.Data))
 	for i, data := range resp.Data {
 		embeddings[i] = llms.Embedding{

@@ -179,7 +179,7 @@ func TestConvertAnthropicModel(t *testing.T) {
 			},
 			expected: llms.ModelInfo{
 				ID:            "claude-2-unknown",
-				DisplayName:   "Claude.2 unknown", // Generated from formatClaudeModelName
+				DisplayName:   "Claude 2 unknown", // Generated from formatClaudeModelName
 				Provider:      llms.ProviderAnthropic,
 				Organization:  "Anthropic",
 				ContextLength: 200000,
@@ -254,8 +254,9 @@ func TestFormatClaudeModelName(t *testing.T) {
 		{"claude-3-5-sonnet-latest", "Claude 3.5 Sonnet latest"},
 		{"claude-3-5-haiku-20241022", "Claude 3.5 Haiku 20241022"},
 		{"claude-3-opus-20240229", "Claude 3 Opus 20240229"},
-		{"claude-2-1", "Claude.2 1"},                 // version replacement doesn't apply here due to spacing
-		{"claude-instant-1-2", "Claude Instant.1 2"}, // version replacement doesn't apply here due to spacing
+		{"claude-2-1", "Claude 2.1"},
+		{"claude-instant-1-2", "Claude Instant 1.2"},
+		{"claude-2-unknown", "Claude 2 unknown"},
 		{"unknown-model", "unknown model"},
 	}
 

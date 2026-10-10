@@ -1,11 +1,30 @@
 package llmadk
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
 	"google.golang.org/genai"
 )
+
+// A self-referential schema has no JSON Schema form; conversion must return an
+// error rather than recursing until the stack overflows.
+func TestSchemaJSON_RejectsCyclicSchema(t *testing.T) {
+	s := &genai.Schema{Type: genai.TypeArray}
+	s.Items = s
+	if _, err := schemaJSON(s); err == nil {
+		t.Fatal("cyclic schema converted without error")
+	} else if !errors.Is(err, ErrUnsupportedConfigField) {
+		t.Errorf("err = %v, want ErrUnsupportedConfigField", err)
+	}
+
+	prop := &genai.Schema{Type: genai.TypeObject, Properties: map[string]*genai.Schema{}}
+	prop.Properties["self"] = prop
+	if _, err := schemaJSON(prop); err == nil {
+		t.Fatal("cyclic property schema converted without error")
+	}
+}
 
 // TestFieldHandlingCoversGenai is the tripwire for genai releases: every
 // exported field of the request types the bridge reads must be classified in
