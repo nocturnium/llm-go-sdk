@@ -269,7 +269,14 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		if field.PkgPath != "" {
-			continue
+			// An unexported anonymous struct is not itself reachable, but
+			// encoding/json still promotes its exported fields to the parent, so
+			// the schema must promote them too or the model will omit data that
+			// Unmarshal would have accepted. Any other unexported field is
+			// invisible to encoding/json and must stay out of the schema.
+			if !field.Anonymous || field.Type.Kind() != reflect.Struct {
+				continue
+			}
 		}
 
 		// Flatten embedded (anonymous) structs without an explicit json name,

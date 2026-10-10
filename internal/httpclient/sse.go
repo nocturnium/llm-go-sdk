@@ -168,14 +168,21 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 // leaves the carriage returns in the data.
 func (r *SSEReader) readLine() (string, error) {
 	// A CR from the previous line may have been followed by a LF that had not
-	// arrived yet. Consume it only if it is already buffered; a blocking read
-	// here would stall a CR-only stream.
+	// arrived yet. Read it now, on the following call, after the previous line
+	// has already been handed to the caller. If the byte is not a LF the stream
+	// used a bare CR terminator, so put it back and parse it as the next line's
+	// first byte. This runs before the line loop so the paired LF is never
+	// mistaken for the empty line that dispatches an SSE event.
 	if r.pendingLF {
 		r.pendingLF = false
-		if r.br.Buffered() > 0 {
-			if next, peekErr := r.br.Peek(1); peekErr == nil && len(next) == 1 && next[0] == '\n' {
-				_, _ = r.br.ReadByte()
-			}
+		b, err := r.br.ReadByte()
+		switch {
+		case errors.Is(err, io.EOF):
+			return "", io.EOF
+		case err != nil:
+			return "", err
+		case b != '\n':
+			_ = r.br.UnreadByte()
 		}
 	}
 	var line []byte

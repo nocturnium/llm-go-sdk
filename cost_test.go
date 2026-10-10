@@ -90,6 +90,9 @@ func TestPricing_DefaultPricing(t *testing.T) {
 		"groq:openai/gpt-oss-120b",
 		"mistral:mistral-large-4",
 		"mistral:codestral",
+		"deepseek:deepseek-v4-pro",
+		"fireworks:accounts/fireworks/models/ember-1",
+		"fireworks:accounts/fireworks/models/glm-5p3",
 	}
 
 	for _, model := range expectedModels {

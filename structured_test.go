@@ -310,11 +310,36 @@ type structuredMockLLM struct {
 	opts     *CallOptions
 }
 
+type unexportedEmbedInner struct {
+	A      string `json:"a"`
+	hidden string
+}
+
+type unexportedEmbedOuter struct {
+	unexportedEmbedInner
+}
+
 // Two embedded structs that promote the same JSON name are ambiguous to
 // encoding/json, which drops both. The schema must drop the field too rather
 // than ask the model for a value Unmarshal silently discards. The type is built
 // with reflect.StructOf because go vet rejects a literal struct with duplicate
 // JSON tags, which is exactly the shape under test.
+// An unexported anonymous struct still promotes its exported fields through
+// encoding/json, so the schema must include them.
+func TestSchemaFrom_UnexportedEmbeddedStructPromoted(t *testing.T) {
+	schema, err := schemaForType(reflect.TypeOf(unexportedEmbedOuter{}), map[reflect.Type]bool{})
+	if err != nil {
+		t.Fatalf("schemaForType: %v", err)
+	}
+	properties := schemaProperties(t, schema)
+	if _, ok := properties["a"]; !ok {
+		t.Fatalf("promoted exported field missing from schema: %#v", properties)
+	}
+	if _, ok := properties["hidden"]; ok {
+		t.Fatalf("unexported field leaked into schema: %#v", properties)
+	}
+}
+
 func TestSchemaFrom_AmbiguousEmbeddedFieldsDropped(t *testing.T) {
 	embedded := reflect.StructOf([]reflect.StructField{{
 		Name: "Name",

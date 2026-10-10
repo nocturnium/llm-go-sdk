@@ -60,6 +60,7 @@ conformance where the provider supports it.
 ```go
 schema := json.RawMessage(`{
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "sentiment": {"type": "string"},
     "confidence": {"type": "number"}

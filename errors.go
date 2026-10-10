@@ -425,16 +425,31 @@ func WrapProviderError(provider Provider, operation string, err error) error {
 // ProviderFromError extracts the provider from an error if it's a ProviderError or APIError.
 // Returns empty string if the error doesn't contain provider information.
 func ProviderFromError(err error) Provider {
+	// Walk the chain rather than using errors.As once: an outer ProviderError
+	// may carry an empty Provider when the caller only wanted to attach an
+	// operation, while an inner wrapper or APIError still names the provider
+	// that failed.
+	for cur := err; cur != nil; cur = errors.Unwrap(cur) {
+		if provErr, ok := cur.(*ProviderError); ok {
+			if provErr.Provider != "" {
+				return provErr.Provider
+			}
+			continue
+		}
+		if apiErr, ok := cur.(*APIError); ok && apiErr.Provider != "" {
+			return apiErr.Provider
+		}
+	}
+	// The unwrap chain does not cover matches behind a custom As method, so
+	// fall back to errors.As for both types.
 	var provErr *ProviderError
-	if errors.As(err, &provErr) {
+	if errors.As(err, &provErr) && provErr.Provider != "" {
 		return provErr.Provider
 	}
-
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr.Provider != "" {
 		return apiErr.Provider
 	}
-
 	return ""
 }
 

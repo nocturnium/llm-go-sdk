@@ -418,6 +418,11 @@ var DefaultPricing = map[string]Pricing{
 	// DeepSeek (cache hits billed at a steep discount).
 	"deepseek:deepseek-chat":     {Input: 0.27, Output: 1.10, CacheRead: 0.07},
 	"deepseek:deepseek-reasoner": {Input: 0.55, Output: 2.19, CacheRead: 0.14},
+	// Current DeepSeek API aliases, read 2026-10-09. Recorded at peak rates;
+	// off-peak is 0.50x and is a time-window card a static map cannot express.
+	"deepseek:deepseek-v4-flash":            {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"deepseek:deepseek-v4-flash-vision-exp": {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"deepseek:deepseek-v4-pro":              {Input: 1.32, Output: 3.96, CacheRead: 0.044},
 
 	// Cloud provider serverless/list pricing.
 	"groq:llama-3.3-70b-versatile": {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
@@ -444,6 +449,19 @@ var DefaultPricing = map[string]Pricing{
 	"mistral:codestral":          {Input: 0.30, Output: 0.90, CacheRead: 0.03},
 	"mistral:codestral-embed":    {Input: 0.15, CacheRead: 0.015},
 	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {Input: 0.90, Output: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
+	// Exact Fireworks serverless IDs, verified 2026-10-09. Priority/Fast/US
+	// residency have separate cards with no universal multiplier, so only the
+	// standard short-context rates are recorded here.
+	"fireworks:accounts/fireworks/models/ember-1":                        {Input: 3.00, Output: 15.00, CacheRead: 0.30},
+	"fireworks:accounts/fireworks/models/kimi-k3":                        {Input: 3.00, Output: 15.00, CacheRead: 0.30},
+	"fireworks:accounts/fireworks/models/deepseek-v4p1-flash":            {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"fireworks:accounts/fireworks/models/glm-5p3":                        {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"fireworks:accounts/fireworks/models/glm-5p3-flash":                  {Input: 0.15, Output: 0.50, CacheRead: 0.03},
+	"fireworks:accounts/fireworks/models/qwen3p8-max":                    {Input: 2.00, Output: 6.00, CacheRead: 0.25},
+	"fireworks:accounts/fireworks/models/minimax-m3":                     {Input: 0.30, Output: 1.20, CacheRead: 0.06},
+	"fireworks:accounts/fireworks/models/nemotron-3-ultra-nvfp4":         {Input: 0.60, Output: 2.40, CacheRead: 0.12},
+	"fireworks:accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {Input: 0.05, Output: 0.20, CacheRead: 0.01},
+	"fireworks:accounts/fireworks/models/gpt-oss-120b":                   {Input: 0.15, Output: 0.60, CacheRead: 0.015},
 	"perplexity:sonar":   {Input: 1.00, Output: 1.00},                  // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
 	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
 	"zai:glm-5.1":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // docs.z.ai, verified 2026-10-09

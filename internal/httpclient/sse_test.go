@@ -275,6 +275,65 @@ func TestSSEReader_LargeDataLine(t *testing.T) {
 	}
 }
 
+// chunkReader hands out at most n bytes per Read so a CRLF pair can be forced
+// to straddle a buffer boundary, the case where a naive CR lookahead sees
+// nothing and later mistakes the paired LF for an event separator.
+type chunkReader struct {
+	data []byte
+	n    int
+}
+
+func (c *chunkReader) Read(p []byte) (int, error) {
+	if len(c.data) == 0 {
+		return 0, io.EOF
+	}
+	n := c.n
+	if n > len(p) {
+		n = len(p)
+	}
+	if n > len(c.data) {
+		n = len(c.data)
+	}
+	copy(p, c.data[:n])
+	c.data = c.data[n:]
+	return n, nil
+}
+
+func TestSSEReader_SplitCRLF(t *testing.T) {
+	raw := "data: first\r" + "\n\r\n" + "data: second\r\n\r\n"
+	r := NewSSEReader(io.NopCloser(&chunkReader{data: []byte(raw), n: 11}))
+	defer r.Close()
+
+	first, err := r.Read()
+	if err != nil {
+		t.Fatalf("first Read: %v", err)
+	}
+	if first.Data != "first" {
+		t.Fatalf("first event data = %q, want %q", first.Data, "first")
+	}
+	second, err := r.Read()
+	if err != nil {
+		t.Fatalf("second Read: %v", err)
+	}
+	if second.Data != "second" {
+		t.Fatalf("second event data = %q, want %q", second.Data, "second")
+	}
+}
+
+func TestSSEReader_BareCRSeparator(t *testing.T) {
+	r := NewSSEReader(io.NopCloser(strings.NewReader("data: one\r\rdata: two\r\r")))
+	defer r.Close()
+
+	got, err := r.Read()
+	if err != nil || got.Data != "one" {
+		t.Fatalf("first = %+v, %v; want data one", got, err)
+	}
+	got, err = r.Read()
+	if err != nil || got.Data != "two" {
+		t.Fatalf("second = %+v, %v; want data two", got, err)
+	}
+}
+
 func TestSSEReader_LineTooLarge(t *testing.T) {
 	data := "data: " + strings.Repeat("A", maxSSEEventSize+1) + "\n\n"
 	reader := NewSSEReader(newMockReadCloser(data))
