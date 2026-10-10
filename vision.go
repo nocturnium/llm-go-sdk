@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -335,8 +336,11 @@ func ValidateImageContent(img *ImageContent) error {
 	}
 
 	if img.Source == ImageSourceURL {
-		// Basic URL validation
-		if !strings.HasPrefix(img.Data, "http://") && !strings.HasPrefix(img.Data, "https://") {
+		// Basic URL validation. Require a real http(s) host: malformed values
+		// such as "https://" or "http://?x" would otherwise reach the provider
+		// and fail there instead of at the caller.
+		parsed, err := url.Parse(img.Data)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return fmt.Errorf("invalid image URL: must start with http:// or https://")
 		}
 

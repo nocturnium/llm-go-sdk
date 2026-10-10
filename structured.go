@@ -136,7 +136,7 @@ func parseTyped[T any](content string) (T, error) {
 	// constant string sent the model back to fix "invalid JSON" when the JSON
 	// was valid and only a field's type was wrong.
 	reason := directErr
-	if extracted, ok := extractJSON(content); ok {
+	for _, extracted := range extractJSONCandidates(content) {
 		var v T
 		extractedErr := json.Unmarshal([]byte(extracted), &v)
 		if extractedErr == nil {
@@ -221,17 +221,30 @@ func repairPrompt(parseErr error) string {
 // bracket pair, and the scanner must continue to the valid object after it. The
 // boolean is false when no balanced, parseable JSON value is found.
 func extractJSON(s string) (string, bool) {
+	candidates := extractJSONCandidates(s)
+	if len(candidates) == 0 {
+		return "", false
+	}
+	return candidates[0], true
+}
+
+// extractJSONCandidates returns every balanced JSON object or array embedded in
+// s that parses as JSON, in left-to-right order. Callers that unmarshal into a
+// concrete type must try each one: a valid but unrelated value earlier in prose
+// must not mask the value that actually matches the schema.
+func extractJSONCandidates(s string) []string {
+	var candidates []string
 	for i := 0; i < len(s); i++ {
 		if s[i] != '{' && s[i] != '[' {
 			continue
 		}
 		if candidate, ok := balancedJSONAt(s, i); ok {
 			if json.Valid([]byte(candidate)) {
-				return candidate, true
+				candidates = append(candidates, candidate)
 			}
 		}
 	}
-	return "", false
+	return candidates
 }
 
 // balancedJSONAt scans from a bracketing byte at start and returns the shortest

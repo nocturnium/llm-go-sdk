@@ -78,7 +78,11 @@ func (l *JSONLogger) LogError(_ context.Context, entry *LogEntry, err error) {
 	// Sanitize CR/LF: an upstream/provider error can echo user-controlled input,
 	// so escape it like other user-influenced values to prevent forged log lines
 	// (CWE-117).
-	e.Error = sanitizeLogValue(err.Error())
+	if err == nil {
+		e.Error = "<nil>"
+	} else {
+		e.Error = sanitizeLogValue(err.Error())
+	}
 	l.writeEntry("error", e)
 }
 

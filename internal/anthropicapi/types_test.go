@@ -229,6 +229,25 @@ func TestContentPart_ToolResultArrayContent(t *testing.T) {
 	}
 }
 
+func TestContentPart_ToolResultEmptyArrayContent(t *testing.T) {
+	const raw = `{"type":"tool_result","tool_use_id":"toolu_123","content":[]}`
+	var part ContentPart
+	if err := json.Unmarshal([]byte(raw), &part); err != nil {
+		t.Fatalf("failed to unmarshal empty array content: %v", err)
+	}
+	data, err := json.Marshal(part)
+	if err != nil {
+		t.Fatalf("failed to re-marshal empty array content: %v", err)
+	}
+	var roundTrip map[string]any
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("failed to unmarshal round trip: %v", err)
+	}
+	if _, ok := roundTrip["content"].([]any); !ok {
+		t.Errorf("round-tripped content = %#v, want an empty array", roundTrip["content"])
+	}
+}
+
 func TestContentPart_ToolResultWithError(t *testing.T) {
 	part := ContentPart{
 		Type:      "tool_result",

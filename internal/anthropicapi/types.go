@@ -149,14 +149,15 @@ type ContentPart struct {
 // common case and array blocks are decoded so callers can inspect or forward
 // them.
 type ToolResultContent struct {
-	Text  string
-	Array []ContentPart
+	Text     string
+	Array    []ContentPart
+	useArray bool
 }
 
 // MarshalJSON writes the string form when only Text is set, otherwise the array
 // form.
 func (c ToolResultContent) MarshalJSON() ([]byte, error) {
-	if len(c.Array) > 0 {
+	if c.useArray || len(c.Array) > 0 {
 		return json.Marshal(c.Array)
 	}
 	return json.Marshal(c.Text)
@@ -180,7 +181,7 @@ func (c *ToolResultContent) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &parts); err != nil {
 		return err
 	}
-	*c = ToolResultContent{Array: parts}
+	*c = ToolResultContent{Array: parts, useArray: true}
 	return nil
 }
 

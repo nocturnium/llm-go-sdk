@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"reflect"
 	"time"
 
 	"google.golang.org/adk/v2/model"
@@ -27,7 +28,7 @@ var _ model.LLM = (*Model)(nil)
 // NewModel adapts llm to ADK's model.LLM. llm may be any provider client or a
 // middleware chain around one. It returns an error for a nil llm.
 func NewModel(llm llms.LLM, opts ...Option) (*Model, error) {
-	if llm == nil {
+	if isNilLLM(llm) {
 		return nil, errors.New("llmadk: NewModel needs an llms.LLM")
 	}
 	o := apply(opts...)
@@ -36,6 +37,21 @@ func NewModel(llm llms.LLM, opts ...Option) (*Model, error) {
 		name = llm.Model()
 	}
 	return &Model{llm: llm, name: name, opts: o}, nil
+}
+
+// isNilLLM reports whether llm is nil or a typed-nil interface value. A typed
+// nil passes the == nil check but panics on the first method call.
+func isNilLLM(llm llms.LLM) bool {
+	if llm == nil {
+		return true
+	}
+	v := reflect.ValueOf(llm)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 // Name returns the model name ADK sees (see WithName).

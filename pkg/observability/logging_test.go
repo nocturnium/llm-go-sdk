@@ -287,6 +287,23 @@ func TestJSONLogger_LogError(t *testing.T) {
 	}
 }
 
+// A nil error must not panic the process; the logger reports it explicitly.
+func TestLogError_NilErrorDoesNotPanic(t *testing.T) {
+	var buf bytes.Buffer
+	jsonLogger := NewJSONLogger(func(b []byte) error { buf.Write(b); return nil })
+	jsonLogger.LogError(context.Background(), &LogEntry{RequestID: "nil-error"}, nil)
+	if !strings.Contains(buf.String(), `\u003cnil\u003e`) {
+		t.Errorf("JSON logger output = %q, want a nil error marker", buf.String())
+	}
+
+	var slogBuf bytes.Buffer
+	slogLogger := NewSlogLogger(slog.New(slog.NewJSONHandler(&slogBuf, nil)))
+	slogLogger.LogError(context.Background(), &LogEntry{RequestID: "nil-error"}, nil)
+	if !strings.Contains(slogBuf.String(), "<nil>") {
+		t.Errorf("slog logger output = %q, want a nil error marker", slogBuf.String())
+	}
+}
+
 // mockLLM is a mock LLM for testing
 type mockLLM struct {
 	callFn   func(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)

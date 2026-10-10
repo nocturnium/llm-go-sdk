@@ -258,3 +258,9 @@ Also refreshed the verified rate cards for the same providers and extended
 | `.github/workflows/*` reference unreleased `actions/checkout@v7` | The tags exist: the GitHub tags API returns `v7.0.1`/`v7` for checkout and `v7.0.0`/`v7` for setup-go. |
 | `scripts/release-decide.sh` uses an undefined `$1` in `count()` | The filter is passed as `count`'s first positional argument, which `jq` receives through shell interpolation of `$1`; a direct invocation of the same function returns the expected count. |
 | `pkg/observability/otel_langfuse_test.go` leaves later tests on the wrong recorder | The suite passes with `-shuffle` seeds 1-8 after the global-provider cleanup the file already performs. |
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/release.yml` uses unpublished action major versions | The GitHub tags API returns `v7` for Goreleaser, `v7` for upload-artifact, and `v8` for download-artifact; the workflow refs resolve. |
+| `internal/httpclient/security.go` accepts hostnames that resolve to private addresses | Literal-host checks are only the first layer; the shared transport's dial `Control` hook rejects private, loopback, link-local, and metadata addresses after DNS resolution. |
+| `llmadk` drops `GenerateContentConfig.Labels` | `Labels` is deliberately classified as ignored request metadata in `llmadk/fields.go`, and `TestUnsupportedFieldsCovered` pins that table. |

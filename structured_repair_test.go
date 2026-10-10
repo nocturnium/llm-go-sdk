@@ -72,6 +72,19 @@ func TestExtractJSON(t *testing.T) {
 	}
 }
 
+// A valid but unrelated JSON value before the real object must not stop the
+// parser: GenerateTyped needs the candidate that matches its schema.
+func TestGenerateTyped_SkipsUnrelatedJSONValue(t *testing.T) {
+	llm := &repairScriptLLM{responses: []string{`prefix [1] then {"name":"Ada","age":36}`}}
+	got, _, err := GenerateTyped[person](context.Background(), llm, []Message{{Role: RoleUser, Content: "x"}})
+	if err != nil {
+		t.Fatalf("GenerateTyped: %v", err)
+	}
+	if got.Name != "Ada" || got.Age != 36 {
+		t.Errorf("got %+v, want {Ada 36}", got)
+	}
+}
+
 // GenerateTyped should recover JSON wrapped in markdown fences via local
 // extraction, in a single model call.
 func TestGenerateTyped_LocalExtraction(t *testing.T) {

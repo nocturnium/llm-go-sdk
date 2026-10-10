@@ -152,6 +152,10 @@ func (l *SlogLogger) buildResponseAttrs(entry *LogEntry) []slog.Attr {
 }
 
 func (l *SlogLogger) buildErrorAttrs(entry *LogEntry, err error) []slog.Attr {
+	errorText := "<nil>"
+	if err != nil {
+		errorText = err.Error()
+	}
 	attrs := []slog.Attr{
 		slog.String("request_id", entry.RequestID),
 		slog.String("provider", string(entry.Provider)),
@@ -161,7 +165,7 @@ func (l *SlogLogger) buildErrorAttrs(entry *LogEntry, err error) []slog.Attr {
 		// Sanitize CR/LF in the error: an upstream/provider error can echo
 		// user-controlled input, so escape it like other user-influenced values
 		// to prevent forged log lines (CWE-117).
-		slog.String("error", sanitizeLogValue(err.Error())),
+		slog.String("error", sanitizeLogValue(errorText)),
 	}
 
 	// Add structured error information

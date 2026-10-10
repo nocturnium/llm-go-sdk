@@ -306,6 +306,16 @@ func TestValidateImageContent(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "url without host",
+			img:     &ImageContent{Source: testImageSource, Data: "https://"},
+			wantErr: true,
+		},
+		{
+			name:    "url with empty host",
+			img:     &ImageContent{Source: testImageSource, Data: "http://?x"},
+			wantErr: true,
+		},
+		{
 			name:    "base64 missing media type",
 			img:     &ImageContent{Source: contentTypeBase64, Data: "SGVsbG8="},
 			wantErr: true,
