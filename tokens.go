@@ -60,7 +60,7 @@ func (e *TokenEstimator) EstimateTokens(text string) int {
 	}
 
 	charsPerToken := e.CharsPerToken
-	if charsPerToken <= 0 {
+	if charsPerToken <= 0 || math.IsNaN(charsPerToken) || math.IsInf(charsPerToken, 0) {
 		charsPerToken = 4.0
 	}
 

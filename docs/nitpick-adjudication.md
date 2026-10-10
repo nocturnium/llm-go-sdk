@@ -264,3 +264,10 @@ Also refreshed the verified rate cards for the same providers and extended
 | `.github/workflows/release.yml` uses unpublished action major versions | The GitHub tags API returns `v7` for Goreleaser, `v7` for upload-artifact, and `v8` for download-artifact; the workflow refs resolve. |
 | `internal/httpclient/security.go` accepts hostnames that resolve to private addresses | Literal-host checks are only the first layer; the shared transport's dial `Control` hook rejects private, loopback, link-local, and metadata addresses after DNS resolution. |
 | `llmadk` drops `GenerateContentConfig.Labels` | `Labels` is deliberately classified as ignored request metadata in `llmadk/fields.go`, and `TestUnsupportedFieldsCovered` pins that table. |
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go` leaks credentials containing `?` or `#` before `@` | `url.Parse` rejects those forms with `invalid port`, and `errors_url_edge_test.go` already pins that the error string contains no credential prefix. |
+| `llmadk` classifies `FunctionCallingConfig.Mode` as translated, so `WithIgnore` cannot suppress `VALIDATED` | The table is a coverage map, not the enforcement point; `config.go` calls `reject(FieldValidatedFunctionCalling, false, "VALIDATED")`, and `TestTranslateFunctionCalling` covers both the rejection and the ignore override. |
+| `MetricsMiddleware.Call` returns the mock's `callResp` | `llms.LLM` has no `Call` method, so `MetricsMiddleware.Call` delegates to `GenerateContent` to obtain usage; the mock's `genResp` field is therefore correct. |
+| ElevenLabs duration fallback should ignore spacing and audio-event entries | The package doc and `TestTranscribe` deliberately define the fallback as `max(word.End)` over the provider words array, including spacing and audio events. |

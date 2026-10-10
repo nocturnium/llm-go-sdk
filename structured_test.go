@@ -298,6 +298,34 @@ func TestSchemaFrom_PromotedMarshalerIsString(t *testing.T) {
 
 type structuredEmbeddedTime struct{ time.Time }
 
+// A shallower promoted field shadows a deeper field with the same JSON name, so
+// the schema must keep the shallow one rather than dropping the name as though
+// the two were equally ambiguous.
+func TestSchemaFrom_ShallowEmbeddedFieldWins(t *testing.T) {
+	type Deep struct {
+		Name string `json:"name"`
+	}
+	type Mid struct {
+		Deep
+	}
+	type Shallow struct {
+		Name int `json:"name"`
+	}
+	type Doc struct {
+		Mid
+		Shallow
+	}
+	schema, err := SchemaFrom[Doc]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(schema, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	assertSchema(t, schemaProperties(t, decoded)["name"], map[string]any{"type": "integer"})
+}
+
 // TestSchemaFrom_JSONNumberIsNumeric pins that json.Number is described as a
 // JSON number. It implements both marshaler interfaces, but its wire form is a
 // number, so a string schema makes the model return a quoted value that

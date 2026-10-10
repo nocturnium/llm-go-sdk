@@ -537,7 +537,7 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		}
 		if extra > 0 {
 			rl.mu.Lock()
-			rl.tokenDebt += extra
+			rl.tokenDebt = saturatingAddInt(rl.tokenDebt, extra)
 			rl.mu.Unlock()
 		}
 	case actualTokens < rl.tokenEstimate:
@@ -562,6 +562,21 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		}
 		rl.mu.Unlock()
 	}
+}
+
+// saturatingAddInt adds two non-negative ints, clamping at maxInt instead of
+// overflowing into a negative value that later requests would treat as settled.
+func saturatingAddInt(a, b int) int {
+	if a < 0 {
+		a = 0
+	}
+	if b < 0 {
+		b = 0
+	}
+	if a > maxInt()-b {
+		return maxInt()
+	}
+	return a + b
 }
 
 // waitFailure classifies a limiter wait failure.

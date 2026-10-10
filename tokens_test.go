@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"math"
 	"testing"
 )
 
@@ -213,6 +214,17 @@ func TestTokenEstimator_ZeroCharsPerToken(t *testing.T) {
 
 	if result < 1 {
 		t.Errorf("expected at least 1 token, got %d", result)
+	}
+}
+
+// Non-finite configuration must fall back to the default rather than producing
+// a NaN/Inf conversion that becomes an implementation-defined int.
+func TestTokenEstimator_NonFiniteCharsPerToken(t *testing.T) {
+	for _, charsPerToken := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		estimator := &TokenEstimator{CharsPerToken: charsPerToken}
+		if got := estimator.EstimateTokens("Hello world"); got < 1 {
+			t.Errorf("CharsPerToken=%v: got %d, want a positive estimate", charsPerToken, got)
+		}
 	}
 }
 

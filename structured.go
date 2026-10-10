@@ -146,7 +146,7 @@ func parseTyped[T any](content string) (T, error) {
 	}
 	// A scalar T (string, number, bool) has no braces to scan for, but the
 	// response may still be a quoted scalar inside a markdown fence or prose.
-	if extracted, ok := extractScalarJSON(content); ok {
+	if extracted, ok := extractScalarJSONOutsideStructures(content); ok {
 		var v T
 		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
 			return v, nil
@@ -160,7 +160,21 @@ func parseTyped[T any](content string) (T, error) {
 // null) embedded in s. Strings are found by their quotes; bare scalars are tried
 // at each position that could begin one. It returns ok=false when none parses.
 func extractScalarJSON(s string) (string, bool) {
-	for i := 0; i < len(s); i++ {
+	return extractScalarJSONOutsideStructures(s)
+}
+
+// extractScalarJSONOutsideStructures finds a scalar only outside balanced JSON
+// objects and arrays. Without that boundary a string schema could consume an
+// object key (for example `"name"` from `{"name":"Ada"}`) and report success
+// with a value that is not the response.
+func extractScalarJSONOutsideStructures(s string) (string, bool) {
+	for i := 0; i < len(s); {
+		if s[i] == '{' || s[i] == '[' {
+			if candidate, ok := balancedJSONAt(s, i); ok {
+				i += len(candidate)
+				continue
+			}
+		}
 		switch s[i] {
 		case '"':
 			if candidate, ok := quotedJSONAt(s, i); ok {
@@ -178,6 +192,7 @@ func extractScalarJSON(s string) (string, bool) {
 				}
 			}
 		}
+		i++
 	}
 	return "", false
 }
@@ -341,21 +356,56 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 }
 
 func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any, error) {
+	properties, _, err := schemaForStructDepth(typ, seen)
+	if err != nil {
+		return nil, err
+	}
+	required := make([]string, 0, len(properties))
+	for name := range properties {
+		required = appendUnique(required, name)
+	}
+	schema := map[string]any{
+		schemaKeyType:          "object",
+		"properties":           properties,
+		"additionalProperties": false,
+	}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema, nil
+}
+
+// schemaField is one JSON-named property discovered while walking a struct.
+// Depth is relative to the struct at the root of the current walk: direct fields
+// are depth 0, fields promoted through one embedding are depth 1, and so on.
+// Count records how many fields were found at the shallowest depth; more than one
+// is ambiguous and encoding/json drops the name.
+type schemaField struct {
+	schema map[string]any
+	depth  int
+	count  int
+}
+
+// schemaForStructDepth returns the object properties for typ and the depth at
+// which each property is promoted relative to typ. encoding/json chooses the
+// shallowest field and treats equal-depth duplicates as ambiguous, so callers
+// must preserve these depths when merging an embedded struct.
+func schemaForStructDepth(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any, map[string]int, error) {
 	seen[typ] = true
 	defer delete(seen, typ)
 
-	properties := make(map[string]any)
-	required := make([]string, 0)
-	// promoted counts how many same-depth embedded structs promote each JSON
-	// name. encoding/json drops a field two embedded structs promote at the same
-	// depth as ambiguous, so the schema must drop it too rather than ask the
-	// model for a value Unmarshal will discard.
-	promoted := make(map[string]int)
-	// directCount counts named fields at this struct's own depth that share a
-	// JSON name. encoding/json treats two same-depth duplicate names as
-	// ambiguous and ignores the value, so a schema that required the field would
-	// accept a response whose Go field stays zero.
-	directCount := make(map[string]int)
+	fields := make(map[string]schemaField)
+
+	add := func(name string, depth int, fieldSchema map[string]any) {
+		prior, ok := fields[name]
+		switch {
+		case !ok || depth < prior.depth:
+			fields[name] = schemaField{schema: fieldSchema, depth: depth, count: 1}
+		case depth == prior.depth:
+			prior.count++
+			fields[name] = prior
+		}
+	}
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -380,19 +430,17 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 		// them. An embedded field WITH a json name falls through to be treated as
 		// a normal named field.
 		if field.Anonymous {
-			props, ok, err := mergeEmbeddedSchema(field, seen)
+			props, depths, ok, err := mergeEmbeddedSchema(field, seen)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if ok {
 				for k, v := range props {
-					promoted[k]++
-					// A direct field of the same name (shallower) wins, so do not
-					// overwrite it; a collision between two embedded structs is
-					// resolved as ambiguous below.
-					if _, exists := properties[k]; !exists {
-						properties[k] = v
+					property, isMap := v.(map[string]any)
+					if !isMap {
+						continue
 					}
+					add(k, depths[k]+1, property)
 				}
 				continue
 			}
@@ -405,7 +453,7 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 
 		fieldSchema, err := schemaForType(field.Type, seen)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// The json ",string" option makes encoding/json emit the field as a
 		// quoted JSON string regardless of the Go type, so the model must be told
@@ -413,37 +461,19 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 		if jsonFieldStringOption(field) {
 			fieldSchema = map[string]any{schemaKeyType: schemaTypeString}
 		}
-		properties[name] = fieldSchema
-		directCount[name]++
-		if directCount[name] > 1 {
-			// The second same-depth field makes the name ambiguous; keep the
-			// property out of the schema entirely so the model is not asked for a
-			// value Unmarshal will discard.
-			delete(properties, name)
-		}
+		add(name, 0, fieldSchema)
 	}
 
-	// A direct field shadows any embedded field of the same name, so only a
-	// collision among embedded structs is ambiguous. Drop those from the
-	// properties; the required list is rebuilt from what survives.
-	for name, count := range promoted {
-		if count > 1 && directCount[name] == 0 {
-			delete(properties, name)
+	properties := make(map[string]any, len(fields))
+	depths := make(map[string]int, len(fields))
+	for name, field := range fields {
+		if field.count > 1 {
+			continue
 		}
+		properties[name] = field.schema
+		depths[name] = field.depth
 	}
-	for name := range properties {
-		required = appendUnique(required, name)
-	}
-
-	schema := map[string]any{
-		schemaKeyType:          "object",
-		"properties":           properties,
-		"additionalProperties": false,
-	}
-	if len(required) > 0 {
-		schema["required"] = required
-	}
-	return schema, nil
+	return properties, depths, nil
 }
 
 // mergeEmbeddedSchema returns the properties an anonymous embedded struct
@@ -453,13 +483,13 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 // caller handles it as a normal field. The caller merges the returned properties
 // so it can resolve same-depth conflicts, which encoding/json treats as
 // ambiguous.
-func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) (props map[string]any, ok bool, err error) {
+func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) (props map[string]any, depths map[string]int, ok bool, err error) {
 	tag := field.Tag.Get("json")
 	if tag == "-" {
-		return nil, true, nil // embedded but explicitly skipped
+		return nil, nil, true, nil // embedded but explicitly skipped
 	}
 	if tag != "" && strings.Split(tag, ",")[0] != "" {
-		return nil, false, nil // has an explicit json name, so a normal named field
+		return nil, nil, false, nil // has an explicit json name, so a normal named field
 	}
 
 	ft := field.Type
@@ -467,14 +497,14 @@ func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) 
 		ft = ft.Elem()
 	}
 	if ft.Kind() != reflect.Struct {
-		return nil, false, nil // embedded interface or named non-struct, so a normal field
+		return nil, nil, false, nil // embedded interface or named non-struct, so a normal field
 	}
 	// An embedded type with a special (non-object) schema, time.Time,
 	// json.Marshaler/TextMarshaler, json.RawMessage, marshals as a scalar and
 	// must stay unflattened rather than expand into its internal fields; treat it as a normal named
 	// field so schemaForType applies the special schema.
 	if _, special := specialSchemaForType(ft); special {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	// Recursion guard: schemaForStruct does not itself check seen (that guard
 	// lives in schemaForType), so a self- or mutually-recursive embedded struct
@@ -482,17 +512,14 @@ func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) 
 	// normal field path, which routes through schemaForType's seen guard and
 	// terminates with an unconstrained {}.
 	if seen[ft] {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 
-	embedded, err := schemaForStruct(ft, seen)
+	props, depths, err = schemaForStructDepth(ft, seen)
 	if err != nil {
-		return nil, true, err
+		return nil, nil, true, err
 	}
-	if embeddedProps, hasProps := embedded["properties"].(map[string]any); hasProps {
-		return embeddedProps, true, nil
-	}
-	return nil, true, nil
+	return props, depths, true, nil
 }
 
 // appendUnique appends each name to dst only if not already present.

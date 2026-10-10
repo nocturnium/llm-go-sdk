@@ -792,3 +792,20 @@ func TestRateLimiter_RecordTokens_LargeUsageDoesNotWrap(t *testing.T) {
 		t.Fatalf("tokenDebt after a MaxInt usage report = %d, want a positive debt", debt)
 	}
 }
+
+// Repeated large usage reports must saturate debt instead of wrapping negative,
+// which would make later requests look settled and bypass the limiter.
+func TestRateLimiter_RecordTokens_DebtSaturates(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(0))
+	rl.tokenDebt = maxInt() - 1
+	rl.RecordTokens(math.MaxInt)
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt < 0 {
+		t.Fatalf("tokenDebt overflowed to %d, want a non-negative saturated debt", debt)
+	}
+	if debt != maxInt() {
+		t.Fatalf("tokenDebt = %d, want saturation at %d", debt, maxInt())
+	}
+}
