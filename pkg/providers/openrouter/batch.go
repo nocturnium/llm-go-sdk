@@ -418,6 +418,12 @@ func (c *Client) WaitBatch(ctx context.Context, batchID string, opts ...WaitOpti
 	if interval <= 0 {
 		interval = defaultBatchPollInterval
 	}
+	// Clamp the initial interval to the cap. A caller-supplied interval larger
+	// than the cap would otherwise skip the backoff guard and, doubled, overflow
+	// into a negative duration passed to jitter.
+	if interval > maxBatchPollInterval {
+		interval = maxBatchPollInterval
+	}
 	deadline := time.Now().Add(batchVisibilityGrace)
 	for {
 		batch, err := c.GetBatch(ctx, batchID)
@@ -454,6 +460,9 @@ func isBatchNotYetVisible(err error, deadline time.Time) bool {
 
 // jitter spreads concurrent waiters by up to 10% of the interval.
 func jitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return 0
+	}
 	return d + time.Duration(rand.Int64N(int64(d)/10+1)) // #nosec G404 -- polling jitter for thundering-herd spread, not cryptography
 }
 

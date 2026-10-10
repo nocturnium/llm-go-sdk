@@ -205,7 +205,7 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 			if current != nil {
 				result = append(result, *current)
 			}
-			msgCopy := msg
+			msgCopy := cloneMessageSlices(msg)
 			current = &msgCopy
 			continue
 		}
@@ -248,7 +248,7 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 			if current != nil {
 				result = append(result, *current)
 			}
-			msgCopy := msg
+			msgCopy := cloneMessageSlices(msg)
 			current = &msgCopy
 		}
 	}
@@ -259,6 +259,21 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 	}
 
 	return result
+}
+
+// cloneMessageSlices copies the slice fields a merge can append to, so building
+// the merged message never writes into a slice the caller still owns. A plain
+// struct copy keeps the same backing arrays, and an append that has spare
+// capacity would write the merged parts into caller-visible storage.
+func cloneMessageSlices(msg Message) Message {
+	copyMsg := msg
+	if msg.Parts != nil {
+		copyMsg.Parts = append([]ContentPart(nil), msg.Parts...)
+	}
+	if msg.ToolCalls != nil {
+		copyMsg.ToolCalls = append([]ToolCall(nil), msg.ToolCalls...)
+	}
+	return copyMsg
 }
 
 // ConsolidateSystemMessages merges all system messages into a single system message

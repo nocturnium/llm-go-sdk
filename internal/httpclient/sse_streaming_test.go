@@ -11,6 +11,27 @@ import (
 	"time"
 )
 
+// TestSSEReader_CROnlyLineEndings pins that a stream using a bare CR as its line
+// terminator parses as multiple events. Splitting only on LF merged them into one
+// event and left the carriage returns in the data.
+func TestSSEReader_CROnlyLineEndings(t *testing.T) {
+	data := "event: message\rdata: hello\r\r" +
+		"event: ping\rdata: pong\r\r"
+	reader := NewSSEReader(io.NopCloser(strings.NewReader(data)))
+	defer func() { _ = reader.Close() }()
+
+	expected := []struct{ event, data string }{{"message", "hello"}, {"ping", "pong"}}
+	for i, exp := range expected {
+		event, err := reader.Read()
+		if err != nil {
+			t.Fatalf("event %d: %v", i, err)
+		}
+		if event.Event != exp.event || event.Data != exp.data {
+			t.Errorf("event %d = %q/%q, want %q/%q", i, event.Event, event.Data, exp.event, exp.data)
+		}
+	}
+}
+
 func TestSSEReader_LargeResponse(t *testing.T) {
 	// Generate 1000 chunks
 	var buf bytes.Buffer

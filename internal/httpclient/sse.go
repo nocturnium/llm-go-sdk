@@ -157,24 +157,35 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 	}
 }
 
+// readLine reads one line, including its terminator. LF, CRLF, and a bare CR
+// all terminate a line, and every terminator is normalized to "\n" so the
+// caller's TrimSuffix logic keeps working. The SSE spec accepts all three; a
+// reader that only splits on LF merges a CR-only stream into one line and
+// leaves the carriage returns in the data.
 func (r *SSEReader) readLine() (string, error) {
 	var line []byte
 	for {
-		fragment, err := r.br.ReadSlice('\n')
-		if len(line)+len(fragment) > maxSSEEventSize {
-			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
-		}
-		line = append(line, fragment...)
-		if errors.Is(err, bufio.ErrBufferFull) {
-			continue
-		}
+		b, err := r.br.ReadByte()
 		if err != nil {
 			if len(line) > 0 {
 				return string(line), err
 			}
 			return "", err
 		}
-		return string(line), nil
+		if len(line) >= maxSSEEventSize {
+			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
+		}
+		if b == '\n' {
+			return string(line) + "\n", nil
+		}
+		if b == '\r' {
+			// A CRLF pair is one terminator: consume the paired LF if present.
+			if next, peekErr := r.br.Peek(1); peekErr == nil && len(next) == 1 && next[0] == '\n' {
+				_, _ = r.br.ReadByte()
+			}
+			return string(line) + "\n", nil
+		}
+		line = append(line, b)
 	}
 }
 

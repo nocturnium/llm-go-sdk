@@ -16,7 +16,9 @@ func FilterModelsByType(models []ModelInfo, types ...ModelType) []ModelInfo {
 	if len(types) == 0 {
 		// Return a copy to prevent mutation of original
 		result := make([]ModelInfo, len(models))
-		copy(result, models)
+		for i, m := range models {
+			result[i] = cloneModelInfo(m)
+		}
 		return result
 	}
 
@@ -30,7 +32,7 @@ func FilterModelsByType(models []ModelInfo, types ...ModelType) []ModelInfo {
 	for _, m := range models {
 		for _, mt := range m.Types {
 			if _, ok := typeSet[mt]; ok {
-				result = append(result, m)
+				result = append(result, cloneModelInfo(m))
 				break
 			}
 		}
@@ -63,7 +65,7 @@ func FilterModelsByProvider(models []ModelInfo, provider Provider) []ModelInfo {
 	result := make([]ModelInfo, 0, len(models))
 	for _, m := range models {
 		if m.Provider == provider {
-			result = append(result, m)
+			result = append(result, cloneModelInfo(m))
 		}
 	}
 	return result
@@ -76,7 +78,7 @@ func FilterModelsByOrganization(models []ModelInfo, org string) []ModelInfo {
 	result := make([]ModelInfo, 0)
 	for _, m := range models {
 		if strings.ToLower(m.Organization) == orgLower {
-			result = append(result, m)
+			result = append(result, cloneModelInfo(m))
 		}
 	}
 	return result
@@ -87,7 +89,7 @@ func FilterModelsByMinContext(models []ModelInfo, minTokens int) []ModelInfo {
 	result := make([]ModelInfo, 0)
 	for _, m := range models {
 		if m.ContextLength >= minTokens {
-			result = append(result, m)
+			result = append(result, cloneModelInfo(m))
 		}
 	}
 	return result
@@ -101,7 +103,7 @@ func SearchModels(models []ModelInfo, query string) []ModelInfo {
 	for _, m := range models {
 		if strings.Contains(strings.ToLower(m.ID), queryLower) ||
 			strings.Contains(strings.ToLower(m.DisplayName), queryLower) {
-			result = append(result, m)
+			result = append(result, cloneModelInfo(m))
 		}
 	}
 	return result
@@ -111,7 +113,9 @@ func SearchModels(models []ModelInfo, query string) []ModelInfo {
 // Use descending=true for largest first, false for smallest first.
 func SortModelsByContextLength(models []ModelInfo, descending bool) []ModelInfo {
 	result := make([]ModelInfo, len(models))
-	copy(result, models)
+	for i, m := range models {
+		result[i] = cloneModelInfo(m)
+	}
 
 	sort.Slice(result, func(i, j int) bool {
 		if descending {
@@ -127,7 +131,9 @@ func SortModelsByContextLength(models []ModelInfo, descending bool) []ModelInfo 
 // Use descending=true for most expensive first.
 func SortModelsByInputPrice(models []ModelInfo, descending bool) []ModelInfo {
 	result := make([]ModelInfo, len(models))
-	copy(result, models)
+	for i, m := range models {
+		result[i] = cloneModelInfo(m)
+	}
 
 	sort.Slice(result, func(i, j int) bool {
 		priceI := 0.0
@@ -161,7 +167,9 @@ func SortModelsByInputPrice(models []ModelInfo, descending bool) []ModelInfo {
 // SortModelsByName sorts models alphabetically by ID.
 func SortModelsByName(models []ModelInfo, descending bool) []ModelInfo {
 	result := make([]ModelInfo, len(models))
-	copy(result, models)
+	for i, m := range models {
+		result[i] = cloneModelInfo(m)
+	}
 
 	sort.Slice(result, func(i, j int) bool {
 		if descending {
@@ -176,7 +184,9 @@ func SortModelsByName(models []ModelInfo, descending bool) []ModelInfo {
 // Use descending=true for newest first.
 func SortModelsByCreatedAt(models []ModelInfo, descending bool) []ModelInfo {
 	result := make([]ModelInfo, len(models))
-	copy(result, models)
+	for i, m := range models {
+		result[i] = cloneModelInfo(m)
+	}
 
 	sort.Slice(result, func(i, j int) bool {
 		if descending {
@@ -282,7 +292,9 @@ func ApplyModelFilters(models []ModelInfo, opts *ListModelsOptions) []ModelInfo 
 	} else {
 		// No type filter, make a copy
 		result = make([]ModelInfo, len(models))
-		copy(result, models)
+		for i, m := range models {
+			result[i] = cloneModelInfo(m)
+		}
 	}
 
 	// Apply limit if specified

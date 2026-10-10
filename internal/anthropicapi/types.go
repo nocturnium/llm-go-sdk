@@ -283,6 +283,11 @@ func (e *StreamEvent) UnmarshalJSON(data []byte) error {
 	}
 
 	*e = StreamEvent(alias)
+	// MessageDelta is tagged `json:"-"`, so the alias unmarshal above never
+	// clears it. A caller that reuses one StreamEvent across events would
+	// otherwise see a stale stop-reason delta on a later non-message_delta
+	// event.
+	e.MessageDelta = nil
 
 	// For message_delta events, the "delta" field contains MessageDelta data
 	if e.Type == "message_delta" {
