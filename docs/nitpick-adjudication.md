@@ -186,3 +186,24 @@ filtering the tool list in the ADK bridge.
 | `Config.EmbeddingModel` is dropped by the Mistral factory | `llms.Config` has no `EmbeddingModel` field, so no caller-supplied value is dropped. Every provider factory forwards `Model`, not an embedding model. |
 | `llmadk/config.go:182` treats the zero thinking level as unspecified | The empty `ThinkingLevel` being meaningful is the intended contract; see the note above. |
 | `pkg/observability/otel_langfuse_test.go:299` global tracer provider blocks later tests | The suite passes reliably with `-shuffle` seeds 1-5; latent only. |
+
+Follow-up rounds (21 and 22) on the same branch reported a still mostly different
+error set each run. Fixed from those rounds: a comparable-interface LLM key that
+panicked map insertion during cycle detection; a nil stream returned without an
+error in the OTel middleware; stale closed-state completions left outstanding
+across state transitions in the public circuit-breaker API; request parameters
+overwriting caller metadata in the log entry; data races on a counting test
+logger; a merge writing merged parts into a caller-owned slice; model filters and
+sorters returning shallow copies that aliased the caller's `Pricing` pointer and
+`Types` array; CR-only SSE line endings merged into one event in both SSE
+readers; a reused Anthropic `StreamEvent` keeping a stale `MessageDelta`; an
+oversized polling interval overflowing to a negative duration in the OpenRouter
+batch waiter; and the auto-release tag staying behind after a failed GoReleaser
+run, which would have skipped that commit's release forever.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `GetWithDefaults` should apply boolean capability defaults | The method documents defaults for the two numeric fields and is only called to fill `MaxContextTokens`/`MaxOutputTokens`; booleans have no comparable "unset" state, so a false cannot be distinguished from a deliberate false. |
+| `MetricsMiddleware.Call` should invoke the underlying `Call` | `LLM` has no `Call` method; the one-shot helper is the package function `llms.Call`, and routing through `GenerateContent` is the only way to obtain usage for cost and token metrics. The comment documents the choice. |
+| A custom `json.Marshaler`/`Unmarshaler` should not be forced to a string schema | The SDK defines the round-trip contract for these types as a JSON string; a type that marshals to another shape is not supported by the typed-decode path, and the existing test pins the string schema. |
+| `GenerateContentConfig.Labels` is silently dropped | `fields.go` marks it `ignored` deliberately: it is Google billing metadata ADK sets per agent, and rejecting it would break every ADK Go caller. The comment records the decision. |
