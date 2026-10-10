@@ -525,19 +525,23 @@ func toolDemoAction(c commandContext) error {
 	_, _ = fmt.Fprintln(c.out)
 
 	// Add assistant message with tool calls and tool response.
-	messages = append(messages,
-		llms.Message{
-			Role:      llms.RoleAssistant,
-			Content:   resp.Content,
-			ToolCalls: resp.ToolCalls,
-		},
-		llms.Message{
+	messages = append(messages, llms.Message{
+		Role:      llms.RoleAssistant,
+		Content:   resp.Content,
+		ToolCalls: resp.ToolCalls,
+	})
+	for _, call := range resp.ToolCalls {
+		name := ""
+		if call.Function != nil {
+			name = call.Function.Name
+		}
+		messages = append(messages, llms.Message{
 			Role:       llms.RoleTool,
 			Content:    weatherResult,
-			ToolCallID: resp.ToolCalls[0].ID,
-			Name:       resp.ToolCalls[0].Function.Name,
-		},
-	)
+			ToolCallID: call.ID,
+			Name:       name,
+		})
+	}
 
 	// Second call - model should respond with the weather info.
 	resp, err = client.GenerateContent(

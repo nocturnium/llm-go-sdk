@@ -102,6 +102,42 @@ func (r *CapabilityRegistry) GetWithDefaults(provider Provider, modelID string, 
 	if caps.MaxOutputTokens == 0 {
 		caps.MaxOutputTokens = defaults.MaxOutputTokens
 	}
+	if !caps.SupportsVision {
+		caps.SupportsVision = defaults.SupportsVision
+	}
+	if !caps.SupportsTools {
+		caps.SupportsTools = defaults.SupportsTools
+	}
+	if !caps.SupportsStreaming {
+		caps.SupportsStreaming = defaults.SupportsStreaming
+	}
+	if !caps.SupportsEmbeddings {
+		caps.SupportsEmbeddings = defaults.SupportsEmbeddings
+	}
+	if !caps.SupportsBatch {
+		caps.SupportsBatch = defaults.SupportsBatch
+	}
+	if !caps.SupportsJSON {
+		caps.SupportsJSON = defaults.SupportsJSON
+	}
+	if !caps.SupportsReasoning {
+		caps.SupportsReasoning = defaults.SupportsReasoning
+	}
+	if !caps.SupportsPromptCaching {
+		caps.SupportsPromptCaching = defaults.SupportsPromptCaching
+	}
+	if !caps.ImageGeneration {
+		caps.ImageGeneration = defaults.ImageGeneration
+	}
+	if !caps.VideoGeneration {
+		caps.VideoGeneration = defaults.VideoGeneration
+	}
+	if !caps.Speech {
+		caps.Speech = defaults.Speech
+	}
+	if !caps.Transcription {
+		caps.Transcription = defaults.Transcription
+	}
 
 	return caps
 }

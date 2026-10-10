@@ -213,6 +213,24 @@ func TestReasoningContentClone_IsolatesNestedMetadata(t *testing.T) {
 	}
 }
 
+// TestReasoningContentClone_DistinctEmptySliceTypes guards the clone memo key:
+// two zero-length slices can share a backing address but have different element
+// types, so keying only on pointer, length, and kind aliases one as the other.
+func TestReasoningContentClone_DistinctEmptySliceTypes(t *testing.T) {
+	original := &ReasoningContent{Metadata: map[string]any{
+		"ints":    []int{},
+		"strings": []string{},
+	}}
+
+	clone := original.Clone()
+	if _, ok := clone.Metadata["ints"].([]int); !ok {
+		t.Fatalf("ints cloned as %T, want []int", clone.Metadata["ints"])
+	}
+	if _, ok := clone.Metadata["strings"].([]string); !ok {
+		t.Fatalf("strings cloned as %T, want []string", clone.Metadata["strings"])
+	}
+}
+
 // TestReasoningContentClone_SelfReferentialMetadata pins that a self-referential
 // metadata value clones to a self-referential copy rather than recursing until
 // the stack overflows.

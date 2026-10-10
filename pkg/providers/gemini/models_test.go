@@ -489,6 +489,15 @@ func TestInferGeminiModelTypes_VisionAcrossFamilies(t *testing.T) {
 	}
 }
 
+// TestInferGeminiModelTypes_UnknownMethodSetsAreNotChat pins the discovery
+// fallback: a model that explicitly advertises neither generation nor embedding
+// methods must not be presented as a chat model.
+func TestInferGeminiModelTypes_UnknownMethodSetsAreNotChat(t *testing.T) {
+	if types := inferGeminiModelTypes("gemini-tuning-001", []string{"countTokens"}); len(types) != 0 {
+		t.Errorf("tuning model inferred as %v, want no model types", types)
+	}
+}
+
 func containsModelType(types []llms.ModelType, want llms.ModelType) bool {
 	for _, t := range types {
 		if t == want {

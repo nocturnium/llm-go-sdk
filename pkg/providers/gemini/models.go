@@ -404,6 +404,13 @@ func inferGeminiModelTypes(id string, methods []string) []llms.ModelType {
 				return []llms.ModelType{llms.ModelTypeEmbedding}
 			}
 		}
+		// A populated method list that names neither generation nor embeddings
+		// describes a tuning or prediction model. An empty list carries no
+		// information (cached/manual entries), so fall through to the ID-based
+		// inference below.
+		if len(methods) > 0 {
+			return nil
+		}
 	}
 
 	// Gemini 1.5 and everything after it takes image input, so the check has to

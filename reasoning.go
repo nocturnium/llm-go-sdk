@@ -130,9 +130,10 @@ func cloneMetadataValue(v any) any {
 // length (overlapping subslices) are treated as distinct values rather than one
 // returning the other's clone.
 type cloneKey struct {
-	ptr  uintptr
-	len  int
-	kind reflect.Kind
+	ptr   uintptr
+	len   int
+	kind  reflect.Kind
+	type_ reflect.Type
 }
 
 func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Value {
@@ -146,7 +147,7 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 		if v.IsNil() {
 			return v
 		}
-		key := cloneKey{ptr: v.Pointer(), kind: v.Kind()}
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), type_: v.Type()}
 		if cp, ok := seen[key]; ok {
 			return cp
 		}
@@ -158,7 +159,7 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 		if v.IsNil() {
 			return v
 		}
-		key := cloneKey{ptr: v.Pointer(), len: v.Len(), kind: v.Kind()}
+		key := cloneKey{ptr: v.Pointer(), len: v.Len(), kind: v.Kind(), type_: v.Type()}
 		if cp, ok := seen[key]; ok {
 			return cp
 		}

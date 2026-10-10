@@ -185,6 +185,12 @@ func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
 	case CircuitOpen:
 		// Check if enough time has passed to try again
 		if time.Since(cb.lastFailureTime) >= cb.resetTimeout {
+			// A closed-state request admitted before the breaker opened still
+			// carries no probe token. Wait for it to settle before entering
+			// half-open; otherwise its completion could be mistaken for a probe.
+			if cb.inflightClosed > 0 {
+				return false, false
+			}
 			cb.transitionTo(CircuitHalfOpen)
 			cb.halfOpenCount = 1
 			return true, true
@@ -213,9 +219,8 @@ func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
 func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	// Classify under the write lock: an Allow between a separate probe check and
-	// this update could otherwise flip inflightClosed and misclassify either a
-	// stale closed-state completion or a real half-open probe.
+	// acquire defers the open-to-half-open transition until every closed-state
+	// request has settled, so in half-open a public success is always a probe.
 	cb.recordSuccessLocked(cb.inflightClosed == 0)
 }
 

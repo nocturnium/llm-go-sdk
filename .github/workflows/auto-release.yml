@@ -136,6 +136,7 @@ jobs:
           GORELEASER_PREVIOUS_TAG: ${{ needs.version.outputs.previous }}
 
       - name: Upload release artifacts
+        id: artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-artifacts-${{ needs.version.outputs.version }}
@@ -148,7 +149,10 @@ jobs:
       # forever. Only remove a tag this run created, so a reused or pre-existing
       # tag is never touched.
       - name: Remove the tag if the release failed
-        if: failure() && steps.tag.outputs.created == 'true'
+        # GoReleaser has already published the GitHub release by this point. A
+        # transient artifact-upload failure must not delete the release's tag,
+        # or the next run would compute a different version baseline.
+        if: failure() && steps.tag.outputs.created == 'true' && steps.artifacts.outcome != 'failure'
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
