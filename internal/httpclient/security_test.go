@@ -216,6 +216,18 @@ func TestValidateURL_ObfuscatedIPv4Literals(t *testing.T) {
 	}
 }
 
+// TestValidateURL_TrailingDotHost pins that the DNS root label cannot smuggle a
+// blocked hostname past the suffix comparisons: "localhost." resolves exactly
+// like "localhost".
+func TestValidateURL_TrailingDotHost(t *testing.T) {
+	opts := DefaultURLValidationOptions()
+	for _, host := range []string{"localhost.", "metadata.google.internal.", "127.0.0.1."} {
+		if err := ValidateURL("https://"+host+"/api", opts); err == nil {
+			t.Errorf("expected %q to be blocked", host)
+		}
+	}
+}
+
 func TestValidateNotPrivateIP_NAT64EmbeddedPrivateIPv4(t *testing.T) {
 	tests := []struct {
 		name string

@@ -149,6 +149,9 @@ func parseIPLiteral(host string) net.IP {
 
 // validateNotPrivateHost checks if a host resolves to a private or internal IP
 func validateNotPrivateHost(host string) error {
+	// A trailing dot is the DNS root label: "localhost." resolves exactly like
+	// "localhost" but fails every suffix comparison below.
+	host = strings.TrimSuffix(host, ".")
 	// Check if it's a direct IP address
 	if ip := parseIPLiteral(host); ip != nil {
 		return validateNotPrivateIP(ip)

@@ -85,11 +85,15 @@ const maxUnwrapDepth = 10000
 func llmIdentity(llm LLM) (any, bool) {
 	v := reflect.ValueOf(llm)
 	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
+	case reflect.Chan, reflect.Map, reflect.Pointer, reflect.UnsafePointer:
 		if v.IsNil() {
 			return nil, false
 		}
-		return v.Pointer(), true
+		return struct {
+			kind  reflect.Kind
+			type_ reflect.Type
+			ptr   uintptr
+		}{kind: v.Kind(), type_: v.Type(), ptr: v.Pointer()}, true
 	default:
 		return nil, false
 	}

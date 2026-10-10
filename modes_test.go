@@ -56,8 +56,8 @@ func TestModeUsesPublishedRatesNotAMultiplier(t *testing.T) {
 		wantInput  float64
 		wantOutput float64
 	}{
-		{"gpt-5.6-sol", PricingModeBatch, 4.00, 15.00}, // long-context batch tier
-		{"gpt-5.6-sol", PricingModeFlex, 4.00, 15.00},  // long-context flex tier
+		{"gpt-5.6-sol", PricingModeBatch, 4.00, 15.00},  // long-context batch tier
+		{"gpt-5.6-sol", PricingModeFlex, 4.00, 15.00},   // long-context flex tier
 		{"gpt-5.6-sol", PricingModeFast, 8.00, 40.00},   // 2.0x standard
 		{"gpt-5.5", PricingModeFast, 12.50, 75.00},      // 2.5x standard
 		{"gpt-5.4-mini", PricingModeFast, 1.50, 9.00},   // 2.0x standard

@@ -44,8 +44,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		fields["prompt"] = o.Prompt
 	}
 	format := "json"
-	if o.Diarize || o.WordTimestamps || o.Language != "" {
+	if o.Diarize || o.WordTimestamps {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
+	}
+	if o.Language != "" {
+		fields["language"] = o.Language
 	}
 	for _, term := range o.Keyterms {
 		files = append(files, httpclient.MultipartFile{Field: "hotwords[]", Data: []byte(term)})

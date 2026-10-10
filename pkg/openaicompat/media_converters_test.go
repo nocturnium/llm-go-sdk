@@ -61,6 +61,21 @@ func TestMediaImageConverters(t *testing.T) {
 	}
 }
 
+// TestMarshalMediaExtra_PreservesLargeIntegers pins that a provider-specific
+// integer above 2^53 round-trips exactly instead of being rounded through a
+// float64 decode.
+func TestMarshalMediaExtra_PreservesLargeIntegers(t *testing.T) {
+	data, err := marshalMediaExtra(struct {
+		Seed int64 `json:"seed"`
+	}{Seed: 9007199254740993}, map[string]any{"n": 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "9007199254740993") {
+		t.Fatalf("large integer lost precision: %s", data)
+	}
+}
+
 func TestMediaSpeechConverters(t *testing.T) {
 	req := BuildSpeechRequest("default", "你好", &llms.SpeechOptions{})
 	if req.Model != "default" || req.ResponseFormat != "mp3" || req.Voice != "alloy" {

@@ -205,7 +205,9 @@ func main() {
     fmt.Printf("Prep:   %d min\n", recipe.PrepMinutes)
     fmt.Printf("Veg:    %v\n", recipe.Vegetarian)
     fmt.Printf("Items:  %v\n", recipe.Ingredients)
-    fmt.Printf("Tokens: %d\n", resp.Usage.TotalTokens)
+    if resp.Usage != nil {
+        fmt.Printf("Tokens: %d\n", resp.Usage.TotalTokens)
+    }
 }
 ```
 

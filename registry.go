@@ -16,6 +16,9 @@ import (
 // common SDK field. Recognized keys:
 //   - runpod: ExtraRunPodEndpointID sets the required serverless endpoint ID.
 //   - zai: ExtraZAICoding set to "true", "1", or "yes" enables the Coding API.
+//   - ollama, llamacpp: ExtraDisallowPrivateIPs / ExtraDisallowHTTP force the
+//     shared SSRF and HTTPS checks back on for a non-local deployment.
+//   - mistral: ExtraEmbeddingModel selects the default embedding model.
 type Config struct {
 	APIKey  string
 	Model   string
@@ -43,6 +46,21 @@ const (
 
 	// ExtraZAICoding is the Config.Extra key for enabling the optional Z.AI Coding API endpoint.
 	ExtraZAICoding = "coding"
+
+	// ExtraDisallowPrivateIPs is the Config.Extra key that forces the shared
+	// private-IP restriction on providers (Ollama, llama.cpp) whose local
+	// default relaxes it. Presence of the key is what matters; the value is
+	// ignored.
+	ExtraDisallowPrivateIPs = "disallow_private_ips"
+
+	// ExtraDisallowHTTP is the Config.Extra key that forces HTTPS on providers
+	// (Ollama, llama.cpp) whose local default permits plain HTTP. Presence of
+	// the key is what matters; the value is ignored.
+	ExtraDisallowHTTP = "disallow_http"
+
+	// ExtraEmbeddingModel is the Config.Extra key for providers whose embedding
+	// model has no common Config field.
+	ExtraEmbeddingModel = "embedding_model"
 )
 
 // RequireExtra returns the non-blank Config.Extra value for key.

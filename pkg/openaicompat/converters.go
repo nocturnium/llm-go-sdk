@@ -321,6 +321,9 @@ func compactToolCalls(calls []llms.ToolCall) []llms.ToolCall {
 
 // ConvertResponse converts an OpenAI-compatible response to llms.Response.
 func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
+	if resp == nil {
+		return &llms.Response{}
+	}
 	if len(resp.Choices) == 0 {
 		return &llms.Response{ID: resp.ID, ServiceTier: resp.ServiceTier, ModelVersion: resp.Model}
 	}

@@ -2,12 +2,11 @@ package llamacpp
 
 import llms "github.com/nocturnium/llm-go-sdk/v6"
 
-// Nothing here can turn the SSRF relaxations off: llamacpp serves a loopback
-// endpoint by default, so this provider defaults AllowPrivateIPs and AllowHTTP
-// to true, a Config leaving them at their zero value is indistinguishable from
-// one setting them false, and New has no option that clears either flag. A
-// deployment that needs private-IP and plain-HTTP requests refused has to wrap
-// the client's transport itself.
+// llama.cpp serves a loopback endpoint by default, so this provider defaults
+// AllowPrivateIPs and AllowHTTP to true. Config's boolean zero value cannot
+// distinguish "unset" from "false", so Extra[llms.ExtraDisallowPrivateIPs]
+// and Extra[llms.ExtraDisallowHTTP] exist to force the shared SSRF/HTTPS
+// restrictions back on for deployments that need them.
 func init() {
 	llms.RegisterProvider("llamacpp", func(cfg llms.Config) (llms.LLM, error) {
 		opts := make([]Option, 0, 6)
@@ -26,11 +25,20 @@ func init() {
 		if cfg.HTTPClient != nil {
 			opts = append(opts, WithHTTPClient(cfg.HTTPClient))
 		}
+		// Apply the zero-value-compatible allowances first, then the Extra
+		// opt-outs last so an explicit disallow key wins over AllowPrivateIPs or
+		// AllowHTTP being set.
 		if cfg.AllowPrivateIPs {
 			opts = append(opts, WithAllowPrivateIPs())
 		}
 		if cfg.AllowHTTP {
 			opts = append(opts, WithAllowHTTP())
+		}
+		if _, ok := cfg.Extra[llms.ExtraDisallowPrivateIPs]; ok {
+			opts = append(opts, WithDisallowPrivateIPs())
+		}
+		if _, ok := cfg.Extra[llms.ExtraDisallowHTTP]; ok {
+			opts = append(opts, WithDisallowHTTP())
 		}
 		return New(opts...)
 	})

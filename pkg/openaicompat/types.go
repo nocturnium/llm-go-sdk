@@ -5,6 +5,7 @@ package openaicompat
 // documentation lives in doc.go.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -453,8 +454,13 @@ func marshalMediaExtra(value any, extra map[string]any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decode numbers as json.Number rather than float64. Re-marshaling a
+	// float64 rounds integers above 2^53, silently changing provider-specific
+	// IDs or seed values that happen to be large.
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
 	var fields map[string]any
-	if err := json.Unmarshal(data, &fields); err != nil {
+	if err := decoder.Decode(&fields); err != nil {
 		return nil, err
 	}
 	for key, value := range extra {

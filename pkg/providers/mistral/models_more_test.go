@@ -372,3 +372,22 @@ func TestRegisteredFactory(t *testing.T) {
 		t.Errorf("expected provider mistral, got %s", client.Provider())
 	}
 }
+
+// TestRegisteredFactoryEmbeddingModelExtra pins that a deployment can select
+// the embedding model through the common Config.Extra map.
+func TestRegisteredFactoryEmbeddingModelExtra(t *testing.T) {
+	client, err := llms.New("mistral", llms.Config{
+		APIKey: "test-key",
+		Extra:  map[string]string{llms.ExtraEmbeddingModel: "mistral-embed"},
+	})
+	if err != nil {
+		t.Fatalf("llms.New(mistral) failed: %v", err)
+	}
+	got, ok := client.(*Client)
+	if !ok {
+		t.Fatalf("factory returned %T, want *Client", client)
+	}
+	if got.options.EmbeddingModel != "mistral-embed" {
+		t.Errorf("EmbeddingModel = %q, want mistral-embed", got.options.EmbeddingModel)
+	}
+}

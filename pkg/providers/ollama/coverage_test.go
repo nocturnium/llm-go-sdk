@@ -197,6 +197,38 @@ func TestRegisterFactoryMinimalConfig(t *testing.T) {
 	}
 }
 
+// TestRegisterFactoryDisallowExtra pins the opt-out that makes an Ollama client
+// usable against a non-loopback endpoint without relaxing SSRF checks. The
+// disallow keys must win even when AllowPrivateIPs/AllowHTTP are set.
+func TestRegisterFactoryDisallowExtra(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "")
+	t.Setenv("OLLAMA_API_KEY", "")
+
+	llm, err := llms.New("ollama", llms.Config{
+		Model:           "llama3.2",
+		BaseURL:         "https://ollama.example.com/v1",
+		AllowPrivateIPs: true,
+		AllowHTTP:       true,
+		Extra: map[string]string{
+			llms.ExtraDisallowPrivateIPs: "true",
+			llms.ExtraDisallowHTTP:       "true",
+		},
+	})
+	if err != nil {
+		t.Fatalf("llms.New(ollama): %v", err)
+	}
+	client, ok := llm.(*Client)
+	if !ok {
+		t.Fatalf("factory returned %T, want *Client", llm)
+	}
+	if client.options.AllowPrivateIPs {
+		t.Error("AllowPrivateIPs = true, want false (disallow key must win)")
+	}
+	if client.options.AllowHTTP {
+		t.Error("AllowHTTP = true, want false (disallow key must win)")
+	}
+}
+
 // newModelsServer returns a test server that answers the OpenAI-compatible
 // /v1/models endpoint with a fixed model list.
 func newModelsServer(t *testing.T) *httptest.Server {

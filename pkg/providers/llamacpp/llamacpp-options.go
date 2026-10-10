@@ -91,6 +91,22 @@ func WithAllowHTTP() Option {
 	}
 }
 
+// WithDisallowPrivateIPs clears the llama.cpp default that permits private and
+// loopback addresses. Use it for a remote endpoint whose URL must still be
+// subject to the shared SSRF check.
+func WithDisallowPrivateIPs() Option {
+	return func(o *options) {
+		o.AllowPrivateIPs = false
+	}
+}
+
+// WithDisallowHTTP clears the llama.cpp default that permits plain-HTTP URLs.
+func WithDisallowHTTP() Option {
+	return func(o *options) {
+		o.AllowHTTP = false
+	}
+}
+
 // apply applies the options to the default options.
 func apply(opts ...Option) *options {
 	options := defaultOptions()

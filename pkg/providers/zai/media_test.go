@@ -101,6 +101,31 @@ func TestMediaTranscription_Validation(t *testing.T) {
 	}
 }
 
+// TestMediaTranscription_Language pins that a supported language hint reaches
+// the request instead of being rejected as an invalid parameter.
+func TestMediaTranscription_Language(t *testing.T) {
+	sawLanguage := make(chan string, 1)
+	c := mediaTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseMultipartForm(1 << 20)
+		sawLanguage <- r.FormValue("language")
+		fmt.Fprint(w, `{"text":"hello"}`)
+	})
+	if _, err := c.Transcribe(context.Background(),
+		llms.MediaInput{Data: []byte("RIFF"), MIMEType: "audio/wav"},
+		llms.WithTranscribeLanguage("zh"),
+	); err != nil {
+		t.Fatalf("language hint rejected: %v", err)
+	}
+	select {
+	case got := <-sawLanguage:
+		if got != "zh" {
+			t.Errorf("language = %q, want zh", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("handler never ran")
+	}
+}
+
 func TestMediaTranscription_Errors(t *testing.T) {
 	for _, body := range []string{`{`, `{"error":{"code":"1113","message":"balance"}}`} {
 		t.Run(body, func(t *testing.T) {

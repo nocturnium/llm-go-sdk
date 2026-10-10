@@ -489,6 +489,9 @@ func toolDemoAction(c commandContext) error {
 		_, _ = fmt.Fprintln(c.out, "Model response (no tool call):", resp.Content)
 		return nil
 	}
+	if resp.ToolCalls[0].Function == nil {
+		return fmt.Errorf("model returned a tool call without a function")
+	}
 
 	_, _ = fmt.Fprintf(c.out, "Model requested tool call: %s\n", resp.ToolCalls[0].Function.Name)
 	_, _ = fmt.Fprintf(c.out, "Arguments: %s\n", resp.ToolCalls[0].Function.Arguments)
