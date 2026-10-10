@@ -662,3 +662,54 @@ func TestRateLimiter_TokenBurstCoversEstimate(t *testing.T) {
 		t.Fatalf("tokenBucketBurst() = %d, want at least the 1000-token estimate", got)
 	}
 }
+
+// A request whose token wait fails must not consume request capacity. The
+// blocking path used to spend a request token before discovering the token
+// bucket could not be met, so a call that never started pushed the next request
+// over the request limit.
+func TestRateLimiter_TokenWaitFailureRefundsRequestCapacity(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithRequestBurst(2),
+		WithTokensPerMinute(600),
+		WithTokenEstimate(1000),
+		WithBlocking(true),
+		WithWaitTimeout(20*time.Millisecond),
+	)
+
+	// Exhaust the token bucket so the next token wait must block past the wait
+	// timeout. The request bucket still has capacity.
+	if err := rl.WaitN(context.Background(), 1, 600); err != nil {
+		t.Fatalf("initial WaitN failed: %v", err)
+	}
+	if err := rl.WaitN(context.Background(), 1, 600); !errors.Is(err, ErrRateLimitTimeout) {
+		t.Fatalf("second WaitN = %v, want ErrRateLimitTimeout", err)
+	}
+
+	// The failed call must not have spent request capacity: one request should
+	// still be immediately available.
+	if err := rl.WaitN(context.Background(), 1, 0); err != nil {
+		t.Fatalf("request capacity was consumed by the failed token wait: %v", err)
+	}
+}
+
+// The non-blocking path must not spend request capacity when the token bucket
+// is exhausted.
+func TestRateLimiter_TryAcquire_TokenFailureRefundsRequestCapacity(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithRequestBurst(2),
+		WithTokensPerMinute(600),
+		WithTokenEstimate(1000),
+		WithBlocking(false),
+	)
+	if err := rl.WaitN(context.Background(), 1, 600); err != nil {
+		t.Fatalf("initial WaitN failed: %v", err)
+	}
+	if err := rl.WaitN(context.Background(), 1, 600); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("second WaitN = %v, want ErrRateLimitExceeded", err)
+	}
+	if err := rl.WaitN(context.Background(), 1, 0); err != nil {
+		t.Fatalf("request capacity was consumed by the failed token acquire: %v", err)
+	}
+}

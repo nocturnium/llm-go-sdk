@@ -98,7 +98,8 @@ func runToolExample(ctx context.Context, client llms.LLM, prompt string, tools [
 	fmt.Printf("User: %s\n\n", prompt)
 
 	// Loop to handle tool calls
-	for i := 0; i < 5; i++ { // Max 5 iterations to prevent infinite loops
+	const maxIterations = 5 // Cap tool-call rounds to prevent infinite loops.
+	for i := 0; i < maxIterations; i++ {
 		resp, err := client.GenerateContent(ctx, messages,
 			llms.WithTools(tools),
 		)
@@ -135,9 +136,13 @@ func runToolExample(ctx context.Context, client llms.LLM, prompt string, tools [
 		} else {
 			// No more tool calls, we have the final response
 			fmt.Printf("Assistant: %s\n", resp.Content)
-			break
+			return
 		}
 	}
+
+	// The model kept requesting tools past the cap, so there is no final
+	// assistant response to show. Say so rather than ending as if it completed.
+	fmt.Printf("Reached the %d-iteration tool-call limit without a final response.\n", maxIterations)
 }
 
 // executeTool simulates executing a tool and returning results.

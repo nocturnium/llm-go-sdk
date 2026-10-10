@@ -379,7 +379,7 @@ func TestTranslate_Tools(t *testing.T) {
 		{"auto with allow list filters", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAuto, AllowedFunctionNames: []string{"b"}}, []string{"b"}, "", ""},
 		{"none", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeNone}, []string{"a", "b", "c"}, llms.ToolChoiceNone, ""},
 		{"any", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny}, []string{"a", "b", "c"}, llms.ToolChoiceRequired, ""},
-		{"any one", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny, AllowedFunctionNames: []string{"c"}}, []string{"a", "b", "c"}, llms.ToolChoiceTool, "c"},
+		{"any one", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny, AllowedFunctionNames: []string{"c"}}, []string{"c"}, llms.ToolChoiceTool, "c"},
 		{"any several", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny, AllowedFunctionNames: []string{"a", "c"}}, []string{"a", "c"}, llms.ToolChoiceRequired, ""},
 	}
 	for _, tt := range modes {

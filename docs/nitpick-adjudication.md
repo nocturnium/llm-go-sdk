@@ -153,3 +153,36 @@ errors and tools, the fixture and live harnesses, the wire checks, and
 | --- | --- |
 | Gemini streamed tool calls get empty IDs on models before Gemini 3 (`gemini.go`) | The stream path calls `llms.EnsureToolCallIDs` on the accumulated calls before the final chunk, so an absent native ID is minted; `TestStream_IdentityAndToolCallContract` asserts two distinct minted IDs. |
 | The new Gemini default `gemini-3.5-flash` does not exist | It is in the live `models.list` response for the account and answered a live call on 2026-09-26; the llmadk live gate ran the 3.5 family. |
+
+## Security and accounting remediation (2026-10-09, branch feat/security-accounting-pricing-remediation)
+
+Two `nitpick full-review` runs (`gpt-5.6-luna` review and triage, `min_severity:
+warning`) over the whole tree. The reviewer's error set is largely nondeterministic
+between runs: run 18 reported 7 errors, run 19 reported 16, run 20 reported 9, and
+the sets only partially overlap. Each reported error was reproduced or refuted
+against the code before acting.
+
+Fixed: nil-options panic in `WrapStream`/`WrapStreamWithFinalizer`; a duration
+that rounded to 2^63 and converted to a negative retry delay; the rate limiter
+spending request capacity before the token wait could be met; `Cache` missing
+from the response cache key (a `WithoutCache` call could read another call's
+usage and cost); conflicting embedded JSON names emitted as a schema field
+`encoding/json` then drops; `ExtraBody` keys the standard Anthropic fields own;
+assistant history serialized with `output_text` instead of `input_text` in the
+Responses input; CRLF-separated SSE events parsed as one; `ResultFn` invoked
+after cancellation in `PollingVideoJob.Wait`; `ErrEmptyInput` returned for an
+empty provider response to a nonempty query; `ValidationErrors{}` matching
+`ErrInvalidParameters`; a nil channel closed in `ProcessStream`; nil responses
+dereferenced in the OTel and Langfuse middlewares; a prerelease tag with a hyphen
+rejected by the release workflow; and a single-function `ANY` allow list not
+filtering the tool list in the ADK bridge.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `actions/checkout@v7` and `setup-go@v7` are not released refs, so CI fails at checkout (`ci.yml`) | Both are published major tags: the GitHub tags API returns `v7.0.1`/`v7` for checkout and `v7.0.0`/`v7` for setup-go. The claim is stale knowledge, not a broken workflow. |
+| `pkg/providers/synthetic` references an undefined `Client` type and cannot compile | `type Client struct` is defined in `synthetic.go`; `go build ./pkg/providers/synthetic/` exits 0. The reviewer saw `models.go` alone. |
+| `WithSpeechUsageHandler` is never wired into the client | `speech.go` reads `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event. The reviewer saw the options file alone. |
+| `resp.Usage` is a nil dereference in the structured-outputs guide | `Response.Usage` is a value field (`Usage`, not `*Usage`), so it cannot be nil; the example compiles and runs. |
+| `Config.EmbeddingModel` is dropped by the Mistral factory | `llms.Config` has no `EmbeddingModel` field, so no caller-supplied value is dropped. Every provider factory forwards `Model`, not an embedding model. |
+| `llmadk/config.go:182` treats the zero thinking level as unspecified | The empty `ThinkingLevel` being meaningful is the intended contract; see the note above. |
+| `pkg/observability/otel_langfuse_test.go:299` global tracer provider blocks later tests | The suite passes reliably with `-shuffle` seeds 1-5; latent only. |

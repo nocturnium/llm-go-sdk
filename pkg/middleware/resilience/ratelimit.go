@@ -207,32 +207,62 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	if b := requestLimiter.Burst(); b > 0 && requests > b {
 		requests = b
 	}
-	if err := requestLimiter.WaitN(waitCtx, requests); err != nil {
-		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
-			return failure
-		}
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-		// What is left is rate's own "would exceed context deadline", which is the
-		// wait running out of time rather than a permanent refusal.
+
+	// Reserve both buckets before waiting on either. Reserving the request
+	// bucket first and only then discovering the token bucket cannot be met
+	// would consume request capacity for a call that never starts, making the
+	// next request wait or fail. ReserveN takes the capacity immediately, so a
+	// failed or canceled wait must release every reservation it holds.
+	now := time.Now()
+	reqRes := requestLimiter.ReserveN(now, requests)
+	if !reqRes.OK() {
 		return ErrRateLimitTimeout
 	}
-
+	var tokRes *rate.Reservation
 	if tokenLimiter != nil && tokens > 0 {
-		// Never request more than the bucket can hold, or WaitN rejects it forever.
+		// Never request more than the bucket can hold, or the reservation is
+		// never granted.
 		if b := tokenLimiter.Burst(); tokens > b {
 			tokens = b
 		}
-		if err := tokenLimiter.WaitN(waitCtx, tokens); err != nil {
-			if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
-				return failure
+		tokRes = tokenLimiter.ReserveN(now, tokens)
+		if !tokRes.OK() {
+			reqRes.CancelAt(now)
+			return ErrRateLimitTimeout
+		}
+	}
+
+	delay := reqRes.Delay()
+	if tokRes != nil && tokRes.Delay() > delay {
+		delay = tokRes.Delay()
+	}
+	if delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-waitCtx.Done():
+			reqRes.Cancel()
+			if tokRes != nil {
+				tokRes.Cancel()
 			}
-			if errors.Is(err, context.Canceled) {
-				return err
+			if failure := rl.waitFailure(ctx, waitCtx, waitCtx.Err()); failure != nil {
+				return failure
 			}
 			return ErrRateLimitTimeout
 		}
+	}
+
+	// The deadline may have passed while delay was zero; release and report.
+	if err := waitCtx.Err(); err != nil {
+		reqRes.Cancel()
+		if tokRes != nil {
+			tokRes.Cancel()
+		}
+		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
+			return failure
+		}
+		return ErrRateLimitTimeout
 	}
 
 	return nil
@@ -248,7 +278,13 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 	if b := requestLimiter.Burst(); b > 0 && requests > b {
 		requests = b
 	}
-	if !requestLimiter.AllowN(time.Now(), requests) {
+	// Reserve the request bucket, then the token bucket. If the token bucket is
+	// unavailable, release the request reservation so a call that never started
+	// does not consume request capacity.
+	now := time.Now()
+	reqRes := requestLimiter.ReserveN(now, requests)
+	if !reqRes.OK() || reqRes.Delay() > 0 {
+		reqRes.CancelAt(now)
 		return ErrRateLimitExceeded
 	}
 
@@ -256,7 +292,10 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 		if b := tokenLimiter.Burst(); tokens > b {
 			tokens = b
 		}
-		if !tokenLimiter.AllowN(time.Now(), tokens) {
+		tokRes := tokenLimiter.ReserveN(now, tokens)
+		if !tokRes.OK() || tokRes.Delay() > 0 {
+			tokRes.CancelAt(now)
+			reqRes.CancelAt(now)
 			return ErrRateLimitExceeded
 		}
 	}

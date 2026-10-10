@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
 )
@@ -98,6 +99,22 @@ func TestRetryPolicy_GetDelay_NoMaxDelay(t *testing.T) {
 	result := policy.GetDelay(5)
 	if result != 0 {
 		t.Errorf("GetDelay with MaxDelay=0 should return 0, got %v", result)
+	}
+}
+
+// TestRetryPolicy_GetDelay_MaxDurationNoOverflow pins that a delay which rounds
+// to exactly 2^63 as a float does not convert to a negative time.Duration. A
+// negative delay would make a retry fire immediately instead of backing off.
+func TestRetryPolicy_GetDelay_MaxDurationNoOverflow(t *testing.T) {
+	policy := &RetryPolicy{
+		InitialDelay: time.Duration(math.MaxInt64),
+		MaxDelay:     time.Duration(math.MaxInt64),
+		Multiplier:   2.0,
+	}
+	for attempt := 1; attempt <= 8; attempt++ {
+		if got := policy.GetDelay(attempt); got < 0 {
+			t.Fatalf("GetDelay(%d) = %v, want non-negative", attempt, got)
+		}
 	}
 }
 

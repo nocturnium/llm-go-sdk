@@ -291,6 +291,14 @@ func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []llms.Me
 		m.recordError(ctx, span, err, attrs)
 		return nil, err
 	}
+	// An LLM implementation may return a nil response with a nil error; the
+	// declared return type permits it. Report it as an incomplete response
+	// rather than panicking on the usage dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", m.llm.Provider(), llms.ErrIncompleteResponse)
+		m.recordError(ctx, span, err, attrs)
+		return nil, err
+	}
 
 	m.promptTokens.Add(ctx, int64(resp.Usage.PromptTokens), metric.WithAttributes(attrs...))
 	m.completionTokens.Add(ctx, int64(resp.Usage.CompletionTokens), metric.WithAttributes(attrs...))

@@ -7,6 +7,43 @@ import (
 	"time"
 )
 
+// TestWrapStream_NilOptions verifies the wrappers tolerate a nil *CallOptions.
+// GetBufferSize accepts nil, so the send-timeout lookup must too rather than
+// dereferencing opts and panicking before a stream is returned.
+func TestWrapStream_NilOptions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	source := make(chan StreamChunk, 1)
+	source <- StreamChunk{Done: true}
+	close(source)
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("WrapStream with nil options panicked: %v", r)
+			}
+		}()
+		out := WrapStream(ctx, source, nil, nil)
+		for range out {
+		}
+	}()
+
+	source2 := make(chan StreamChunk, 1)
+	source2 <- StreamChunk{Done: true}
+	close(source2)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("WrapStreamWithFinalizer with nil options panicked: %v", r)
+			}
+		}()
+		out := WrapStreamWithFinalizer(ctx, source2, nil, nil, nil)
+		for range out {
+		}
+	}()
+}
+
 func TestCollectStream(t *testing.T) {
 	t.Run("clean stream returns content and terminal metadata", func(t *testing.T) {
 		usage := &Usage{PromptTokens: 3, CompletionTokens: 5, TotalTokens: 8}

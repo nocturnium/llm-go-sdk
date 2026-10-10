@@ -176,7 +176,6 @@ func TestDefaultCacheKey_CoversAllOutputAffectingOptions(t *testing.T) {
 	// CallOptions fields intentionally excluded from the key: they change cost,
 	// latency, transport, or observability, never the model's output.
 	excluded := map[string]bool{
-		"Cache":             true, // prompt-cache directive: same output, cheaper/faster
 		"EstimateTokens":    true, // post-hoc token counting
 		"StreamBufferSize":  true, // streaming transport (Stream is not cached)
 		"StreamSendTimeout": true, // streaming transport

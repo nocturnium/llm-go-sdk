@@ -478,7 +478,7 @@ func StreamText(stream <-chan StreamChunk) (string, error) {
 func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOptions, processor StreamProcessor) <-chan StreamChunk {
 	bufferSize := GetBufferSize(opts)
 	wrapped := make(chan StreamChunk, bufferSize)
-	sender := NewStreamSender(ctx, wrapped, opts.StreamSendTimeout)
+	sender := NewStreamSender(ctx, wrapped, GetSendTimeout(opts))
 
 	go func() {
 		defer close(wrapped)
@@ -545,7 +545,7 @@ func deliverTerminalForContext(ctx context.Context, sender *StreamSender) {
 func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opts *CallOptions, processor StreamProcessor, finalizer func()) <-chan StreamChunk {
 	bufferSize := GetBufferSize(opts)
 	wrapped := make(chan StreamChunk, bufferSize)
-	sender := NewStreamSender(ctx, wrapped, opts.StreamSendTimeout)
+	sender := NewStreamSender(ctx, wrapped, GetSendTimeout(opts))
 
 	go func() {
 		defer close(wrapped)

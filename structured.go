@@ -259,6 +259,12 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 
 	properties := make(map[string]any)
 	required := make([]string, 0)
+	// promoted counts how many same-depth embedded structs promote each JSON
+	// name. encoding/json drops a field two embedded structs promote at the same
+	// depth as ambiguous, so the schema must drop it too rather than ask the
+	// model for a value Unmarshal will discard.
+	promoted := make(map[string]int)
+	direct := make(map[string]bool)
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -272,12 +278,20 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 		// them. An embedded field WITH a json name falls through to be treated as
 		// a normal named field.
 		if field.Anonymous {
-			promoted, ok, err := mergeEmbeddedSchema(field, properties, seen)
+			props, ok, err := mergeEmbeddedSchema(field, seen)
 			if err != nil {
 				return nil, err
 			}
 			if ok {
-				required = appendUnique(required, promoted...)
+				for k, v := range props {
+					promoted[k]++
+					// A direct field of the same name (shallower) wins, so do not
+					// overwrite it; a collision between two embedded structs is
+					// resolved as ambiguous below.
+					if _, exists := properties[k]; !exists {
+						properties[k] = v
+					}
+				}
 				continue
 			}
 		}
@@ -298,6 +312,18 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			fieldSchema = map[string]any{schemaKeyType: schemaTypeString}
 		}
 		properties[name] = fieldSchema
+		direct[name] = true
+	}
+
+	// A direct field shadows any embedded field of the same name, so only a
+	// collision among embedded structs is ambiguous. Drop those from the
+	// properties; the required list is rebuilt from what survives.
+	for name, count := range promoted {
+		if count > 1 && !direct[name] {
+			delete(properties, name)
+		}
+	}
+	for name := range properties {
 		required = appendUnique(required, name)
 	}
 
@@ -312,14 +338,14 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 	return schema, nil
 }
 
-// mergeEmbeddedSchema flattens an anonymous embedded struct field into the
-// parent's properties, mirroring encoding/json promotion, and returns the
-// promoted field names for the required list. ok is false when the field is not a
-// promotable embedded struct, it has an explicit json name (then it is a normal
-// named field) or its underlying type is not a struct, in which case the caller
-// handles it as a normal field. Outer fields already present shadow promoted ones
-// (shallower wins), matching encoding/json.
-func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, seen map[reflect.Type]bool) (promoted []string, ok bool, err error) {
+// mergeEmbeddedSchema returns the properties an anonymous embedded struct
+// promotes, mirroring encoding/json promotion. ok is false when the field is not
+// a promotable embedded struct, it has an explicit json name (then it is a
+// normal named field) or its underlying type is not a struct, in which case the
+// caller handles it as a normal field. The caller merges the returned properties
+// so it can resolve same-depth conflicts, which encoding/json treats as
+// ambiguous.
+func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) (props map[string]any, ok bool, err error) {
 	tag := field.Tag.Get("json")
 	if tag == "-" {
 		return nil, true, nil // embedded but explicitly skipped
@@ -355,18 +381,10 @@ func mergeEmbeddedSchema(field reflect.StructField, properties map[string]any, s
 	if err != nil {
 		return nil, true, err
 	}
-	// An embedded field's property is promoted only when the outer struct does
-	// not already have that name: the shallower field wins, which is the rule
-	// encoding/json applies when it resolves the same conflict.
-	if props, hasProps := embedded["properties"].(map[string]any); hasProps {
-		for k, v := range props {
-			if _, exists := properties[k]; !exists {
-				properties[k] = v
-				promoted = append(promoted, k)
-			}
-		}
+	if embeddedProps, hasProps := embedded["properties"].(map[string]any); hasProps {
+		return embeddedProps, true, nil
 	}
-	return promoted, true, nil
+	return nil, true, nil
 }
 
 // appendUnique appends each name to dst only if not already present.

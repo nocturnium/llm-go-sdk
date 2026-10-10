@@ -290,6 +290,11 @@ func (e ValidationErrors) Is(target error) bool {
 
 // Unwrap returns ErrInvalidParameters for errors.Is compatibility
 func (e ValidationErrors) Unwrap() error {
+	// An empty collection carries no validation failure, so it must not match
+	// ErrInvalidParameters through errors.Is.
+	if len(e) == 0 {
+		return nil
+	}
 	return ErrInvalidParameters
 }
 

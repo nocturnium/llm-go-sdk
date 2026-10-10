@@ -113,6 +113,20 @@ func TestExtractFrames(t *testing.T) {
 		t.Errorf("SSE response not extracted: %q err %v", resp, err)
 	}
 
+	// SSE with CRLF line endings, which the spec permits. A CRLF body used to
+	// split as one merged event because it contains no "\n\n".
+	crlf := []byte(
+		"event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":2}}\r\n\r\n" +
+			"event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}\r\n\r\n")
+	resp, notes = extractFrames(crlf)
+	if len(notes) != 1 {
+		t.Fatalf("CRLF SSE: expected 1 notification, got %d", len(notes))
+	}
+	probe.Result.OK = false
+	if err := json.Unmarshal(resp, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("CRLF SSE response not extracted: %q err %v", resp, err)
+	}
+
 	// A batch carrying a notification and a response.
 	batch := []byte(`[{"jsonrpc":"2.0","method":"notifications/progress"},{"jsonrpc":"2.0","id":1,"result":{"ok":true}}]`)
 	resp, notes = extractFrames(batch)

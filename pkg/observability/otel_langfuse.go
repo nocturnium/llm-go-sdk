@@ -292,6 +292,14 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 		m.recordError(ctx, span, err, attrs)
 		return nil, err
 	}
+	// An LLM implementation may return a nil response with a nil error; the
+	// declared return type permits it. Report it as an incomplete response
+	// rather than panicking on the usage dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", m.llm.Provider(), llms.ErrIncompleteResponse)
+		m.recordError(ctx, span, err, attrs)
+		return nil, err
+	}
 
 	m.setGenAIResponseAttributes(span, m.resolveModel(opts), resp, duration)
 

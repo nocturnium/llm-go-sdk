@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // Common embeddings errors.
@@ -36,7 +37,7 @@ func EmbedQuery(ctx context.Context, e Embedder, text string, options ...EmbedOp
 		return nil, err
 	}
 	if resp == nil || len(resp.Embeddings) == 0 {
-		return nil, ErrEmptyInput
+		return nil, fmt.Errorf("embed query: %w", ErrIncompleteResponse)
 	}
 	return resp.Embeddings[0].Vector, nil
 }
@@ -50,7 +51,7 @@ func EmbedDocuments(ctx context.Context, e Embedder, texts []string, options ...
 	}
 
 	if resp == nil {
-		return nil, ErrEmptyInput
+		return nil, fmt.Errorf("embed documents: %w", ErrIncompleteResponse)
 	}
 	result := make([][]float32, len(resp.Embeddings))
 	for i, emb := range resp.Embeddings {

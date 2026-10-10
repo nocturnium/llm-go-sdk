@@ -9,6 +9,9 @@ package anthropicapi
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 )
 
 // MessagesRequest represents a request to the Anthropic Messages API.
@@ -44,22 +47,53 @@ func (r MessagesRequest) MarshalJSON() ([]byte, error) {
 	if len(r.ExtraBody) == 0 {
 		return base, nil
 	}
+	var std map[string]json.RawMessage
+	if err := json.Unmarshal(base, &std); err != nil {
+		return nil, err
+	}
+	// A standard field wins even when it was omitted as a zero value (e.g. a
+	// false Stream or an empty ToolChoice), so gate on every standard JSON name,
+	// not only the ones present in the serialized map.
+	known := standardJSONFields(reflect.TypeOf(plain(r)))
 	m := make(map[string]json.RawMessage, len(r.ExtraBody)+16)
 	for k, v := range r.ExtraBody {
+		// Skip marshaling the ExtraBody value entirely: marshaling an
+		// unmarshalable value under a key a standard field owns would fail the
+		// whole request for a value that never reaches the wire.
+		if known[k] {
+			continue
+		}
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return nil, fmt.Errorf("anthropic: marshal extra body field %q: %w", k, err)
 		}
 		m[k] = raw
 	}
-	var std map[string]json.RawMessage
-	if err := json.Unmarshal(base, &std); err != nil {
-		return nil, err
-	}
 	for k, v := range std {
 		m[k] = v
 	}
 	return json.Marshal(m)
+}
+
+// standardJSONFields caches the set of top-level JSON names the request struct
+// declares. It lets MarshalJSON honor the documented precedence without
+// inspecting the serialized map, which omitempty shrinks to non-zero fields.
+var standardFields sync.Map // map[reflect.Type]map[string]bool
+
+func standardJSONFields(typ reflect.Type) map[string]bool {
+	if fields, ok := standardFields.Load(typ); ok {
+		return fields.(map[string]bool)
+	}
+	fields := make(map[string]bool, typ.NumField())
+	for i := 0; i < typ.NumField(); i++ {
+		name := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
+		if name == "" || name == "-" {
+			continue
+		}
+		fields[name] = true
+	}
+	actual, _ := standardFields.LoadOrStore(typ, fields)
+	return actual.(map[string]bool)
 }
 
 // ThinkingConfig configures Anthropic extended thinking. Type is one of

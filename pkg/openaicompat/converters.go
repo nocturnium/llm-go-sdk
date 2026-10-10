@@ -536,7 +536,13 @@ func ProcessStream(
 	provider string,
 	config *StreamConfig,
 ) {
-	defer close(chunks)
+	// A nil channel is a programming error, but closing it would panic inside a
+	// deferred call that the panic-recovery defer below cannot catch (recover
+	// only handles panics raised in the same goroutine after it is deferred, and
+	// this defer runs first). Guard it so a nil channel fails cleanly instead.
+	if chunks != nil {
+		defer close(chunks)
+	}
 
 	// Validate required parameters to prevent nil pointer panics.
 	// These checks catch programming errors early with clear error messages.

@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -307,6 +308,46 @@ func assertSchema(t *testing.T, actual any, expected map[string]any) {
 type structuredMockLLM struct {
 	response *Response
 	opts     *CallOptions
+}
+
+// Two embedded structs that promote the same JSON name are ambiguous to
+// encoding/json, which drops both. The schema must drop the field too rather
+// than ask the model for a value Unmarshal silently discards. The type is built
+// with reflect.StructOf because go vet rejects a literal struct with duplicate
+// JSON tags, which is exactly the shape under test.
+func TestSchemaFrom_AmbiguousEmbeddedFieldsDropped(t *testing.T) {
+	embedded := reflect.StructOf([]reflect.StructField{{
+		Name: "Name",
+		Type: reflect.TypeOf(""),
+		Tag:  `json:"name"`,
+	}})
+	top := reflect.StructOf([]reflect.StructField{
+		{Name: "A", Type: embedded, Anonymous: true},
+		{Name: "B", Type: embedded, Anonymous: true},
+		{Name: "Other", Type: reflect.TypeOf(""), Tag: `json:"other"`},
+	})
+
+	schema, err := schemaForType(top, map[reflect.Type]bool{})
+	if err != nil {
+		t.Fatalf("schemaForType returned error: %v", err)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing properties: %#v", schema)
+	}
+	if _, ok := properties["name"]; ok {
+		t.Fatalf("ambiguous promoted field %q must be dropped, got %#v", "name", properties["name"])
+	}
+	if _, ok := properties["other"]; !ok {
+		t.Fatalf("non-ambiguous field %q missing from schema", "other")
+	}
+	if required, ok := schema["required"].([]string); ok {
+		for _, r := range required {
+			if r == "name" {
+				t.Fatalf("ambiguous field must not be required, got %#v", required)
+			}
+		}
+	}
 }
 
 func (m *structuredMockLLM) Call(context.Context, string, ...CallOption) (string, error) {

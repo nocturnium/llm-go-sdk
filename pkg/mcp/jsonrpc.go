@@ -217,10 +217,14 @@ func collectJSONPayloads(body []byte) [][]byte {
 		return [][]byte{trimmed}
 	}
 	var payloads [][]byte
-	for _, event := range bytes.Split(body, []byte("\n\n")) {
+	// Normalize CRLF to LF first: the SSE spec allows CR, LF, or CRLF line
+	// endings, and an event separated by \r\n\r\n contains no "\n\n" to split
+	// on, so a CRLF body would otherwise parse as one merged event.
+	normalized := bytes.ReplaceAll(body, []byte("\r\n"), []byte("\n"))
+	normalized = bytes.ReplaceAll(normalized, []byte("\r"), []byte("\n"))
+	for _, event := range bytes.Split(normalized, []byte("\n\n")) {
 		var data bytes.Buffer
 		for _, line := range bytes.Split(event, []byte("\n")) {
-			line = bytes.TrimRight(line, "\r")
 			if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
 				data.Write(bytes.TrimSpace(rest))
 				data.WriteByte('\n')

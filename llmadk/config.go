@@ -313,8 +313,11 @@ func (t *translator) toolConfig(tc *genai.ToolConfig, tools []llms.Tool) ([]llms
 	case genai.FunctionCallingConfigModeAny:
 		switch {
 		case len(names) == 1 && !t.tr.structured:
+			// Filter the tool list as well as pinning the choice: a provider
+			// that honors the tool definitions but ignores tool_choice must
+			// not be handed a tool outside the caller's allowlist.
 			add(llms.WithToolChoiceTool(names[0]))
-			return tools, nil
+			return filterTools(tools, names), nil
 		default:
 			add(llms.WithToolChoiceRequired())
 			return filterTools(tools, names), nil
