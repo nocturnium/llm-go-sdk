@@ -166,6 +166,11 @@ func unmarshalCandidate[T any](data string, out *T, direct bool) error {
 		return err
 	}
 	target := reflect.TypeOf(*out)
+	// A JSON null leaves an interface-typed *out holding a nil interface, so
+	// reflect.TypeOf returns nil. There is no struct to validate in that case.
+	if target == nil {
+		return nil
+	}
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
@@ -195,8 +200,10 @@ func validateStructCandidate(data string, target reflect.Type) error {
 		if skip {
 			continue
 		}
-		if _, ok := raw[name]; ok {
-			return nil
+		for key := range raw {
+			if strings.EqualFold(key, name) {
+				return nil
+			}
 		}
 	}
 	return fmt.Errorf("candidate %s does not match %s", data, target)

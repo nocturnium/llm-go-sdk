@@ -817,6 +817,8 @@ package <name>
 import (
     "net/http"
     "time"
+
+    "github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
 // Option configures a <name> client.
@@ -824,14 +826,16 @@ type Option func(*options)
 
 // options is the unexported configuration struct.
 type options struct {
-    APIKey          string
-    Model           string
-    BaseURL         string
-    HTTPClient      *http.Client
-    Timeout         time.Duration
-    AllowPrivateIPs bool
-    AllowHTTP       bool
-    // Provider-specific options
+	APIKey          string
+	Model           string
+	EmbeddingModel  string
+	BaseURL         string
+	HTTPClient      *http.Client
+	Timeout         time.Duration
+	AllowPrivateIPs bool
+	AllowHTTP       bool
+	ProviderConfig  *openaicompat.ProviderConfig
+	// Provider-specific options
 }
 
 func defaultOptions() *options {

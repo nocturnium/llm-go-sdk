@@ -104,7 +104,15 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	for _, w := range wire.Words {
 		speaker := w.Speaker
 		if speaker == "" && len(w.SpeakerID) > 0 && string(w.SpeakerID) != "null" {
-			speaker = strings.Trim(string(w.SpeakerID), "\"")
+			// speaker_id is a JSON value (normally a string), so decode it
+			// rather than stripping quotes by hand: a speaker label containing
+			// an escaped quote or backslash would otherwise come through raw.
+			var id string
+			if err := json.Unmarshal(w.SpeakerID, &id); err == nil {
+				speaker = id
+			} else {
+				speaker = strings.Trim(string(w.SpeakerID), "\"")
+			}
 		}
 		out.Words = append(out.Words, llms.TranscriptWord{Word: w.Word, Start: w.Start, End: w.End, Speaker: speaker})
 	}

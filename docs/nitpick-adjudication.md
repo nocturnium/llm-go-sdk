@@ -302,3 +302,25 @@ Also refreshed the verified rate cards for the same providers and extended
 | `llmadk` drops `GenerateContentConfig.Labels` | `Labels` is deliberately classified as ignored metadata in `llmadk/fields.go`. |
 | Featherless `WithSpeechUsageHandler` is never wired | `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
 | `scripts/release-decide.sh` reads `.commits` one level too deep | The git-cliff `--context` output is grouped by tag and the script's `count()` probes each group; a direct invocation returns the expected counts. |
+
+Round 44 (2026-10-10) reported 14 errors. The real ones were fixed:
+`extractJSONMessage` now normalizes CRLF before splitting events (it reuses
+`collectJSONPayloads`); `dispatchOne`/`dispatchNullIDError` send under `t.mu`
+and `fail` closes pending channels under the same lock, removing a
+send-on-closed-channel race; `DeliverTerminal` re-arms `terminalSent` when the
+bounded wait abandons delivery so a later `EnsureTerminal` can retry; Groq
+decodes `speaker_id` as JSON instead of trimming quotes; OpenRouter no longer
+lists `response_format` as a reserved transcription key while still reading it
+from `Extra`; `structured.go` guards a nil `reflect.Type` for interface targets
+and matches struct fields case-insensitively the way `json.Unmarshal` does; and
+the AGENTS.md provider example now declares `EmbeddingModel` and
+`ProviderConfig`.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml` references unavailable action majors | `actions/checkout@v7` and `actions/setup-go@v7` are published major tags; the refs resolve. |
+| `Makefile` API baseline is missing | `api/v6.txt` is tracked (`git ls-files api/v6.txt` lists it); `apidiff` has its input. |
+| `llmadk/config.go` drops `Labels` | `Labels` is deliberately classified as ignored request metadata in `llmadk/fields.go`. |
+| `pkg/providers/azure/models.go` references an undefined `Client` | `type Client struct` is declared in `azure.go`; the package builds. |
+| Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
+| `pkg/openaicompat/toolcall_ids.go` loses earlier tool-call rewrites | The inner loop mutates the shared `msg.ToolCalls` copy and writes the same message back, so every rewrite accumulates; a three-call regression test confirms all IDs are distinct and nine-character. |

@@ -166,23 +166,9 @@ func decodeResult(raw []byte, out any) error {
 // each event's "data:" lines are assembled independently and the last event with
 // a JSON-RPC payload is returned.
 func extractJSONMessage(body []byte) []byte {
-	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
-		return trimmed
-	}
 	var last []byte
-	for _, event := range bytes.Split(body, []byte("\n\n")) {
-		var data bytes.Buffer
-		for _, line := range bytes.Split(event, []byte("\n")) {
-			line = bytes.TrimRight(line, "\r")
-			if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
-				data.Write(bytes.TrimSpace(rest))
-				data.WriteByte('\n')
-			}
-		}
-		if payload := bytes.TrimSpace(data.Bytes()); len(payload) > 0 && (payload[0] == '{' || payload[0] == '[') {
-			last = payload
-		}
+	for _, payload := range collectJSONPayloads(body) {
+		last = payload
 	}
 	return last
 }

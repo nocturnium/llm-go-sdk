@@ -313,7 +313,11 @@ func (s *StreamSender) DeliverTerminal(chunk StreamChunk) {
 	select {
 	case s.chunks <- chunk:
 	case <-timer.C:
-		// Consumer has stopped reading entirely; abandon to avoid a leak.
+		// Consumer has stopped reading entirely; abandon to avoid a leak. Re-arm
+		// the guard so a later EnsureTerminal/DeliverTerminal call can still try:
+		// the chunk was not delivered, so recording it as sent would silently
+		// drop the terminal signal the consumer is promised.
+		s.terminalSent.Store(false)
 	}
 }
 

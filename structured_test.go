@@ -142,6 +142,32 @@ func TestGenerateTyped_FencedScalar(t *testing.T) {
 	}
 }
 
+// T = any has no struct schema, and json.Unmarshal into an interface that
+// receives JSON null leaves a nil interface. reflect.TypeOf then returns nil,
+// so the struct-field check must not dereference it.
+func TestParseTyped_InterfaceTargetNull(t *testing.T) {
+	got, err := parseTyped[any]("null")
+	if err != nil {
+		t.Fatalf("parseTyped[any](null) failed: %v", err)
+	}
+	if got != nil {
+		t.Errorf("got %#v, want nil", got)
+	}
+}
+
+// json.Unmarshal matches struct fields case-insensitively, so a response using
+// "Name" for a field tagged json:"name" decodes successfully. The struct
+// candidate check must accept it too rather than forcing an unnecessary repair.
+func TestParseTyped_CaseInsensitiveFieldMatch(t *testing.T) {
+	got, err := parseTyped[structuredTestResult](`{"Name":"Ada"}`)
+	if err != nil {
+		t.Fatalf("parseTyped case-insensitive field failed: %v", err)
+	}
+	if got.Name != "Ada" {
+		t.Errorf("got %#v, want Name=Ada", got)
+	}
+}
+
 type structuredStrictSchemaResult struct {
 	Name   string                 `json:"name,omitempty"`
 	Note   *string                `json:"note"`

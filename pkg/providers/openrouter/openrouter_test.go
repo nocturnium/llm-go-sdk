@@ -263,6 +263,30 @@ func TestClient_Transcribe(t *testing.T) {
 		}
 	}
 }
+
+// response_format is read from Extra to choose the wire format, so it must not
+// also be rejected as a reserved key. The typed WithTranscribeWordTimestamps
+// option sets verbose_json; Extra can select the supported json form explicitly.
+func TestClient_Transcribe_ResponseFormatExtra(t *testing.T) {
+	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1024); err != nil {
+			t.Error(err)
+			return
+		}
+		defer r.MultipartForm.RemoveAll()
+		if r.FormValue("response_format") != "json" {
+			t.Errorf("response_format = %q, want json", r.FormValue("response_format"))
+		}
+		fmt.Fprint(w, `{"text":"hello"}`)
+	})
+	out, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("ID3audio"), MIMEType: "audio/mpeg"}, llms.WithTranscribeExtra(map[string]any{"response_format": "json"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Text != "hello" {
+		t.Fatalf("got %+v", out)
+	}
+}
 func TestClient_VideoJob(t *testing.T) {
 	polls := 0
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {

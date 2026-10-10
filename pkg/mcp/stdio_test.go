@@ -253,3 +253,30 @@ func writeStdioResult(w io.Writer, id json.RawMessage, result any) {
 	out, _ := json.Marshal(rpcResponse{JSONRPC: jsonRPCVersion, ID: id, Result: b})
 	_, _ = w.Write(append(out, '\n'))
 }
+
+// A response frame can be dispatched at the same moment the read loop's error
+// path tears the transport down. fail closes every pending channel, so if
+// dispatchOne released the lock before sending, the send could land on a closed
+// channel and panic the read loop. Delivery and close both hold t.mu, so the two
+// cannot interleave; the race detector and the panic guard below pin that.
+func TestStdioTransport_DispatchDoesNotRaceFailClose(t *testing.T) {
+	const iterations = 200
+	for i := 0; i < iterations; i++ {
+		tr := &stdioTransport{
+			cmd:     &exec.Cmd{},
+			pending: map[int64]chan []byte{1: make(chan []byte, 1)},
+			done:    make(chan struct{}),
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			tr.dispatchOne([]byte(`{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`))
+		}()
+		go func() {
+			defer wg.Done()
+			tr.fail(errTransportClosed)
+		}()
+		wg.Wait()
+	}
+}

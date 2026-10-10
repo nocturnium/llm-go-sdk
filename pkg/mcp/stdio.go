@@ -248,11 +248,13 @@ func (t *stdioTransport) dispatchOne(line []byte) {
 	ch, found := t.pending[id]
 	if found {
 		delete(t.pending, id)
+		// Deliver while holding the lock: fail closes pending channels under
+		// the same lock, so an unlocked send could race a close from the read
+		// loop's error path and panic on a closed channel. The channel is
+		// buffered (cap 1) and has no other sender, so this never blocks.
+		sendPending(ch, line)
 	}
 	t.mu.Unlock()
-	if found {
-		ch <- line
-	}
 }
 
 // dispatchNullIDError handles a JSON-RPC error response carrying a null/absent id.
@@ -275,12 +277,24 @@ func (t *stdioTransport) dispatchNullIDError(line []byte) {
 			ch = c
 			delete(t.pending, id)
 		}
+		sendPending(ch, line)
 		t.mu.Unlock()
-		ch <- line
 		return
 	}
 	t.mu.Unlock()
 	t.fail(&RPCError{Code: CodeInvalidRequest, Message: "mcp: server returned an error with a null id; cannot correlate to a request"})
+}
+
+// sendPending delivers a frame to a pending response channel. It must be called
+// with t.mu held. The channel is buffered with room for exactly one frame and
+// the dispatcher is its only sender, so the send never blocks; the non-blocking
+// form keeps a future refactor from stalling the read loop while it holds the
+// lock.
+func sendPending(ch chan []byte, line []byte) {
+	select {
+	case ch <- line:
+	default:
+	}
 }
 
 func isNullIDError(line []byte) bool {
@@ -299,17 +313,18 @@ func isNullIDError(line []byte) bool {
 	return id == "" || id == "null"
 }
 
-// fail marks the transport closed and unblocks every pending request.
+// fail marks the transport closed and unblocks every pending request. It closes
+// the pending channels while holding the lock so a dispatcher delivering under
+// the same lock cannot send on a channel this function is closing.
 func (t *stdioTransport) fail(err error) {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.closed = true
 	if t.closeErr == nil && err != nil && !errors.Is(err, io.EOF) {
 		t.closeErr = err
 	}
-	pending := t.pending
-	t.pending = make(map[int64]chan []byte)
-	t.mu.Unlock()
-	for _, ch := range pending {
+	for id, ch := range t.pending {
+		delete(t.pending, id)
 		close(ch)
 	}
 }

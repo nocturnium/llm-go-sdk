@@ -88,6 +88,17 @@ func TestExtractJSONMessage(t *testing.T) {
 	if string(got) != string(batch) {
 		t.Errorf("batch SSE extraction failed: got %s", got)
 	}
+
+	// CRLF-separated events: the SSE spec allows \r\n line endings, so the
+	// event boundary is \r\n\r\n and a split on \n\n alone would merge the
+	// notification and response into one unparseable event.
+	crlfSSE := []byte("event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\r\n\r\n" +
+		"event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}\r\n\r\n")
+	got = extractJSONMessage(crlfSSE)
+	probe.Result.OK = false
+	if err := json.Unmarshal(got, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("CRLF SSE extraction failed: got %q err %v", got, err)
+	}
 }
 
 func TestExtractFrames(t *testing.T) {

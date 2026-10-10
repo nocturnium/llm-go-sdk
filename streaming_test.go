@@ -275,6 +275,34 @@ func TestStreamSender_SendResultTimeout(t *testing.T) {
 	}
 }
 
+// If DeliverTerminal's bounded wait times out, the terminal chunk was never
+// delivered. Recording it as sent would make a later EnsureTerminal a silent
+// no-op and the consumer would see a plain channel close with no terminal
+// chunk. The guard must be re-armed so a retry can still land once the consumer
+// makes room.
+func TestStreamSender_DeliverTerminalRetriesAfterTimeout(t *testing.T) {
+	chunks := make(chan StreamChunk, 1)
+	chunks <- StreamChunk{Content: "blocked"} // saturate the buffer
+	sender := NewStreamSender(context.Background(), chunks, 20*time.Millisecond)
+
+	sender.DeliverTerminal(StreamChunk{Done: true})
+	if sender.terminalSent.Load() {
+		t.Fatal("terminalSent stayed set after an abandoned delivery")
+	}
+
+	// Make room, then retry: the retry must deliver the terminal chunk.
+	<-chunks
+	sender.EnsureTerminal()
+	select {
+	case got := <-chunks:
+		if !got.Done {
+			t.Errorf("got %#v, want a terminal Done chunk", got)
+		}
+	default:
+		t.Fatal("EnsureTerminal did not retry after the abandoned delivery")
+	}
+}
+
 func BenchmarkStreamSender_SendFastPath(b *testing.B) {
 	chunks := make(chan StreamChunk, 1)
 	sender := NewStreamSender(context.Background(), chunks, time.Second)
