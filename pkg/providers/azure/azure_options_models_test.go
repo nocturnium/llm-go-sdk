@@ -225,6 +225,9 @@ func TestListModels_LimitAndTypeFilter(t *testing.T) {
 	if len(result.Models) != 2 {
 		t.Fatalf("expected limit to cap models to 2, got %d", len(result.Models))
 	}
+	if !result.HasMore {
+		t.Error("HasMore should be true when the local limit truncates the listing")
+	}
 
 	// Type filter keeps chat models (all converted models are chat).
 	filtered, err := client.ListModels(context.Background(), llms.WithModelTypes(llms.ModelTypeChat))
@@ -234,8 +237,8 @@ func TestListModels_LimitAndTypeFilter(t *testing.T) {
 	if len(filtered.Models) != 3 {
 		t.Errorf("expected 3 chat models, got %d", len(filtered.Models))
 	}
-	if result.HasMore {
-		t.Error("HasMore should be false")
+	if filtered.HasMore {
+		t.Error("HasMore should be false when the type-filtered result is complete")
 	}
 }
 

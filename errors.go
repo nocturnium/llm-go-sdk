@@ -377,6 +377,12 @@ func sanitizeErrorURL(rawURL string) string {
 	// trailing "@host" in Host. If the path contains an '@', drop everything
 	// through it so the head of a split credential cannot survive.
 	if at := strings.Index(u.Path, "@"); at >= 0 {
+		// url.Parse can put the credential itself ("user:1234") in Host when
+		// the malformed password contains a slash, leaving the terminal @host in
+		// Path. Drop that host too; it is userinfo, not an address.
+		if strings.Contains(u.Host, ":") {
+			u.Host = ""
+		}
 		u.Path = u.Path[at+1:]
 	}
 	if at := strings.Index(u.RawPath, "@"); at >= 0 {

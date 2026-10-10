@@ -85,6 +85,13 @@ func TestGenerateTyped_SkipsUnrelatedJSONValue(t *testing.T) {
 	}
 }
 
+// An unbalanced object must not yield one of its keys as a string result.
+func TestParseTyped_UnbalancedObjectDoesNotYieldKey(t *testing.T) {
+	if got, err := parseTyped[string](`{"name":"Ada"`); err == nil {
+		t.Fatalf("parseTyped returned %q, want an error for malformed JSON", got)
+	}
+}
+
 // GenerateTyped should recover JSON wrapped in markdown fences via local
 // extraction, in a single model call.
 func TestGenerateTyped_LocalExtraction(t *testing.T) {

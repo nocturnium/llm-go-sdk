@@ -174,6 +174,9 @@ func extractScalarJSONOutsideStructures(s string) (string, bool) {
 				i += len(candidate)
 				continue
 			}
+			// An unbalanced structure means the response is malformed. Do not
+			// scan inside it and mistake an object key for a scalar result.
+			return "", false
 		}
 		switch s[i] {
 		case '"':

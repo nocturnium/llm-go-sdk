@@ -271,3 +271,12 @@ Also refreshed the verified rate cards for the same providers and extended
 | `llmadk` classifies `FunctionCallingConfig.Mode` as translated, so `WithIgnore` cannot suppress `VALIDATED` | The table is a coverage map, not the enforcement point; `config.go` calls `reject(FieldValidatedFunctionCalling, false, "VALIDATED")`, and `TestTranslateFunctionCalling` covers both the rejection and the ignore override. |
 | `MetricsMiddleware.Call` returns the mock's `callResp` | `llms.LLM` has no `Call` method, so `MetricsMiddleware.Call` delegates to `GenerateContent` to obtain usage; the mock's `genResp` field is therefore correct. |
 | ElevenLabs duration fallback should ignore spacing and audio-event entries | The package doc and `TestTranscribe` deliberately define the fallback as `max(word.End)` over the provider words array, including spacing and audio events. |
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/ISSUE_TEMPLATE/feature_request.md` starts with indented YAML front matter | The first line is `---` at column zero; the reviewer misread the leading blank line. |
+| `capabilities_registry.go` discards boolean defaults in `GetWithDefaults` | The method is documented and tested as numeric-only: an `int` zero is distinguishable from an unset value, while a `bool` false is not. |
+| `internal/httpclient/poll.go` reports a late successful callback as a timeout | `TestPoll_DoneOnDeadlinePoll` passes; caller cancellation wins over a callback that ignores its context. |
+| `llmadk/fake_test.go` closes a shared `streamDone` channel twice | The fake now guards the close with a `sync.Once`, and the llmadk race suite passes. |
+| `llmadk/request_test.go` indexes an empty second tool-call slice | `TestTranslate_IDlessResponsesPairWithinTheirTurn` runs and passes. |
+| `pkg/providers/togetherai/image.go` omits the `output_format` JSON tag | The decode struct already carries `json:"output_format"`; the reviewer saw a different field. |
