@@ -184,6 +184,50 @@ func TestParseTyped_CaseInsensitiveFieldMatch(t *testing.T) {
 	}
 }
 
+// A struct with fields whose JSON names differ only by case must not let one
+// key satisfy both. "foo" and "Foo" fold to one lower-case bucket, so a
+// response naming just one of them used to satisfy both required fields and
+// decode the other to its zero value.
+func TestParseTyped_CaseOnlyDistinctFieldsRequireBothNames(t *testing.T) {
+	type mixedCase struct {
+		Lower string `json:"foo"`
+		Upper string `json:"Foo"`
+	}
+	if _, err := parseTyped[mixedCase](`{"foo":"x"}`); err == nil {
+		t.Error("object naming only foo accepted, want a missing-field error for Foo")
+	}
+	if _, err := parseTyped[mixedCase](`{"foo":"x","Foo":"y"}`); err != nil {
+		t.Fatalf("object naming both case-distinct fields rejected: %v", err)
+	}
+	got, err := parseTyped[mixedCase](`{"foo":"x","Foo":"y"}`)
+	if err != nil || got.Lower != "x" || got.Upper != "y" {
+		t.Errorf("got %+v, err %v, want {x y}", got, err)
+	}
+}
+
+// When the caller supplies their own JSON Schema, that schema is the contract.
+// The generated schema marks every Go field required, so enforcing it here
+// rejected a response the caller's schema deliberately made optional.
+func TestGenerateTyped_CallerSchemaIsNotForcedToGeneratedShape(t *testing.T) {
+	llm := &repairScriptLLM{responses: []string{`{"name":"Ada"}`}}
+	_, _, err := GenerateTyped[structuredTestResult](
+		context.Background(), llm,
+		[]Message{{Role: RoleUser, Content: "x"}},
+		WithJSONSchema("partial", json.RawMessage(`{"type":"object"}`), false),
+	)
+	if err != nil {
+		t.Fatalf("GenerateTyped with a caller schema rejected a partial object: %v", err)
+	}
+	// Without a caller schema the generated required list still applies.
+	llm2 := &repairScriptLLM{responses: []string{`{"name":"Ada"}`}}
+	if _, _, err := GenerateTyped[structuredTestResult](
+		context.Background(), llm2,
+		[]Message{{Role: RoleUser, Content: "x"}},
+	); err == nil {
+		t.Error("GenerateTyped without a caller schema accepted a partial object, want a missing-field error")
+	}
+}
+
 // Prose can contain a valid scalar before the intended one (a bool before a
 // quoted answer). Extraction must try every scalar candidate so a later one
 // that matches T is not missed.

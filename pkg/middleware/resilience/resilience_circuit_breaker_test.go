@@ -254,6 +254,29 @@ func TestCircuitBreaker_ZeroValueIsUsable(t *testing.T) {
 	cb.Reset()
 }
 
+// A zero-value breaker must apply the same failure threshold as one built by
+// NewCircuitBreaker. Its maxFailures used to stay zero, so the first failure
+// opened the circuit (and, with a zero reset timeout, it never closed again).
+func TestCircuitBreaker_ZeroValueUsesDefaultThreshold(t *testing.T) {
+	var cb CircuitBreaker
+	for i := 0; i < defaultCircuitMaxFailures-1; i++ {
+		if !cb.Allow() {
+			t.Fatalf("zero-value breaker refused request %d before the threshold", i)
+		}
+		cb.RecordFailure()
+	}
+	if state := cb.State(); state != CircuitClosed {
+		t.Fatalf("state after %d failures = %v, want closed", defaultCircuitMaxFailures-1, state)
+	}
+	if !cb.Allow() {
+		t.Fatal("zero-value breaker refused the request that should trip it")
+	}
+	cb.RecordFailure()
+	if state := cb.State(); state != CircuitOpen {
+		t.Fatalf("state after %d failures = %v, want open", defaultCircuitMaxFailures, state)
+	}
+}
+
 // TestCircuitBreaker_PublicCompletionCannotRetirePostResetRequest pins that a
 // request admitted through the public Allow API before Reset keeps its own
 // generation. If RecordSuccess synthesized the current generation, the stale

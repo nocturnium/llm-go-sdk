@@ -81,8 +81,36 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 			return pollContextError(parent, ctx)
 		case <-timer.C:
 		}
-		delay = time.Duration(math.Min(float64(p.Max), float64(delay)*p.Multiplier))
+		delay = growDelay(delay, p.Multiplier, p.Max)
 	}
+}
+
+// maxBackoffDuration is the largest duration a backoff computation may return.
+// A float64 conversion of a value at or above 2^63 wraps to a negative
+// time.Duration, which would make the timer fire immediately and let polling
+// spin instead of respecting the configured maximum. Clamping below 2^63 keeps
+// the conversion well-defined.
+const maxBackoffDuration = time.Duration(math.MaxInt64)
+
+// growDelay multiplies delay by multiplier, saturating at limit. The float
+// product is clamped before the duration conversion so a policy whose Max (or a
+// runaway multiplier) would exceed time.Duration's range cannot overflow to a
+// negative duration.
+func growDelay(delay time.Duration, multiplier float64, limit time.Duration) time.Duration {
+	if limit <= 0 {
+		limit = maxBackoffDuration
+	}
+	if limit > maxBackoffDuration {
+		limit = maxBackoffDuration
+	}
+	next := float64(delay) * multiplier
+	if math.IsNaN(next) || next <= 0 {
+		return delay
+	}
+	if next >= float64(limit) {
+		return limit
+	}
+	return time.Duration(next)
 }
 
 func pollContextError(parent, ctx context.Context) error {
@@ -124,5 +152,13 @@ func pollDelay(delay time.Duration, p PollPolicy) time.Duration {
 	if p.Jitter > 0 {
 		factor += (2*rand.Float64() - 1) * p.Jitter // #nosec G404 -- scheduling jitter, not cryptography
 	}
-	return time.Duration(math.Min(float64(p.Max), float64(delay)*factor))
+	limit := p.Max
+	if limit <= 0 || limit > maxBackoffDuration {
+		limit = maxBackoffDuration
+	}
+	next := float64(delay) * factor
+	if next >= float64(limit) {
+		return limit
+	}
+	return time.Duration(next)
 }

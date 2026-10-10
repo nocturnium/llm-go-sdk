@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -836,5 +837,38 @@ func TestFallbackChain_EmptyProviderAndModel(t *testing.T) {
 	}
 	if chain.Model() != "" {
 		t.Errorf("model = %s, want empty", chain.Model())
+	}
+}
+
+// Removing a client from a weighted chain must drop its weight too. The
+// promoted FallbackChain.RemoveClient only trimmed the entries, so Weights kept
+// reporting the old clients in the old order.
+func TestWeightedFallbackChain_RemoveClientKeepsWeightsAligned(t *testing.T) {
+	client1 := &mockFallbackLLM{provider: llms.ProviderOpenAI, model: "low"}
+	client2 := &mockFallbackLLM{provider: llms.ProviderAnthropic, model: "high"}
+	client3 := &mockFallbackLLM{provider: llms.ProviderGemini, model: "medium"}
+
+	chain := MustNewWeightedFallbackChain(
+		[]llms.LLM{client1, client2, client3},
+		[]int{1, 10, 5},
+	)
+	if !chain.RemoveClient(0) {
+		t.Fatal("RemoveClient(0) returned false")
+	}
+	// The constructor sorts by weight descending, so the removal above drops
+	// the highest weight and leaves the rest in priority order.
+	if got := chain.Weights(); !reflect.DeepEqual(got, []int{5, 1}) {
+		t.Fatalf("Weights() after remove = %v, want [5 1]", got)
+	}
+	if chain.RemoveClient(5) {
+		t.Fatal("RemoveClient(5) returned true, want false")
+	}
+	if got := chain.Weights(); !reflect.DeepEqual(got, []int{5, 1}) {
+		t.Fatalf("Weights() changed after a failed remove = %v, want [5 1]", got)
+	}
+
+	chain.AddClient(client1)
+	if got := chain.Weights(); !reflect.DeepEqual(got, []int{5, 1, 1}) {
+		t.Fatalf("Weights() after AddClient = %v, want [5 1 1]", got)
 	}
 }

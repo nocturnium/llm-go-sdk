@@ -403,12 +403,23 @@ reserved:
 		return ErrRateLimitTimeout
 	}
 	if deferredTokens > 0 {
-		rl.mu.Lock()
-		rl.tokenDebt += deferredTokens
-		rl.mu.Unlock()
+		rl.addTokenDebt(deferredTokens)
 	}
 
 	return nil
+}
+
+// addTokenDebt records the part of an admitted request's token charge that
+// could not be reserved in one burst-sized reservation. Later requests settle it
+// before they are admitted. Saturating keeps a pathological report from wrapping
+// the debt negative, which would make it look settled.
+func (rl *RateLimiter) addTokenDebt(n int) {
+	if n <= 0 {
+		return
+	}
+	rl.mu.Lock()
+	rl.tokenDebt = saturatingAddInt(rl.tokenDebt, n)
+	rl.mu.Unlock()
 }
 
 // tryAcquire attempts to acquire rate limit tokens without waiting
@@ -433,12 +444,15 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 		// still be admitted.
 		credit := rl.consumeTokenCredit(tokens)
 		tokens -= credit
-		if b := tokenLimiter.Burst(); tokens > b {
-			// The non-blocking path cannot wait for the overflow, so treat an
-			// oversized token charge as unavailable rather than admitting it at
-			// the burst rate.
-			rl.restoreTokenCredit(credit)
-			return ErrRateLimitExceeded
+		// A charge above the burst cannot be met by one reservation, and
+		// x/time/rate refuses any count above the burst outright. Charge the
+		// burst-sized part now and carry the remainder as debt, exactly like the
+		// blocking path. Refusing the call instead left a limiter with an explicit
+		// burst below the estimate rejecting every request forever.
+		deferredTokens := 0
+		if b := tokenLimiter.Burst(); b > 0 && tokens > b {
+			deferredTokens = tokens - b
+			tokens = b
 		}
 		if tokens == 0 {
 			now := time.Now()
@@ -448,6 +462,7 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 				rl.restoreTokenCredit(credit)
 				return ErrRateLimitExceeded
 			}
+			rl.addTokenDebt(deferredTokens)
 			return nil
 		}
 		now := time.Now()
@@ -464,6 +479,7 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 			reqRes.CancelAt(now)
 			return ErrRateLimitExceeded
 		}
+		rl.addTokenDebt(deferredTokens)
 		return nil
 	}
 	// Reserve the request bucket, then the token bucket. If the token bucket is

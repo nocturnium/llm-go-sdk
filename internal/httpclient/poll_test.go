@@ -141,3 +141,20 @@ func TestPoll_CallbackContextErrorIsReturned(t *testing.T) {
 		t.Fatalf("Poll = %v, want context.Canceled", err)
 	}
 }
+
+// A policy whose Max sits near time.Duration's upper limit must not overflow
+// the growth multiplication to a negative duration, which would make the timer
+// fire immediately and let polling spin.
+func TestPoll_GrowDelaySaturatesAtMax(t *testing.T) {
+	for _, limit := range []time.Duration{time.Duration(math.MaxInt64), time.Duration(math.MaxInt64 - 1), time.Hour} {
+		got := growDelay(time.Duration(math.MaxInt64/2), 2, limit)
+		if got <= 0 || got > limit {
+			t.Fatalf("growDelay limit %v = %v, want a positive duration at or below the limit", limit, got)
+		}
+	}
+	// A policy Max above time.Duration's range (as float64 would round) is still
+	// clamped to a non-negative duration.
+	if got := growDelay(time.Second, 1e30, time.Duration(math.MaxInt64)); got <= 0 {
+		t.Fatalf("growDelay with a huge multiplier = %v, want a positive saturated duration", got)
+	}
+}

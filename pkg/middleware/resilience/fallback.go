@@ -649,7 +649,37 @@ func MustNewWeightedFallbackChain(clients []llms.LLM, weights []int, opts ...Fal
 
 // Weights returns the weights in priority order
 func (wfc *WeightedFallbackChain) Weights() []int {
+	wfc.FallbackChain.mu.RLock()
+	defer wfc.FallbackChain.mu.RUnlock()
 	result := make([]int, len(wfc.weights))
 	copy(result, wfc.weights)
 	return result
+}
+
+// AddClient appends a client with the default weight, keeping weights aligned
+// with the embedded chain's entries. The promoted FallbackChain method would
+// append the client without a weight, so Weights would describe a shorter chain.
+func (wfc *WeightedFallbackChain) AddClient(client llms.LLM) {
+	fc := wfc.FallbackChain
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.entries = append(fc.entries, fallbackEntry{id: fc.nextID, client: client})
+	fc.nextID++
+	wfc.weights = append(wfc.weights, 1)
+}
+
+// RemoveClient removes the client at idx from the chain and its weight together.
+// The embedded FallbackChain method only touches the entries, so calling it
+// directly left the weight list describing the old clients and misaligned with
+// the current order.
+func (wfc *WeightedFallbackChain) RemoveClient(idx int) bool {
+	fc := wfc.FallbackChain
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	if idx < 0 || idx >= len(fc.entries) {
+		return false
+	}
+	fc.entries = append(fc.entries[:idx], fc.entries[idx+1:]...)
+	wfc.weights = append(wfc.weights[:idx], wfc.weights[idx+1:]...)
+	return true
 }

@@ -687,18 +687,31 @@ func TestRateLimiter_TryAcquire_RejectsRequestsAboveBurst(t *testing.T) {
 	}
 }
 
-// The non-blocking path must not clamp an oversized token charge to the burst
-// either. Clamping admitted the call while charging only the burst, so repeated
-// oversized requests consumed more than the configured token rate.
-func TestRateLimiter_TryAcquire_RejectsTokensAboveBurst(t *testing.T) {
+// An oversized token charge on the non-blocking path must be financed like the
+// blocking path: reserve the burst-sized part and carry the remainder as debt.
+// Rejecting outright made a limiter whose burst sits below the estimate refuse
+// every request forever, and clamping silently charged less than the caller
+// asked for. The debt must show up as a later rejection once the burst refills.
+func TestRateLimiter_TryAcquire_FinancesTokensAboveBurst(t *testing.T) {
 	rl := NewRateLimiter(
 		WithRequestsPerMinute(6000),
 		WithTokensPerMinute(600),
 		WithTokenBurst(10),
 		WithBlocking(false),
 	)
-	if err := rl.WaitN(context.Background(), 1, 1000); !errors.Is(err, ErrRateLimitExceeded) {
-		t.Fatalf("tryAcquire with tokens above the burst = %v, want ErrRateLimitExceeded", err)
+	if err := rl.WaitN(context.Background(), 1, 1000); err != nil {
+		t.Fatalf("tryAcquire with tokens above the burst = %v, want success with debt", err)
+	}
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt != 990 {
+		t.Fatalf("tokenDebt after an oversized charge = %d, want 990", debt)
+	}
+	// The debt is settled before admission, so the very next call fails even
+	// though the burst was only just drained.
+	if err := rl.WaitN(context.Background(), 1, 1); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("tryAcquire with outstanding debt = %v, want ErrRateLimitExceeded", err)
 	}
 }
 

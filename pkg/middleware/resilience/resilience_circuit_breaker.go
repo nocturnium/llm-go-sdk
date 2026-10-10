@@ -8,6 +8,15 @@ import (
 
 const (
 	stateUnknown = "unknown"
+
+	// defaultCircuitMaxFailures is the threshold a zero-value CircuitBreaker
+	// applies. The type is documented as ready to use without
+	// NewCircuitBreaker, whose struct literal seeds the same value; a bare
+	// breaker otherwise left maxFailures at 0 and opened on its first failure.
+	defaultCircuitMaxFailures     = 5
+	defaultCircuitResetTimeout    = 30 * time.Second
+	defaultCircuitHalfOpenTimeout = 30 * time.Second
+	defaultCircuitHalfOpenMax     = 3
 )
 
 // Circuit breaker errors
@@ -95,10 +104,10 @@ type CircuitBreakerOption func(*CircuitBreaker)
 // NewCircuitBreaker creates a new circuit breaker with the given options
 func NewCircuitBreaker(opts ...CircuitBreakerOption) *CircuitBreaker {
 	cb := &CircuitBreaker{
-		maxFailures:     5,
-		resetTimeout:    30 * time.Second,
-		halfOpenTimeout: 30 * time.Second,
-		halfOpenMax:     3,
+		maxFailures:     defaultCircuitMaxFailures,
+		resetTimeout:    defaultCircuitResetTimeout,
+		halfOpenTimeout: defaultCircuitHalfOpenTimeout,
+		halfOpenMax:     defaultCircuitHalfOpenMax,
 		state:           CircuitClosed,
 		inflightClosed:  make(map[uint64]int),
 		lastStateChange: time.Now(),
@@ -109,6 +118,25 @@ func NewCircuitBreaker(opts ...CircuitBreakerOption) *CircuitBreaker {
 	}
 
 	return cb
+}
+
+// normalizeLocked fills in the defaults a zero-value CircuitBreaker needs. It
+// is called from the admission and failure paths so a bare CircuitBreaker
+// behaves like one built by NewCircuitBreaker instead of opening on its first
+// failure and never leaving the open state. The caller holds cb.mu.
+func (cb *CircuitBreaker) normalizeLocked() {
+	if cb.maxFailures <= 0 {
+		cb.maxFailures = defaultCircuitMaxFailures
+	}
+	if cb.resetTimeout <= 0 {
+		cb.resetTimeout = defaultCircuitResetTimeout
+	}
+	if cb.halfOpenTimeout <= 0 {
+		cb.halfOpenTimeout = defaultCircuitHalfOpenTimeout
+	}
+	if cb.halfOpenMax <= 0 {
+		cb.halfOpenMax = defaultCircuitHalfOpenMax
+	}
 }
 
 // WithMaxFailures sets the number of failures before opening the circuit
@@ -214,6 +242,7 @@ func (cb *CircuitBreaker) acquire() (admitted bool, p permit) {
 
 // acquireLocked admits a request. The caller holds cb.mu.
 func (cb *CircuitBreaker) acquireLocked() (admitted bool, p permit) {
+	cb.normalizeLocked()
 
 	switch cb.state {
 	case CircuitClosed:
@@ -395,6 +424,7 @@ func (cb *CircuitBreaker) recordFailureLocked(p permit) {
 	if cb.stalePermitLocked(p) {
 		return
 	}
+	cb.normalizeLocked()
 	cb.lastFailureTime = time.Now()
 
 	switch cb.state {

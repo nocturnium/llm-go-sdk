@@ -513,3 +513,28 @@ populates the structural fields); the OpenRouter generic registration forwards
 | `.github/workflows/codeql.yml:67` job-level blocks omit `security-events: write` | The gosec and trivy jobs declare no job-level `permissions` block, so the workflow-level `security-events: write` applies and the SARIF upload is authorized. Only `analyze` declares its own block, and it includes `security-events: write`. |
 | `llmadk/config.go:94` silently drops `Labels` | Documented deliberate classification: `Labels` are Google billing metadata ADK sets per agent, so they are ignored explicitly (`llmadk/fields.go:79`), not dropped silently. Same false positive as round 50. |
 | `pkg/providers/gemini/gemini.go:122` panics on missing `usageMetadata` | `Response.Usage` is a value (`llms.Usage`), not a pointer, so `result.Usage.TotalTokens` cannot panic; the probe with a usage-less response returns estimated usage instead. |
+
+Round 56 (2026-10-10) reported 13 errors. Fixed: the poll backoff saturates at
+its limit instead of overflowing a float-to-duration conversion to a negative
+value (which fired the timer immediately and could spin);
+`WeightedFallbackChain` overrides `AddClient`/`RemoveClient` so the weight list
+stays aligned with the embedded chain's entries and `Weights` takes the chain
+lock; a zero-value `CircuitBreaker` applies the same failure/reset/half-open
+defaults as `NewCircuitBreaker` instead of opening on its first failure; the
+OTel middleware drains the provider stream after an error chunk rather than
+abandoning its sender; the Groq registry factory forwards `embedding_model` from
+`llms.Config`; `GenerateTyped` stops applying its generated required-field and
+`additionalProperties` checks when the caller supplied their own JSON Schema;
+and required-field presence no longer collapses two fields whose JSON names
+differ only by case. The non-blocking token path now finances an oversized
+charge as burst plus debt like the blocking path; round 54 had changed it to
+reject the whole call, which made a limiter whose burst sits below the estimate
+reject every request forever.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go:373` leaks `user:pa` for `https://user:pa?ss@host/path` | `url.Parse` returns an error for that malformed userinfo, so the sanitizer takes the hand-cut path and strips through the last `@`, yielding `https://host/v1`. Same false positive as rounds 49, 51, and 53. |
+| `.github/workflows/ci.yml:14` requests an unavailable Go 1.26 | Go 1.26.x is published and `go.mod` declares `go 1.26.0`; the shared version is intentional. Recurring false positive. |
+| `.github/workflows/release.yml:22` references unpublished action majors | `actions/checkout@v7`, `actions/setup-go@v7`, `actions/upload-artifact@v7`, and `actions/download-artifact@v8` are published. Recurring false positive. |
+| `docs/guides/resilience.md:374` is a broken example that ignores the constructor error | The tip names `NewWeightedFallbackChain` and `MustNewWeightedFallbackChain` in prose; it is not a code snippet, assigns no result, and nothing compiles. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes `SpeechUsageHandler` | `speech.go` reads the handler on the terminal `speech.audio.done` event, and `TestStreamSpeech_ReportedCharacters` covers it. Recurring false positive. |

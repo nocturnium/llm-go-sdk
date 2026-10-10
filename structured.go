@@ -50,7 +50,9 @@ type RepairOptions struct {
 
 // GenerateTyped generates content with a JSON Schema response format and unmarshals
 // the response content into T. If opts already include a json_schema response
-// format, that schema is used; otherwise SchemaFrom[T] is applied automatically.
+// format, that schema is used and is the only contract enforced; otherwise
+// SchemaFrom[T] is applied automatically and the generated required-field and
+// additionalProperties rules are enforced on the response.
 //
 // If the model wraps its JSON in markdown fences or surrounding prose, GenerateTyped
 // transparently extracts the embedded JSON before unmarshaling. For model-driven
@@ -81,7 +83,13 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 
 	applied := ApplyOptions(opts...)
 	callOpts := opts
-	if applied.ResponseFormat == nil || applied.ResponseFormat.Type != ResponseFormatJSONSchema {
+	// explicitSchema records whether the caller supplied their own JSON Schema.
+	// The generated schema marks every JSON-visible field required, so its
+	// structural check would reject a response the caller's schema deliberately
+	// permits (optional fields, additional properties). Only enforce that check
+	// against the schema this function generated.
+	explicitSchema := applied.ResponseFormat != nil && applied.ResponseFormat.Type == ResponseFormatJSONSchema
+	if !explicitSchema {
 		schema, err := SchemaFrom[T]()
 		if err != nil {
 			return zero, nil, err
@@ -105,7 +113,7 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 		}
 		lastResp = resp
 
-		value, perr := parseTyped[T](resp.Content)
+		value, perr := parseTypedForSchema[T](resp.Content, explicitSchema)
 		if perr == nil {
 			return value, resp, nil
 		}
@@ -124,10 +132,21 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 }
 
 // parseTyped unmarshals content into T, first directly and then, if that fails,
-// from JSON embedded in markdown fences or surrounding prose.
+// from JSON embedded in markdown fences or surrounding prose. It enforces the
+// schema SchemaFrom[T] advertises. When the caller supplied their own schema via
+// WithJSONSchema, use parseTypedForSchema instead.
 func parseTyped[T any](content string) (T, error) {
+	return parseTypedForSchema[T](content, false)
+}
+
+// parseTypedForSchema is parseTyped with the generated schema's structural
+// checks disabled for callerSchema. A caller-supplied JSON Schema is the
+// contract the model was given, and it may make Go fields optional or permit
+// additional properties; enforcing the generated shape would reject responses
+// the caller's schema accepts.
+func parseTypedForSchema[T any](content string, callerSchema bool) (T, error) {
 	var value T
-	directErr := unmarshalCandidate[T](content, &value)
+	directErr := unmarshalCandidate[T](content, &value, callerSchema)
 	if directErr == nil {
 		return value, nil
 	}
@@ -138,7 +157,7 @@ func parseTyped[T any](content string) (T, error) {
 	reason := directErr
 	for _, extracted := range extractJSONCandidates(content) {
 		var v T
-		extractedErr := unmarshalCandidate[T](extracted, &v)
+		extractedErr := unmarshalCandidate[T](extracted, &v, callerSchema)
 		if extractedErr == nil {
 			return v, nil
 		}
@@ -198,7 +217,7 @@ func schemaPermitsNull(typ reflect.Type) bool {
 // otherwise satisfy a struct with its zero value. For struct targets the
 // candidate must at least name one of the struct's JSON fields; this keeps a
 // later matching object from being shadowed by unrelated prose JSON.
-func unmarshalCandidate[T any](data string, out *T) error {
+func unmarshalCandidate[T any](data string, out *T, callerSchema bool) error {
 	if err := json.Unmarshal([]byte(data), out); err != nil {
 		return err
 	}
@@ -219,6 +238,12 @@ func unmarshalCandidate[T any](data string, out *T) error {
 	}
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
+	}
+	// A caller-supplied schema governs the response shape; the generated one is
+	// neither advertised nor sent, so its required/allowed-property rules must
+	// not reject an object the caller's schema permits.
+	if callerSchema {
+		return nil
 	}
 	// A struct target still needs every required field; a slice or array of
 	// structs needs each element validated. Anything else has no object schema
@@ -264,10 +289,17 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 		}
 		return fmt.Errorf("candidate %s does not match %s", data, target)
 	}
-	byLower := make(map[string]json.RawMessage, len(raw))
-	for key, value := range raw {
-		lower := strings.ToLower(key)
-		byLower[lower] = value
+	// rawNamesByFold records which JSON keys fold together. A candidate with two
+	// keys differing only by case is ambiguous for a case-insensitive lookup,
+	// just as two struct fields differing only by case are for encoding/json.
+	rawNamesByFold := make(map[string][]string, len(raw))
+	for key := range raw {
+		fold := strings.ToLower(key)
+		rawNamesByFold[fold] = append(rawNamesByFold[fold], key)
+	}
+	requiredByFold := make(map[string]int, len(required))
+	for name := range required {
+		requiredByFold[strings.ToLower(name)]++
 	}
 	// The generated schema emits additionalProperties:false, so a key the struct
 	// cannot populate violates the advertised contract even though json.Unmarshal
@@ -284,9 +316,19 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 		}
 	}
 	for name := range required {
-		value, ok := byLower[strings.ToLower(name)]
+		value, ok := raw[name]
 		if !ok {
-			return fmt.Errorf("candidate %s is missing required field %q", data, name)
+			// Fall back to a case-insensitive match, mirroring encoding/json's
+			// field lookup, but only when the match is unambiguous on both sides.
+			// Two required fields differing only by case used to share one "lower"
+			// bucket, so a response naming just one of them satisfied both and
+			// decoded the other to its zero value.
+			fold := strings.ToLower(name)
+			keys := rawNamesByFold[fold]
+			if requiredByFold[fold] != 1 || len(keys) != 1 {
+				return fmt.Errorf("candidate %s is missing required field %q", data, name)
+			}
+			value = raw[keys[0]]
 		}
 		field, ok := structFieldByJSONName(target, name)
 		if !ok {
