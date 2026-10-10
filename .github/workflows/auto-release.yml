@@ -95,6 +95,7 @@ jobs:
         run: go test -race ./...
 
       - name: Create and push tag
+        id: tag
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
@@ -115,6 +116,7 @@ jobs:
           fi
           git tag -a "${VERSION}" -m "${VERSION}"
           git push origin "${VERSION}"
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
       # GoReleaser's SBOM step shells out to syft, which is not preinstalled.
       - name: Install Syft (SBOM generation)
@@ -139,6 +141,18 @@ jobs:
           name: release-artifacts-${{ needs.version.outputs.version }}
           path: dist/*
           retention-days: 30
+
+      # A tag pushed before GoReleaser runs is the release baseline: if the
+      # release fails, that tag must not stay behind, or the next push would
+      # compute changes from a commit that never produced artifacts and skip it
+      # forever. Only remove a tag this run created, so a reused or pre-existing
+      # tag is never touched.
+      - name: Remove the tag if the release failed
+        if: failure() && steps.tag.outputs.created == 'true'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          git push origin ":refs/tags/${VERSION}" || true
 
   # No changelog job: CHANGELOG.md is hand-written. A git-cliff regeneration
   # would replace the curated [Unreleased] prose with one line per commit, and
