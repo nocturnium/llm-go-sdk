@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `APIError.Is` no longer reports a match for a nil target, so `errors.Is(err, nil)` is false for an unclassified API error. A self-referential embedded struct no longer adds a phantom required property to the generated structured-output schema, which had rejected valid responses. Structured Langfuse output omits `usage` when the response reported none.
 - Azure `ListModels` queries the account-level `/openai/models` route; it previously appended `/models` to the deployment-scoped URL and so always fell back to the single configured deployment.
 - Token-debt settlement in the rate limiter charges the bucket before it removes the installment from the debt, so a concurrent `RecordTokens` refund cannot cancel against debt that was already deducted but not yet reserved.
 - A struct whose decode is governed by a custom `json.Unmarshaler` (its own or promoted) accepts JSON null, matching the unconstrained `{}` schema it emits instead of rejecting a value the schema allows.

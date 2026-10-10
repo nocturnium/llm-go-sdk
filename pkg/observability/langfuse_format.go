@@ -123,7 +123,12 @@ func FormatOutput(resp *llms.Response, format OutputFormat) string {
 			Content:      resp.Content,
 			FinishReason: string(resp.FinishReason),
 			ToolCalls:    resp.ToolCalls,
-			Usage:        &resp.Usage,
+		}
+		// A zero Usage means the provider reported none; omit it rather than
+		// record unknown token counts as zero.
+		if resp.Usage != (llms.Usage{}) {
+			usage := resp.Usage
+			structured.Usage = &usage
 		}
 		data, err := json.Marshal(structured)
 		if err != nil {

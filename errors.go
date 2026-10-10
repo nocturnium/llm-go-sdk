@@ -164,7 +164,11 @@ func (e *APIError) Unwrap() error {
 
 // Is reports whether the error matches a target error
 func (e *APIError) Is(target error) bool {
-	return errors.Is(e.underlyingError(), target)
+	underlying := e.underlyingError()
+	if underlying == nil || target == nil {
+		return false
+	}
+	return errors.Is(underlying, target)
 }
 
 // underlyingError maps status codes and error types to sentinel errors

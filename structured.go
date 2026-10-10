@@ -794,8 +794,23 @@ type schemaField struct {
 // shallowest field and treats equal-depth duplicates as ambiguous, so callers
 // must preserve these depths when merging an embedded struct.
 func schemaForStructDepth(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any, map[string]int, error) {
-	seen[typ] = true
-	defer delete(seen, typ)
+	return schemaForStructChain(typ, seen, make(map[reflect.Type]bool))
+}
+
+// schemaForStructChain is schemaForStructDepth with the set of struct types on
+// the current embedding chain. encoding/json visits each embedded type once per
+// chain, so an embed that cycles back to a type already on the chain promotes
+// nothing; flattening it, or treating it as a named field, would advertise a
+// property the decoder never populates.
+func schemaForStructChain(typ reflect.Type, seen, chain map[reflect.Type]bool) (map[string]any, map[string]int, error) {
+	// The type may already be in seen when it is reached as an embedded struct of
+	// one of its own named-field descendants; leave that outer entry in place.
+	if !seen[typ] {
+		seen[typ] = true
+		defer delete(seen, typ)
+	}
+	chain[typ] = true
+	defer delete(chain, typ)
 
 	fields := make(map[string]schemaField)
 
@@ -833,7 +848,7 @@ func schemaForStructDepth(typ reflect.Type, seen map[reflect.Type]bool) (map[str
 		// them. An embedded field WITH a json name falls through to be treated as
 		// a normal named field.
 		if field.Anonymous {
-			props, depths, ok, err := mergeEmbeddedSchema(field, seen)
+			props, depths, ok, err := mergeEmbeddedSchema(field, seen, chain)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -886,7 +901,7 @@ func schemaForStructDepth(typ reflect.Type, seen map[reflect.Type]bool) (map[str
 // caller handles it as a normal field. The caller merges the returned properties
 // so it can resolve same-depth conflicts, which encoding/json treats as
 // ambiguous.
-func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) (props map[string]any, depths map[string]int, ok bool, err error) {
+func mergeEmbeddedSchema(field reflect.StructField, seen, chain map[reflect.Type]bool) (props map[string]any, depths map[string]int, ok bool, err error) {
 	tag := field.Tag.Get("json")
 	if tag == "-" {
 		return nil, nil, true, nil // embedded but explicitly skipped
@@ -917,16 +932,14 @@ func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) 
 	if implementsJSONUnmarshaler(ft) {
 		return nil, nil, false, nil
 	}
-	// Recursion guard: schemaForStruct does not itself check seen (that guard
-	// lives in schemaForType), so a self- or mutually-recursive embedded struct
-	// would recurse forever and fatally overflow the stack. Fall back to the
-	// normal field path, which routes through schemaForType's seen guard and
-	// terminates with an unconstrained {}.
-	if seen[ft] {
-		return nil, nil, false, nil
+	// Recursion guard: a self- or mutually-recursive embedded struct would
+	// recurse forever. encoding/json skips an embedded type it has already
+	// visited on this chain, so the cyclic embed promotes no fields.
+	if chain[ft] {
+		return nil, nil, true, nil
 	}
 
-	props, depths, err = schemaForStructDepth(ft, seen)
+	props, depths, err = schemaForStructChain(ft, seen, chain)
 	if err != nil {
 		return nil, nil, true, err
 	}

@@ -627,3 +627,16 @@ Round 62 (2026-10-10) reported 10 errors. Fixed: section 6.4 of
 | `pkg/providers/groq/options_coverage_test.go:333` lacks an API key | The test passes `APIKey: "test-key"` in `llms.Config`. |
 | `structured.go:323` case-insensitive property match | Mirrors `json.Unmarshal` by design (rounds 55, 56, 61). |
 | `structured.go:450` nested pointers accept null | Pointer fields accept null by design (round 53). |
+
+Round 63 (2026-10-10) reported 6 errors. Fixed: `APIError.Is` returns false for
+a nil target (an unclassified error used to match `errors.Is(err, nil)`); a
+self-referential embedded struct (`type Node struct{ *Node; Value string }`) no
+longer adds a phantom required `Node` property to the schema, matching how
+`encoding/json` skips a cyclic embed; and the structured Langfuse output omits
+`usage` when the response carried none instead of reporting zeros.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `ratelimit.go:574` refund can exceed what was charged for an oversized estimate | With burst 100, estimate 5000 and actual 10, the 4900 of debt is cancelled first, leaving a refund of 90 against the 100 charged to the bucket, so the net charge is 10. `TestRecordTokens_RefundCappedAtWhatWasCharged` covers it. |
+| `pkg/observability/metrics_test.go:136` fixture lacks `callResp` | Recurring false positive (round 61); the test passes. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring false positive; `speech.go` calls it on the terminal event. |
