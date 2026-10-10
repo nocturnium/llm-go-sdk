@@ -59,10 +59,15 @@ type CircuitBreaker struct {
 	onCallbackPanic func(recovered any, from, to CircuitState)
 
 	// State
-	state           CircuitState
-	failures        int
-	successes       int // Successes in half-open state
-	halfOpenCount   int // Requests currently in flight in half-open
+	state         CircuitState
+	failures      int
+	successes     int // Successes in half-open state
+	halfOpenCount int // Requests currently in flight in half-open
+	// inflightClosed counts requests admitted while the breaker was closed.
+	// A public Allow/RecordSuccess pair carries no probe token, so a completion
+	// in half-open is attributed to a stale closed request while one is
+	// outstanding, rather than closing the breaker as if it were a probe.
+	inflightClosed  int
 	lastFailureTime time.Time
 	lastStateChange time.Time
 
@@ -174,6 +179,7 @@ func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
 
 	switch cb.state {
 	case CircuitClosed:
+		cb.inflightClosed++
 		return true, false
 
 	case CircuitOpen:
@@ -205,7 +211,18 @@ func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
 
 // RecordSuccess records a successful request
 func (cb *CircuitBreaker) RecordSuccess() {
-	cb.recordSuccess(true)
+	cb.recordSuccess(cb.publicResultIsProbe())
+}
+
+// publicResultIsProbe reports whether a completion reported through the public
+// RecordSuccess/RecordFailure methods corresponds to a half-open probe. It is
+// false while a request admitted through the public Allow in the closed state is
+// still outstanding, so that stale result cannot be mistaken for a probe after a
+// later transition.
+func (cb *CircuitBreaker) publicResultIsProbe() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.inflightClosed == 0
 }
 
 // recordSuccess records a successful request. halfOpenProbe is false for a
@@ -219,9 +236,18 @@ func (cb *CircuitBreaker) recordSuccess(halfOpenProbe bool) {
 	switch cb.state {
 	case CircuitClosed:
 		cb.failures = 0 // Reset failure count on success
+		if cb.inflightClosed > 0 {
+			cb.inflightClosed--
+		}
 
 	case CircuitHalfOpen:
 		if !halfOpenProbe {
+			// A request admitted while closed completing in half-open: it holds
+			// no probe permit, so it can neither close the breaker nor be
+			// counted as a probe. Retire its in-flight mark.
+			if cb.inflightClosed > 0 {
+				cb.inflightClosed--
+			}
 			return
 		}
 		if cb.halfOpenCount == 0 {
@@ -248,7 +274,7 @@ func (cb *CircuitBreaker) recordSuccess(halfOpenProbe bool) {
 
 // RecordFailure records a failed request
 func (cb *CircuitBreaker) RecordFailure() {
-	cb.recordFailure(true)
+	cb.recordFailure(cb.publicResultIsProbe())
 }
 
 // recordFailure records a failed request. A stale failure from a request
@@ -264,6 +290,9 @@ func (cb *CircuitBreaker) recordFailure(halfOpenProbe bool) {
 	switch cb.state {
 	case CircuitClosed:
 		cb.failures++
+		if cb.inflightClosed > 0 {
+			cb.inflightClosed--
+		}
 		if cb.failures >= cb.maxFailures {
 			cb.transitionTo(CircuitOpen)
 		}
@@ -283,12 +312,6 @@ func (cb *CircuitBreaker) recordFailure(halfOpenProbe bool) {
 	case CircuitOpen:
 		// Circuit is already open, just update the failure time
 	}
-}
-
-// release abandons an allowed request without treating it as provider health
-// evidence. In half-open it returns the in-flight probe permit.
-func (cb *CircuitBreaker) release() {
-	cb.releasePermit(true)
 }
 
 // releasePermit abandons an allowed request without treating it as provider
