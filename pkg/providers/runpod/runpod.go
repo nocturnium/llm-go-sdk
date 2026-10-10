@@ -42,16 +42,15 @@ type Client struct {
 // The endpoint ID is required and can be set via WithEndpointID.
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
+	if options.EndpointID == "" {
+		return nil, ErrMissingEndpointID
+	}
 
 	apiKey, err := llms.RequireAPIKey("runpod", options.APIKey, llms.EnvRunPodAPIKey)
 	if err != nil {
 		return nil, err
 	}
 	options.APIKey = apiKey
-
-	if options.EndpointID == "" {
-		return nil, ErrMissingEndpointID
-	}
 
 	// Build the base URL for OpenAI-compatible API
 	// Format: https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1

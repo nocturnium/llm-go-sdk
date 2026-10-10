@@ -184,6 +184,9 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 
 // WaitN blocks until the rate limit allows n requests with estimated tokens
 func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
+	if requests <= 0 {
+		return fmt.Errorf("rate limit requests must be positive")
+	}
 	if !rl.blocking {
 		return rl.tryAcquire(requests, tokens)
 	}

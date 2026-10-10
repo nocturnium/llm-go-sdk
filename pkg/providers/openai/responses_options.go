@@ -33,5 +33,5 @@ func WithStore(store bool) llms.CallOption {
 // server-side state (WithStore / WithPreviousResponseID), e.g. zero-data-
 // retention deployments. No effect unless the client was built with WithResponsesAPI().
 func WithReasoningRoundTrip() llms.CallOption {
-	return llms.WithExtraBodyParam("include_encrypted_reasoning", true)
+	return llms.WithExtraBodyParam("include", []string{"reasoning.encrypted_content"})
 }

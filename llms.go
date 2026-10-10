@@ -4,6 +4,7 @@ package llms
 
 import (
 	"context"
+	"reflect"
 )
 
 // Provider represents an LLM provider type
@@ -77,10 +78,12 @@ type Wrapper interface {
 func UnwrapAll(llm LLM) LLM {
 	seen := make(map[LLM]struct{})
 	for {
-		if _, ok := seen[llm]; ok {
-			return llm
+		if reflect.TypeOf(llm).Comparable() {
+			if _, ok := seen[llm]; ok {
+				return llm
+			}
+			seen[llm] = struct{}{}
 		}
-		seen[llm] = struct{}{}
 		wrapper, ok := llm.(Wrapper)
 		if !ok {
 			return llm
@@ -96,10 +99,12 @@ func GetMiddleware(llm LLM) []Wrapper {
 	current := llm
 	seen := make(map[LLM]struct{})
 	for {
-		if _, ok := seen[current]; ok {
-			break
+		if reflect.TypeOf(current).Comparable() {
+			if _, ok := seen[current]; ok {
+				break
+			}
+			seen[current] = struct{}{}
 		}
-		seen[current] = struct{}{}
 		wrapper, ok := current.(Wrapper)
 		if !ok {
 			break

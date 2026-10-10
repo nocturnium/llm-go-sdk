@@ -508,7 +508,18 @@ func toolDemoAction(c commandContext) error {
 	if unit == "" {
 		unit = "fahrenheit"
 	}
-	weatherResult := fmt.Sprintf(`{"location": "%s", "temperature": 72, "unit": "%s", "condition": "sunny", "humidity": 45}`, args.Location, unit)
+	weatherPayload := struct {
+		Location    string `json:"location"`
+		Temperature int    `json:"temperature"`
+		Unit        string `json:"unit"`
+		Condition   string `json:"condition"`
+		Humidity    int    `json:"humidity"`
+	}{args.Location, 72, unit, "sunny", 45}
+	encodedWeather, err := json.Marshal(weatherPayload)
+	if err != nil {
+		return fmt.Errorf("marshal weather response: %w", err)
+	}
+	weatherResult := string(encodedWeather)
 
 	_, _ = fmt.Fprintf(c.out, "Tool response: %s\n", weatherResult)
 	_, _ = fmt.Fprintln(c.out)

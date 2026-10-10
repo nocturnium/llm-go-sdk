@@ -265,7 +265,7 @@ func main() {
 
 	fmt.Printf("Using: %s (%s)\n", client.Provider(), client.Model())
 
-	if !client.Capabilities().Vision {
+	if !llms.GetCapabilities(client).Vision {
 		log.Fatalf("%s/%s does not support vision", client.Provider(), client.Model())
 	}
 
