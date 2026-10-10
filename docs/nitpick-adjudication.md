@@ -660,3 +660,15 @@ string-keyed map result through as its fields instead of wrapping it in
 | `featherless.go:71` speech usage handler discarded | Recurring false positive; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
 | `tokens.go:58` `isNilInterface` undefined | Defined in `llms.go:120`; the package builds. |
+
+Round 65 (2026-10-10) reported 6 errors. Fixed: the direct-call snippet in
+`docs/guides/mcp.md` no longer declares an unused variable; the MCP handshake
+decodes server capabilities into a scratch value so a malformed map cannot leave
+a half-populated view; and `RunTools` returns an error for a nil registry
+instead of panicking.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring false positive; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
+| `structured.go:323` case-variant properties | Mirrors `json.Unmarshal` by design (rounds 55, 56, 61, 62). |
+| `structured.go:450` pointer fields accept null | By design (round 53). |

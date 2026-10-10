@@ -110,6 +110,9 @@ func WithCallOptions(options ...CallOption) RunToolsOption {
 // for tools, RunTools returns the last response, the transcript, and an error that
 // wraps ErrMaxIterations.
 func RunTools(ctx context.Context, llm LLM, messages []Message, registry *ToolRegistry, opts ...RunToolsOption) (*Response, []Message, error) {
+	if registry == nil {
+		return nil, append([]Message(nil), messages...), errors.New("llms: RunTools requires a non-nil ToolRegistry")
+	}
 	cfg := applyRunToolsOptions(opts...)
 	transcript := append([]Message(nil), messages...)
 	var lastResp *Response

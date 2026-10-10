@@ -381,7 +381,13 @@ func (c *Client) initialize(ctx context.Context) error {
 	if len(result.Capabilities) > 0 {
 		// Capabilities are advisory; a malformed map should not fail the handshake,
 		// so an unmarshal error leaves the typed view zero-valued.
-		_ = json.Unmarshal(result.Capabilities, &c.serverCaps)
+		// Decode into a scratch value: json.Unmarshal can fill fields before it
+		// reports a syntax or type error, and a malformed map must not leave a
+		// half-populated view that callers then act on.
+		var caps ServerCapabilities
+		if err := json.Unmarshal(result.Capabilities, &caps); err == nil {
+			c.serverCaps = caps
+		}
 	}
 
 	note, err := encodeNotification(methodInitialized, nil)
