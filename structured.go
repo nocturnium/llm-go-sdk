@@ -291,6 +291,12 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 		if err != nil {
 			return nil, err
 		}
+		// The json ",string" option makes encoding/json emit the field as a
+		// quoted JSON string regardless of the Go type, so the model must be told
+		// to return a string here or its numeric/bool value fails to decode.
+		if jsonFieldStringOption(field) {
+			fieldSchema = map[string]any{schemaKeyType: schemaTypeString}
+		}
 		properties[name] = fieldSchema
 		required = appendUnique(required, name)
 	}
@@ -434,6 +440,18 @@ func jsonFieldName(field reflect.StructField) (string, bool) {
 		name = field.Name
 	}
 	return name, false
+}
+
+// jsonFieldStringOption reports whether the field's json tag carries the
+// ",string" option, which makes encoding/json emit and expect a quoted string.
+func jsonFieldStringOption(field reflect.StructField) bool {
+	parts := strings.Split(field.Tag.Get("json"), ",")
+	for _, opt := range parts[1:] {
+		if opt == "string" {
+			return true
+		}
+	}
+	return false
 }
 
 func schemaNameForType(typ reflect.Type) string {

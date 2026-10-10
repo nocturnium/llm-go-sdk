@@ -80,16 +80,18 @@ const maxTokenInstallments = 64
 // tokens; callers who want tighter client-side pacing can lower it via
 // WithTokenBurst.
 //
-// NOTE: a per-request token count larger than this burst would make
-// golang.org/x/time/rate's WaitN/AllowN reject every call (n > burst is never
-// satisfiable). Rather than override an explicit WithTokenBurst here, the Wait
-// paths cap the requested token count to the burst (see WaitN/tryAcquire), which
-// preserves the caller's chosen burst while avoiding a self-inflicted outage.
+// The default is raised to at least the per-request estimate so a configured
+// budget below one request's estimate is still charged in full. Otherwise the
+// Wait paths clamp the charge to the burst, and a 500/min budget against the
+// default 1000-token estimate would bill only 500 tokens per call, letting
+// callers consume roughly twice the configured rate. An explicit WithTokenBurst
+// is honored as-is; the Wait paths cap the charge to it (n > burst is never
+// satisfiable in golang.org/x/time/rate), which is the caller's chosen pacing.
 func (rl *RateLimiter) tokenBucketBurst() int {
 	if rl.tokenBurst > 0 {
 		return rl.tokenBurst
 	}
-	return rl.tokensPerMin
+	return max(rl.tokensPerMin, rl.tokenEstimate)
 }
 
 // WithRequestsPerMinute sets the maximum requests per minute

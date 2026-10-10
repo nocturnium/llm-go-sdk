@@ -648,3 +648,17 @@ func TestRateLimiter_TryAcquire_ClampsRequestsToBurst(t *testing.T) {
 		t.Fatalf("tryAcquire with requests above the burst: %v", err)
 	}
 }
+
+// TestRateLimiter_TokenBurstCoversEstimate pins that a token budget smaller
+// than the per-request estimate is still charged in full. Clamping the charge
+// to a burst below the estimate let a 500/min limiter bill only 500 tokens per
+// 1000-token request, doubling the effective rate.
+func TestRateLimiter_TokenBurstCoversEstimate(t *testing.T) {
+	rl := NewRateLimiter(
+		WithTokensPerMinute(500),
+		WithTokenEstimate(1000),
+	)
+	if got := rl.tokenBucketBurst(); got < 1000 {
+		t.Fatalf("tokenBucketBurst() = %d, want at least the 1000-token estimate", got)
+	}
+}

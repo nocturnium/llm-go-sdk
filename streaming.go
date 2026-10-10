@@ -325,6 +325,9 @@ func (s *StreamSender) TimedOut() bool {
 // GetBufferSize returns the appropriate buffer size based on options.
 // Returns the default (100) if the configured value is 0 or negative.
 func GetBufferSize(opts *CallOptions) int {
+	if opts == nil {
+		return 100 // default
+	}
 	if opts.StreamBufferSize > 0 {
 		return opts.StreamBufferSize
 	}
@@ -336,6 +339,9 @@ func GetBufferSize(opts *CallOptions) int {
 // 0 or negative. This aligns with NewStreamSender's behavior which always uses a
 // minimum timeout.
 func GetSendTimeout(opts *CallOptions) time.Duration {
+	if opts == nil {
+		return DefaultStreamSendTimeout
+	}
 	if opts.StreamSendTimeout > 0 {
 		return opts.StreamSendTimeout
 	}
