@@ -667,22 +667,22 @@ func TestRateLimiter_TokenBurst(t *testing.T) {
 	}
 }
 
-// A request count above the limiter's burst is refused outright by rate.WaitN,
-// a condition waiting can never clear. Clamping to the burst keeps the wait
-// meaningful instead of reporting a retryable timeout for a permanent refusal.
-func TestRateLimiter_WaitN_ClampsRequestsToBurst(t *testing.T) {
+// A request count above the limiter's burst is a permanent refusal. Clamping it
+// to one would admit a call that asked for two or more while charging one,
+// bypassing the configured request rate.
+func TestRateLimiter_WaitN_RejectsRequestsAboveBurst(t *testing.T) {
 	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithRequestBurst(2), WithBlocking(true), WithWaitTimeout(time.Second))
-	if err := rl.WaitN(context.Background(), 5, 0); err != nil {
-		t.Fatalf("WaitN with requests above the burst: %v", err)
+	if err := rl.WaitN(context.Background(), 5, 0); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("WaitN with requests above the burst = %v, want ErrRateLimitExceeded", err)
 	}
 }
 
-// AllowN refuses any count above the burst outright, so the non-blocking path
-// clamps it the way the blocking path does rather than refusing every call.
-func TestRateLimiter_TryAcquire_ClampsRequestsToBurst(t *testing.T) {
+// The non-blocking path must not clamp an oversized request count either: doing
+// so would admit the call while charging less than the caller asked for.
+func TestRateLimiter_TryAcquire_RejectsRequestsAboveBurst(t *testing.T) {
 	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithRequestBurst(2), WithBlocking(false))
-	if err := rl.WaitN(context.Background(), 5, 0); err != nil {
-		t.Fatalf("tryAcquire with requests above the burst: %v", err)
+	if err := rl.WaitN(context.Background(), 5, 0); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("tryAcquire with requests above the burst = %v, want ErrRateLimitExceeded", err)
 	}
 }
 
