@@ -176,7 +176,7 @@ func (t *translator) thinking(tc *genai.ThinkingConfig) error {
 		default:
 			rc = &llms.ReasoningConfig{BudgetTokens: int(budget)}
 		}
-	case level == genai.ThinkingLevelUnspecified:
+	case level == "" || level == genai.ThinkingLevelUnspecified:
 		rc = &llms.ReasoningConfig{Effort: llms.ReasoningEffortMedium}
 	}
 	if rc != nil {

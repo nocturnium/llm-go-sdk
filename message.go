@@ -305,10 +305,15 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 		return messages
 	}
 
+	content := joinStrings(systemParts, "\n\n")
+	if len(systemContentParts) > 0 && content != "" {
+		systemContentParts = append([]ContentPart{{Type: PartTypeText, Text: content}}, systemContentParts...)
+		content = ""
+	}
 	result := make([]Message, 0, len(nonSystemMessages)+1)
 	result = append(result, Message{
 		Role:         RoleSystem,
-		Content:      joinStrings(systemParts, "\n\n"),
+		Content:      content,
 		Parts:        systemContentParts,
 		CacheControl: systemCacheControl,
 	})

@@ -442,6 +442,7 @@ func TestCostMiddleware_Call(t *testing.T) {
 	llm := &mockCostLLM{
 		provider: ProviderOpenAI,
 		model:    "gpt-4o",
+		callResp: testCostHelloResponse,
 		genResp: &Response{
 			Content: testCostHelloResponse,
 			Usage:   Usage{PromptTokens: 10, CompletionTokens: 5},

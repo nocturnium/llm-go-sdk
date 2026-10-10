@@ -98,7 +98,9 @@ func WithMetricsMeter(meter metric.Meter) MetricsOption {
 // WithMetricsCostTracker sets a custom cost tracker
 func WithMetricsCostTracker(tracker *llms.CostTracker) MetricsOption {
 	return func(m *MetricsMiddleware) {
-		m.costTracker = tracker
+		if tracker != nil {
+			m.costTracker = tracker
+		}
 	}
 }
 

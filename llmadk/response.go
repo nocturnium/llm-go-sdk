@@ -222,7 +222,7 @@ func usageMetadata(u llms.Usage) *genai.GenerateContentResponseUsageMetadata {
 	if u == (llms.Usage{}) {
 		return nil
 	}
-	prompt := u.PromptTokens + u.CacheReadTokens + u.CacheCreationTokens
+	prompt := saturatingAdd(u.PromptTokens, u.CacheReadTokens, u.CacheCreationTokens)
 	candidates := u.CompletionTokens - u.ReasoningTokens
 	if candidates < 0 {
 		candidates = 0
@@ -232,8 +232,20 @@ func usageMetadata(u llms.Usage) *genai.GenerateContentResponseUsageMetadata {
 		CandidatesTokenCount:    clampInt32(candidates),
 		ThoughtsTokenCount:      clampInt32(u.ReasoningTokens),
 		CachedContentTokenCount: clampInt32(u.CacheReadTokens),
-		TotalTokenCount:         clampInt32(prompt + candidates + u.ReasoningTokens),
+		TotalTokenCount:         clampInt32(saturatingAdd(prompt, candidates, u.ReasoningTokens)),
 	}
+}
+
+func saturatingAdd(values ...int) int {
+	max := int(^uint(0) >> 1)
+	total := 0
+	for _, value := range values {
+		if value > 0 && total > max-value {
+			return max
+		}
+		total += value
+	}
+	return total
 }
 
 // clampInt32 narrows a token count to genai's int32, saturating rather than
