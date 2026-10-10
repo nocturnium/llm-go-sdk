@@ -309,7 +309,12 @@ func (cb *CircuitBreaker) recordSuccess(p permit) {
 
 // recordSuccessLocked implements recordSuccess; the caller holds cb.mu.
 func (cb *CircuitBreaker) recordSuccessLocked(p permit) {
-	if cb.stalePermitLocked(p) {
+	// Any success admitted before a Reset is stale, not just a half-open probe.
+	// A closed-state success clears the failure count; letting a pre-reset
+	// completion do that would erase failures the fresh breaker accumulated
+	// after the operator reset it. (Failures stay asymmetric on purpose: a
+	// pre-reset failure is still provider-health evidence and counts.)
+	if p.generation != cb.generation {
 		return
 	}
 	switch cb.state {

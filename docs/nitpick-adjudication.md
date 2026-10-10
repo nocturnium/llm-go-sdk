@@ -478,3 +478,21 @@ and the tools example rejects a non-finite calculator result instead of emitting
 | `.github/workflows/ci.yml:26` uses an unavailable `actions/checkout@v7` | `v7` is published for checkout (verified against the GitHub tags API); the ref resolves. Same false positive as earlier rounds. |
 | `pkg/observability/metrics_test.go:133` must configure `callResp` | `MetricsMiddleware.Call` delegates to `GenerateContent` (the LLM interface has no `Call`), so the fixture's `genResp` is the response the middleware reads; the test passes. |
 | `pkg/providers/togetherai/image.go:67` needs JSON tags for the snake_case response fields | The anonymous decode struct already carries the `response_format`/`output_format` tags; `json.Unmarshal` reads the marshaled body and the image tests pass. |
+
+Round 54 (2026-10-10) reported 9 errors. Fixed: `tryAcquire` refuses an oversized
+non-blocking token charge instead of clamping it to the burst (clamping admitted
+the call while charging only the burst, so repeated oversized requests exceeded
+the configured token rate); a success admitted before `Reset` no longer clears
+the fresh breaker's failure count (failures stay asymmetric on purpose, still
+counting as provider-health evidence); a video result reports no usage at all
+for a size with no published unit instead of a nonzero quantity with an empty
+unit; the RunPod generic registration forwards `embedding_model`; `HandleAll`
+returns an error for a nil `*Response` instead of panicking; and `GenerateTyped`
+rejects a property the struct cannot populate, matching the advertised
+`additionalProperties: false`.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `internal/httpclient/security_wiring_test.go:197` redirects to an `ftp` URL that bypasses `CheckRedirect` | The probe shows the request fails with `redirect blocked: unsupported URL scheme: ftp`; `net/http` does invoke `CheckRedirect`, whose `validateURL` rejects the scheme, and the test passes. |
+| `llmadk/envelope.go:118` exposes hidden thought text through `PartMetadata` | Documented design: with `IncludeThoughts=false` Anthropic requires the signed text on replay, so the base64 envelope is reachable in session storage and the ADK event stream until `WithEnvelopeKey` (AEAD sealing) lands in v0.2 (`docs/design/llmadk.md:303`). Recurring false positive. |
+| `pkg/providers/anthropic/models_test.go:16` omits Sonnet 4 from the expected pricing | `AssertKnownModelTokenPricingReconcilesWithDefaultPricing` iterates the expected map and the known map independently; it does not require set equality, so the test passes without the entry. |

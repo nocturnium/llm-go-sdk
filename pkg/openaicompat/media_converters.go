@@ -279,11 +279,14 @@ func videoUsage(secondsText, size string) llms.MediaUsage {
 	if err != nil || seconds <= 0 || math.IsNaN(seconds) || math.IsInf(seconds, 0) {
 		return llms.MediaUsage{}
 	}
-	usage := llms.MediaUsage{Quantity: seconds}
-	if size == videoSize720pLandscape || size == videoSize720pPortrait {
-		usage.Unit = llms.MediaUnitSecond
+	// Only the 720p sizes have a published per-second rate; higher-resolution
+	// results are unpriced. Reporting a quantity with an empty unit would look
+	// like valid billable usage to a caller that inspects Quantity or serializes
+	// the usage, so leave both fields zero when the size has no unit.
+	if size != videoSize720pLandscape && size != videoSize720pPortrait {
+		return llms.MediaUsage{}
 	}
-	return usage
+	return llms.MediaUsage{Unit: llms.MediaUnitSecond, Quantity: seconds}
 }
 
 // ApplyMultipartExtra merges a caller's Extra map into a multipart transcription

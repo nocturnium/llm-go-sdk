@@ -257,11 +257,24 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 		}
 		return fmt.Errorf("candidate %s does not match %s", data, target)
 	}
-	provided := make(map[string]struct{}, len(raw))
 	byLower := make(map[string]json.RawMessage, len(raw))
 	for key, value := range raw {
-		provided[strings.ToLower(key)] = struct{}{}
-		byLower[strings.ToLower(key)] = value
+		lower := strings.ToLower(key)
+		byLower[lower] = value
+	}
+	// The generated schema emits additionalProperties:false, so a key the struct
+	// cannot populate violates the advertised contract even though json.Unmarshal
+	// would silently ignore it. Reject it here so the repair turn runs instead of
+	// accepting output the schema forbids. The comparison is case-insensitive to
+	// mirror encoding/json's field lookup.
+	visible := make(map[string]struct{}, len(required))
+	for name := range required {
+		visible[strings.ToLower(name)] = struct{}{}
+	}
+	for key := range raw {
+		if _, ok := visible[strings.ToLower(key)]; !ok {
+			return fmt.Errorf("candidate %s has unexpected property %q", data, key)
+		}
 	}
 	for name := range required {
 		value, ok := byLower[strings.ToLower(name)]

@@ -476,18 +476,6 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 		return ErrRateLimitExceeded
 	}
 
-	if tokenLimiter != nil && tokens > 0 {
-		if b := tokenLimiter.Burst(); tokens > b {
-			tokens = b
-		}
-		tokRes := tokenLimiter.ReserveN(now, tokens)
-		if !tokRes.OK() || tokRes.Delay() > 0 {
-			tokRes.CancelAt(now)
-			reqRes.CancelAt(now)
-			return ErrRateLimitExceeded
-		}
-	}
-
 	return nil
 }
 

@@ -280,6 +280,30 @@ func TestParseTyped_RawMessageAcceptsNull(t *testing.T) {
 	}
 }
 
+// The generated object schema sets additionalProperties:false, so a response
+// naming a property the struct cannot populate violates the advertised contract
+// even though json.Unmarshal would silently ignore it. Validation must reject it
+// so the repair turn runs.
+func TestParseTyped_RejectsUnexpectedProperties(t *testing.T) {
+	if _, err := parseTyped[structuredTestResult](`{"name":"Ada","age":36,"active":true,"tags":[],"note":null,"unexpected":true}`); err == nil {
+		t.Error("object with an unexpected property accepted, want a schema mismatch")
+	}
+	// A case-insensitive match is still a valid field, mirroring json.Unmarshal.
+	if _, err := parseTyped[structuredTestResult](`{"Name":"Ada","Age":36,"Active":true,"Tags":[],"Note":null}`); err != nil {
+		t.Errorf("case-insensitive fields rejected: %v", err)
+	}
+	// A nested unexpected property is rejected too.
+	type nested struct {
+		Count int `json:"count"`
+	}
+	type outer struct {
+		Inner nested `json:"inner"`
+	}
+	if _, err := parseTyped[outer](`{"inner":{"count":1,"bogus":2}}`); err == nil {
+		t.Error("nested object with an unexpected property accepted, want a schema mismatch")
+	}
+}
+
 // json.Unmarshal accepts null into a nested non-pointer scalar and leaves a
 // zero value, so `{"nested":{"count":null}}` would satisfy a schema that
 // describes count as a non-null integer. Nested validation must reject it the

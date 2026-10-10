@@ -687,6 +687,21 @@ func TestRateLimiter_TryAcquire_RejectsRequestsAboveBurst(t *testing.T) {
 	}
 }
 
+// The non-blocking path must not clamp an oversized token charge to the burst
+// either. Clamping admitted the call while charging only the burst, so repeated
+// oversized requests consumed more than the configured token rate.
+func TestRateLimiter_TryAcquire_RejectsTokensAboveBurst(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithTokensPerMinute(600),
+		WithTokenBurst(10),
+		WithBlocking(false),
+	)
+	if err := rl.WaitN(context.Background(), 1, 1000); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("tryAcquire with tokens above the burst = %v, want ErrRateLimitExceeded", err)
+	}
+}
+
 // TestRateLimiter_TokenBurstCoversEstimate pins that a token budget smaller
 // than the per-request estimate is still charged in full. Clamping the charge
 // to a burst below the estimate let a 500/min limiter bill only 500 tokens per

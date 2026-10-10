@@ -105,7 +105,6 @@ func TestCircuitBreaker_ResetGenerationsIsolateCompletions(t *testing.T) {
 	}
 }
 
-// TestCircuitBreaker_SlowProbesStillClose pins that a caller slower than
 // TestCircuitBreaker_ResetDropsStaleHalfOpenProbe pins that a half-open probe
 // admitted before Reset cannot reopen or consume a permit in the fresh
 // generation once Reset has returned the breaker to a clean closed state.
@@ -135,6 +134,32 @@ func TestCircuitBreaker_ResetDropsStaleHalfOpenProbe(t *testing.T) {
 	}
 	if cb.failures != 0 {
 		t.Errorf("stale probe failure counted as %d failures, want 0", cb.failures)
+	}
+}
+
+// TestCircuitBreaker_ResetDropsStaleClosedSuccess pins that a success admitted
+// while closed before a Reset cannot clear failures the fresh breaker records
+// afterward. Reset is meant to give the operator a clean slate, not one that an
+// in-flight pre-reset request can quietly wipe.
+func TestCircuitBreaker_ResetDropsStaleClosedSuccess(t *testing.T) {
+	cb := NewCircuitBreaker(WithMaxFailures(3), WithResetTimeout(time.Minute))
+	admitted, stale := cb.acquire()
+	if !admitted || stale.halfOpen {
+		t.Fatalf("pre-reset acquire = %v,%+v", admitted, stale)
+	}
+	cb.Reset()
+
+	for i := 0; i < 2; i++ {
+		_, p := cb.acquire()
+		cb.recordFailure(p)
+	}
+	if cb.failures != 2 {
+		t.Fatalf("post-reset failures = %d, want 2", cb.failures)
+	}
+
+	cb.recordSuccess(stale)
+	if cb.failures != 2 {
+		t.Errorf("stale success cleared post-reset failures: got %d, want 2", cb.failures)
 	}
 }
 

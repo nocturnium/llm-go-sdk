@@ -396,6 +396,9 @@ func (r *ToolRegistry) Handle(ctx context.Context, tc ToolCall) (Message, error)
 
 // HandleAll executes handlers for all tool calls in a response and returns tool messages.
 func (r *ToolRegistry) HandleAll(ctx context.Context, resp *Response) ([]Message, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("%w: response is nil", ErrToolCallFailed)
+	}
 	messages := make([]Message, 0, len(resp.ToolCalls))
 
 	for _, tc := range resp.ToolCalls {

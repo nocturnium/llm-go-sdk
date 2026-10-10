@@ -335,6 +335,10 @@ func TestToolRegistry(t *testing.T) {
 }
 
 func TestToolRegistry_HandleAll(t *testing.T) {
+	if _, err := NewToolRegistry().HandleAll(context.Background(), nil); err == nil {
+		t.Fatal("HandleAll(nil) succeeded, want an error")
+	}
+
 	registry := NewToolRegistry()
 
 	registry.Register(

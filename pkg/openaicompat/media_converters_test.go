@@ -237,6 +237,11 @@ func TestVideoStatusCostAndUnknown(t *testing.T) {
 			t.Fatal(out)
 		}
 	}
+	// A higher-resolution result has no published rate, so it must not report a
+	// nonzero quantity with an empty unit (which reads as billable usage).
+	if out := ConvertVideoStatus(&VideoObject{Status: "completed", Model: "sora-2", Seconds: "4", Size: "1024x1792"}); out.Cost != nil {
+		t.Fatalf("unexpected cost for unpriced size: %+v", out)
+	}
 }
 
 func TestMediaReportedCostAndMIME(t *testing.T) {
