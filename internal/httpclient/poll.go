@@ -52,7 +52,7 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 		if done && err == nil {
 			return nil
 		}
-		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		if err != nil && !(errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil) {
 			return err
 		}
 		if ctxErr := pollContextError(parent, ctx); ctxErr != nil {

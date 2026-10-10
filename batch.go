@@ -215,8 +215,12 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 		completed++
 		currentCompleted := completed
 		completedMu.Unlock()
-		// Call callback outside lock to prevent deadlock.
-		opts.ProgressCallback(currentCompleted, len(requests))
+		// Call callback outside lock to prevent deadlock. A progress callback is
+		// observational; it must not be able to terminate a worker goroutine.
+		func() {
+			defer func() { _ = recover() }()
+			opts.ProgressCallback(currentCompleted, len(requests))
+		}()
 	}
 	recordFailure := func(id string, duration time.Duration, err error) {
 		resultsMu.Lock()
