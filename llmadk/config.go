@@ -26,6 +26,9 @@ func (t *translator) reject(field Field, isHard bool, detail string) error {
 // config translates a GenerateContentConfig. Every field is translated,
 // ignored or rejected; see fieldHandling for the table.
 func (t *translator) config(cfg *genai.GenerateContentConfig) error {
+	if cfg == nil {
+		return nil
+	}
 	add := func(o llms.CallOption) { t.tr.callOptions = append(t.tr.callOptions, o) }
 
 	if cfg.Temperature != nil {
@@ -176,7 +179,7 @@ func (t *translator) thinking(tc *genai.ThinkingConfig) error {
 		default:
 			rc = &llms.ReasoningConfig{BudgetTokens: int(budget)}
 		}
-	case level == "" || level == genai.ThinkingLevelUnspecified:
+	case level == genai.ThinkingLevelUnspecified:
 		rc = &llms.ReasoningConfig{Effort: llms.ReasoningEffortMedium}
 	}
 	if rc != nil {

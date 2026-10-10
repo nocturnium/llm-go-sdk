@@ -451,7 +451,7 @@ func (rlc *RateLimitedClient) Stream(ctx context.Context, messages []llms.Messag
 
 	opts := llms.ApplyOptions(options...)
 	return llms.WrapStream(ctx, stream, opts, func(chunk llms.StreamChunk) llms.StreamChunk {
-		if chunk.Usage != nil {
+		if chunk.Usage != nil && chunk.Usage.TotalTokens > 0 {
 			rlc.limiter.RecordTokens(chunk.Usage.TotalTokens)
 		}
 		return chunk

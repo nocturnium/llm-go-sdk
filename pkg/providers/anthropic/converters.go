@@ -232,27 +232,30 @@ func convertContentParts(parts []llms.ContentPart) ([]anthropicapi.ContentPart, 
 				Text: part.Text,
 			})
 		case llms.PartTypeImage:
-			if part.Image != nil {
-				switch part.Image.Source {
-				case llms.ImageSourceBase64:
-					result = append(result, anthropicapi.ContentPart{
-						Type: "image",
-						Source: &anthropicapi.ImageSource{
-							Type:      "base64",
-							MediaType: part.Image.MediaType,
-							Data:      part.Image.Data,
-						},
-					})
-				case llms.ImageSourceURL:
-					// Anthropic fetches the image server-side from a public URL.
-					result = append(result, anthropicapi.ContentPart{
-						Type:   "image",
-						Source: &anthropicapi.ImageSource{Type: "url", URL: part.Image.Data},
-					})
-				default:
-					return nil, fmt.Errorf("%w: got %q", ErrUnsupportedImageSource, part.Image.Source)
-				}
+			if part.Image == nil {
+				return nil, fmt.Errorf("anthropic: image part is missing image data")
 			}
+			switch part.Image.Source {
+			case llms.ImageSourceBase64:
+				result = append(result, anthropicapi.ContentPart{
+					Type: "image",
+					Source: &anthropicapi.ImageSource{
+						Type:      "base64",
+						MediaType: part.Image.MediaType,
+						Data:      part.Image.Data,
+					},
+				})
+			case llms.ImageSourceURL:
+				// Anthropic fetches the image server-side from a public URL.
+				result = append(result, anthropicapi.ContentPart{
+					Type:   "image",
+					Source: &anthropicapi.ImageSource{Type: "url", URL: part.Image.Data},
+				})
+			default:
+				return nil, fmt.Errorf("%w: got %q", ErrUnsupportedImageSource, part.Image.Source)
+			}
+		default:
+			return nil, fmt.Errorf("anthropic: unsupported content part type %q", part.Type)
 		}
 	}
 	return result, nil

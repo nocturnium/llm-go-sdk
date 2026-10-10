@@ -232,7 +232,10 @@ func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *ht
 		body = map[string]any{}
 		const maxMultipartBytes = 64 << 20 // bound the body before parsing (gosec)
 		r.Body = http.MaxBytesReader(w, r.Body, maxMultipartBytes)
-		if err := r.ParseMultipartForm(32 << 20); err == nil { // #nosec G120 -- body bounded by MaxBytesReader above; test-only mock server
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			http.Error(w, "mock server: invalid multipart request: "+err.Error(), http.StatusBadRequest)
+			return nil, false
+		} else { // #nosec G120 -- body bounded by MaxBytesReader above; test-only mock server
 			defer func() { _ = r.MultipartForm.RemoveAll() }()
 			for key, values := range r.MultipartForm.Value {
 				if len(values) == 1 {
@@ -259,8 +262,14 @@ func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *ht
 		// A body that does not decode is answered with 400 rather than captured
 		// as an empty map: the real providers reject it, and a silent empty
 		// capture makes every LastRequest assertion pass on malformed output.
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			http.Error(w, "mock server: request body is not valid JSON: "+err.Error(), http.StatusBadRequest)
+			return nil, false
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			http.Error(w, "mock server: request body contains trailing data", http.StatusBadRequest)
 			return nil, false
 		}
 	}
