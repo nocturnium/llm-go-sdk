@@ -304,9 +304,9 @@ func ValidateImageContent(img *ImageContent) error {
 
 		// Check approximate decoded size before decoding to prevent OOM.
 		// Base64 encoding increases size by ~33%, so decoded size ≈ encoded size * 3/4.
-		approxDecodedSize := len(img.Data) * 3 / 4
-		if approxDecodedSize > MaxImageSize {
-			return fmt.Errorf("image data appears to exceed maximum allowed size of %d bytes (estimated %d bytes)", MaxImageSize, approxDecodedSize)
+		decodedSize := base64.StdEncoding.DecodedLen(len(img.Data))
+		if decodedSize > MaxImageSize {
+			return fmt.Errorf("image data appears to exceed maximum allowed size of %d bytes (estimated %d bytes)", MaxImageSize, decodedSize)
 		}
 
 		// Validate the whole base64 payload without keeping the decoded bytes:

@@ -78,6 +78,9 @@ type Wrapper interface {
 func UnwrapAll(llm LLM) LLM {
 	seen := make(map[LLM]struct{})
 	for {
+		if llm == nil {
+			return nil
+		}
 		if reflect.TypeOf(llm).Comparable() {
 			if _, ok := seen[llm]; ok {
 				return llm
@@ -99,6 +102,9 @@ func GetMiddleware(llm LLM) []Wrapper {
 	current := llm
 	seen := make(map[LLM]struct{})
 	for {
+		if current == nil {
+			break
+		}
 		if reflect.TypeOf(current).Comparable() {
 			if _, ok := seen[current]; ok {
 				break

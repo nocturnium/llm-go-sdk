@@ -132,7 +132,7 @@ func validateRootURI(raw string) error {
 	// does not have. It is also what a caller writing "file://relative/path"
 	// accidentally produces: the first segment becomes the authority, so the URI
 	// silently means something other than what they wrote.
-	if u.Host != "" && u.Host != "localhost" {
+	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
 		return fmt.Errorf("mcp: root URI %q must have no authority (got host %q); "+
 			"a local path needs three slashes, e.g. file:///path", raw, u.Host)
 	}
