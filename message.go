@@ -270,6 +270,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	}
 
 	var systemParts []string
+	var systemContentParts []ContentPart
 	systemCount := 0
 	var nonSystemMessages []Message
 	// A cache breakpoint on a system message survives consolidation: the merged
@@ -285,6 +286,11 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 			// the simple Content field) is not silently dropped.
 			if text := msg.Text(); text != "" {
 				systemParts = append(systemParts, text)
+			}
+			for _, part := range msg.Parts {
+				if part.Type != PartTypeText {
+					systemContentParts = append(systemContentParts, part)
+				}
 			}
 			if systemCacheControl == nil {
 				systemCacheControl = msg.CacheControl
@@ -303,6 +309,7 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	result = append(result, Message{
 		Role:         RoleSystem,
 		Content:      joinStrings(systemParts, "\n\n"),
+		Parts:        systemContentParts,
 		CacheControl: systemCacheControl,
 	})
 	result = append(result, nonSystemMessages...)
