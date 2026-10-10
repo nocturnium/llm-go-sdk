@@ -280,6 +280,39 @@ func TestParseTyped_RawMessageAcceptsNull(t *testing.T) {
 	}
 }
 
+// json.Unmarshal accepts null into a nested non-pointer scalar and leaves a
+// zero value, so `{"nested":{"count":null}}` would satisfy a schema that
+// describes count as a non-null integer. Nested validation must reject it the
+// same way the top-level and extracted-scalar paths do. A nested pointer field
+// still accepts null because nil is its natural encoding.
+func TestParseTyped_NestedNonNullableRejectsNull(t *testing.T) {
+	type nested struct {
+		Count int `json:"count"`
+	}
+	type outer struct {
+		Name   string  `json:"name"`
+		Note   *string `json:"note"`
+		Nested nested  `json:"nested"`
+	}
+	if _, err := parseTyped[outer](`{"name":"Ada","note":null,"nested":{"count":null}}`); err == nil {
+		t.Error("nested null count accepted, want a schema mismatch")
+	}
+	got, err := parseTyped[outer](`{"name":"Ada","note":null,"nested":{"count":7}}`)
+	if err != nil {
+		t.Fatalf("valid nested object failed: %v", err)
+	}
+	if got.Nested.Count != 7 || got.Note != nil {
+		t.Errorf("got %+v, want Count=7 Note=nil", got)
+	}
+
+	type inSlice struct {
+		Items []nested `json:"items"`
+	}
+	if _, err := parseTyped[inSlice](`{"items":[{"count":null}]}`); err == nil {
+		t.Error("null inside an object slice accepted, want a schema mismatch")
+	}
+}
+
 type structuredPromotedDoc struct {
 	structuredPromotedMeta
 	Name string `json:"name"`

@@ -461,3 +461,20 @@ writer goroutine forever.
 | Finding | Why it does not stand |
 | --- | --- |
 | Featherless `WithSpeechUsageHandler` is never wired into the client | `speech.go` reads `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. The reviewer saw the options file alone. |
+
+Round 53 (2026-10-10) reported 8 errors. Fixed: a nested `null` for a
+non-nullable field (`{"age":null}` into an `int`) is rejected like the top-level
+and extracted-scalar paths, so it drives the repair turn instead of decoding to a
+zero value (pointer fields still accept `null`); a transient failure opening a
+stream (429/5xx or a transport error, before any chunk is emitted) is retried
+like `GenerateContent` rather than surfaced immediately; a cross-origin 307/308
+redirect is refused when it would replay the request body to another origin;
+and the tools example rejects a non-finite calculator result instead of emitting
+`+Inf`/`NaN` as invalid JSON.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go:373` leaves malformed credentials in the sanitized host (`https://user:se#cret@host`) | `url.Parse` rejects that form with `invalid port ":se"`, so `sanitizeErrorURL` takes the hand-cut path and renders `https://host/v1`; the probe and `TestAPIError_ErrorRedactsAwkwardCredentialForms` cover it. |
+| `.github/workflows/ci.yml:26` uses an unavailable `actions/checkout@v7` | `v7` is published for checkout (verified against the GitHub tags API); the ref resolves. Same false positive as earlier rounds. |
+| `pkg/observability/metrics_test.go:133` must configure `callResp` | `MetricsMiddleware.Call` delegates to `GenerateContent` (the LLM interface has no `Call`), so the fixture's `genResp` is the response the middleware reads; the test passes. |
+| `pkg/providers/togetherai/image.go:67` needs JSON tags for the snake_case response fields | The anonymous decode struct already carries the `response_format`/`output_format` tags; `json.Unmarshal` reads the marshaled body and the image tests pass. |

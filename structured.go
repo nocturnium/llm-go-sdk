@@ -313,8 +313,24 @@ func structFieldByJSONName(target reflect.Type, name string) (reflect.StructFiel
 // Slices and arrays describe each element, and pointers are stripped the same
 // way schemaForType strips them.
 func validateFieldValue(value json.RawMessage, typ reflect.Type) error {
+	// A pointer field's natural zero is nil, which JSON null encodes, so a
+	// pointer field accepts null even though the generated schema strips the
+	// pointer and describes the pointee as non-null. (A top-level *T target is
+	// the exception, rejected in unmarshalCandidate.)
+	nullable := typ.Kind() == reflect.Pointer
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
+	}
+	// json.Unmarshal accepts null into a non-pointer scalar and leaves a zero
+	// value, so a nested `{"age":null}` would satisfy a schema that describes
+	// age as a non-null integer. Reject it the same way the extracted-scalar
+	// path does; only pointer fields and the unconstrained shapes (interface,
+	// map, RawMessage) permit null.
+	if isJSONNull(string(value)) {
+		if nullable || schemaPermitsNull(typ) {
+			return nil
+		}
+		return fmt.Errorf("field is null, but the schema requires a %s", typ)
 	}
 	switch typ.Kind() {
 	case reflect.Struct:

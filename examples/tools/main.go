@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"time"
 
@@ -197,6 +198,12 @@ func executeTool(name, arguments string) string {
 			result = args.A / args.B
 		default:
 			return `{"error": "unknown operation"}`
+		}
+		// float64 arithmetic can overflow to +Inf or produce NaN (for example
+		// 1e308 * 10 or 0/0 in a later operation); %g renders those as +Inf/NaN,
+		// which is not valid JSON and would break the model's tool-result parse.
+		if math.IsInf(result, 0) || math.IsNaN(result) {
+			return `{"error": "result is not a finite number"}`
 		}
 		return fmt.Sprintf(`{"result": %g}`, result)
 

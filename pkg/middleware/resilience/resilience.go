@@ -112,24 +112,83 @@ func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []llms.
 
 // Stream wraps the LLM's Stream method with resilience.
 //
-// Streaming failures surface as a terminal error chunk on the returned channel
-// rather than as the synchronous return value, so the circuit breaker is updated
-// from the stream's actual outcome (success/failure) once it completes. Mid-stream
-// retry is not possible once chunks have been emitted; only the initial connect
-// error is handled synchronously.
+// A transient failure opening the stream (429/5xx or a transport error) is
+// retried like GenerateContent, since no chunks have been emitted yet and the
+// caller has not seen a partial response. Once the stream is established its
+// outcome drives the circuit breaker: a terminal error chunk counts as a
+// provider failure, a clean finish as a success. Mid-stream retry is not
+// possible once chunks have been emitted.
 func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
-	admitted, p := rc.breaker.acquire()
-	if !admitted {
-		return nil, ErrCircuitOpen
+	var lastErr error
+	delay := rc.retry.InitialDelay
+	maxAttempts := rc.retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
 	}
-	src, err := rc.llm.Stream(ctx, messages, options...)
-	if err != nil {
-		if isProviderUnhealthy(err) {
-			rc.breaker.recordFailure(p)
-		} else {
-			rc.breaker.releasePermit(p)
+
+	var (
+		src <-chan llms.StreamChunk
+		p   permit
+	)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		admitted, perm := rc.breaker.acquire()
+		if !admitted {
+			if lastErr != nil {
+				return nil, fmt.Errorf("%w: %w", ErrCircuitOpen, lastErr)
+			}
+			return nil, ErrCircuitOpen
 		}
-		return nil, err
+
+		s, err := rc.llm.Stream(ctx, messages, options...)
+		if err == nil {
+			src, p = s, perm
+			break
+		}
+		lastErr = err
+
+		// Same classification as execute: only retryable upstream failures
+		// count against the breaker; a bad request or cancellation leaves it
+		// closed.
+		providerUnhealthy := isProviderUnhealthy(err)
+		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) || attempt >= maxAttempts-1 {
+			if providerUnhealthy {
+				rc.breaker.recordFailure(perm)
+			} else {
+				rc.breaker.releasePermit(perm)
+			}
+			return nil, err
+		}
+
+		// The next attempt obtains its own grant; this attempt's retryable
+		// error is not terminal provider-health evidence, so release its probe.
+		rc.breaker.releasePermit(perm)
+
+		jitteredDelay := calculateDelay(delay, rc.retry.Jitter)
+		retryDelay := retryDelayForError(err, jitteredDelay, rc.retry.MaxDelay)
+		if rc.onRetry != nil {
+			rc.onRetry(attempt+1, err, retryDelay)
+		}
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+
+		delay = time.Duration(float64(delay) * rc.retry.BackoffFactor)
+		if delay > rc.retry.MaxDelay {
+			delay = rc.retry.MaxDelay
+		}
+	}
+	if src == nil {
+		return nil, lastErr
 	}
 
 	opts := llms.ApplyOptions(options...)

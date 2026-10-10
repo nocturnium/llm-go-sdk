@@ -281,10 +281,32 @@ func (c *Client) installRedirectPolicy() {
 			return fmt.Errorf("redirect blocked: %w", err)
 		}
 		if len(via) > 0 && !sameRedirectOrigin(req, via[0]) {
+			// A 307/308 keeps the request body, so following a cross-origin
+			// redirect would replay the caller's payload (prompts, user content,
+			// possibly credentials) to an origin the redirecting host chose.
+			// Refuse rather than silently hand the body to a third party.
+			if requestHasBody(req) {
+				return errors.New("redirect blocked: cross-origin redirect would forward the request body")
+			}
 			stripCrossHostCredentials(req)
 		}
 		return nil
 	}
+}
+
+// requestHasBody reports whether req carries a payload that net/http would
+// replay on a redirect. ContentLength is the reliable signal: http.NewRequest
+// normalizes an absent body to a non-nil http.NoBody with length 0, while a
+// real payload from the DoJSON/DoRaw path is a bytes.Reader with a positive
+// length.
+func requestHasBody(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	if req.ContentLength > 0 {
+		return true
+	}
+	return req.Body != nil && req.Body != http.NoBody
 }
 
 // sameRedirectOrigin reports whether a redirect stayed on the same origin.
