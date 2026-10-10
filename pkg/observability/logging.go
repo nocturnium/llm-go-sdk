@@ -490,6 +490,7 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		var toolCalls []llms.ToolCall
 		contentTruncated := false
 		streamInterrupted := false
+		completed := false
 
 		for chunk := range stream {
 			// Use StreamSender to handle backpressure - if consumer stops reading,
@@ -529,6 +530,9 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			if chunk.Usage != nil {
 				usage = chunk.Usage
 			}
+			if chunk.Done {
+				completed = true
+			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
 			}
@@ -546,7 +550,11 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// A stream that was abandoned or canceled is a failure, and logging it
 		// through LogResponse made it byte-identical to a clean one: the only
 		// marker was a suffix on Content, which the default redaction strips.
-		if err := ctx.Err(); err != nil {
+		// A completed stream is logged as a response even if the caller's
+		// context is canceled by the time this goroutine reaches the check: the
+		// terminal chunk was already delivered, and reporting a cancellation
+		// would turn a finished request into a spurious failure.
+		if err := ctx.Err(); err != nil && !completed {
 			entry.Content += "...[stream canceled]"
 			m.logger.LogError(ctx, m.scrubContent(entry), err)
 			return

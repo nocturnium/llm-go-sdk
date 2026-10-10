@@ -383,6 +383,7 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 		var finishReason string
 		var toolCallCount int
 		var hadError bool
+		var completed bool
 		var firstChunkReceived bool
 		var ttft time.Duration
 
@@ -446,7 +447,9 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			}
 
 			if !hadError {
-				if err := ctx.Err(); err != nil {
+				// A stream that delivered its terminal chunk already succeeded; a
+				// cancellation observed after it must not fail the span.
+				if err := ctx.Err(); err != nil && !completed {
 					hadError = true
 					m.recordError(ctx, span, err, attrs)
 				}
@@ -501,6 +504,9 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
+			}
+			if chunk.Done {
+				completed = true
 			}
 			if len(chunk.ToolCalls) > 0 {
 				// Providers may deliver tool calls across several chunks (deltas)

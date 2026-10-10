@@ -265,11 +265,12 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 	if target.Kind() != reflect.Struct {
 		return nil
 	}
-	// A promoted custom UnmarshalJSON consumes the whole object, so the
-	// struct's own fields are never decoded individually and none of them is
-	// required in the sense the generated schema would enforce. The unconstrained
-	// schema reflects that; validation must not contradict it.
-	if hasPromotedCustomUnmarshaler(target) {
+	// A custom UnmarshalJSON — the struct's own, or one promoted from an
+	// anonymous embedded type — consumes the whole value, so the struct's own
+	// fields are never decoded individually and none of them is required in the
+	// sense the generated schema would enforce. The type emits an unconstrained
+	// schema; validation must not contradict it by requiring reflected fields.
+	if hasPromotedCustomUnmarshaler(target) || implementsJSONUnmarshaler(target) {
 		return nil
 	}
 	var raw map[string]json.RawMessage
@@ -732,13 +733,15 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 		// subschema that strict validators reject with a 400.
 		return map[string]any{}, nil
 	case reflect.Struct:
-		// An anonymous embedded type that implements json.Unmarshaler has its
-		// method promoted to the parent, so encoding/json hands the parent's
-		// entire object to that method and never decodes the parent's own fields.
-		// No structural schema can describe what the custom decoder accepts, and
-		// the structural guess advertises keys (and required fields) it ignores.
-		// Emit an unconstrained schema rather than a wrong one.
-		if hasPromotedCustomUnmarshaler(typ) {
+		// A struct whose decode is governed by a custom json.Unmarshaler — its
+		// own, or one promoted from an anonymous embedded type — never decodes
+		// its fields individually: encoding/json hands the method the whole
+		// value, and it may accept a scalar or ignore missing fields. No
+		// structural schema can describe what that decoder accepts, and the
+		// structural guess advertises keys (and required fields) it ignores.
+		// Emit an unconstrained schema rather than a wrong one. (A type that also
+		// round-trips a JSON string is caught by specialSchemaForType above.)
+		if hasPromotedCustomUnmarshaler(typ) || implementsJSONUnmarshaler(typ) {
 			return map[string]any{}, nil
 		}
 		return schemaForStruct(typ, seen)

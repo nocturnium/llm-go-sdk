@@ -816,6 +816,37 @@ func TestSchemaFrom_EmbeddedCustomUnmarshalerNotFlattened(t *testing.T) {
 	}
 }
 
+// A struct whose own type implements json.Unmarshaler is like the promoted case:
+// encoding/json hands the method the whole value, so the reflected fields are
+// not the wire shape. The generated schema must be unconstrained rather than
+// advertising required fields the decoder never reads.
+func TestSchemaFrom_DirectCustomUnmarshalerNotStructural(t *testing.T) {
+	schema, err := schemaForType(reflect.TypeOf(structuredCustomDecoder{}), map[reflect.Type]bool{})
+	if err != nil {
+		t.Fatalf("schemaForType: %v", err)
+	}
+	if len(schema) != 0 {
+		t.Fatalf("expected an unconstrained schema for a custom-unmarshaled struct, got %#v", schema)
+	}
+
+	// A custom decoder that accepts an arbitrary object is not rejected for
+	// missing the structural field the schema no longer advertises.
+	if _, err := parseTyped[structuredCustomDecoder](`{"anything":1}`); err != nil {
+		t.Errorf("custom-decoded object rejected: %v", err)
+	}
+}
+
+// structuredCustomDecoder consumes the whole JSON value through its own
+// UnmarshalJSON, ignoring the reflected field entirely.
+type structuredCustomDecoder struct {
+	Field string `json:"field"`
+}
+
+func (d *structuredCustomDecoder) UnmarshalJSON(b []byte) error {
+	d.Field = string(b)
+	return nil
+}
+
 type unexportedEmbedInner struct {
 	A      string `json:"a"`
 	hidden string

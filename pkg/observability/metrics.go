@@ -311,6 +311,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		var firstTokenTime time.Time
 		var hadFirstToken bool
 		var hadError bool
+		var completed bool
 
 		// Pre-allocate some capacity to reduce allocations
 		contentBuilder.Grow(1024)
@@ -336,7 +337,9 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 
 			if !hadError {
-				if err := ctx.Err(); err != nil {
+				// A delivered terminal chunk makes the request a success; a
+				// cancellation observed after it must not fail the sample.
+				if err := ctx.Err(); err != nil && !completed {
 					hadError = true
 					m.recordError(ctx, span, err, attrs)
 					m.successRateWindow.Record(false)
@@ -415,6 +418,9 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
+			}
+			if chunk.Done {
+				completed = true
 			}
 			if len(chunk.ToolCalls) > 0 {
 				toolCallCount = len(chunk.ToolCalls)

@@ -385,6 +385,7 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 		var finishReason string
 		var toolCallCount int
 		var hadError bool
+		var completed bool
 
 		// Pre-allocate some capacity to reduce allocations
 		contentBuilder.Grow(1024)
@@ -434,7 +435,10 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			}
 
 			if !hadError {
-				if err := ctx.Err(); err != nil {
+				// A stream that delivered its terminal chunk is a success even if
+				// the caller cancels while this deferred block runs; the request
+				// already finished, so a late cancellation must not mark it failed.
+				if err := ctx.Err(); err != nil && !completed {
 					hadError = true
 					m.recordError(ctx, span, err, attrs)
 				}
@@ -489,6 +493,9 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
+			}
+			if chunk.Done {
+				completed = true
 			}
 			if len(chunk.ToolCalls) > 0 {
 				toolCallCount = len(chunk.ToolCalls)

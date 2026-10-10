@@ -553,3 +553,19 @@ the caller's cancellation is observed.
 | --- | --- |
 | `pkg/providers/elevenlabs/speech_test.go:20` has 29 names but requires 28 | The fixture names 28 formats and `supportedFormats` has 28; `TestOutputFormat` passes. |
 | `pkg/providers/elevenlabs/transcribe.go:107` never connects a speech usage handler | ElevenLabs has no `WithSpeechUsageHandler` option at all; the finding describes Featherless's option, which `speech.go` does invoke on the terminal usage event. |
+
+Round 58 (2026-10-10) reported 7 errors. Fixed: the api baseline is regenerated
+for the exported surface this branch added; a stream that delivered its terminal
+chunk is no longer logged or recorded as canceled when the caller's context is
+canceled by the time the wrapper goroutine drains (OTel, Langfuse, metrics, and
+logging); and a struct whose decode is governed by its own `json.Unmarshaler`
+now emits an unconstrained schema and skips the reflected required-field checks,
+matching the promoted-embedding case.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `Makefile:159` passes apidiff arguments in the wrong order | `apidiff -m` accepts a file of export data as OLD and a module path as NEW; `apidiff -m api/v6.txt github.com/nocturnium/llm-go-sdk/v6` returns the intended diff, and `make apidiff` fails only because the baseline was stale. |
+| `internal/httpclient/multipart_test.go:81` uses a valid method token | `net/http` rejects `"bad method"` at `http.NewRequestWithContext` (the space is not a token character), so `DoMultipart` returns the error the test asserts. `TestClient_DoMultipart_Errors` passes. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event; recurring false positive (rounds 50, 52–56). |
+| `pkg/providers/mistral/transcription.go:74` ignores `TranscribeOptions.ResponseFormat` | `llms.TranscribeOptions` has no `ResponseFormat` field; a caller can only set it through `Extra`, which the code reads into `format` and rejects for non-JSON. |
+| `structured.go:453` nested pointer fields accept null despite a non-null schema | Pointer fields accept null by design (round 53, documented in the code and `docs/nitpick-adjudication.md`): a nil pointer is the field's natural zero, and the generated schema advertises the pointee because OpenAI strict mode rejects nullable unions. |
