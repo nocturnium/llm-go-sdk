@@ -304,6 +304,28 @@ func TestLogError_NilErrorDoesNotPanic(t *testing.T) {
 	}
 }
 
+// The logging methods are exported and take a *LogEntry. A nil entry must be
+// reported through the sink, not dereferenced into a panic in the caller.
+func TestLoggers_NilEntryDoesNotPanic(t *testing.T) {
+	var reported error
+	jsonLogger := NewJSONLogger(func([]byte) error { return nil }, WithJSONWriteError(func(err error) { reported = err }))
+	jsonLogger.LogRequest(context.Background(), nil)
+	jsonLogger.LogResponse(context.Background(), nil)
+	jsonLogger.LogError(context.Background(), nil, errors.New("boom"))
+	if !errors.Is(reported, errNilLogEntry) {
+		t.Errorf("JSON logger reported %v, want errNilLogEntry", reported)
+	}
+
+	var slogBuf bytes.Buffer
+	slogLogger := NewSlogLogger(slog.New(slog.NewJSONHandler(&slogBuf, nil)))
+	slogLogger.LogRequest(context.Background(), nil)
+	slogLogger.LogResponse(context.Background(), nil)
+	slogLogger.LogError(context.Background(), nil, errors.New("boom"))
+	if !strings.Contains(slogBuf.String(), errNilLogEntry.Error()) {
+		t.Errorf("slog logger output = %q, want the nil-entry report", slogBuf.String())
+	}
+}
+
 // mockLLM is a mock LLM for testing
 type mockLLM struct {
 	callFn   func(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)

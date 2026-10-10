@@ -477,6 +477,10 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				hadError = true
 				m.recordError(ctx, span, chunk.Error, attrs)
 				return

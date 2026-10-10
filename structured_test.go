@@ -228,6 +228,34 @@ func TestGenerateTyped_CallerSchemaIsNotForcedToGeneratedShape(t *testing.T) {
 	}
 }
 
+// A caller schema that permits JSON null for a concrete Go type is the contract
+// the model was given. The generated schema describes a string as non-null, so
+// its null check used to reject a response the caller's nullable schema allows.
+func TestGenerateTyped_CallerSchemaMayPermitNull(t *testing.T) {
+	nullable := json.RawMessage(`{"type":["string","null"]}`)
+	llm := &repairScriptLLM{responses: []string{`null`}}
+	got, _, err := GenerateTyped[string](
+		context.Background(), llm,
+		[]Message{{Role: RoleUser, Content: "x"}},
+		WithJSONSchema("nullable", nullable, false),
+	)
+	if err != nil {
+		t.Fatalf("GenerateTyped with a nullable caller schema rejected null: %v", err)
+	}
+	if got != "" {
+		t.Errorf("got %q, want the zero string", got)
+	}
+	// Without a caller schema the generated non-null string schema still rejects
+	// null rather than decoding it to a false success.
+	llm2 := &repairScriptLLM{responses: []string{`null`}}
+	if _, _, err := GenerateTyped[string](
+		context.Background(), llm2,
+		[]Message{{Role: RoleUser, Content: "x"}},
+	); err == nil {
+		t.Error("GenerateTyped without a caller schema accepted null, want a schema mismatch")
+	}
+}
+
 // Prose can contain a valid scalar before the intended one (a bool before a
 // quoted answer). Extraction must try every scalar candidate so a later one
 // that matches T is not missed.

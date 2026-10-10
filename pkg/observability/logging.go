@@ -505,6 +505,10 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				entry.Duration = time.Since(start)
 				m.logger.LogError(ctx, m.scrubContent(entry), chunk.Error)
 				return

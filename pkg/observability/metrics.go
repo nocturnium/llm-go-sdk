@@ -389,6 +389,10 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				hadError = true
 				m.recordError(ctx, span, chunk.Error, attrs)
 				m.successRateWindow.Record(false)

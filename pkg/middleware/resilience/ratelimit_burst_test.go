@@ -55,6 +55,43 @@ func TestRateLimiter_CanceledOversizedWaitLeavesNoDebt(t *testing.T) {
 	}
 }
 
+// Debt settlement charges installments in a loop. With a high token rate every
+// installment is zero-delay, so a huge debt used to be charged in one
+// uninterruptible burst before the wait deadline was even consulted. Settlement
+// now stops between installments once the context is done and leaves the
+// remainder owed.
+func TestRateLimiter_DebtSettlementHonorsContext(t *testing.T) {
+	rl := NewRateLimiter(
+		WithTokensPerMinute(600_000_000_000),
+		WithTokenBurst(1),
+		WithBlocking(true),
+		WithWaitTimeout(5*time.Second),
+	)
+	rl.mu.Lock()
+	rl.tokenDebt = 1_000_000_000
+	rl.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	err := rl.WaitN(ctx, 1, 1)
+	if err == nil {
+		t.Fatal("WaitN with a canceled context succeeded, want an error")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("WaitN took %v to observe cancellation; settlement is not bounded by the context", elapsed)
+	}
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt <= 0 {
+		t.Fatalf("tokenDebt = %d after the interrupted settlement, want the remainder still owed", debt)
+	}
+}
+
 // When actual usage is lower than the estimated burst-plus-debt charge, the
 // refund must cancel outstanding debt before adding bucket credit. Otherwise a
 // later request still pays for tokens this response never used.

@@ -196,12 +196,20 @@ func (rl *RateLimiter) tokenLim() *rate.Limiter {
 // provider-reported usage count. It returns the longest reservation delay and
 // any amount still owed. The reservations are not cancellable by the admitting
 // request: those tokens were already consumed by a previous response.
-func (rl *RateLimiter) settleTokenDebt(tokenLimiter *rate.Limiter, now time.Time) (delay time.Duration, remaining int) {
+//
+// ctx bounds the work so a caller cancellation is observed between installments.
+// A high token rate makes every installment zero-delay, so the loop below would
+// otherwise charge the whole (potentially huge) debt while ignoring the wait
+// deadline; an expired ctx stops it with the remainder still owed.
+func (rl *RateLimiter) settleTokenDebt(ctx context.Context, tokenLimiter *rate.Limiter, now time.Time) (delay time.Duration, remaining int) {
 	burst := tokenLimiter.Burst()
 	if burst <= 0 {
 		return 0, 0
 	}
 	for range maxTokenInstallments {
+		if ctx != nil && ctx.Err() != nil {
+			break
+		}
 		rl.mu.Lock()
 		debt := rl.tokenDebt
 		if debt <= 0 {
@@ -280,7 +288,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		return err
 	}
 	if !rl.blocking {
-		return rl.tryAcquire(requests, tokens)
+		return rl.tryAcquire(ctx, requests, tokens)
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, rl.waitTimeout)
@@ -292,7 +300,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	tokenLimiter := rl.tokenLim()
 	if tokenLimiter != nil {
 		for {
-			delay, remaining := rl.settleTokenDebt(tokenLimiter, time.Now())
+			delay, remaining := rl.settleTokenDebt(waitCtx, tokenLimiter, time.Now())
 			if remaining == 0 && delay == 0 {
 				break
 			}
@@ -423,11 +431,17 @@ func (rl *RateLimiter) addTokenDebt(n int) {
 }
 
 // tryAcquire attempts to acquire rate limit tokens without waiting
-func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
+func (rl *RateLimiter) tryAcquire(ctx context.Context, requests, tokens int) error {
 	requestLimiter := rl.requestLim()
 	tokenLimiter := rl.tokenLim()
 	if tokenLimiter != nil {
-		delay, remaining := rl.settleTokenDebt(tokenLimiter, time.Now())
+		// The non-blocking path cannot wait, but debt settlement must still stop
+		// between installments when the caller's context is done rather than
+		// charging a huge debt in one call.
+		delay, remaining := rl.settleTokenDebt(ctx, tokenLimiter, time.Now())
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if remaining > 0 || delay > 0 {
 			return ErrRateLimitExceeded
 		}

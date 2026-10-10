@@ -174,7 +174,7 @@ func parseTypedForSchema[T any](content string, callerSchema bool) (T, error) {
 		// null into a string/number/bool/slice and returns a zero value, which
 		// would turn `null` into a false success; only an interface target has an
 		// unconstrained schema that permits null.
-		if isJSONNull(extracted) && !schemaPermitsNull(reflect.TypeOf((*T)(nil)).Elem()) {
+		if isJSONNull(extracted) && !callerSchema && !schemaPermitsNull(reflect.TypeOf((*T)(nil)).Elem()) {
 			continue
 		}
 		var v T
@@ -228,12 +228,14 @@ func unmarshalCandidate[T any](data string, out *T, callerSchema bool) error {
 	// described as non-null, so null must be rejected rather than decoded to a
 	// zero value.
 	if target == nil {
-		if !schemaPermitsNull(reflect.TypeOf((*T)(nil)).Elem()) {
+		// A caller schema that permits null is the contract the model was given;
+		// the generated non-null shape must not reject it.
+		if !callerSchema && !schemaPermitsNull(reflect.TypeOf((*T)(nil)).Elem()) {
 			return fmt.Errorf("candidate %s is null, but the schema requires a %s", data, reflect.TypeOf((*T)(nil)).Elem())
 		}
 		return nil
 	}
-	if isJSONNull(data) && !schemaPermitsNull(target) {
+	if isJSONNull(data) && !callerSchema && !schemaPermitsNull(target) {
 		return fmt.Errorf("candidate %s is null, but the schema requires a %s", data, target)
 	}
 	for target.Kind() == reflect.Pointer {

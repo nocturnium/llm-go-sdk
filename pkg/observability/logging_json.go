@@ -6,6 +6,12 @@ import (
 	"errors"
 )
 
+// errNilLogEntry is reported through the logger's error callback when a caller
+// invokes a logging method with a nil *LogEntry. The middleware never does, but
+// the methods are exported and dereferencing a nil entry would panic in the
+// caller's process instead of surfacing a sink error.
+var errNilLogEntry = errors.New("observability: log entry is nil")
+
 // JSONLogger logs entries as JSON lines
 type JSONLogger struct {
 	encode    func(any) ([]byte, error)
@@ -64,16 +70,28 @@ func WithJSONMaxLength(maxLength int) JSONLoggerOption {
 
 // LogRequest logs a request as JSON
 func (l *JSONLogger) LogRequest(_ context.Context, entry *LogEntry) {
+	if entry == nil {
+		l.reportError(errNilLogEntry)
+		return
+	}
 	l.writeEntry("request", l.prepareEntry(entry, false))
 }
 
 // LogResponse logs a response as JSON
 func (l *JSONLogger) LogResponse(_ context.Context, entry *LogEntry) {
+	if entry == nil {
+		l.reportError(errNilLogEntry)
+		return
+	}
 	l.writeEntry("response", l.prepareEntry(entry, true))
 }
 
 // LogError logs an error as JSON
 func (l *JSONLogger) LogError(_ context.Context, entry *LogEntry, err error) {
+	if entry == nil {
+		l.reportError(errNilLogEntry)
+		return
+	}
 	e := l.prepareEntry(entry, false)
 	// Sanitize CR/LF: an upstream/provider error can echo user-controlled input,
 	// so escape it like other user-influenced values to prevent forged log lines

@@ -538,3 +538,18 @@ reject every request forever.
 | `.github/workflows/release.yml:22` references unpublished action majors | `actions/checkout@v7`, `actions/setup-go@v7`, `actions/upload-artifact@v7`, and `actions/download-artifact@v8` are published. Recurring false positive. |
 | `docs/guides/resilience.md:374` is a broken example that ignores the constructor error | The tip names `NewWeightedFallbackChain` and `MustNewWeightedFallbackChain` in prose; it is not a code snippet, assigns no result, and nothing compiles. |
 | `pkg/providers/featherless/featherless-options.go:107` never invokes `SpeechUsageHandler` | `speech.go` reads the handler on the terminal `speech.audio.done` event, and `TestStreamSpeech_ReportedCharacters` covers it. Recurring false positive. |
+
+Round 57 (2026-10-10) reported 5 errors. Fixed: the OTel, Langfuse, metrics,
+and logging stream wrappers now drain the provider stream after an error chunk,
+not just on a send failure (the provider sender could otherwise stay parked);
+`JSONLogger` and `SlogLogger` report a nil `*LogEntry` through the sink instead
+of dereferencing it into a panic; `GenerateTyped` no longer applies the generated
+non-null shape to a response when the caller supplied a schema that permits
+null; and `settleTokenDebt` checks the wait context between installments, so a
+high token rate cannot charge a huge debt in one uninterruptible burst before
+the caller's cancellation is observed.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/providers/elevenlabs/speech_test.go:20` has 29 names but requires 28 | The fixture names 28 formats and `supportedFormats` has 28; `TestOutputFormat` passes. |
+| `pkg/providers/elevenlabs/transcribe.go:107` never connects a speech usage handler | ElevenLabs has no `WithSpeechUsageHandler` option at all; the finding describes Featherless's option, which `speech.go` does invoke on the terminal usage event. |
