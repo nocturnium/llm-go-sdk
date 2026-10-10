@@ -320,10 +320,7 @@ func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Contex
 		return handler(ctx, parsed)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.handlers[tool.Function.Name] = wrappedHandler
-	r.tools = append(r.tools, tool)
+	r.Register(tool, wrappedHandler)
 }
 
 // Tools returns the registered tools for use with WithTools.

@@ -14,6 +14,9 @@ const (
 
 // convertResponse converts a Gemini API response to an llms.Response.
 func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
+	if resp == nil {
+		return nil
+	}
 	if len(resp.Candidates) == 0 {
 		// A prompt blocked by input filtering comes back with HTTP 200, no
 		// candidates, promptFeedback.blockReason and usage for the prompt

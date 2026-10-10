@@ -173,6 +173,7 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	for _, m := range cachedModels {
 		if m.ID == modelID || strings.EqualFold(m.ID, modelID) {
 			info := m
+			info.Types = append([]llms.ModelType(nil), m.Types...)
 			return &info, nil
 		}
 	}

@@ -107,6 +107,13 @@ func (r *CapabilityRegistry) GetWithDefaults(provider Provider, modelID string, 
 	caps.SupportsStreaming = caps.SupportsStreaming || defaults.SupportsStreaming
 	caps.SupportsJSON = caps.SupportsJSON || defaults.SupportsJSON
 	caps.SupportsEmbeddings = caps.SupportsEmbeddings || defaults.SupportsEmbeddings
+	caps.SupportsReasoning = caps.SupportsReasoning || defaults.SupportsReasoning
+	caps.SupportsPromptCaching = caps.SupportsPromptCaching || defaults.SupportsPromptCaching
+	caps.SupportsBatch = caps.SupportsBatch || defaults.SupportsBatch
+	caps.ImageGeneration = caps.ImageGeneration || defaults.ImageGeneration
+	caps.VideoGeneration = caps.VideoGeneration || defaults.VideoGeneration
+	caps.Speech = caps.Speech || defaults.Speech
+	caps.Transcription = caps.Transcription || defaults.Transcription
 
 	return caps
 }
