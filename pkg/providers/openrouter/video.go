@@ -149,7 +149,7 @@ func (c *Client) GenerateVideo(ctx context.Context, prompt string, opts ...llms.
 func videoStatus(obj *videoObject, observedRunning bool) *llms.JobStatus {
 	out := &llms.JobStatus{Cost: obj.Usage.Cost}
 	switch obj.Status {
-	case "pending":
+	case "pending", "queued":
 		out.State = llms.JobQueued
 	case "in_progress":
 		out.State = llms.JobRunning

@@ -52,11 +52,11 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 		if done && err == nil {
 			return nil
 		}
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		if ctxErr := pollContextError(parent, ctx); ctxErr != nil {
 			return ctxErr
-		}
-		if err != nil {
-			return err
 		}
 		timer := time.NewTimer(pollDelay(delay, p))
 		select {

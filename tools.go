@@ -283,7 +283,18 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.handlers[tool.Function.Name] = handler
+	name := tool.Function.Name
+	if _, exists := r.handlers[name]; exists {
+		for i, existing := range r.tools {
+			if existing.Function != nil && existing.Function.Name == name {
+				r.tools[i] = tool
+				break
+			}
+		}
+		r.handlers[name] = handler
+		return
+	}
+	r.handlers[name] = handler
 	r.tools = append(r.tools, tool)
 }
 
