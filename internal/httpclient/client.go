@@ -489,15 +489,15 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 			return fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
 		}
 		if len(body) == 0 {
-			return nil
-		}
-		if err := json.Unmarshal(body, response); err != nil {
-			// A 204, or a 200 with no payload, leaves the target at its zero
-			// value rather than failing: the request succeeded and the endpoint
-			// returned no payload.
-			if errors.Is(err, io.EOF) {
+			// A 204 has no representation by definition. A 200 that declares a
+			// required JSON body but sends none is a malformed response and should
+			// not be mistaken for a successful empty result.
+			if resp.StatusCode == http.StatusNoContent {
 				return nil
 			}
+			return fmt.Errorf("expected JSON response body from status %d", resp.StatusCode)
+		}
+		if err := json.Unmarshal(body, response); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
 	}

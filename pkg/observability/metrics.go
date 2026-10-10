@@ -157,7 +157,10 @@ func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...
 	m.incrementActive(ctx, attrs)
 	defer m.decrementActive(ctx, attrs)
 
-	// Use GenerateContent internally to get usage info
+	// The LLM interface has no Call method; the one-shot helper is the package
+	// function llms.Call, which itself delegates to GenerateContent. Calling
+	// GenerateContent directly here preserves that contract while exposing usage
+	// for cost and token metrics.
 	messages := []llms.Message{{Role: llms.RoleUser, Content: prompt}}
 	resp, err := m.llm.GenerateContent(ctx, messages, options...)
 

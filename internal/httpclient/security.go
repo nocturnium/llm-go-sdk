@@ -264,9 +264,16 @@ func validateNotPrivateIP(ip net.IP) error {
 	}
 
 	// Check for IPv6-mapped IPv4 addresses that are private
-	if ip4 := ip.To4(); ip4 != nil {
-		if ip4.IsLoopback() || ip4.IsPrivate() {
-			return errors.New("private/loopback IPv4 addresses not allowed")
+	if ip4 := ip.To4(); ip4 != nil && len(ip) == net.IPv6len {
+		switch {
+		case ip4.IsLoopback():
+			return errors.New("IPv4-mapped loopback addresses not allowed")
+		case ip4.IsPrivate():
+			return errors.New("IPv4-mapped private addresses not allowed")
+		case ip4.IsLinkLocalUnicast() || ip4.IsLinkLocalMulticast():
+			return errors.New("IPv4-mapped link-local addresses not allowed")
+		case ip4.IsUnspecified():
+			return errors.New("IPv4-mapped unspecified addresses not allowed")
 		}
 	}
 

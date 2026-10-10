@@ -359,7 +359,10 @@ func TestFunctionCallToJSON(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := FunctionCallToJSON(tc.fc)
+			result, err := FunctionCallToJSON(tc.fc)
+			if err != nil {
+				t.Fatalf("FunctionCallToJSON() error = %v", err)
+			}
 			if tc.expected != "" && result != tc.expected {
 				t.Errorf("expected '%s', got '%s'", tc.expected, result)
 			}
@@ -371,6 +374,15 @@ func TestFunctionCallToJSON(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFunctionCallToJSON_MarshalError(t *testing.T) {
+	_, err := FunctionCallToJSON(&FunctionCall{
+		Args: map[string]any{"bad": make(chan int)},
+	})
+	if err == nil {
+		t.Fatal("expected marshal error")
 	}
 }
 

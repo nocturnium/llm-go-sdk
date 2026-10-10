@@ -255,6 +255,23 @@ func TestValidateNotPrivateIP_NAT64EmbeddedPrivateIPv4(t *testing.T) {
 	}
 }
 
+func TestValidateNotPrivateIP_IPv4MappedMetadata(t *testing.T) {
+	for _, ip := range []string{
+		"::ffff:169.254.169.254",
+		"::ffff:127.0.0.1",
+		"::ffff:10.0.0.1",
+		"::ffff:0.0.0.0",
+	} {
+		if err := validateNotPrivateIP(net.ParseIP(ip)); err == nil {
+			t.Errorf("expected IPv4-mapped address %s to be blocked", ip)
+		}
+	}
+
+	if err := validateNotPrivateIP(net.ParseIP("::ffff:8.8.8.8")); err != nil {
+		t.Fatalf("expected IPv4-mapped public address to be allowed, got %v", err)
+	}
+}
+
 func TestSanitizeModelName(t *testing.T) {
 	tests := []struct {
 		input    string

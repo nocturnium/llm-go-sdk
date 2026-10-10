@@ -203,6 +203,34 @@ func TestRateLimiter_RecordTokensRefundsOverEstimate(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_RefundIsConsumedByNextRequest(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(100),
+		WithRequestBurst(100),
+		WithTokensPerMinute(300),
+		WithTokenEstimate(200),
+		WithBlocking(false),
+	)
+
+	if err := rl.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rl.RecordTokens(100)
+	if got := rl.TokensRemaining(); got < 200 {
+		t.Fatalf("tokens remaining after refund = %d, want at least one request estimate", got)
+	}
+
+	// The first request was refunded 100 tokens even though the bucket is not
+	// rebuilt; a 200-token second request should fit because the refund offsets
+	// half of it. The third then has no credit and must wait.
+	if err := rl.Wait(context.Background()); err != nil {
+		t.Fatalf("second request should consume the refund: %v", err)
+	}
+	if err := rl.Wait(context.Background()); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("third request = %v, want ErrRateLimitExceeded", err)
+	}
+}
+
 func TestRateLimiter_RequestsRemaining(t *testing.T) {
 	rl := NewRateLimiter(WithRequestsPerMinute(10), WithRequestBurst(10))
 

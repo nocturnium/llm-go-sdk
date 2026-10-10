@@ -23,6 +23,7 @@ type Client struct {
 	mediaPaths   MediaCapabilities
 	httpClient   *httpclient.Client
 	baseURL      string
+	embeddingURL string
 	apiKey       string
 	headers      map[string]string
 	azureAPIKey  bool   // Use api-key header instead of Authorization
@@ -66,6 +67,7 @@ func NewClient(config ClientConfig) *Client {
 		httpClient:   httpClient,
 		mediaPaths:   MediaCapabilities{ImagesPath: config.ImagesPath, ImageEditsPath: config.ImageEditsPath, SpeechPath: config.SpeechPath, TranscriptionsPath: config.TranscriptionsPath, VideosPath: config.VideosPath},
 		baseURL:      config.BaseURL,
+		embeddingURL: config.BaseURL,
 		apiKey:       config.APIKey,
 		headers:      maps.Clone(config.Headers),
 		azureAPIKey:  config.AzureAPIKey,
@@ -138,9 +140,15 @@ func (c *Client) getHeaders() map[string]string {
 
 // buildURL constructs the full URL, appending Azure API version if needed.
 func (c *Client) buildURL(path string) string {
-	fullURL, err := appendPath(c.baseURL, path)
+	return c.buildURLFrom(c.baseURL, path)
+}
+
+// buildURLFrom constructs the full URL from baseURL, appending Azure API
+// version if needed.
+func (c *Client) buildURLFrom(baseURL, path string) string {
+	fullURL, err := appendPath(baseURL, path)
 	if err != nil {
-		fullURL = strings.TrimRight(c.baseURL, "/") + "/" + strings.TrimLeft(path, "/")
+		fullURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(path, "/")
 	}
 	if c.azureVersion == "" {
 		return fullURL
@@ -210,12 +218,16 @@ func (r *StreamReader) Close() error {
 
 // CreateEmbedding sends an embedding request
 func (c *Client) CreateEmbedding(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	baseURL := c.embeddingURL
+	if baseURL == "" {
+		baseURL = c.baseURL
+	}
 	headers := c.getHeaders()
 	var response EmbeddingResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodPost,
-		URL:     c.buildURL("/embeddings"),
+		URL:     c.buildURLFrom(baseURL, "/embeddings"),
 		Headers: headers,
 		Body:    req,
 	}, &response)
@@ -225,6 +237,16 @@ func (c *Client) CreateEmbedding(ctx context.Context, req *EmbeddingRequest) (*E
 	}
 
 	return &response, nil
+}
+
+// SetEmbeddingBaseURL overrides the base URL used for embedding requests. Azure
+// routes embeddings by deployment, so a client may need a different route for
+// embeddings than for chat. Passing an empty value restores the chat base URL.
+func (c *Client) SetEmbeddingBaseURL(baseURL string) {
+	if baseURL == "" {
+		baseURL = c.baseURL
+	}
+	c.embeddingURL = baseURL
 }
 
 // ListModels retrieves the list of available models.

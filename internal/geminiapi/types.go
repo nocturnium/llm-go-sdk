@@ -6,7 +6,10 @@
 //   - Function calling with FunctionDeclaration and FunctionCall/FunctionResponse parts
 package geminiapi
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // GenerateContentRequest represents a request to the Gemini API
 type GenerateContentRequest struct {
@@ -192,16 +195,16 @@ func ExtractThoughtSignature(parts []Part) string {
 	return ""
 }
 
-// FunctionCallToJSON converts a FunctionCall's Args to JSON string
-func FunctionCallToJSON(fc *FunctionCall) string {
+// FunctionCallToJSON converts a FunctionCall's Args to JSON string.
+func FunctionCallToJSON(fc *FunctionCall) (string, error) {
 	if fc == nil || fc.Args == nil {
-		return "{}"
+		return "{}", nil
 	}
 	data, err := json.Marshal(fc.Args)
 	if err != nil {
-		return "{}"
+		return "", fmt.Errorf("gemini: marshal function call arguments: %w", err)
 	}
-	return string(data)
+	return string(data), nil
 }
 
 // EmbedContentRequest represents a request to the Gemini embeddings API

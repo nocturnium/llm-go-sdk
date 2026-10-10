@@ -1183,7 +1183,10 @@ func TestConvertTools_Empty(t *testing.T) {
 }
 
 func TestConvertResponse_Empty(t *testing.T) {
-	resp := convertResponse(&geminiapi.GenerateContentResponse{})
+	resp, err := convertResponse(&geminiapi.GenerateContentResponse{})
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 
 	if resp == nil {
 		t.Fatal("expected non-nil response")
@@ -1194,7 +1197,7 @@ func TestConvertResponse_Empty(t *testing.T) {
 }
 
 func TestConvertResponse_WithToolCalls(t *testing.T) {
-	resp := convertResponse(&geminiapi.GenerateContentResponse{
+	resp, err := convertResponse(&geminiapi.GenerateContentResponse{
 		Candidates: []geminiapi.Candidate{
 			{
 				Content: &geminiapi.Content{
@@ -1216,6 +1219,9 @@ func TestConvertResponse_WithToolCalls(t *testing.T) {
 			TotalTokenCount:      15,
 		},
 	})
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 
 	if len(resp.ToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))

@@ -24,7 +24,10 @@ func TestThoughtSignature_ToolCallRoundTrip(t *testing.T) {
 			}}},
 		}},
 	}
-	got := convertResponse(resp)
+	got, err := convertResponse(resp)
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 	if len(got.ToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(got.ToolCalls))
 	}
@@ -62,7 +65,10 @@ func TestThoughtSignature_ReasoningCapture(t *testing.T) {
 			}},
 		}},
 	}
-	got := convertResponse(resp)
+	got, err := convertResponse(resp)
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 	if got.Reasoning == nil {
 		t.Fatal("expected reasoning content")
 	}
@@ -85,7 +91,10 @@ func TestThoughtSignature_AbsentIsEmpty(t *testing.T) {
 			}}},
 		}},
 	}
-	got := convertResponse(resp)
+	got, err := convertResponse(resp)
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 	if len(got.ToolCalls) != 1 || got.ToolCalls[0].Signature != "" {
 		t.Fatalf("expected empty signature, got %+v", got.ToolCalls)
 	}

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +27,36 @@ func TestWithEmbeddingDeployment(t *testing.T) {
 
 	if opts.EmbeddingDeployment != "text-embedding-ada-002" {
 		t.Errorf("EmbeddingDeployment = %q, want text-embedding-ada-002", opts.EmbeddingDeployment)
+	}
+}
+
+func TestEmbeddingDeploymentRoutesEmbeddingRequests(t *testing.T) {
+	var gotPath string
+	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		gotPath = req.URL.Path
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":[{"embedding":[0.1],"index":0}],"model":"text-embedding-3-small","usage":{"prompt_tokens":1,"total_tokens":1}}`)),
+		}, nil
+	})}
+
+	client, err := New(
+		WithAPIKey("test-key"),
+		WithEndpoint("https://myresource.openai.azure.com"),
+		WithDeployment("gpt-4"),
+		WithEmbeddingDeployment("text-embedding-3-small"),
+		WithHTTPClient(httpClient),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if _, err := client.Embed(context.Background(), []string{"hello"}); err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+	if want := "/openai/deployments/text-embedding-3-small/embeddings"; gotPath != want {
+		t.Fatalf("embedding path = %q, want %q", gotPath, want)
 	}
 }
 

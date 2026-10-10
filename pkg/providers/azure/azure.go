@@ -76,13 +76,16 @@ func New(opts ...Option) (*Client, error) {
 
 	// Build the base URL for Azure OpenAI
 	// Format: https://{resource}.openai.azure.com/openai/deployments/{deployment}
-	baseURL := buildAzureBaseURL(options.Endpoint, options.DeploymentName, options.APIVersion)
-
+	options.ChatBaseURL = buildAzureBaseURL(options.Endpoint, options.DeploymentName, options.APIVersion)
 	clientConfig := openaicompat.ClientConfig{
-		BaseURL:      baseURL,
+		BaseURL:      options.ChatBaseURL,
 		APIKey:       options.APIKey,
 		AzureAPIKey:  true, // Use api-key header instead of Authorization
 		AzureVersion: options.APIVersion,
+	}
+
+	if options.EmbeddingDeployment != "" {
+		options.EmbeddingBaseURL = buildAzureBaseURL(options.Endpoint, options.EmbeddingDeployment, options.APIVersion)
 	}
 
 	if options.HTTPClient != nil {
@@ -93,6 +96,9 @@ func New(opts ...Option) (*Client, error) {
 	clientConfig.AllowHTTP = options.AllowHTTP
 
 	client := openaicompat.NewClient(clientConfig)
+	if options.EmbeddingBaseURL != "" {
+		client.SetEmbeddingBaseURL(options.EmbeddingBaseURL)
+	}
 	cfg := providerConfig
 	cfg.DefaultModel = options.DeploymentName
 	if options.EmbeddingDeployment != "" {

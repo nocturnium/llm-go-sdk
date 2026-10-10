@@ -77,7 +77,10 @@ func TestConvertResponse_ToolCallFinishReason(t *testing.T) {
 			}}},
 		}},
 	}
-	got := convertResponse(resp)
+	got, err := convertResponse(resp)
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 	if got.FinishReason != llms.FinishReasonToolCalls {
 		t.Errorf("FinishReason = %q, want %q", got.FinishReason, llms.FinishReasonToolCalls)
 	}
