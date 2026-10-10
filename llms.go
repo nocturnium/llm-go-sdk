@@ -74,18 +74,49 @@ type Wrapper interface {
 	Unwrap() LLM
 }
 
+// maxUnwrapDepth bounds unwrapping when a Wrapper cycle cannot be identified.
+// Wrappers implemented by a non-comparable value whose identity cannot be read
+// (a struct with a slice field, for example) would otherwise loop forever.
+const maxUnwrapDepth = 10000
+
+// llmIdentity returns a comparable identity for an LLM that is not itself
+// comparable, keyed on the underlying pointer of its map, slice, func, channel,
+// or pointer value. The boolean is false when no such identity exists.
+func llmIdentity(llm LLM) (any, bool) {
+	v := reflect.ValueOf(llm)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
+		if v.IsNil() {
+			return nil, false
+		}
+		return v.Pointer(), true
+	default:
+		return nil, false
+	}
+}
+
+// seenKey returns the map key used for cycle detection, and whether one exists.
+// Comparable LLM values are their own key; non-comparable ones fall back to
+// their underlying pointer.
+func seenKey(llm LLM) (any, bool) {
+	if reflect.TypeOf(llm).Comparable() {
+		return llm, true
+	}
+	return llmIdentity(llm)
+}
+
 // UnwrapAll recursively unwraps all middleware to get the base LLM implementation.
 func UnwrapAll(llm LLM) LLM {
-	seen := make(map[LLM]struct{})
-	for {
+	seen := make(map[any]struct{})
+	for depth := 0; depth < maxUnwrapDepth; depth++ {
 		if llm == nil {
 			return nil
 		}
-		if reflect.TypeOf(llm).Comparable() {
-			if _, ok := seen[llm]; ok {
+		if key, ok := seenKey(llm); ok {
+			if _, ok := seen[key]; ok {
 				return llm
 			}
-			seen[llm] = struct{}{}
+			seen[key] = struct{}{}
 		}
 		wrapper, ok := llm.(Wrapper)
 		if !ok {
@@ -93,6 +124,7 @@ func UnwrapAll(llm LLM) LLM {
 		}
 		llm = wrapper.Unwrap()
 	}
+	return llm
 }
 
 // GetMiddleware extracts all middleware wrappers from the LLM chain.
@@ -100,16 +132,16 @@ func UnwrapAll(llm LLM) LLM {
 func GetMiddleware(llm LLM) []Wrapper {
 	var middleware []Wrapper
 	current := llm
-	seen := make(map[LLM]struct{})
-	for {
+	seen := make(map[any]struct{})
+	for depth := 0; depth < maxUnwrapDepth; depth++ {
 		if current == nil {
 			break
 		}
-		if reflect.TypeOf(current).Comparable() {
-			if _, ok := seen[current]; ok {
+		if key, ok := seenKey(current); ok {
+			if _, ok := seen[key]; ok {
 				break
 			}
-			seen[current] = struct{}{}
+			seen[key] = struct{}{}
 		}
 		wrapper, ok := current.(Wrapper)
 		if !ok {

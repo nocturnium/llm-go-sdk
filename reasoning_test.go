@@ -172,3 +172,43 @@ func assertReasoningConfig(t *testing.T, got *ReasoningConfig, want ReasoningCon
 func boolPtr(v bool) *bool {
 	return &v
 }
+
+// TestReasoningContentClone_IsolatesNestedMetadata guards the cache boundary: a
+// clone must not share the slice or map values carried in Metadata, or mutating
+// a cached response's reasoning would corrupt the stored copy (and vice versa).
+func TestReasoningContentClone_IsolatesNestedMetadata(t *testing.T) {
+	type item struct {
+		ID      string
+		Summary []string
+	}
+	original := &ReasoningContent{
+		Content: "thinking",
+		Metadata: map[string]any{
+			"items":   []item{{ID: "a", Summary: []string{"s1"}}},
+			"strings": []string{"x", "y"},
+			"byName":  map[string]string{"k": "v"},
+			"scalar":  7,
+		},
+	}
+	clone := original.Clone()
+
+	cloneItems := clone.Metadata["items"].([]item)
+	cloneItems[0].ID = "mutated"
+	cloneItems[0].Summary[0] = "mutated"
+	clone.Metadata["strings"].([]string)[0] = "mutated"
+	clone.Metadata["byName"].(map[string]string)["k"] = "mutated"
+
+	origItems := original.Metadata["items"].([]item)
+	if origItems[0].ID != "a" || origItems[0].Summary[0] != "s1" {
+		t.Errorf("clone mutation leaked into original items: %#v", origItems[0])
+	}
+	if original.Metadata["strings"].([]string)[0] != "x" {
+		t.Errorf("clone mutation leaked into original strings: %#v", original.Metadata["strings"])
+	}
+	if original.Metadata["byName"].(map[string]string)["k"] != "v" {
+		t.Errorf("clone mutation leaked into original map: %#v", original.Metadata["byName"])
+	}
+	if clone.Metadata["scalar"] != 7 {
+		t.Errorf("scalar metadata changed: %#v", clone.Metadata["scalar"])
+	}
+}

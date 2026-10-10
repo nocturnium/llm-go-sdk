@@ -1,5 +1,7 @@
 package llms
 
+import "reflect"
+
 // This file defines the cross-provider reasoning ("thinking") surface: the
 // effort/budget controls a caller sets on a request and the ReasoningContent a
 // model returns. Providers map ReasoningConfig onto their own knobs, OpenAI's
@@ -92,10 +94,10 @@ func (r *ReasoningContent) ReplayableBy(p Provider) bool {
 	return r != nil && (r.Provider == "" || r.Provider == p)
 }
 
-// Clone returns a copy of r with its own Metadata map. The map is copied one
-// level deep, so slice or map values inside it (Anthropic's redacted_thinking
-// blocks, the Responses reasoning items) are shared with r. It returns nil for a
-// nil r.
+// Clone returns a copy of r with its own Metadata map. Slice and map values
+// inside Metadata (Anthropic's redacted_thinking blocks, the Responses
+// reasoning items) are copied too, so a caller mutating them cannot corrupt r or
+// another clone. It returns nil for a nil r.
 func (r *ReasoningContent) Clone() *ReasoningContent {
 	if r == nil {
 		return nil
@@ -104,10 +106,79 @@ func (r *ReasoningContent) Clone() *ReasoningContent {
 	if r.Metadata != nil {
 		c.Metadata = make(map[string]any, len(r.Metadata))
 		for k, v := range r.Metadata {
-			c.Metadata[k] = v
+			c.Metadata[k] = cloneMetadataValue(v)
 		}
 	}
 	return &c
+}
+
+// cloneMetadataValue deep-copies the reference-typed values that Metadata
+// carries: slices, arrays, maps, pointers, and structs reachable through them.
+// Scalars and opaque types are returned as-is.
+func cloneMetadataValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	return deepCopyValue(reflect.ValueOf(v)).Interface()
+}
+
+func deepCopyValue(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		return deepCopyValue(v.Elem())
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
+		cp := reflect.New(v.Type().Elem())
+		cp.Elem().Set(deepCopyValue(v.Elem()))
+		return cp
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		cp := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			cp.Index(i).Set(deepCopyValue(v.Index(i)))
+		}
+		return cp
+	case reflect.Array:
+		cp := reflect.New(v.Type()).Elem()
+		for i := 0; i < v.Len(); i++ {
+			cp.Index(i).Set(deepCopyValue(v.Index(i)))
+		}
+		return cp
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		cp := reflect.MakeMapWithSize(v.Type(), v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			cp.SetMapIndex(iter.Key(), deepCopyValue(iter.Value()))
+		}
+		return cp
+	case reflect.Struct:
+		cp := reflect.New(v.Type()).Elem()
+		// Copy the whole struct first so unexported fields keep their values;
+		// only the exported, settable reference fields can be deep-copied.
+		cp.Set(v)
+		for i := 0; i < v.NumField(); i++ {
+			if !cp.Field(i).CanSet() {
+				continue
+			}
+			switch v.Field(i).Kind() {
+			case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
+				cp.Field(i).Set(deepCopyValue(v.Field(i)))
+			}
+		}
+		return cp
+	default:
+		return v
+	}
 }
 
 // ReasoningBudgetForEffort maps a qualitative ReasoningEffort to a default

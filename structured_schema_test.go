@@ -210,3 +210,23 @@ func TestSchemaFrom_EmbeddedWithJSONNameIsNamedField(t *testing.T) {
 		t.Errorf("named-embedded struct must NOT be flattened: %v", props)
 	}
 }
+
+// recSlice is a recursive slice type: the element type is the slice itself.
+type recSlice []recSlice
+
+// TestSchemaFrom_RecursiveSliceDoesNotOverflow guards against a fatal stack
+// overflow: a recursive slice type must terminate with an unconstrained item
+// schema rather than calling schemaForType without end.
+func TestSchemaFrom_RecursiveSliceDoesNotOverflow(t *testing.T) {
+	raw, err := SchemaFrom[recSlice]()
+	if err != nil {
+		t.Fatalf("SchemaFrom[recSlice]: %v", err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("unmarshal schema: %v", err)
+	}
+	if schema["type"] != "array" {
+		t.Errorf("expected array schema, got %#v", schema["type"])
+	}
+}

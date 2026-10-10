@@ -101,8 +101,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
-            echo "Tag ${VERSION} already exists; aborting to avoid clobber."
-            exit 1
+            # A previous run pushed the tag, then failed before GoReleaser
+            # finished. The tag points at this same commit (this run only
+            # starts when a new releasable commit lands), so reuse it rather
+            # than aborting and leaving the version unretryable. A tag that
+            # points elsewhere is a real conflict and still fails.
+            if [ "$(git rev-parse "refs/tags/${VERSION}^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "Tag ${VERSION} already exists and points at a different commit; aborting."
+              exit 1
+            fi
+            echo "Tag ${VERSION} already exists on this commit; reusing it."
+            exit 0
           fi
           git tag -a "${VERSION}" -m "${VERSION}"
           git push origin "${VERSION}"

@@ -53,3 +53,23 @@ func TestChain_OrderAndNilSkip(t *testing.T) {
 		t.Error("UnwrapAll should reach the base provider through the chain")
 	}
 }
+
+// selfWrapper returns itself from Unwrap, producing a cycle. It carries a slice
+// so the wrapper value is non-comparable, exercising the fallback identity used
+// when a wrapper cannot be used as its own map key.
+type selfWrapper struct {
+	LLM
+	pad []int
+}
+
+func (w *selfWrapper) Unwrap() LLM { return w }
+
+func TestUnwrapAll_CyclicNonComparableWrapper(t *testing.T) {
+	w := &selfWrapper{LLM: NewMockLLM()}
+	if got := UnwrapAll(w); got != LLM(w) {
+		t.Errorf("UnwrapAll(cyclic) = %v, want the wrapper itself", got)
+	}
+	if mws := GetMiddleware(w); len(mws) != 1 {
+		t.Errorf("GetMiddleware(cyclic) returned %d wrappers, want 1", len(mws))
+	}
+}

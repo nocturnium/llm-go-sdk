@@ -226,7 +226,13 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 	case reflect.String:
 		return map[string]any{schemaKeyType: schemaTypeString}, nil
 	case reflect.Slice, reflect.Array:
+		// A recursive slice type (type S []S, or a cycle reached through slice
+		// elements) would otherwise recurse forever: the seen guard is set only
+		// for structs, so a slice never marks itself. Mark it for the duration of
+		// the element lookup so the cycle terminates with an unconstrained schema.
+		seen[typ] = true
 		itemSchema, err := schemaForType(typ.Elem(), seen)
+		delete(seen, typ)
 		if err != nil {
 			return nil, err
 		}
