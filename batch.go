@@ -204,7 +204,6 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	if concurrency <= 0 {
 		concurrency = defaultBatchConcurrency
 	}
-	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	var cancelBatch context.CancelFunc
 
@@ -273,91 +272,83 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	cancelBatch = cancel
 	defer cancelBatch()
 
-	for _, req := range requests {
-		wg.Add(1)
-		go func(r BatchRequest) {
-			reqStart := time.Now()
-			progressReported := false
-			resultRecorded := false
-			defer wg.Done()
-			defer func() {
-				if recovered := recover(); recovered != nil {
-					if !resultRecorded {
-						recordFailure(r.ID, time.Since(reqStart), fmt.Errorf("panic: %v", recovered))
-					}
-					if !opts.ContinueOnError {
-						cancelBatch()
-					}
-					if !progressReported {
-						reportProgress()
-					}
+	// A fixed worker pool keeps the number of live goroutines bounded by
+	// MaxConcurrency instead of one blocked goroutine per request. requests is
+	// caller-supplied and can be arbitrarily large.
+	jobs := make(chan BatchRequest)
+	processOne := func(r BatchRequest) {
+		reqStart := time.Now()
+		progressReported := false
+		resultRecorded := false
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				if !resultRecorded {
+					recordFailure(r.ID, time.Since(reqStart), fmt.Errorf("panic: %v", recovered))
 				}
-			}()
-
-			// Check if batch has been canceled (due to error with ContinueOnError=false)
-			select {
-			case <-batchCtx.Done():
-				// Don't record canceled requests - they weren't started
-				return
-			default:
-			}
-
-			// Acquire semaphore
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-batchCtx.Done():
-				// Context canceled while waiting for semaphore
-				return
-			}
-
-			// Double-check context after acquiring semaphore
-			select {
-			case <-batchCtx.Done():
-				return
-			default:
-			}
-
-			// Create request-specific context with timeout
-			reqCtx := batchCtx
-			if opts.RequestTimeout > 0 {
-				var cancel context.CancelFunc
-				reqCtx, cancel = context.WithTimeout(batchCtx, opts.RequestTimeout)
-				defer cancel()
-			}
-
-			// Final context check before expensive LLM call to avoid wasted work
-			select {
-			case <-batchCtx.Done():
-				return
-			default:
-			}
-
-			resp, err := b.llm.GenerateContent(reqCtx, r.Messages, r.Options...)
-			duration := time.Since(reqStart)
-
-			if err != nil {
-				recordFailure(r.ID, duration, err)
-				resultRecorded = true
-
 				if !opts.ContinueOnError {
-					// Cancel all pending requests
 					cancelBatch()
-					progressReported = true
-					reportProgress()
-					return
 				}
-			} else {
-				recordSuccess(r.ID, duration, resp)
-				resultRecorded = true
+				if !progressReported {
+					reportProgress()
+				}
 			}
+		}()
 
-			progressReported = true
-			reportProgress()
-		}(req)
+		// Don't record canceled requests - they weren't started.
+		select {
+		case <-batchCtx.Done():
+			return
+		default:
+		}
+
+		// Create request-specific context with timeout
+		reqCtx := batchCtx
+		if opts.RequestTimeout > 0 {
+			var cancel context.CancelFunc
+			reqCtx, cancel = context.WithTimeout(batchCtx, opts.RequestTimeout)
+			defer cancel()
+		}
+
+		resp, err := b.llm.GenerateContent(reqCtx, r.Messages, r.Options...)
+		duration := time.Since(reqStart)
+
+		if err != nil {
+			recordFailure(r.ID, duration, err)
+			resultRecorded = true
+
+			if !opts.ContinueOnError {
+				// Cancel all pending requests
+				cancelBatch()
+			}
+		} else {
+			recordSuccess(r.ID, duration, resp)
+			resultRecorded = true
+		}
+
+		progressReported = true
+		reportProgress()
 	}
-
+	worker := func() {
+		defer wg.Done()
+		for r := range jobs {
+			processOne(r)
+		}
+	}
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go worker()
+	}
+feed:
+	for _, req := range requests {
+		select {
+		case jobs <- req:
+		case <-batchCtx.Done():
+			break feed
+		}
+	}
+	close(jobs)
 	wg.Wait()
+
 	if allCostsReported && successCount > 0 {
 		totalUsage.Cost = &totalCost
 	}
