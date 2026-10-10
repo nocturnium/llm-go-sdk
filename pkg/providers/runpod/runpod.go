@@ -4,6 +4,7 @@ package runpod
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -44,6 +45,9 @@ func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 	if options.EndpointID == "" {
 		return nil, ErrMissingEndpointID
+	}
+	if strings.ContainsAny(options.EndpointID, "/?#") {
+		return nil, fmt.Errorf("runpod: invalid endpoint ID %q", options.EndpointID)
 	}
 
 	apiKey, err := llms.RequireAPIKey("runpod", options.APIKey, llms.EnvRunPodAPIKey)

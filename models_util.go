@@ -287,7 +287,7 @@ func ApplyModelFilters(models []ModelInfo, opts *ListModelsOptions) []ModelInfo 
 
 	// Apply limit if specified
 	if opts != nil && opts.Limit > 0 && len(result) > opts.Limit {
-		result = result[:opts.Limit]
+		result = result[:opts.Limit:opts.Limit]
 	}
 
 	return result

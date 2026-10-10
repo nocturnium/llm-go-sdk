@@ -80,6 +80,9 @@ func buildRootsHandler(cfg config) (requestHandler, error) {
 				// than publishing a malformed or ambiguous path.
 				return nil, &RPCError{Code: CodeInternalError, Message: err.Error()}
 			}
+			if roots == nil {
+				roots = []Root{}
+			}
 			return rootsListResult{Roots: roots}, nil
 		}, nil
 	}
@@ -94,6 +97,9 @@ func buildRootsHandler(cfg config) (requestHandler, error) {
 	}
 	roots := append([]Root(nil), cfg.roots...)
 	return func(context.Context, json.RawMessage) (any, error) {
+		if roots == nil {
+			roots = []Root{}
+		}
 		return rootsListResult{Roots: roots}, nil
 	}, nil
 }

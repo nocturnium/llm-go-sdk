@@ -90,6 +90,9 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 // CreateMessageStream sends a streaming message request.
 func (c *Client) CreateMessageStream(ctx context.Context, req *MessagesRequest) (*StreamReader, error) {
+	if req == nil {
+		return nil, WrapError("create message stream", errors.New("request is required"))
+	}
 	request := *req
 	request.Stream = true
 	headers := c.getHeaders()
