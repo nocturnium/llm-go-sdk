@@ -75,6 +75,13 @@ func TestEmbedDocuments(t *testing.T) {
 	if _, err := EmbedDocuments(ctx, &stubEmbedder{err: boom}, []string{"a"}); !errors.Is(err, boom) {
 		t.Errorf("error = %v, want boom", err)
 	}
+
+	// A provider that silently omits a vector must fail rather than returning a
+	// shortened result whose positions no longer match the input texts.
+	short := &stubEmbedder{resp: &EmbeddingResponse{Embeddings: []Embedding{{Vector: []float32{1}}}}}
+	if _, err := EmbedDocuments(ctx, short, []string{"a", "b"}); !errors.Is(err, ErrIncompleteResponse) {
+		t.Errorf("short response error = %v, want ErrIncompleteResponse", err)
+	}
 }
 
 func TestSupportsAndAsEmbedder(t *testing.T) {

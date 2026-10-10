@@ -177,7 +177,7 @@ func TestContentPart_ToolResult(t *testing.T) {
 	part := ContentPart{
 		Type:      "tool_result",
 		ToolUseID: testToolID,
-		Content:   `{"temperature": 72}`,
+		Content:   &ToolResultContent{Text: `{"temperature": 72}`},
 	}
 
 	data, err := json.Marshal(part)
@@ -196,13 +196,44 @@ func TestContentPart_ToolResult(t *testing.T) {
 	if decoded.ToolUseID != testToolID {
 		t.Errorf("expected tool_use_id=toolu_123, got %s", decoded.ToolUseID)
 	}
+	if decoded.Content == nil || decoded.Content.Text != `{"temperature": 72}` {
+		t.Errorf("expected string content to round-trip, got %+v", decoded.Content)
+	}
+}
+
+// Anthropic accepts an array of content blocks as tool_result content, so a
+// response carrying that shape must decode instead of failing the whole call.
+func TestContentPart_ToolResultArrayContent(t *testing.T) {
+	const raw = `{"type":"tool_result","tool_use_id":"toolu_123","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}`
+	var part ContentPart
+	if err := json.Unmarshal([]byte(raw), &part); err != nil {
+		t.Fatalf("failed to unmarshal array content: %v", err)
+	}
+	if part.Content == nil || len(part.Content.Array) != 2 {
+		t.Fatalf("array content = %+v, want two blocks", part.Content)
+	}
+	if part.Content.Array[0].Text != "first" || part.Content.Array[1].Text != "second" {
+		t.Errorf("array content = %+v, want the two text blocks", part.Content.Array)
+	}
+
+	data, err := json.Marshal(part)
+	if err != nil {
+		t.Fatalf("failed to re-marshal array content: %v", err)
+	}
+	var roundTrip map[string]any
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("failed to unmarshal round trip: %v", err)
+	}
+	if _, ok := roundTrip["content"].([]any); !ok {
+		t.Errorf("round-tripped content = %#v, want an array", roundTrip["content"])
+	}
 }
 
 func TestContentPart_ToolResultWithError(t *testing.T) {
 	part := ContentPart{
 		Type:      "tool_result",
 		ToolUseID: testToolID,
-		Content:   "Error: Location not found",
+		Content:   &ToolResultContent{Text: "Error: Location not found"},
 		IsError:   true,
 	}
 

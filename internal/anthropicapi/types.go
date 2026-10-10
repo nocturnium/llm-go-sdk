@@ -129,9 +129,9 @@ type ContentPart struct {
 	Input json.RawMessage `json:"input,omitempty"`
 
 	// For tool_result content
-	ToolUseID string `json:"tool_use_id,omitempty"`
-	Content   string `json:"content,omitempty"`
-	IsError   bool   `json:"is_error,omitempty"`
+	ToolUseID string             `json:"tool_use_id,omitempty"`
+	Content   *ToolResultContent `json:"content,omitempty"`
+	IsError   bool               `json:"is_error,omitempty"`
 
 	// For thinking content (extended thinking). Signature authenticates the
 	// thinking block and must be echoed back on a follow-up turn. Data carries an
@@ -142,6 +142,46 @@ type ContentPart struct {
 
 	// CacheControl marks this block as a prompt-caching breakpoint.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
+}
+
+// ToolResultContent is the content of a tool_result block. Anthropic accepts
+// either a plain string or an array of content blocks; the string form is the
+// common case and array blocks are decoded so callers can inspect or forward
+// them.
+type ToolResultContent struct {
+	Text  string
+	Array []ContentPart
+}
+
+// MarshalJSON writes the string form when only Text is set, otherwise the array
+// form.
+func (c ToolResultContent) MarshalJSON() ([]byte, error) {
+	if len(c.Array) > 0 {
+		return json.Marshal(c.Array)
+	}
+	return json.Marshal(c.Text)
+}
+
+// UnmarshalJSON accepts the string and array forms Anthropic may return.
+func (c *ToolResultContent) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 || string(data) == "null" {
+		*c = ToolResultContent{}
+		return nil
+	}
+	if data[0] == '"' {
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		*c = ToolResultContent{Text: text}
+		return nil
+	}
+	var parts []ContentPart
+	if err := json.Unmarshal(data, &parts); err != nil {
+		return err
+	}
+	*c = ToolResultContent{Array: parts}
+	return nil
 }
 
 // ImageSource represents the source of an image for Anthropic's vision API.

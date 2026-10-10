@@ -144,7 +144,7 @@ func convertMessages(messages []llms.Message) ([]anthropicapi.Message, error) {
 			content = append(content, anthropicapi.ContentPart{
 				Type:      "tool_result",
 				ToolUseID: msg.ToolCallID,
-				Content:   msg.Content,
+				Content:   &anthropicapi.ToolResultContent{Text: msg.Content},
 			})
 		case len(msg.Parts) > 0:
 			// Handle multi-part content (including images)

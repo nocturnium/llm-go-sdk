@@ -270,7 +270,7 @@ func BuildToolResultMessage(toolUseID, content string, isError bool) Message {
 			{
 				Type:      "tool_result",
 				ToolUseID: toolUseID,
-				Content:   content,
+				Content:   &ToolResultContent{Text: content},
 				IsError:   isError,
 			},
 		},

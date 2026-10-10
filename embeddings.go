@@ -53,6 +53,9 @@ func EmbedDocuments(ctx context.Context, e Embedder, texts []string, options ...
 	if resp == nil {
 		return nil, fmt.Errorf("embed documents: %w", ErrIncompleteResponse)
 	}
+	if len(resp.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("embed documents: got %d embeddings for %d inputs: %w", len(resp.Embeddings), len(texts), ErrIncompleteResponse)
+	}
 	result := make([][]float32, len(resp.Embeddings))
 	for i, emb := range resp.Embeddings {
 		result[i] = emb.Vector

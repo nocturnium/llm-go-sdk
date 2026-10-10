@@ -37,8 +37,8 @@ func TestConvertMessages_DeduplicatesToolResultsRequestWide(t *testing.T) {
 	if len(toolResults) != 1 {
 		t.Fatalf("expected exactly one tool_result for %q, got %d", toolUseID, len(toolResults))
 	}
-	if toolResults[0].Content != "first result" {
-		t.Fatalf("expected first tool result to be kept, got %q", toolResults[0].Content)
+	if toolResults[0].Content == nil || toolResults[0].Content.Text != "first result" {
+		t.Fatalf("expected first tool result to be kept, got %q", toolResults[0].Content.Text)
 	}
 }
 
@@ -71,8 +71,8 @@ func TestConvertMessages_SingleToolResultUnaffected(t *testing.T) {
 	if len(toolResults) != 1 {
 		t.Fatalf("expected one tool_result for %q, got %d", toolUseID, len(toolResults))
 	}
-	if toolResults[0].Content != "single result" {
-		t.Fatalf("expected tool result content to be preserved, got %q", toolResults[0].Content)
+	if toolResults[0].Content == nil || toolResults[0].Content.Text != "single result" {
+		t.Fatalf("expected tool result content to be preserved, got %q", toolResults[0].Content.Text)
 	}
 }
 
