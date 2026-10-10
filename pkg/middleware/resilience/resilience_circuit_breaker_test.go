@@ -24,6 +24,46 @@ func TestCircuitBreaker_ResetClearsFailuresWhenClosed(t *testing.T) {
 	}
 }
 
+// TestCircuitBreaker_ResetClearsInflightClosed pins that Reset also clears the
+// closed-state in-flight count. A request admitted before Reset that never
+// settles would otherwise hold the open-to-half-open transition off forever,
+// defeating the operator's escape hatch.
+func TestCircuitBreaker_ResetClearsInflightClosed(t *testing.T) {
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithResetTimeout(time.Millisecond),
+		WithHalfOpenTimeout(time.Minute),
+		WithHalfOpenMax(1),
+	)
+
+	// Two requests admitted while closed. One fails and opens the breaker; the
+	// other is still outstanding, so its in-flight mark survives the open.
+	for range 2 {
+		if admitted, probe := cb.acquire(); !admitted || probe {
+			t.Fatalf("closed-state acquire = %v,%v; want true,false", admitted, probe)
+		}
+	}
+	cb.RecordFailure()
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want open", cb.State())
+	}
+
+	// Reset must clear the leftover in-flight mark: otherwise the stale request
+	// holds the open-to-half-open transition off forever.
+	cb.Reset()
+	if cb.State() != CircuitClosed {
+		t.Fatalf("state = %v, want closed", cb.State())
+	}
+	cb.RecordFailure()
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want open", cb.State())
+	}
+	time.Sleep(5 * time.Millisecond)
+	if !cb.Allow() {
+		t.Fatal("half-open probe refused after Reset cleared the stale in-flight mark")
+	}
+}
+
 // TestCircuitBreaker_SlowProbesStillClose pins that a caller slower than
 // halfOpenMax requests per halfOpenTimeout can still close the circuit. The
 // half-open watchdog used to measure the whole half-open window from entry, so

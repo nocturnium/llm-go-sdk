@@ -309,10 +309,18 @@ func extractJSONCandidates(s string) []string {
 		if s[i] != '{' && s[i] != '[' {
 			continue
 		}
-		if candidate, ok := balancedJSONAt(s, i); ok {
-			if json.Valid([]byte(candidate)) {
-				candidates = append(candidates, candidate)
-			}
+		candidate, ok := balancedJSONAt(s, i)
+		if !ok {
+			continue
+		}
+		if json.Valid([]byte(candidate)) {
+			candidates = append(candidates, candidate)
+			// Skip past the whole value: an object nested inside a valid
+			// enclosing JSON value is part of that value, not a separate
+			// top-level payload. Descending into it would let an unrelated
+			// envelope satisfy the schema with a nested object (for example
+			// `{"wrapper":{"name":"Ada"}}` returning Ada).
+			i += len(candidate) - 1
 		}
 	}
 	return candidates
@@ -560,6 +568,14 @@ func mergeEmbeddedSchema(field reflect.StructField, seen map[reflect.Type]bool) 
 	// must stay unflattened rather than expand into its internal fields; treat it as a normal named
 	// field so schemaForType applies the special schema.
 	if _, special := specialSchemaForType(ft); special {
+		return nil, nil, false, nil
+	}
+	// encoding/json promotes an embedded type's UnmarshalJSON to the parent, so
+	// a custom unmarshaler consumes the whole outer object rather than the
+	// promoted fields. Flattening its fields into the schema would advertise
+	// properties the decode path never populates, so keep it as a named field
+	// and let schemaForType describe its real wire form.
+	if implementsJSONUnmarshaler(ft) {
 		return nil, nil, false, nil
 	}
 	// Recursion guard: schemaForStruct does not itself check seen (that guard

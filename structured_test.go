@@ -168,6 +168,17 @@ func TestParseTyped_CaseInsensitiveFieldMatch(t *testing.T) {
 	}
 }
 
+// A nested object inside a valid enclosing JSON value is part of that value,
+// not a separate top-level payload. Descending into the envelope would let an
+// unrelated wrapper satisfy the schema with the nested object and return data
+// the model did not present as the answer.
+func TestParseTyped_RejectsNestedEnvelopeObject(t *testing.T) {
+	_, err := parseTyped[structuredTestResult](`{"wrapper":{"name":"Ada","age":36}}`)
+	if err == nil {
+		t.Fatal("parseTyped accepted a nested object inside an unrelated envelope")
+	}
+}
+
 type structuredStrictSchemaResult struct {
 	Name   string                 `json:"name,omitempty"`
 	Note   *string                `json:"note"`
@@ -452,6 +463,31 @@ func assertSchema(t *testing.T, actual any, expected map[string]any) {
 type structuredMockLLM struct {
 	response *Response
 	opts     *CallOptions
+}
+
+// embeddedCustomUnmarshaler consumes the whole outer object through the
+// promoted UnmarshalJSON, so its exported fields are never decoded
+// individually. The schema must not advertise them as flattened properties.
+type embeddedCustomUnmarshaler struct{ V string }
+
+func (e *embeddedCustomUnmarshaler) UnmarshalJSON([]byte) error { e.V = "custom"; return nil }
+
+func TestSchemaFrom_EmbeddedCustomUnmarshalerNotFlattened(t *testing.T) {
+	type outer struct {
+		embeddedCustomUnmarshaler
+		Other string `json:"other"`
+	}
+	schema, err := schemaForType(reflect.TypeOf(outer{}), map[reflect.Type]bool{})
+	if err != nil {
+		t.Fatalf("schemaForType: %v", err)
+	}
+	properties := schemaProperties(t, schema)
+	if _, ok := properties["V"]; ok {
+		t.Errorf("embedded custom unmarshaler's field leaked into the schema: %#v", properties)
+	}
+	if _, ok := properties["other"]; !ok {
+		t.Errorf("sibling field missing from schema: %#v", properties)
+	}
 }
 
 type unexportedEmbedInner struct {

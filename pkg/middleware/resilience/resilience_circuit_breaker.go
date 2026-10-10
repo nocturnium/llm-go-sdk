@@ -366,6 +366,11 @@ func (cb *CircuitBreaker) Reset() {
 	cb.failures = 0
 	cb.successes = 0
 	cb.halfOpenCount = 0
+	// Clear the closed-state in-flight count too. A request admitted before the
+	// reset that never settles would otherwise hold the open-to-half-open
+	// transition off forever, defeating the operator's escape hatch. A late
+	// completion just finds nothing to decrement.
+	cb.inflightClosed = 0
 }
 
 // stateTransition holds a captured state-change callback and its arguments.

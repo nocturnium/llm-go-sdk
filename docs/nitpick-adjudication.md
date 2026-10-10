@@ -324,3 +324,19 @@ the AGENTS.md provider example now declares `EmbeddingModel` and
 | `pkg/providers/azure/models.go` references an undefined `Client` | `type Client struct` is declared in `azure.go`; the package builds. |
 | Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
 | `pkg/openaicompat/toolcall_ids.go` loses earlier tool-call rewrites | The inner loop mutates the shared `msg.ToolCalls` copy and writes the same message back, so every rewrite accumulates; a three-call regression test confirms all IDs are distinct and nine-character. |
+
+Round 45 (2026-10-10) reported 7 errors. Fixed: `CircuitBreaker.Reset` now
+clears `inflightClosed`, so an outstanding pre-reset request cannot pin the
+breaker away from half-open forever; `extractJSONCandidates` no longer descends
+into a nested object inside a valid enclosing value (a wrapper object can no
+longer satisfy the schema with its nested payload); and the schema generator no
+longer flattens an embedded type that implements `UnmarshalJSON`, which would
+advertise promoted fields the promoted decoder never populates. Three
+provenance tests that read a handler-captured request body now guard it with a
+mutex, removing the latent handler/test-goroutine race.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/model.go` blocks on cancellation because `DrainStream` is synchronous | `DrainStream` starts its own goroutine, so `stopped` returns immediately; the adapter does not wait on the provider's channel. |
+| `scripts/release-decide.sh` passes a revision range as the `--context` output path | `--context` is a boolean flag; the range is a positional argument. `scripts/release-decide_test.sh` passes against git-cliff 2.13.1. |
+| Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
