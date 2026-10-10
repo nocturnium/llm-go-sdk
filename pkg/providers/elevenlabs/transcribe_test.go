@@ -119,7 +119,12 @@ func TestTranscribe_AudioDuration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 				if err := r.ParseMultipartForm(1 << 20); err != nil {
-					t.Fatal(err)
+					// t.Fatal here runs on the server goroutine and would Goexit
+					// without writing a response, hanging the client. Report and
+					// answer instead.
+					t.Error(err)
+					http.Error(w, "bad multipart", http.StatusBadRequest)
+					return
 				}
 				defer func() { _ = r.MultipartForm.RemoveAll() }()
 				if r.FormValue("timestamps_granularity") != tc.granularity {

@@ -187,9 +187,9 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 // ToolCalls, SearchResults, or Reasoning can neither poison the cached entry nor
 // race another concurrent cache hit. Returns nil for a nil input.
 //
-// Reasoning.Metadata is copied one level deep, sufficient because providers
-// populate it with scalar values; nested reference values inside Metadata are
-// not independently cloned.
+// Reasoning is cloned through Reasoning.Clone, which deep-copies the metadata
+// map and the slice, map, pointer, and struct values inside it, so nested
+// reference values are isolated from the cached entry as well.
 func cloneResponse(resp *Response) *Response {
 	if resp == nil {
 		return nil

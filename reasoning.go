@@ -173,7 +173,7 @@ func deepCopyValue(v reflect.Value, seen map[uintptr]reflect.Value) reflect.Valu
 		seen[v.Pointer()] = cp
 		iter := v.MapRange()
 		for iter.Next() {
-			cp.SetMapIndex(iter.Key(), deepCopyValue(iter.Value(), seen))
+			cp.SetMapIndex(deepCopyValue(iter.Key(), seen), deepCopyValue(iter.Value(), seen))
 		}
 		return cp
 	case reflect.Struct:
