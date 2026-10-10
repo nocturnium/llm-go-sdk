@@ -211,18 +211,12 @@ func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
 
 // RecordSuccess records a successful request
 func (cb *CircuitBreaker) RecordSuccess() {
-	cb.recordSuccess(cb.publicResultIsProbe())
-}
-
-// publicResultIsProbe reports whether a completion reported through the public
-// RecordSuccess/RecordFailure methods corresponds to a half-open probe. It is
-// false while a request admitted through the public Allow in the closed state is
-// still outstanding, so that stale result cannot be mistaken for a probe after a
-// later transition.
-func (cb *CircuitBreaker) publicResultIsProbe() bool {
-	cb.mu.RLock()
-	defer cb.mu.RUnlock()
-	return cb.inflightClosed == 0
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	// Classify under the write lock: an Allow between a separate probe check and
+	// this update could otherwise flip inflightClosed and misclassify either a
+	// stale closed-state completion or a real half-open probe.
+	cb.recordSuccessLocked(cb.inflightClosed == 0)
 }
 
 // recordSuccess records a successful request. halfOpenProbe is false for a
@@ -232,7 +226,11 @@ func (cb *CircuitBreaker) publicResultIsProbe() bool {
 func (cb *CircuitBreaker) recordSuccess(halfOpenProbe bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	cb.recordSuccessLocked(halfOpenProbe)
+}
 
+// recordSuccessLocked implements recordSuccess; the caller holds cb.mu.
+func (cb *CircuitBreaker) recordSuccessLocked(halfOpenProbe bool) {
 	switch cb.state {
 	case CircuitClosed:
 		cb.failures = 0 // Reset failure count on success
@@ -279,7 +277,9 @@ func (cb *CircuitBreaker) recordSuccess(halfOpenProbe bool) {
 
 // RecordFailure records a failed request
 func (cb *CircuitBreaker) RecordFailure() {
-	cb.recordFailure(cb.publicResultIsProbe())
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.recordFailureLocked(cb.inflightClosed == 0)
 }
 
 // recordFailure records a failed request. A stale failure from a request
@@ -289,7 +289,11 @@ func (cb *CircuitBreaker) RecordFailure() {
 func (cb *CircuitBreaker) recordFailure(halfOpenProbe bool) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	cb.recordFailureLocked(halfOpenProbe)
+}
 
+// recordFailureLocked implements recordFailure; the caller holds cb.mu.
+func (cb *CircuitBreaker) recordFailureLocked(halfOpenProbe bool) {
 	cb.lastFailureTime = time.Now()
 
 	switch cb.state {

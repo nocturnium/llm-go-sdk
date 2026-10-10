@@ -233,6 +233,25 @@ func TestRepairToolResults(t *testing.T) {
 	}
 }
 
+func TestRepairToolResults_InterveningMessage(t *testing.T) {
+	got, dropped := repairToolResults([]llms.Message{
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{toolCall("open", "job", "{}")}},
+		{Role: llms.RoleUser, Content: "next"},
+	})
+	if dropped != 0 {
+		t.Errorf("dropped = %d, want 0", dropped)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d messages: %+v", len(got), got)
+	}
+	if got[1].Role != llms.RoleTool || got[1].ToolCallID != "open" || got[1].Content != pendingResult {
+		t.Errorf("intervening result = %+v, want a pending placeholder for the open call", got[1])
+	}
+	if got[2].Role != llms.RoleUser || got[2].Content != "next" {
+		t.Errorf("user message = %+v, want it preserved after the placeholder", got[2])
+	}
+}
+
 func TestTranslate_Config(t *testing.T) {
 	contents := []*genai.Content{user(text("q"))}
 	f32 := func(v float32) *float32 { return &v }
