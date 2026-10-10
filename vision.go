@@ -2,6 +2,7 @@ package llms
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -133,6 +134,9 @@ func NewImageFromFile(path string) (ContentPart, error) {
 // The mediaType must be specified (e.g., "image/png").
 // Returns an error if the data exceeds MaxImageSize (20MB).
 func NewImageFromReader(r io.Reader, mediaType string) (ContentPart, error) {
+	if r == nil {
+		return ContentPart{}, errors.New("image reader is required")
+	}
 	// Use LimitReader to prevent reading more than MaxImageSize + 1 byte.
 	// Reading exactly MaxImageSize+1 lets us detect oversized data.
 	limitedReader := io.LimitReader(r, MaxImageSize+1)

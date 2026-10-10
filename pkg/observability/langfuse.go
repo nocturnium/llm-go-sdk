@@ -205,7 +205,7 @@ func WithMetadataMap(metadata map[string]string) TraceContextOption {
 			tc.Metadata = make(map[string]string)
 		}
 		for k, v := range metadata {
-			if IsValidMetadataKey(k) && len(v) <= MaxMetadataValueLength {
+			if IsValidMetadataKey(k) && utf8.RuneCountInString(v) <= MaxMetadataValueLength {
 				tc.Metadata[k] = v
 			}
 		}
