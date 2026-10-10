@@ -293,7 +293,11 @@ func schemaForStruct(typ reflect.Type, seen map[reflect.Type]bool) (map[string]a
 			// the schema must promote them too or the model will omit data that
 			// Unmarshal would have accepted. Any other unexported field is
 			// invisible to encoding/json and must stay out of the schema.
-			if !field.Anonymous || field.Type.Kind() != reflect.Struct {
+			embedded := field.Type
+			for embedded.Kind() == reflect.Pointer {
+				embedded = embedded.Elem()
+			}
+			if !field.Anonymous || embedded.Kind() != reflect.Struct {
 				continue
 			}
 		}
@@ -445,6 +449,11 @@ func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
 	}
 	if typ == reflect.TypeOf(time.Time{}) {
 		return map[string]any{schemaKeyType: schemaTypeString, "format": "date-time"}, true
+	}
+	// json.Number round-trips a JSON number, not a string, even though it
+	// implements both Marshaler and Unmarshaler.
+	if typ == reflect.TypeOf(json.Number("")) {
+		return map[string]any{schemaKeyType: "number"}, true
 	}
 	// A custom marshaler is described as a string only when the type can read
 	// one back. Claiming "string" for a write-only marshaler asks the model for

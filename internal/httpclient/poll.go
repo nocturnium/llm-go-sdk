@@ -50,6 +50,12 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 		}
 		done, err := fn(ctx)
 		if done && err == nil {
+			// A callback that ignores its context can report success after the
+			// caller canceled. Caller cancellation wins: an abandoned operation
+			// must not look successful just because a late callback returned.
+			if parentErr := parent.Err(); parentErr != nil {
+				return parentErr
+			}
 			return nil
 		}
 		if err != nil && !(errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil) {

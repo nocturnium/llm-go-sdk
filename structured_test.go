@@ -227,6 +227,25 @@ func TestSchemaFrom_MarshalerTypes(t *testing.T) {
 	assertSchema(t, properties["json"], map[string]any{"type": "string"})
 }
 
+// TestSchemaFrom_JSONNumberIsNumeric pins that json.Number is described as a
+// JSON number. It implements both marshaler interfaces, but its wire form is a
+// number, so a string schema makes the model return a quoted value that
+// json.Number.UnmarshalJSON rejects.
+func TestSchemaFrom_JSONNumberIsNumeric(t *testing.T) {
+	type result struct {
+		Value json.Number `json:"value"`
+	}
+	schema, err := SchemaFrom[result]()
+	if err != nil {
+		t.Fatalf("SchemaFrom: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(schema, &decoded); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+	assertSchema(t, schemaProperties(t, decoded)["value"], map[string]any{"type": "number"})
+}
+
 // TestSchemaFrom_WriteOnlyMarshalerKeepsStructuralSchema pins that a type which
 // marshals to a string but cannot unmarshal one is described structurally. The
 // schema used to ask the model for a string the SDK then failed to decode.
@@ -337,6 +356,23 @@ func TestSchemaFrom_UnexportedEmbeddedStructPromoted(t *testing.T) {
 	}
 	if _, ok := properties["hidden"]; ok {
 		t.Fatalf("unexported field leaked into schema: %#v", properties)
+	}
+}
+
+// TestSchemaFrom_UnexportedPointerEmbeddedStructPromoted pins the pointer form
+// of promotion. encoding/json promotes exported fields through an unexported
+// anonymous *inner, so the schema must include them as well.
+func TestSchemaFrom_UnexportedPointerEmbeddedStructPromoted(t *testing.T) {
+	type outer struct {
+		*unexportedEmbedInner
+	}
+	schema, err := schemaForType(reflect.TypeOf(outer{}), map[reflect.Type]bool{})
+	if err != nil {
+		t.Fatalf("schemaForType: %v", err)
+	}
+	properties := schemaProperties(t, schema)
+	if _, ok := properties["a"]; !ok {
+		t.Fatalf("promoted exported field missing from schema: %#v", properties)
 	}
 }
 

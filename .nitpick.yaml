@@ -46,7 +46,10 @@ models:
     temperature: 0
 
 review:
-  max_files: 200
+  # The repository currently tracks over 600 reviewable files. A lower cap
+  # silently turns a full review into a partial one, so leave headroom here
+  # rather than having the gate report on a subset of the tree.
+  max_files: 1000
   token_budget_per_request: 60000
   fail_on: none
   min_severity: info

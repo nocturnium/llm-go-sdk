@@ -37,6 +37,19 @@ func TestPoll_Cancellation(t *testing.T) {
 	}
 }
 
+// TestPoll_LateSuccessAfterCancel pins that caller cancellation wins over a
+// callback that ignored its context and reported success. The late success must
+// not make an abandoned operation look complete.
+func TestPoll_LateSuccessAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := Poll(ctx, PollPolicy{}, func(context.Context) (bool, error) {
+		return true, nil // ignores ctx entirely
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Poll = %v, want context.Canceled", err)
+	}
+}
+
 func TestPoll_Timeout(t *testing.T) {
 	for _, callbackWait := range []bool{false, true} {
 		err := Poll(context.Background(), PollPolicy{Timeout: time.Millisecond}, func(ctx context.Context) (bool, error) {
