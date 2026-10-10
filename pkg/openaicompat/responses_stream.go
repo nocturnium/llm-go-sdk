@@ -63,14 +63,18 @@ func (r *ResponsesStreamReader) Close() error { return r.sse.Close() }
 
 // CreateResponseStream sends a streaming Responses-API request to POST /responses.
 func (c *Client) CreateResponseStream(ctx context.Context, req *ResponsesRequest) (*ResponsesStreamReader, error) {
-	req.Stream = true
+	if req == nil {
+		return nil, fmt.Errorf("responses request is required")
+	}
+	request := *req
+	request.Stream = true
 	headers := c.getHeaders()
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.buildURL("/responses"),
 		Headers: headers,
-		Body:    req,
+		Body:    &request,
 	})
 	if err != nil {
 		return nil, err

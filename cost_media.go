@@ -108,6 +108,9 @@ func MediaCost(provider, model string, u MediaUsage) (cost float64, ok bool) {
 	if !found || rate.Unit != u.Unit {
 		return 0, false
 	}
+	if rate.Unit == "" {
+		return rate.USD, true
+	}
 	return u.Quantity * rate.USD, true
 }
 

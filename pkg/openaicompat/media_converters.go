@@ -71,6 +71,9 @@ func tokenMediaUsage(usage *ImageUsage) llms.MediaUsage {
 
 // BuildSpeechRequest converts options with an mp3 container and alloy voice by default.
 func BuildSpeechRequest(model, input string, opts *llms.SpeechOptions) *SpeechRequest {
+	if opts == nil {
+		opts = &llms.SpeechOptions{}
+	}
 	format := opts.Format.Container
 	if format == "" {
 		format = "mp3"
@@ -121,6 +124,9 @@ func convertSpeechEvent(event SpeechStreamEvent) llms.AudioChunk {
 // BuildTranscriptionRequest converts transcription options; diarization takes
 // precedence over word timestamps when both are requested.
 func BuildTranscriptionRequest(model string, audio llms.MediaInput, opts *llms.TranscribeOptions) *TranscriptionRequest {
+	if opts == nil {
+		opts = &llms.TranscribeOptions{}
+	}
 	req := &TranscriptionRequest{Model: effectiveModel(model, opts.Model), File: audio, Language: opts.Language, Prompt: opts.Prompt, ResponseFormat: "json", ExtraBody: opts.Extra}
 	if opts.Diarize {
 		req.ResponseFormat = transcriptionFormatDiarizedJSON
@@ -171,6 +177,9 @@ func ConvertTranscriptionResponse(resp *TranscriptionResponse, model string) *ll
 // FirstFrame is sent as a URL, data URL, or provider file identifier.
 // The OpenAI wire ignores Audio, LastFrame, ReferenceImages, Seed, and NegativePrompt.
 func BuildVideoRequest(model, prompt string, opts *llms.VideoOptions) *VideoCreateRequest {
+	if opts == nil {
+		opts = &llms.VideoOptions{}
+	}
 	req := &VideoCreateRequest{Model: effectiveModel(model, opts.Model), Prompt: prompt, Size: videoSize(opts.Resolution, opts.AspectRatio)}
 	if opts.DurationSeconds != 0 {
 		req.Seconds = strconv.Itoa(opts.DurationSeconds)

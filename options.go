@@ -3,6 +3,7 @@ package llms
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -384,7 +385,7 @@ func ApplyOptions(opts ...CallOption) *CallOptions {
 func (o *CallOptions) Validate() error {
 	var errs ValidationErrors
 
-	if o.Temperature != nil && (*o.Temperature < 0 || *o.Temperature > 2.0) {
+	if o.Temperature != nil && (math.IsNaN(*o.Temperature) || math.IsInf(*o.Temperature, 0) || *o.Temperature < 0 || *o.Temperature > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "temperature",
 			Value:   *o.Temperature,

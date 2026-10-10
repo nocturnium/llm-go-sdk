@@ -90,14 +90,15 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 // CreateMessageStream sends a streaming message request.
 func (c *Client) CreateMessageStream(ctx context.Context, req *MessagesRequest) (*StreamReader, error) {
-	req.Stream = true
+	request := *req
+	request.Stream = true
 	headers := c.getHeaders()
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.baseURL + "/messages",
 		Headers: headers,
-		Body:    req,
+		Body:    &request,
 	})
 
 	if err != nil {

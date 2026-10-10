@@ -203,6 +203,7 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	}
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
+	var cancelBatch context.CancelFunc
 
 	completed := 0
 	var completedMu sync.Mutex
@@ -234,6 +235,9 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	recordSuccess := func(id string, duration time.Duration, resp *Response) {
 		if resp == nil {
 			recordFailure(id, duration, fmt.Errorf("%w: provider returned no response and no error", ErrIncompleteResponse))
+			if !opts.ContinueOnError {
+				cancelBatch()
+			}
 			return
 		}
 		resultsMu.Lock()
@@ -258,7 +262,8 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	}
 
 	// Create a cancellable context for stopping all goroutines when ContinueOnError=false
-	batchCtx, cancelBatch := context.WithCancel(ctx)
+	batchCtx, cancel := context.WithCancel(ctx)
+	cancelBatch = cancel
 	defer cancelBatch()
 
 	for _, req := range requests {

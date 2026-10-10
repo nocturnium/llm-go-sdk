@@ -186,7 +186,7 @@ func WithMetadata(key, value string) TraceContextOption {
 		if !IsValidMetadataKey(key) {
 			return
 		}
-		if len(value) > MaxMetadataValueLength {
+		if utf8.RuneCountInString(value) > MaxMetadataValueLength {
 			return
 		}
 		if tc.Metadata == nil {
