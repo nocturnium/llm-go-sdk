@@ -455,6 +455,13 @@ func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
 	if typ == reflect.TypeOf(json.Number("")) {
 		return map[string]any{schemaKeyType: "number"}, true
 	}
+	// encoding/json decodes a type implementing only TextUnmarshaler from a
+	// quoted string. There is no marshaler to inspect, but the decode path pins
+	// the wire form, so describe it as a string rather than emitting an object
+	// schema the SDK's own unmarshal would reject.
+	if implementsTextUnmarshaler(typ) && !implementsMarshaler(typ) {
+		return map[string]any{schemaKeyType: schemaTypeString}, true
+	}
 	// A custom marshaler is described as a string only when the type can read
 	// one back. Claiming "string" for a write-only marshaler asks the model for
 	// a value the SDK then fails to decode into the field.
@@ -481,6 +488,14 @@ func implementsUnmarshaler(typ reflect.Type) bool {
 	return typ.Implements(jsonUnmarshaler) ||
 		reflect.PointerTo(typ).Implements(jsonUnmarshaler) ||
 		typ.Implements(textUnmarshaler) ||
+		reflect.PointerTo(typ).Implements(textUnmarshaler)
+}
+
+// implementsTextUnmarshaler reports whether encoding/json can decode a value of
+// typ from a quoted JSON string through TextUnmarshaler.
+func implementsTextUnmarshaler(typ reflect.Type) bool {
+	textUnmarshaler := reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+	return typ.Implements(textUnmarshaler) ||
 		reflect.PointerTo(typ).Implements(textUnmarshaler)
 }
 

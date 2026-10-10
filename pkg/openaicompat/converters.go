@@ -572,6 +572,16 @@ func ProcessStream(
 		_ = stream.Close()
 		return
 	}
+	if ctx == nil {
+		// A nil context would panic in the goroutine below, outside the parent
+		// recovery defer, and crash the process. Surface it as a terminal error
+		// instead.
+		sender.DeliverTerminal(llms.StreamChunk{
+			Error: fmt.Errorf("%s: context is nil", provider),
+		})
+		_ = stream.Close()
+		return
+	}
 
 	defer func() { _ = stream.Close() }()
 

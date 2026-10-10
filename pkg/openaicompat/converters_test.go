@@ -1118,6 +1118,25 @@ func TestProcessStream_ContextCancelUnblocksRead(t *testing.T) {
 	}
 }
 
+// A nil context must not reach the reader-unblock goroutine: ctx.Done() on a
+// nil interface panics there, where the parent recovery defer cannot catch it.
+func TestProcessStream_NilContextReturnsTerminalError(t *testing.T) {
+	stream := testSSEStream(t, StreamChunk{Choices: []Choice{{Delta: &ChatMessage{ContentValue: "hi"}}}})
+	chunks := make(chan llms.StreamChunk, 2)
+	sender := llms.NewStreamSender(context.Background(), chunks, time.Second)
+
+	ProcessStream(nil, stream, chunks, sender, "test", nil)
+
+	select {
+	case chunk := <-chunks:
+		if chunk.Error == nil {
+			t.Fatalf("nil context produced %+v, want a terminal error", chunk)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ProcessStream with nil context produced no terminal chunk")
+	}
+}
+
 func TestProcessStream_ReasoningContentDelta(t *testing.T) {
 	// Verify ChatMessage.ReasoningContent is accessible during streaming
 	delta := &ChatMessage{

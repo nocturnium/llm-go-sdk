@@ -187,12 +187,11 @@ func deriveAnthropicBatchPricing(base Pricing, known bool) (Pricing, bool) {
 // provider-wide rule where the provider states one, then unknown. Callers that
 // get ok=false must fall back to standard pricing rather than assume a discount.
 //
-// Tier caveat: a mode card replaces the standard card wholesale, and the cards
-// above carry the providers' short-context rates. OpenAI publishes separate
-// long-context columns for its Batch and Flex tiers, which are not transcribed
-// here, so a batch request above the long-context threshold is currently priced
-// at short-context batch rates and will read low. This mirrors the existing
-// long-context caveat on standard pricing.
+// A mode card replaces the standard card wholesale. Where the provider publishes
+// a separate long-context column for a mode, that tier is transcribed on the mode
+// card and resolves at the standard long-context threshold. Models with no
+// published long-context row (for example gpt-5.4-mini and gpt-5.4-nano) stay
+// flat rather than borrowing another model's tier.
 func resolveModePricing(provider Provider, model string, mode PricingMode, standard Pricing, standardKnown bool) (Pricing, bool) {
 	if mode == PricingModeStandard {
 		return standard, standardKnown

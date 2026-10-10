@@ -99,6 +99,20 @@ func llmIdentity(llm LLM) (any, bool) {
 	}
 }
 
+// isNilLLM reports whether a non-nil LLM interface holds a nil pointer. A
+// typed-nil wrapper is non-nil as an interface and would otherwise reach
+// Unwrap, where a value-receiver implementation can panic instead of returning
+// safely.
+func isNilLLM(llm LLM) bool {
+	v := reflect.ValueOf(llm)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
+}
+
 // seenKey returns the map key used for cycle detection, and whether one exists.
 // Comparable LLM values are their own key; non-comparable ones fall back to
 // their underlying pointer. A struct whose type is comparable can still hold an
@@ -129,7 +143,7 @@ func comparableValue(llm LLM) (ok bool) {
 func UnwrapAll(llm LLM) LLM {
 	seen := make(map[any]struct{})
 	for depth := 0; depth < maxUnwrapDepth; depth++ {
-		if llm == nil {
+		if llm == nil || isNilLLM(llm) {
 			return nil
 		}
 		if key, ok := seenKey(llm); ok {
@@ -154,7 +168,7 @@ func GetMiddleware(llm LLM) []Wrapper {
 	current := llm
 	seen := make(map[any]struct{})
 	for depth := 0; depth < maxUnwrapDepth; depth++ {
-		if current == nil {
+		if current == nil || isNilLLM(current) {
 			break
 		}
 		if key, ok := seenKey(current); ok {

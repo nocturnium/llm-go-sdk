@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
+	"math/big"
 	"strconv"
 )
 
@@ -116,15 +116,20 @@ func messageID(raw []byte) (int64, bool) {
 	if err == nil {
 		return id, true
 	}
-	f, err := strconv.ParseFloat(n.String(), 64)
-	// float64(math.MaxInt64) rounds up to 2^63, so comparing against it would
-	// admit 2^63 exactly and wrap int64(f) to math.MinInt64. Reject anything at
-	// or above 2^63 instead; math.MinInt64 is exactly representable and valid.
-	if err != nil || math.Trunc(f) != f || f < math.MinInt64 || f >= 9223372036854775808.0 {
+	// Parse exactly rather than through float64. A decimal just below
+	// math.MinInt64 rounds to math.MinInt64 as a float and would pass a bounds
+	// check as a different, valid ID. big.Rat preserves the literal value and
+	// accepts exponent notation, so an integral value can be range-checked
+	// exactly. Bound the literal length first so a hostile peer cannot make the
+	// parse allocate arbitrarily large integers.
+	if len(n.String()) > 64 {
 		return 0, false
 	}
-	id = int64(f)
-	return id, true
+	r, ok := new(big.Rat).SetString(n.String())
+	if !ok || !r.IsInt() || !r.Num().IsInt64() {
+		return 0, false
+	}
+	return r.Num().Int64(), true
 }
 
 // decodeResult unmarshals a JSON-RPC response's result into out, returning any

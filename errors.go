@@ -468,16 +468,18 @@ func IsTemporary(err error) bool {
 		return false
 	}
 
+	// A canceled or expired context is the caller's decision, not a transient
+	// provider fault: retrying it wastes a call and ignores the deadline. Check
+	// this before APIError classification because an error can carry both a
+	// wrapped context error and a retryable-looking APIError.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
 	// Check APIError
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.IsRetryable()
-	}
-
-	// A canceled or expired context is the caller's decision, not a transient
-	// provider fault: retrying it wastes a call and ignores the deadline.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return false
 	}
 
 	// Check common transient errors

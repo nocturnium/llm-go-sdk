@@ -421,8 +421,10 @@ type Pricing = llms.Pricing
 
 // ModelsListResponse represents the response from the models list API
 type ModelsListResponse struct {
-	Object string          `json:"object"` // "list"
-	Data   []ModelResponse `json:"data"`
+	Object  string          `json:"object"` // "list"
+	Data    []ModelResponse `json:"data"`
+	HasMore bool            `json:"has_more,omitempty"`
+	LastID  string          `json:"last_id,omitempty"`
 }
 
 // ImageGenerationRequest is the JSON image generation request. ExtraBody overrides standard fields.

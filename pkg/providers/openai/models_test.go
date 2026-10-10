@@ -215,6 +215,30 @@ func TestListModels(t *testing.T) {
 	}
 }
 
+// The models endpoint reports has_more and last_id when a page is truncated.
+// The method must pass the cursor through and surface the server's pagination
+// state instead of unconditionally claiming there is no next page.
+func TestListModels_PreservesPagination(t *testing.T) {
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("after"); got != "model-page-1" {
+			t.Errorf("after = %q, want model-page-1", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-4o","object":"model"}],"has_more":true,"last_id":"model-page-2"}`))
+	})
+
+	result, err := client.ListModels(context.Background(), llms.WithModelCursor("model-page-1"))
+	if err != nil {
+		t.Fatalf("ListModels failed: %v", err)
+	}
+	if !result.HasMore {
+		t.Error("HasMore = false, want true")
+	}
+	if result.NextCursor != "model-page-2" {
+		t.Errorf("NextCursor = %q, want model-page-2", result.NextCursor)
+	}
+}
+
 func TestListModels_WithTypeFilter(t *testing.T) {
 	client := setupMockServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

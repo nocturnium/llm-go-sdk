@@ -341,8 +341,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	// Fetch models from API
-	resp, err := c.Client().ListModels(ctx)
+	// Fetch models from API. The endpoint accepts a cursor (last_id) and reports
+	// has_more/last_id when a page is truncated, so pass the cursor through and
+	// preserve the server's pagination state instead of claiming the list is
+	// complete.
+	query := map[string]string(nil)
+	if options.Cursor != "" {
+		query = map[string]string{"after": options.Cursor}
+	}
+	resp, err := c.Client().ListModelsWithQuery(ctx, query)
 	if err != nil {
 		return nil, llms.WrapProviderError(llms.ProviderOpenAI, "list models", err)
 	}
@@ -365,8 +372,9 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	}
 
 	return &llms.ListModelsResult{
-		Models:  models,
-		HasMore: false, // OpenAI doesn't paginate the models endpoint
+		Models:     models,
+		NextCursor: resp.LastID,
+		HasMore:    resp.HasMore,
 	}, nil
 }
 

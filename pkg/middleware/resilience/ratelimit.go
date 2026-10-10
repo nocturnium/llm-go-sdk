@@ -329,6 +329,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	var tokRes *rate.Reservation
 	consumedCredit := 0
 	deferredTokens := 0
+	debtFinanced := false
 	if tokenLimiter != nil && tokens > 0 {
 		// A charge above the burst cannot be satisfied by one reservation. Reserve
 		// the burst-sized part now and carry the remainder as debt so the budget is
@@ -338,6 +339,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 			// against the burst-sized portion first, and leave the rest as debt.
 			deferredTokens = tokens - b
 			tokens = b
+			debtFinanced = true
 		}
 		// A refund is capacity already paid for by an earlier request. Apply it
 		// before the bucket reservation so the refund actually admits the next
@@ -349,24 +351,19 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		}
 		tokRes = tokenLimiter.ReserveN(now, tokens)
 		if !tokRes.OK() {
-			if deferredTokens > 0 {
-				rl.mu.Lock()
-				rl.tokenDebt += deferredTokens
-				rl.mu.Unlock()
-			}
 			rl.restoreTokenCredit(consumedCredit)
 			reqRes.CancelAt(now)
 			return ErrRateLimitTimeout
 		}
 	}
-	if deferredTokens > 0 {
-		// If a refund consumed part of the burst-sized reservation, the remaining
-		// estimate still has to be charged. Fold that amount into the debt rather
-		// than dropping it.
+	// If a refund consumed part of the burst-sized reservation, the remaining
+	// estimate still has to be charged. Fold that amount into the debt rather
+	// than dropping it. The debt is committed only after the request is admitted:
+	// a canceled wait never consumed the tokens, so it must not leave debt behind
+	// (and committing early would also let a concurrent waiter settle debt for a
+	// request that may yet be refused).
+	if debtFinanced {
 		deferredTokens += consumedCredit
-		rl.mu.Lock()
-		rl.tokenDebt += deferredTokens
-		rl.mu.Unlock()
 	}
 
 reserved:
@@ -403,6 +400,11 @@ reserved:
 			return failure
 		}
 		return ErrRateLimitTimeout
+	}
+	if deferredTokens > 0 {
+		rl.mu.Lock()
+		rl.tokenDebt += deferredTokens
+		rl.mu.Unlock()
 	}
 
 	return nil
@@ -519,16 +521,15 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 			rl.mu.Unlock()
 		}
 	case actualTokens < rl.tokenEstimate:
-		// If we overestimated, refund unused tokens without exceeding burst.
-		// An estimate above the burst is charged in installments: the Wait path
-		// reserves the burst and carries the remainder as debt. Refund only the
-		// burst-sized charge; the debt portion was never charged.
-		charged := min(rl.tokenEstimate, rl.tokenBucketBurst())
-		refund := charged - actualTokens
-		if refund < 0 {
-			refund = 0
-		}
+		// If we overestimated, refund unused tokens. An estimate above the burst is
+		// charged as a burst-sized reservation plus debt for the remainder, so cancel
+		// outstanding debt first, then credit whatever is left against the bucket.
+		refund := rl.tokenEstimate - actualTokens
 		rl.mu.Lock()
+		if cancel := min(refund, rl.tokenDebt); cancel > 0 {
+			rl.tokenDebt -= cancel
+			refund -= cancel
+		}
 		available := rl.tokenBucketBurst() - int(tokenLimiter.Tokens()) - rl.tokenCredit
 		if available < 0 {
 			available = 0

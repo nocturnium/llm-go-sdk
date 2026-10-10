@@ -206,6 +206,16 @@ func (structuredWriteOnlyMarshaler) MarshalJSON() ([]byte, error) {
 	return []byte(`"written"`), nil
 }
 
+// structuredTextOnlyUnmarshaler can decode a quoted string but has no marshal
+// method of either kind. encoding/json accepts it from a string, so the schema
+// must ask for one rather than emitting an object schema the decode rejects.
+type structuredTextOnlyUnmarshaler struct{ Value string }
+
+func (v *structuredTextOnlyUnmarshaler) UnmarshalText(data []byte) error {
+	v.Value = string(data)
+	return nil
+}
+
 type structuredMarshalerSchemaResult struct {
 	Text structuredTextMarshaler `json:"text"`
 	JSON structuredJSONMarshaler `json:"json"`
@@ -225,6 +235,33 @@ func TestSchemaFrom_MarshalerTypes(t *testing.T) {
 	properties := schemaProperties(t, decoded)
 	assertSchema(t, properties["text"], map[string]any{"type": "string"})
 	assertSchema(t, properties["json"], map[string]any{"type": "string"})
+}
+
+// TestSchemaFrom_TextOnlyUnmarshalerIsString pins the decode path: a type with
+// only TextUnmarshaler is populated by encoding/json from a JSON string, so an
+// object schema would make the SDK's own unmarshal fail.
+func TestSchemaFrom_TextOnlyUnmarshalerIsString(t *testing.T) {
+	type result struct {
+		Value structuredTextOnlyUnmarshaler `json:"value"`
+	}
+	schema, err := SchemaFrom[result]()
+	if err != nil {
+		t.Fatalf("SchemaFrom returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(schema, &decoded); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+	assertSchema(t, schemaProperties(t, decoded)["value"], map[string]any{"type": "string"})
+
+	// The generated shape must actually decode through encoding/json.
+	var out result
+	if err := json.Unmarshal([]byte(`{"value":"hello"}`), &out); err != nil {
+		t.Fatalf("string value rejected by the decoder: %v", err)
+	}
+	if out.Value.Value != "hello" {
+		t.Errorf("decoded TextUnmarshaler = %#v, want hello", out.Value)
+	}
 }
 
 // TestSchemaFrom_JSONNumberIsNumeric pins that json.Number is described as a

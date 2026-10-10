@@ -40,6 +40,14 @@ func TestMessageID(t *testing.T) {
 	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":9223372036854775807}`)); !ok || id != 9223372036854775807 {
 		t.Errorf("messageID(max int64) = %d,%v; want max,true", id, ok)
 	}
+	// A negative number just below math.MinInt64 rounds to math.MinInt64 as a
+	// float64, so a float-based check would accept it as a different, valid ID.
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":-9223372036854775809}`)); ok {
+		t.Errorf("messageID(-2^63-1) = %d,%v; want ok=false", id, ok)
+	}
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":-9223372036854775808}`)); !ok || id != -9223372036854775808 {
+		t.Errorf("messageID(min int64) = %d,%v; want min,true", id, ok)
+	}
 }
 
 func TestExtractJSONMessage(t *testing.T) {

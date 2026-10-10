@@ -79,6 +79,37 @@ func TestModeUsesPublishedRatesNotAMultiplier(t *testing.T) {
 	}
 }
 
+// TestModeCardsApplyLongContextTiers pins that a mode card's transcribing tier
+// is actually used above the long-context threshold. The absolute rates are
+// asserted so a mode card that carries only the short-context numbers cannot
+// pass by silently falling back to them.
+func TestModeCardsApplyLongContextTiers(t *testing.T) {
+	cases := []struct {
+		model      string
+		mode       PricingMode
+		wantInput  float64
+		wantOutput float64
+	}{
+		{"gpt-5.6-sol", PricingModeBatch, 4.00, 15.00},
+		{"gpt-5.6-sol", PricingModeFlex, 4.00, 15.00},
+		{"gpt-6-luna", PricingModeBatch, 0.10, 0.375},
+		{"gpt-5.5", PricingModeFlex, 5.00, 22.50},
+	}
+	for _, c := range cases {
+		t.Run(c.model+"/"+string(c.mode), func(t *testing.T) {
+			usage := Usage{PromptTokens: openAILongContextThreshold, CompletionTokens: 1_000_000}
+			got, ok := EstimateCostMode(ProviderOpenAI, c.model, usage, c.mode)
+			if !ok {
+				t.Fatalf("no rate card known for %s/%s", c.model, c.mode)
+			}
+			want := float64(openAILongContextThreshold)/1e6*c.wantInput + c.wantOutput
+			if !approxEqual(got, want) {
+				t.Errorf("long-context cost = %v, want %v (input %v + output %v)", got, want, c.wantInput, c.wantOutput)
+			}
+		})
+	}
+}
+
 // TestUnpublishedModeFallsBackToStandardAndReportsUnknown pins the honesty
 // contract: gpt-5.4-nano has no published Fast mode row, so it must price at
 // standard rates and say so, never at an invented premium.

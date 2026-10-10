@@ -644,6 +644,17 @@ func TestIsTemporary(t *testing.T) {
 	}
 }
 
+// A wrapped context error must win over an APIError that would otherwise look
+// retryable. Retrying a canceled request ignores the caller's decision and can
+// send work that was explicitly stopped.
+func TestIsTemporary_ContextBeatsAPIError(t *testing.T) {
+	apiErr := &APIError{StatusCode: 429, Message: "rate limited"}
+	wrapped := fmt.Errorf("provider request: %w: %w", context.Canceled, apiErr)
+	if IsTemporary(wrapped) {
+		t.Error("canceled request carrying an APIError must not be temporary")
+	}
+}
+
 func TestGetErrorDetails(t *testing.T) {
 	t.Run("nil error", func(t *testing.T) {
 		details := GetErrorDetails(nil)

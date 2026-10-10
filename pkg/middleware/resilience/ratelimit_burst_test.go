@@ -3,6 +3,7 @@ package resilience
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // TestRateLimiter_TokenEstimateExceedingBurstDoesNotWedge covers the self-
@@ -37,5 +38,44 @@ func TestRateLimiter_TokenEstimateExceedingBurstDoesNotWedge(t *testing.T) {
 	}
 	if got := big.tokenDebt; got == 0 {
 		t.Fatal("oversized token charge left no debt, so the estimate was treated as fully paid")
+	}
+}
+
+// A wait that is canceled before admission must leave no debt behind: the
+// request never consumed the tokens, and a later caller should not pay for it.
+func TestRateLimiter_CanceledOversizedWaitLeavesNoDebt(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithRequestBurst(1))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := rl.WaitN(ctx, 1, 10_000_000); err == nil {
+		t.Fatal("WaitN with a canceled context succeeded")
+	}
+	if got := rl.tokenDebt; got != 0 {
+		t.Fatalf("canceled wait left tokenDebt=%d, want 0", got)
+	}
+}
+
+// When actual usage is lower than the estimated burst-plus-debt charge, the
+// refund must cancel outstanding debt before adding bucket credit. Otherwise a
+// later request still pays for tokens this response never used.
+func TestRateLimiter_RecordTokensRefundsOverflowDebt(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(10_000))
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_ = rl.WaitN(ctx, 1, 10_000)
+
+	rl.mu.RLock()
+	debtBefore := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debtBefore == 0 {
+		t.Fatal("setup did not create overflow debt")
+	}
+
+	rl.RecordTokens(1_000)
+	rl.mu.RLock()
+	debtAfter := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debtAfter != 0 {
+		t.Fatalf("tokenDebt after a full refund = %d, want 0", debtAfter)
 	}
 }

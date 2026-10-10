@@ -193,7 +193,7 @@ jobs:
       # created (and GitHub Pages enabled) for storage to succeed; until then,
       # don't fail CI: the benchmarks above still run on every push to main.
       - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@v1.22.2
         continue-on-error: true
         with:
           tool: 'go'
