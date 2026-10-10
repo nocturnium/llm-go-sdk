@@ -1,6 +1,7 @@
 package infinity
 
 import (
+	"encoding/json"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -138,5 +139,26 @@ func TestAPIKeyOption(t *testing.T) {
 	// Option should take precedence
 	if client.options.APIKey != "option-api-key" {
 		t.Errorf("expected API key from option, got %q", client.options.APIKey)
+	}
+}
+
+// TestRunPodResponsePayloadOf pins that the Runpod output payload is read from
+// both the object shape and the one-element array shape, and that absent or
+// empty output is reported as missing.
+func TestRunPodResponsePayloadOf(t *testing.T) {
+	object := &runPodResponse{Output: []byte(`{"object":"list","data":[]}`)}
+	if raw, ok := object.payloadOf(); !ok || string(raw) != `{"object":"list","data":[]}` {
+		t.Errorf("object payload = %s,%v", raw, ok)
+	}
+
+	array := &runPodResponse{Output: []byte(`[{"object":"list","data":[]}]`)}
+	if raw, ok := array.payloadOf(); !ok || string(raw) != `{"object":"list","data":[]}` {
+		t.Errorf("array payload = %s,%v", raw, ok)
+	}
+
+	for _, missing := range []json.RawMessage{nil, []byte(""), []byte("null"), []byte("[]")} {
+		if _, ok := (&runPodResponse{Output: missing}).payloadOf(); ok {
+			t.Errorf("payloadOf(%q) = ok; want false", missing)
+		}
 	}
 }
