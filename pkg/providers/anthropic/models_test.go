@@ -411,3 +411,37 @@ func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
 		t.Fatalf("ModelInfo() error = %q, want no literal 404", err)
 	}
 }
+
+// A non-2xx /models response must arrive as a normalized *llms.APIError with the
+// provider stamp, matching CreateMessage, rather than the raw internal
+// httpclient.APIError.
+func TestListModels_NormalizesAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":{"message":"upstream exploded","type":"api_error"}}`))
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-key"),
+		WithBaseURL(server.URL),
+		WithAllowHTTP(),
+		WithAllowPrivateIPs(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = client.ListModels(context.Background())
+	var apiErr *llms.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("ListModels() error = %T (%v), want *llms.APIError", err, err)
+	}
+	if apiErr.Provider != llms.ProviderAnthropic {
+		t.Errorf("Provider = %q, want anthropic", apiErr.Provider)
+	}
+	if apiErr.StatusCode != http.StatusInternalServerError {
+		t.Errorf("StatusCode = %d, want 500", apiErr.StatusCode)
+	}
+}

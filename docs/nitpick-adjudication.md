@@ -435,3 +435,16 @@ completions are matched to grants in FIFO order.
 | `llmadk/model.go:177` blocks because `DrainStream` is synchronous | `DrainStream` starts its own goroutine (`streaming.go:212`); `stopped` returns without waiting on the provider channel. |
 | Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. |
 | `pkg/middleware/resilience/resilience_circuit_breaker.go:363` public completions can consume the wrong generation permit | The token-less `Allow() bool` pair cannot retroactively re-tag an outstanding grant after a concurrent `Reset`; completions are matched FIFO, which is correct for the documented sequential use. The middleware path (which threads a generation-tagged permit) is unaffected. The doc comment now states the FIFO contract. |
+
+Round 51 (2026-10-10) reported 6 errors. Fixed: `WrapHTTPError` now keeps an
+outer `context.Canceled`/`DeadlineExceeded` alongside a nested API error so
+retry classification cannot retry canceled work; `anthropicapi.Client.ListModels`
+normalizes a non-2xx response with `WrapError` (and the provider no longer
+double-wraps); and the resilience retry loop drains its timer non-blockingly on
+cancellation instead of risking a hang.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go:373` leaks credentials when a password contains `?` or `#` | `url.Parse` rejects those forms with `invalid port ":se"`, so `sanitizeErrorURL` takes the hand-cut path; the probe shows every form rendered as `https://host/v1`. |
+| `pkg/observability/metrics_test.go:151` expects an unset mock response | `MetricsMiddleware.Call` delegates to `GenerateContent` (the LLM interface has no `Call`), so the fixture's `genResp` is the response the middleware reads; `TestMetricsMiddleware_Call_Success` passes. |
+| Featherless `WithSpeechUsageHandler` is not connected | `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. |

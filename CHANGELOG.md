@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `WrapHTTPError` keeps an outer `context.Canceled`/`DeadlineExceeded` when it also finds a nested API error, so retry classification no longer retries canceled work. Anthropic `ListModels` normalizes a non-2xx `/models` response into the same `*llms.APIError` shape as `CreateMessage`, and the resilience retry loop drains its timer non-blockingly on cancellation instead of risking a hang.
 - `GenerateTyped` now enforces the schema it advertises: a response missing a required field is rejected (and drives the repair turn) instead of decoding to a zero value, at the top level and inside nested objects and object slices. A `*map`/`*any` target, whose schema strips the pointer to an unconstrained `{}`, still accepts `null`.
 - `GenerateTyped` no longer accepts a `null` response for a concrete scalar, slice, array, or struct target (the generated schema describes a non-null type) and recognizes a field promoted through an embedded struct, so a response naming `id` from an anonymous `Meta` decodes and validates. A bare scalar embedded in prose now survives trailing punctuation such as `true.`.
 - A `TokenEstimator` with a typed-nil `Tokenizer` (a nil pointer in the interface) falls back to the heuristic instead of panicking on the nil receiver, and an OpenAI-compatible provider built with a nil client returns `llms.ErrClientNotConfigured` from `GenerateContent`, `Stream`, and `Embed` instead of dereferencing nil.

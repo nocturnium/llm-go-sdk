@@ -229,7 +229,14 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
-				<-timer.C // Drain the channel if timer already fired
+				// The timer already fired, but the value may have been delivered
+				// and consumed, or not yet delivered on an unbuffered channel.
+				// A blocking receive here would hang the canceled request, so
+				// drain non-blockingly.
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
 			return ctx.Err()
 		case <-timer.C:

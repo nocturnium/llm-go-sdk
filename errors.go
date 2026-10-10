@@ -657,11 +657,30 @@ func WrapHTTPError(provider Provider, operation string, err error) error {
 		if apiErr.Provider == "" {
 			apiErr.Provider = provider
 		}
+		// A caller may wrap a cancellation alongside the API error
+		// (fmt.Errorf("%w: %w", context.Canceled, apiErr)). Returning the bare
+		// APIError would drop the cancellation, so retry classification sees a
+		// retryable status and retries work whose context is already done.
+		if ctxErr := firstContextError(err); ctxErr != nil && !errors.Is(apiErr, ctxErr) {
+			return fmt.Errorf("%w: %w", ctxErr, apiErr)
+		}
 		return apiErr
 	}
 
 	// For other errors, wrap with provider context
 	return WrapProviderError(provider, operation, err)
+}
+
+// firstContextError returns the first context cancellation sentinel err matches,
+// or nil. It distinguishes an outer cancellation from the API error itself so a
+// genuine timeout survives wrapping.
+func firstContextError(err error) error {
+	for _, target := range []error{context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, target) {
+			return target
+		}
+	}
+	return nil
 }
 
 // ErrPlanRequired indicates a paid plan is required (HTTP 402).

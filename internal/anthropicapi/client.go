@@ -330,7 +330,7 @@ func (c *Client) ListModels(ctx context.Context, params *ModelsListParams) (*Mod
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("list models", err)
 	}
 
 	return &response, nil

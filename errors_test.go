@@ -513,6 +513,36 @@ func TestWrapProviderError(t *testing.T) {
 	}
 }
 
+// A caller may wrap a cancellation alongside the API error. WrapHTTPError must
+// keep both: returning the bare APIError would drop context.Canceled, so retry
+// classification would see a retryable status and retry canceled work.
+func TestWrapHTTPError_PreservesContextCancellation(t *testing.T) {
+	apiErr := &APIError{StatusCode: 500, Message: "boom"}
+	wrapped := fmt.Errorf("request: %w: %w", context.Canceled, apiErr)
+	got := WrapHTTPError(ProviderOpenAI, "chat", wrapped)
+	if !errors.Is(got, context.Canceled) {
+		t.Errorf("errors.Is(got, context.Canceled) = false: %v", got)
+	}
+	var out *APIError
+	if !errors.As(got, &out) {
+		t.Errorf("errors.As(got, *APIError) = false: %v", got)
+	}
+}
+
+// An API error that is not paired with an outer cancellation must come back
+// unchanged, so the provider stamp is added without altering the value.
+func TestWrapHTTPError_NoContextError(t *testing.T) {
+	apiErr := &APIError{StatusCode: 500, Message: "boom"}
+	got := WrapHTTPError(ProviderOpenAI, "chat", apiErr)
+	var out *APIError
+	if !errors.As(got, &out) || out != apiErr {
+		t.Errorf("WrapHTTPError returned %#v, want the original *APIError", got)
+	}
+	if errors.Is(got, context.Canceled) {
+		t.Errorf("unexpected context cancellation on %v", got)
+	}
+}
+
 func TestProviderFromError(t *testing.T) {
 	tests := []struct {
 		name     string
