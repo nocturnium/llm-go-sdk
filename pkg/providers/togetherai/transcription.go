@@ -50,7 +50,7 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	format := "verbose_json"
 	if o.WordTimestamps {
 		format = "verbose_json"
-		files = append(files, httpclient.MultipartFile{Field: "timestamp_granularities", Data: []byte("word")})
+		fields["timestamp_granularities"] = "word"
 	}
 	if o.Diarize {
 		fields["diarize"] = "true"

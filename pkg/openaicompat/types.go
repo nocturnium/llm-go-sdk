@@ -354,6 +354,9 @@ func (m *ChatMessage) RawContent() string {
 // Falls back to reasoning content if Content is empty (Z.AI GLM / Synthetic Thinking models).
 // Returns empty string if no content is available.
 func (m *ChatMessage) Content() string {
+	if m == nil {
+		return ""
+	}
 	result := m.RawContent()
 
 	// Fall back to reasoning content if Content is empty

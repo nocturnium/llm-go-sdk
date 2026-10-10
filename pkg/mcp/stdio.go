@@ -111,7 +111,7 @@ func (t *stdioTransport) deliverNotification(raw []byte) {
 	fn := t.notifyFn
 	t.notifyMu.RUnlock()
 	if fn != nil {
-		fn(raw)
+		go fn(append([]byte(nil), raw...))
 	}
 }
 
@@ -360,13 +360,20 @@ func (t *stdioTransport) request(ctx context.Context, id int64, payload []byte) 
 			}
 		default:
 		}
-		return nil, orClosed(t.closeErr)
+		return nil, t.closedError()
 	case line, ok := <-ch:
 		if !ok {
-			return nil, orClosed(t.closeErr)
+			return nil, t.closedError()
 		}
 		return line, nil
 	}
+}
+
+func (t *stdioTransport) closedError() error {
+	t.mu.Lock()
+	err := t.closeErr
+	t.mu.Unlock()
+	return orClosed(err)
 }
 
 func (t *stdioTransport) notify(ctx context.Context, payload []byte) error {

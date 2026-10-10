@@ -45,7 +45,7 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 	}
 	delay := p.Initial
 	for {
-		if err := pollContextError(parent, ctx); err != nil {
+		if err := parent.Err(); err != nil {
 			return err
 		}
 		done, err := fn(ctx)

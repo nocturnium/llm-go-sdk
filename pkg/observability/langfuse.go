@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"time"
+	"unicode/utf8"
 )
 
 // Langfuse-compatible context key type
@@ -220,7 +221,7 @@ func IsValidMetadataKey(key string) bool {
 // ValidateMetadataValue checks if a value is valid for Langfuse propagated metadata.
 // Values must be at most 200 characters per Langfuse constraints.
 func ValidateMetadataValue(value string) bool {
-	return len(value) <= MaxMetadataValueLength
+	return utf8.RuneCountInString(value) <= MaxMetadataValueLength
 }
 
 // NewTraceContext creates a new TraceContext with the given options

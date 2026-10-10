@@ -24,6 +24,9 @@ const (
 // BuildImageRequest converts image options using model as the default model.
 // The OpenAI wire ignores Seed, AspectRatio, NegativePrompt, and SafetyTolerance.
 func BuildImageRequest(model, prompt string, opts *llms.ImageOptions) *ImageGenerationRequest {
+	if opts == nil {
+		opts = &llms.ImageOptions{}
+	}
 	return &ImageGenerationRequest{Model: effectiveModel(model, opts.Model), Prompt: prompt, N: opts.N, Size: opts.Size, Quality: opts.Quality, OutputFormat: opts.OutputFormat, ExtraBody: opts.Extra}
 }
 

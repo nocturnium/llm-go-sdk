@@ -49,8 +49,9 @@ func New(opts ...Option) (*Client, error) {
 				host = "http://" + host
 			}
 			// Ensure the URL ends with /v1 for OpenAI compatibility
+			host = strings.TrimSuffix(host, "/")
 			if !strings.HasSuffix(host, "/v1") {
-				host = strings.TrimSuffix(host, "/") + "/v1"
+				host += "/v1"
 			}
 			options.BaseURL = host
 		}

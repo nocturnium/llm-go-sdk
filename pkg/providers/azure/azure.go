@@ -111,7 +111,10 @@ func buildAzureBaseURL(endpoint, deployment, _ string) string {
 	if err != nil {
 		return strings.TrimSuffix(endpoint, "/") + "/openai/deployments/" + url.PathEscape(deployment)
 	}
-	u.Path = path.Join(strings.TrimRight(u.Path, "/"), "openai", "deployments", deployment)
+	basePath := path.Join(strings.TrimRight(u.Path, "/"), "openai", "deployments")
+	baseRawPath := path.Join(strings.TrimRight(u.EscapedPath(), "/"), "openai", "deployments")
+	u.Path = basePath + "/" + deployment
+	u.RawPath = baseRawPath + "/" + url.PathEscape(deployment)
 	return u.String()
 }
 
