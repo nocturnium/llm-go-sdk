@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `GenerateTyped` now enforces the schema it advertises: a response missing a required field is rejected (and drives the repair turn) instead of decoding to a zero value, at the top level and inside nested objects and object slices. A `*map`/`*any` target, whose schema strips the pointer to an unconstrained `{}`, still accepts `null`.
 - `GenerateTyped` no longer accepts a `null` response for a concrete scalar, slice, array, or struct target (the generated schema describes a non-null type) and recognizes a field promoted through an embedded struct, so a response naming `id` from an anonymous `Meta` decodes and validates. A bare scalar embedded in prose now survives trailing punctuation such as `true.`.
 - A `TokenEstimator` with a typed-nil `Tokenizer` (a nil pointer in the interface) falls back to the heuristic instead of panicking on the nil receiver, and an OpenAI-compatible provider built with a nil client returns `llms.ErrClientNotConfigured` from `GenerateContent`, `Stream`, and `Embed` instead of dereferencing nil.
 - Embedding responses requested with `encoding_format: "base64"` decode again: `llms.Embedding` and the OpenAI-compatible wire type accept the base64 string of little-endian float32s as well as the default float array. `ToolRegistry.Register` copies the caller's `Tool` so a later mutation cannot advertise a name with no handler, and `GenerateTyped[*T]` rejects a `null` response instead of returning a nil value that violates its schema.

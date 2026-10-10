@@ -416,3 +416,22 @@ instead of panicking.
 | `pkg/observability/metrics_test.go` fixtures must populate `callResp` | `MetricsMiddleware.Call` delegates to `GenerateContent` (the LLM interface has no Call), so the fixture's `genResp` is the response the middleware reads; `TestMetricsMiddleware_Call_Success` and `TestMetricsMiddleware_ContentRecording` pass. |
 | Featherless `WithSpeechUsageHandler` is not wired | `speech.go:82` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. |
 | `llmadk/model.go:177` blocks because `DrainStream` is synchronous | `DrainStream` starts its own goroutine (`streaming.go:212`), so `stopped` returns without waiting on the provider channel. |
+
+Round 50 (2026-10-10) reported 10 errors. Fixed: `GenerateTyped` now enforces
+the required list its schema advertises, rejecting a partial response at the top
+level and inside nested objects and object slices (previously a missing field
+decoded to a zero value and never drove the repair turn); a `*map`/`*any`
+target, whose schema strips the pointer to an unconstrained `{}`, accepts `null`
+again; and the OpenRouter live usage-accounting test checks `Usage` before
+dereferencing its cost. The public `CircuitBreaker.Allow` doc now states that
+completions are matched to grants in FIFO order.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/codeql.yml:44` uses an unavailable `actions/checkout@v7` | `v7` is published for checkout (verified against the GitHub tags API); the ref resolves. Same false positive as earlier rounds. |
+| `.github/workflows/lint.yml:24` requests an unavailable Go 1.26 | `go1.26.0` through `go1.26.9` are published on go.dev/dl; `go.mod` already declares `go 1.26.0`. |
+| `llmadk/config.go:94` silently drops request labels | Documented deliberate classification: `Labels` are Google billing metadata ADK sets per agent, so they are ignored rather than rejected (`llmadk/fields.go`). |
+| `llmadk/config.go:182` treats the zero thinking level as unspecified | Intended contract: `ThinkingLevelUnspecified` alone maps to medium, an explicit `ThinkingLevel` beats a budget, and only a truly empty config defers to the budget; `request_test.go` pins all three. |
+| `llmadk/model.go:177` blocks because `DrainStream` is synchronous | `DrainStream` starts its own goroutine (`streaming.go:212`); `stopped` returns without waiting on the provider channel. |
+| Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. |
+| `pkg/middleware/resilience/resilience_circuit_breaker.go:363` public completions can consume the wrong generation permit | The token-less `Allow() bool` pair cannot retroactively re-tag an outstanding grant after a concurrent `Reset`; completions are matched FIFO, which is correct for the documented sequential use. The middleware path (which threads a generation-tagged permit) is unaffected. The doc comment now states the FIFO contract. |

@@ -127,7 +127,7 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 // from JSON embedded in markdown fences or surrounding prose.
 func parseTyped[T any](content string) (T, error) {
 	var value T
-	directErr := unmarshalCandidate[T](content, &value, true)
+	directErr := unmarshalCandidate[T](content, &value)
 	if directErr == nil {
 		return value, nil
 	}
@@ -138,7 +138,7 @@ func parseTyped[T any](content string) (T, error) {
 	reason := directErr
 	for _, extracted := range extractJSONCandidates(content) {
 		var v T
-		extractedErr := unmarshalCandidate[T](extracted, &v, false)
+		extractedErr := unmarshalCandidate[T](extracted, &v)
 		if extractedErr == nil {
 			return v, nil
 		}
@@ -155,7 +155,7 @@ func parseTyped[T any](content string) (T, error) {
 		// null into a string/number/bool/slice and returns a zero value, which
 		// would turn `null` into a false success; only an interface target has an
 		// unconstrained schema that permits null.
-		if isJSONNull(extracted) && !targetPermitsNull[T]() {
+		if isJSONNull(extracted) && !schemaPermitsNull(reflect.TypeOf((*T)(nil)).Elem()) {
 			continue
 		}
 		var v T
@@ -167,32 +167,25 @@ func parseTyped[T any](content string) (T, error) {
 	return zero, fmt.Errorf("llms: structured output does not match the schema: %w", reason)
 }
 
-// pointerTarget reports whether T is a pointer type, so the caller can reject a
-// null that the schema (which strips pointers) does not permit.
-func pointerTarget[T any]() bool {
-	return reflect.TypeOf((*T)(nil)).Elem().Kind() == reflect.Pointer
-}
-
-// targetPermitsNull reports whether T's generated schema permits a JSON null.
-// Interfaces and maps emit an unconstrained schema ({}); every other kind is
-// described as a concrete non-null type.
-func targetPermitsNull[T any]() bool {
-	return !schemaRejectsNull(reflect.TypeOf((*T)(nil)).Elem().Kind())
-}
-
 // isJSONNull reports whether a candidate is the JSON null literal.
 func isJSONNull(s string) bool {
 	return strings.TrimSpace(s) == "null"
 }
 
-// schemaRejectsNull reports whether the generated schema for kind describes a
-// concrete non-null type. Maps and interfaces emit `{}`, which permits null.
-func schemaRejectsNull(kind reflect.Kind) bool {
-	switch kind {
-	case reflect.Map, reflect.Interface, reflect.Chan, reflect.Func, reflect.UnsafePointer:
-		return false
-	default:
+// schemaPermitsNull reports whether the generated schema for typ permits a JSON
+// null. schemaForType strips pointers, so *map and *interface{} emit `{}` just
+// like their pointees; a pointer to a concrete type keeps that type's non-null
+// schema. Only the unconstrained shapes (interface, map, and kinds with no
+// closed schema) permit null.
+func schemaPermitsNull(typ reflect.Type) bool {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	switch typ.Kind() {
+	case reflect.Interface, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
 		return true
+	default:
+		return false
 	}
 }
 
@@ -201,58 +194,57 @@ func schemaRejectsNull(kind reflect.Kind) bool {
 // otherwise satisfy a struct with its zero value. For struct targets the
 // candidate must at least name one of the struct's JSON fields; this keeps a
 // later matching object from being shadowed by unrelated prose JSON.
-func unmarshalCandidate[T any](data string, out *T, direct bool) error {
+func unmarshalCandidate[T any](data string, out *T) error {
 	if err := json.Unmarshal([]byte(data), out); err != nil {
 		return err
 	}
 	target := reflect.TypeOf(*out)
 	// A JSON null leaves the decoded value nil, so reflect.TypeOf returns nil.
-	// For an interface target (T = any) null is a valid value with no schema to
-	// violate. For a pointer target the generated schema strips the pointer and
-	// describes the pointee, so a null does not satisfy it and must be rejected.
+	// Accept it only when T's generated schema permits null (interface or map
+	// shapes, including behind pointers); a concrete scalar/struct/slice type is
+	// described as non-null, so null must be rejected rather than decoded to a
+	// zero value.
 	if target == nil {
-		if pointerTarget[T]() {
+		if !schemaPermitsNull(reflect.TypeOf((*T)(nil)).Elem()) {
 			return fmt.Errorf("candidate %s is null, but the schema requires a %s", data, reflect.TypeOf((*T)(nil)).Elem())
 		}
 		return nil
 	}
-	// A non-pointer scalar, slice, array, or map also accepts null from
-	// json.Unmarshal as a zero value. The generated schema describes it as
-	// non-null, so accepting null would report a schema match for a response the
-	// schema forbids.
-	if isJSONNull(data) && schemaRejectsNull(target.Kind()) {
+	if isJSONNull(data) && !schemaPermitsNull(target) {
 		return fmt.Errorf("candidate %s is null, but the schema requires a %s", data, target)
 	}
+	for target.Kind() == reflect.Pointer {
+		target = target.Elem()
+	}
+	// A struct target still needs every required field; a slice or array of
+	// structs needs each element validated. Anything else has no object schema
+	// to enforce.
+	return validateFieldValue(json.RawMessage(data), target)
+}
+
+// validateObjectRequiredFields enforces the generated schema's required list for
+// target and, recursively, for the nested objects its fields describe. A
+// partial response is otherwise decoded to zero values and never triggers the
+// repair turn, even though the advertised schema (and OpenAI strict mode)
+// requires every non-skipped field.
+func validateObjectRequiredFields(data string, target reflect.Type) error {
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
 	if target.Kind() != reflect.Struct {
 		return nil
 	}
-	if direct {
-		// The caller supplied the whole response as one JSON value. A struct
-		// target still needs at least one matching field; otherwise an unrelated
-		// object would produce a zero struct as a false success.
-		return validateStructCandidate(data, target)
-	}
-	return validateStructCandidate(data, target)
-}
-
-func validateStructCandidate(data string, target reflect.Type) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(data), &raw); err != nil {
 		return nil
 	}
-	// A response may name a field promoted through an embedded struct (for
-	// example `id` from an anonymous `Meta`), so the visible names must include
-	// promoted fields, not just the target's own. Walking through
-	// schemaForStructDepth mirrors encoding/json promotion exactly, so a name the
-	// decoder would populate counts here too.
-	visible, err := jsonVisibleFields(target)
+	// Walking through schemaForStructDepth mirrors encoding/json promotion, so a
+	// promoted field such as `id` from an anonymous `Meta` counts as present.
+	required, err := jsonVisibleFields(target)
 	if err != nil {
 		return err
 	}
-	if len(visible) == 0 {
+	if len(required) == 0 {
 		// A struct with no JSON-visible fields has an object schema that permits
 		// (indeed requires) `{}`; there is no field to match, so an empty object
 		// is the only valid representation and must be accepted.
@@ -261,14 +253,87 @@ func validateStructCandidate(data string, target reflect.Type) error {
 		}
 		return fmt.Errorf("candidate %s does not match %s", data, target)
 	}
-	for key := range raw {
-		for name := range visible {
-			if strings.EqualFold(key, name) {
-				return nil
+	provided := make(map[string]struct{}, len(raw))
+	byLower := make(map[string]json.RawMessage, len(raw))
+	for key, value := range raw {
+		provided[strings.ToLower(key)] = struct{}{}
+		byLower[strings.ToLower(key)] = value
+	}
+	for name := range required {
+		value, ok := byLower[strings.ToLower(name)]
+		if !ok {
+			return fmt.Errorf("candidate %s is missing required field %q", data, name)
+		}
+		field, ok := structFieldByJSONName(target, name)
+		if !ok {
+			continue
+		}
+		if err := validateFieldValue(value, field.Type); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// structFieldByJSONName returns the struct field whose JSON name matches name,
+// following promotion through embedded structs like encoding/json.
+func structFieldByJSONName(target reflect.Type, name string) (reflect.StructField, bool) {
+	for i := 0; i < target.NumField(); i++ {
+		field := target.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		if field.Anonymous {
+			embedded := field.Type
+			for embedded.Kind() == reflect.Pointer {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() == reflect.Struct {
+				if promoted, ok := structFieldByJSONName(embedded, name); ok {
+					return promoted, true
+				}
+			}
+		}
+		jsonName, skip := jsonFieldName(field)
+		if skip {
+			continue
+		}
+		if strings.EqualFold(jsonName, name) {
+			return field, true
+		}
+	}
+	return reflect.StructField{}, false
+}
+
+// validateFieldValue recurses into nested object values the schema constrains.
+// Slices and arrays describe each element, and pointers are stripped the same
+// way schemaForType strips them.
+func validateFieldValue(value json.RawMessage, typ reflect.Type) error {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	switch typ.Kind() {
+	case reflect.Struct:
+		return validateObjectRequiredFields(string(value), typ)
+	case reflect.Slice, reflect.Array:
+		elem := typ.Elem()
+		for elem.Kind() == reflect.Pointer {
+			elem = elem.Elem()
+		}
+		if elem.Kind() != reflect.Struct {
+			return nil
+		}
+		var items []json.RawMessage
+		if err := json.Unmarshal(value, &items); err != nil {
+			return nil
+		}
+		for _, item := range items {
+			if err := validateObjectRequiredFields(string(item), elem); err != nil {
+				return err
 			}
 		}
 	}
-	return fmt.Errorf("candidate %s does not match %s", data, target)
+	return nil
 }
 
 // jsonVisibleFields returns every JSON name encoding/json can populate on typ,

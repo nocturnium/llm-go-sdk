@@ -176,7 +176,13 @@ func (cb *CircuitBreaker) State() CircuitState {
 	return cb.state
 }
 
-// Allow checks if a request should be allowed through
+// Allow checks if a request should be allowed through. It retains the grant so
+// the next RecordSuccess or RecordFailure call reports that request's outcome.
+// Completions are matched to grants in FIFO order, so callers that admit several
+// requests and report them out of order should use the middleware path (or a
+// dedicated CircuitBreaker per in-flight request) rather than the token-less
+// public pair; a concurrent Reset cannot retroactively re-tag an outstanding
+// grant.
 func (cb *CircuitBreaker) Allow() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()

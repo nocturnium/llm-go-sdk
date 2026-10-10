@@ -76,7 +76,7 @@ func TestSchemaFrom(t *testing.T) {
 
 func TestGenerateTyped(t *testing.T) {
 	mock := &structuredMockLLM{
-		response: &Response{Content: `{"name":"Ada","active":true}`},
+		response: &Response{Content: `{"name":"Ada","age":36,"active":true,"tags":[],"note":null}`},
 	}
 
 	value, resp, err := GenerateTyped[structuredTestResult](
@@ -162,7 +162,7 @@ func TestParseTyped_PointerTargetRejectsNull(t *testing.T) {
 	if _, err := parseTyped[*structuredTestResult](`null`); err == nil {
 		t.Fatal("parseTyped[*T](null) succeeded, want a schema mismatch")
 	}
-	got, err := parseTyped[*structuredTestResult](`{"name":"Ada"}`)
+	got, err := parseTyped[*structuredTestResult](`{"name":"Ada","age":36,"active":true,"tags":[],"note":null}`)
 	if err != nil {
 		t.Fatalf("parseTyped[*T] object failed: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestParseTyped_PointerTargetRejectsNull(t *testing.T) {
 // "Name" for a field tagged json:"name" decodes successfully. The struct
 // candidate check must accept it too rather than forcing an unnecessary repair.
 func TestParseTyped_CaseInsensitiveFieldMatch(t *testing.T) {
-	got, err := parseTyped[structuredTestResult](`{"Name":"Ada"}`)
+	got, err := parseTyped[structuredTestResult](`{"Name":"Ada","Age":36,"Active":true,"Tags":[],"Note":null}`)
 	if err != nil {
 		t.Fatalf("parseTyped case-insensitive field failed: %v", err)
 	}
@@ -212,6 +212,18 @@ func TestParseTyped_NonPointerScalarRejectsNull(t *testing.T) {
 	}
 }
 
+// schemaForType strips pointers, so *map[string]any and *any emit the same
+// unconstrained `{}` schema as their pointees. A null is valid for them, and
+// rejecting it would contradict the advertised schema.
+func TestParseTyped_PointerToUnconstrainedAcceptsNull(t *testing.T) {
+	if _, err := parseTyped[*map[string]any]("null"); err != nil {
+		t.Errorf("parseTyped[*map[string]any](null) failed: %v", err)
+	}
+	if _, err := parseTyped[*any]("null"); err != nil {
+		t.Errorf("parseTyped[*any](null) failed: %v", err)
+	}
+}
+
 // A bare scalar embedded in prose ends at punctuation the JSON delimiter set
 // does not include (`true.`), so extraction must still recover the valid prefix.
 func TestParseTyped_BareScalarWithTrailingPunctuation(t *testing.T) {
@@ -233,6 +245,28 @@ func TestParseTyped_BareScalarWithTrailingPunctuation(t *testing.T) {
 
 type structuredPromotedMeta struct {
 	ID string `json:"id"`
+}
+
+// The generated schema marks every JSON-visible field required (omitempty and
+// pointers included). Validation must reject a partial object rather than
+// returning a zero value the schema forbids, both at the top level and inside
+// nested objects and object slices.
+func TestParseTyped_MissingRequiredFieldsRejected(t *testing.T) {
+	if _, err := parseTyped[structuredTestResult](`{"name":"Ada"}`); err == nil {
+		t.Error("partial object accepted, want a missing-field error")
+	}
+	if _, err := parseTyped[structuredTestResult](`{"name":"Ada","age":36,"active":true,"note":null}`); err == nil {
+		t.Error("object missing tags accepted, want a missing-field error")
+	}
+	type nested struct {
+		Inner structuredTestResult `json:"inner"`
+	}
+	if _, err := parseTyped[nested](`{"inner":{"name":"Ada"}}`); err == nil {
+		t.Error("nested partial object accepted, want a missing-field error")
+	}
+	if _, err := parseTyped[[]structuredTestResult](`[{"name":"Ada"}]`); err == nil {
+		t.Error("partial object in slice accepted, want a missing-field error")
+	}
 }
 
 type structuredPromotedDoc struct {
