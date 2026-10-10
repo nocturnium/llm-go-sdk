@@ -12,6 +12,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// maxInt returns the largest value an int can hold on this platform.
+func maxInt() int { return int(^uint(0) >> 1) }
+
 // Rate limiting errors. ErrRateLimitExceeded wraps the canonical
 // llms.ErrRateLimited so a local rate-limiter rejection satisfies
 // errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429,
@@ -270,6 +273,9 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	if requests <= 0 {
 		return fmt.Errorf("rate limit requests must be positive")
 	}
+	if tokens < 0 {
+		return fmt.Errorf("rate limit tokens must not be negative")
+	}
 	if !rl.blocking {
 		return rl.tryAcquire(requests, tokens)
 	}
@@ -419,23 +425,34 @@ func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
 		return ErrRateLimitExceeded
 	}
 	if tokenLimiter != nil && tokens > 0 {
+		// Apply any refund before the burst check: credit is capacity already
+		// paid for, so a charge whose effective size is within the burst must
+		// still be admitted.
+		credit := rl.consumeTokenCredit(tokens)
+		tokens -= credit
 		if b := tokenLimiter.Burst(); tokens > b {
 			// The non-blocking path cannot wait for the overflow, so treat an
 			// oversized token charge as unavailable rather than admitting it at
 			// the burst rate.
+			rl.restoreTokenCredit(credit)
 			return ErrRateLimitExceeded
 		}
-		credit := rl.consumeTokenCredit(tokens)
-		tokens -= credit
+		if tokens == 0 {
+			now := time.Now()
+			reqRes := requestLimiter.ReserveN(now, requests)
+			if !reqRes.OK() || reqRes.Delay() > 0 {
+				reqRes.CancelAt(now)
+				rl.restoreTokenCredit(credit)
+				return ErrRateLimitExceeded
+			}
+			return nil
+		}
 		now := time.Now()
 		reqRes := requestLimiter.ReserveN(now, requests)
 		if !reqRes.OK() || reqRes.Delay() > 0 {
 			reqRes.CancelAt(now)
 			rl.restoreTokenCredit(credit)
 			return ErrRateLimitExceeded
-		}
-		if tokens == 0 {
-			return nil
 		}
 		tokRes := tokenLimiter.ReserveN(now, tokens)
 		if !tokRes.OK() || tokRes.Delay() > 0 {
@@ -490,11 +507,22 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		// underestimate (a 200k-token request against a smaller burst) used to
 		// cost the limiter zero. Charge it in burst-sized installments instead,
 		// which is the same clamp the Wait paths document.
-		extra := actualTokens - rl.tokenEstimate
+		// Compute the overflow as an int64 so a provider-reported count near
+		// math.MaxInt cannot wrap negative and skip the charge entirely.
+		extra64 := int64(actualTokens) - int64(rl.tokenEstimate)
+		if extra64 <= 0 {
+			return
+		}
 		burst := rl.tokenBucketBurst()
 		if burst <= 0 {
 			return
 		}
+		// Clamp to the largest value int can represent on this platform; the
+		// result stays non-negative even for a report near math.MaxInt.
+		if extra64 > int64(maxInt()) {
+			extra64 = int64(maxInt())
+		}
+		extra := int(extra64)
 		// ReserveN refuses any count above the burst and charges nothing for
 		// it, so a large debt goes in burst-sized installments. Bound the number of
 		// calls so one untrusted usage report cannot spin forever, and keep the

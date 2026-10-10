@@ -490,6 +490,19 @@ func TestValidateMessages_LeadingToolMessage(t *testing.T) {
 	}
 }
 
+// A system message may be consolidated to the front, but it must not hide a
+// leading orphan tool result. The first non-system message cannot be a tool.
+func TestValidateMessages_LeadingToolMessageAfterSystem(t *testing.T) {
+	messages := []Message{
+		{Role: RoleTool, Content: "result", ToolCallID: "call-1"},
+		{Role: RoleSystem, Content: "Be concise"},
+		{Role: RoleUser, Content: "hi"},
+	}
+	if err := ValidateMessages(messages); err == nil {
+		t.Fatal("expected validation error for a tool result before any assistant message")
+	}
+}
+
 func TestValidateMessages_AllowsProviderSpecificQuirks(t *testing.T) {
 	messages := []Message{
 		{Role: RoleUser, Content: "Get weather"},

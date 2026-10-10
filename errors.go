@@ -367,6 +367,10 @@ func sanitizeErrorURL(rawURL string) string {
 	// last '@' in the authority as well as in Path/Opaque.
 	if at := strings.LastIndex(u.Host, "@"); at >= 0 {
 		u.Host = u.Host[at+1:]
+	} else if strings.ContainsAny(u.Host, "?#") {
+		// A lone '?' or '#' in the host without an '@' is credential material
+		// that url.Parse could not place in User. Nothing host-like precedes it.
+		u.Host = ""
 	}
 	// A reserved character in a password (for example a slash) makes
 	// url.Parse treat the credential as part of the path while leaving the

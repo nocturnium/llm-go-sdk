@@ -90,7 +90,7 @@ func (c *Client) GenerateContent(ctx context.Context, model string, req *Generat
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("generate content", err)
 	}
 
 	return &response, nil
@@ -114,7 +114,7 @@ func (c *Client) GenerateContentStream(ctx context.Context, model string, req *G
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("stream generate content", err)
 	}
 
 	return &StreamReader{

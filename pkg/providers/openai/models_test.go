@@ -362,6 +362,12 @@ func TestListModels_WithLimit(t *testing.T) {
 	if len(result.Models) != 3 {
 		t.Errorf("expected 3 models (limited), got %d", len(result.Models))
 	}
+	if !result.HasMore {
+		t.Error("HasMore = false, want true when the local limit truncates the page")
+	}
+	if result.NextCursor != result.Models[len(result.Models)-1].ID {
+		t.Errorf("NextCursor = %q, want the last returned model %q so no models are skipped", result.NextCursor, result.Models[len(result.Models)-1].ID)
+	}
 }
 
 func TestModelInfo(t *testing.T) {

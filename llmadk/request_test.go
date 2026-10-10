@@ -339,6 +339,9 @@ func TestTranslate_Thinking(t *testing.T) {
 		{"level beats budget", &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow, ThinkingBudget: i32(9000)}, &llms.ReasoningConfig{Effort: llms.ReasoningEffortLow}, true},
 		{"unspecified defers to budget", &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelUnspecified, ThinkingBudget: i32(2048)}, &llms.ReasoningConfig{BudgetTokens: 2048}, true},
 		{"unspecified alone is medium", &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelUnspecified}, &llms.ReasoningConfig{Effort: llms.ReasoningEffortMedium}, true},
+		// A zero-value level means "leave reasoning unset", not the explicit
+		// UNSPECIFIED constant, so it must not synthesize a medium effort.
+		{"zero-value level alone leaves reasoning unset", &genai.ThinkingConfig{}, nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

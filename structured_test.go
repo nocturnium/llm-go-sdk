@@ -129,6 +129,19 @@ func TestGenerateTyped_InvalidJSON(t *testing.T) {
 	}
 }
 
+// A scalar T must accept a fenced JSON string; extractJSON only scans objects
+// and arrays, so a string result previously failed even though it was valid JSON.
+func TestGenerateTyped_FencedScalar(t *testing.T) {
+	mock := &structuredMockLLM{response: &Response{Content: "```json\n\"Ada\"\n```"}}
+	got, _, err := GenerateTyped[string](context.Background(), mock, []Message{{Role: RoleUser, Content: "name"}})
+	if err != nil {
+		t.Fatalf("GenerateTyped[string] failed: %v", err)
+	}
+	if got != "Ada" {
+		t.Errorf("got %q, want Ada", got)
+	}
+}
+
 type structuredStrictSchemaResult struct {
 	Name   string                 `json:"name,omitempty"`
 	Note   *string                `json:"note"`

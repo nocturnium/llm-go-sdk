@@ -144,8 +144,67 @@ func parseTyped[T any](content string) (T, error) {
 		}
 		reason = extractedErr
 	}
+	// A scalar T (string, number, bool) has no braces to scan for, but the
+	// response may still be a quoted scalar inside a markdown fence or prose.
+	if extracted, ok := extractScalarJSON(content); ok {
+		var v T
+		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
+			return v, nil
+		}
+	}
 	var zero T
 	return zero, fmt.Errorf("llms: structured output does not match the schema: %w", reason)
+}
+
+// extractScalarJSON finds the first valid JSON scalar (string, number, bool, or
+// null) embedded in s. Strings are found by their quotes; bare scalars are tried
+// at each position that could begin one. It returns ok=false when none parses.
+func extractScalarJSON(s string) (string, bool) {
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			if candidate, ok := quotedJSONAt(s, i); ok {
+				return candidate, true
+			}
+		case 't', 'f', 'n', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			end := i
+			for end < len(s) && !isJSONScalarDelimiter(s[end]) {
+				end++
+			}
+			if end > i {
+				candidate := s[i:end]
+				if json.Valid([]byte(candidate)) {
+					return candidate, true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+func isJSONScalarDelimiter(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',' || c == '}' || c == ']' || c == '`'
+}
+
+// quotedJSONAt scans a JSON string starting at start and returns it when it is a
+// well-formed string literal.
+func quotedJSONAt(s string, start int) (string, bool) {
+	escaped := false
+	for i := start + 1; i < len(s); i++ {
+		switch {
+		case escaped:
+			escaped = false
+		case s[i] == '\\':
+			escaped = true
+		case s[i] == '"':
+			candidate := s[start : i+1]
+			if json.Valid([]byte(candidate)) {
+				return candidate, true
+			}
+			return "", false
+		}
+	}
+	return "", false
 }
 
 // repairPrompt is the correction instruction sent to the model on a repair turn.

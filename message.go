@@ -81,9 +81,11 @@ func ValidateMessages(messages []Message) error {
 			})
 		}
 
-		// A tool message is a result for a prior assistant tool call, so it
-		// cannot be the first message in a conversation.
-		if i == 0 && msg.Role == RoleTool {
+		// A tool message is a result for a prior assistant tool call, so the
+		// first message that is not a system prompt cannot be a tool result.
+		// System messages may precede it; consolidation moves them to the front,
+		// so checking index 0 alone would miss an orphan tool message behind one.
+		if msg.Role == RoleTool && firstNonSystemMessage(messages) == i {
 			errs = append(errs, ValidationError{
 				Field:   "messages[" + strconv.Itoa(i) + "].role",
 				Value:   msg.Role,
@@ -96,6 +98,17 @@ func ValidateMessages(messages []Message) error {
 		return errs
 	}
 	return nil
+}
+
+// firstNonSystemMessage returns the index of the first message that is not a
+// system prompt, or -1 when every message is a system prompt.
+func firstNonSystemMessage(messages []Message) int {
+	for i, msg := range messages {
+		if msg.Role != RoleSystem {
+			return i
+		}
+	}
+	return -1
 }
 
 // ValidateToolCallIDs enforces provider opt-in tool result linkage by requiring

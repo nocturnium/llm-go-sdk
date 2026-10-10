@@ -3,6 +3,7 @@ package resilience
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -748,5 +749,46 @@ func TestRateLimiter_TryAcquire_TokenFailureRefundsRequestCapacity(t *testing.T)
 	}
 	if err := rl.WaitN(context.Background(), 1, 0); err != nil {
 		t.Fatalf("request capacity was consumed by the failed token acquire: %v", err)
+	}
+}
+
+// A negative token count must be rejected, not treated as "no token charge"
+// that silently bypasses the configured token rate.
+func TestRateLimiter_WaitN_RejectsNegativeTokens(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(600))
+	if err := rl.WaitN(context.Background(), 1, -1); err == nil {
+		t.Fatal("WaitN with negative tokens succeeded, want error")
+	}
+}
+
+// The non-blocking path must apply token credit before the burst check: 1000
+// credits make a 1500-token request effectively 500, which fits a 1000 burst.
+func TestRateLimiter_TryAcquire_AppliesCreditBeforeBurstCheck(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithRequestBurst(2),
+		WithTokensPerMinute(60000),
+		WithTokenBurst(1000),
+		WithBlocking(false),
+	)
+	rl.mu.Lock()
+	rl.tokenCredit = 1000
+	rl.mu.Unlock()
+
+	if err := rl.WaitN(context.Background(), 1, 1500); err != nil {
+		t.Fatalf("WaitN with credit applied = %v, want success", err)
+	}
+}
+
+// A reported usage near math.MaxInt must not overflow the overflow calculation
+// and skip accounting entirely.
+func TestRateLimiter_RecordTokens_LargeUsageDoesNotWrap(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(1))
+	rl.RecordTokens(math.MaxInt)
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt <= 0 {
+		t.Fatalf("tokenDebt after a MaxInt usage report = %d, want a positive debt", debt)
 	}
 }

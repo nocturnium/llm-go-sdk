@@ -367,14 +367,21 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	}
 
 	// apply limit if specified
+	hasMore := resp.HasMore
+	nextCursor := resp.LastID
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		// The returned prefix ends before the server's page cursor. Point the
+		// caller at the last model actually returned so continuing from it does
+		// not skip the models between here and resp.LastID.
+		nextCursor = models[len(models)-1].ID
+		hasMore = true
 	}
 
 	return &llms.ListModelsResult{
 		Models:     models,
-		NextCursor: resp.LastID,
-		HasMore:    resp.HasMore,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
 	}, nil
 }
 
