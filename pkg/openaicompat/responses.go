@@ -614,6 +614,10 @@ func responsesFinishReason(resp *ResponsesResponse, hasToolCalls bool) llms.Fini
 		resp.IncompleteDetails.Reason == "max_output_tokens" {
 		return llms.FinishReasonLength
 	}
+	if resp.Status == "incomplete" && resp.IncompleteDetails != nil &&
+		resp.IncompleteDetails.Reason == "content_filter" {
+		return llms.FinishReasonContentFilter
+	}
 	return llms.FinishReasonStop
 }
 

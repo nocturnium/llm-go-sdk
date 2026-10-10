@@ -144,7 +144,11 @@ func validateRootURI(raw string) error {
 	}
 	// Reject traversal rather than cleaning it: silently rewriting a caller's
 	// path would publish a location they did not write.
-	if u.Path != filepath.ToSlash(filepath.Clean(u.Path)) {
+	cleanPath := filepath.ToSlash(filepath.Clean(u.Path))
+	if strings.HasSuffix(u.Path, "/") && cleanPath != "/" {
+		cleanPath += "/"
+	}
+	if u.Path != cleanPath {
 		return fmt.Errorf("mcp: root URI %q must be a clean absolute path (no . or .. segments)", raw)
 	}
 	return nil

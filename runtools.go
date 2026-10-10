@@ -126,7 +126,7 @@ func RunTools(ctx context.Context, llm LLM, messages []Message, registry *ToolRe
 		callOptions = append(callOptions, WithTools(registry.Tools()))
 		resp, err := llm.GenerateContent(ctx, transcript, callOptions...)
 		if err != nil {
-			return nil, transcript, err
+			return lastResp, transcript, err
 		}
 		lastResp = resp
 

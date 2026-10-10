@@ -115,6 +115,9 @@ func (s *StreamSender) Send(chunk StreamChunk) SendResult {
 		return SendTimeout
 	}
 	chunk = s.stamp(chunk)
+	if err := s.ctx.Err(); err != nil {
+		return SendContextCanceled
+	}
 
 	// Fast path: buffered stream channels almost always have room, so avoid
 	// allocating a timer unless the send would block.
