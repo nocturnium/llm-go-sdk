@@ -194,6 +194,7 @@ func validateStructCandidate(data string, target reflect.Type) error {
 	if err := json.Unmarshal([]byte(data), &raw); err != nil {
 		return nil
 	}
+	hasVisibleField := false
 	for i := 0; i < target.NumField(); i++ {
 		field := target.Field(i)
 		if !field.IsExported() {
@@ -203,11 +204,18 @@ func validateStructCandidate(data string, target reflect.Type) error {
 		if skip {
 			continue
 		}
+		hasVisibleField = true
 		for key := range raw {
 			if strings.EqualFold(key, name) {
 				return nil
 			}
 		}
+	}
+	// A struct with no JSON-visible fields has an object schema that permits
+	// (indeed requires) `{}`; there is no field to match, so an empty object is
+	// the only valid representation and must be accepted.
+	if !hasVisibleField && len(raw) == 0 {
+		return nil
 	}
 	return fmt.Errorf("candidate %s does not match %s", data, target)
 }

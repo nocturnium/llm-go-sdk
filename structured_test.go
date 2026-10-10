@@ -181,6 +181,27 @@ func TestParseTyped_TriesEveryScalarCandidate(t *testing.T) {
 	}
 }
 
+type emptySchemaTarget struct{}
+
+type allHiddenSchemaTarget struct {
+	Hidden string `json:"-"`
+}
+
+// A struct with no JSON-visible fields has an object schema that permits only
+// `{}`. Validation must accept that empty object rather than rejecting the one
+// valid representation.
+func TestParseTyped_EmptyStructAcceptsEmptyObject(t *testing.T) {
+	if _, err := parseTyped[emptySchemaTarget](`{}`); err != nil {
+		t.Errorf("empty struct: %v", err)
+	}
+	if _, err := parseTyped[allHiddenSchemaTarget](`{}`); err != nil {
+		t.Errorf("all-hidden struct: %v", err)
+	}
+	if _, err := parseTyped[emptySchemaTarget](`{"x":1}`); err == nil {
+		t.Error("empty struct accepted a non-empty object")
+	}
+}
+
 // A nested object inside a valid enclosing JSON value is part of that value,
 // not a separate top-level payload. Descending into the envelope would let an
 // unrelated wrapper satisfy the schema with the nested object and return data
@@ -467,7 +488,10 @@ func assertSchema(t *testing.T, actual any, expected map[string]any) {
 		t.Fatalf("expected schema %#v, got %#v", expected, actualMap)
 	}
 	for key, expectedValue := range expected {
-		if actualMap[key] != expectedValue {
+		// reflect.DeepEqual, not !=: a nested schema value is itself a map, and
+		// comparing maps with != panics. DeepEqual handles scalars and nested
+		// objects alike.
+		if !reflect.DeepEqual(actualMap[key], expectedValue) {
 			t.Fatalf("expected schema %#v, got %#v", expected, actualMap)
 		}
 	}

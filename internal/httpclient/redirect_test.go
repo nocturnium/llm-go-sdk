@@ -78,6 +78,50 @@ func TestCheckRedirect_RetainsCredentialsOnSameHostRedirect(t *testing.T) {
 	}
 }
 
+// A caller can put a secret in any custom header, not just the fixed provider
+// credential list. A cross-origin redirect must drop those too, or the secret
+// leaks to a server the redirecting host chose.
+func TestCheckRedirect_StripsCustomCallerHeadersOnCrossHostRedirect(t *testing.T) {
+	foreignHeaders := make(chan http.Header, 1)
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHeaders <- r.Header.Clone()
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer foreign.Close()
+
+	foreignURL, err := url.Parse(foreign.URL)
+	if err != nil {
+		t.Fatalf("parse foreign URL: %v", err)
+	}
+	_, foreignPort, err := net.SplitHostPort(foreignURL.Host)
+	if err != nil {
+		t.Fatalf("split foreign host: %v", err)
+	}
+	foreignURL.Host = net.JoinHostPort("localhost", foreignPort)
+
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreignURL.String(), http.StatusFound)
+	}))
+	defer redirector.Close()
+
+	client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true))
+	if _, err := client.DoRaw(context.Background(), Request{
+		Method:  http.MethodGet,
+		URL:     redirector.URL,
+		Headers: map[string]string{"X-Custom-Secret": "top-secret", "Accept": "application/json"},
+	}); err != nil {
+		t.Fatalf("DoRaw returned error: %v", err)
+	}
+
+	headers := <-foreignHeaders
+	if got := headers.Get("X-Custom-Secret"); got != "" {
+		t.Errorf("expected custom secret header to be stripped, got %q", got)
+	}
+	if got := headers.Get("Accept"); got != "application/json" {
+		t.Errorf("expected safe Accept header to survive, got %q", got)
+	}
+}
+
 func redirectCredentialTestHeaders() map[string]string {
 	return map[string]string{
 		"x-goog-api-key": "gemini-secret",

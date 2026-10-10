@@ -342,6 +342,24 @@ instead of calling `t.Fatal` inside the HTTP handler.
 | --- | --- |
 | `.github/workflows/ci.yml` references an unpublished `actions/checkout@v7` | `v7` is a published checkout tag and `v7` is published for setup-go; the refs resolve. |
 | `capabilities_registry.go` should apply boolean defaults | Documented and pinned as numeric-only: a bool false cannot be distinguished from a deliberate false, so there is no zero value to substitute. |
+
+Round 47 (2026-10-10) reported 10 errors. Fixed: a bare `CircuitBreaker{}` now
+initializes its in-flight bucket map lazily instead of panicking on the first
+admission; `internal/httpclient` drops every non-safe request header on a
+cross-origin redirect, not just the fixed provider credential list, so a secret
+in a caller-supplied custom header cannot leak; `validateStructCandidate`
+accepts `{}` for a struct with no JSON-visible fields; `assertSchema` compares
+with `reflect.DeepEqual` so a nested schema map cannot panic the comparison; the
+v3-to-v4 migration guide now describes the v4 field removal accurately instead
+of attributing it to v5; and the changelog's two Gemini-default entries are
+reconciled.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/release.yml` references unavailable action versions | `v7` is published for checkout, setup-go, goreleaser-action and upload-artifact, and `v8` for download-artifact; the refs resolve. |
+| `errors.go` leaks credentials for a URL with `?`/`#` in userinfo | `url.Parse` rejects those forms with `invalid port`, so `sanitizeErrorURL` takes the hand-cut path; the probe shows `user:se` stripped from every form. |
+| `pkg/observability/metrics_test.go` populates the wrong mock field | `MetricsMiddleware.Call` delegates to `GenerateContent`, so the fixture's `genResp` is the response the middleware reads; `TestMetricsMiddleware_Call_Success` passes. |
+| `ratelimit_bounded_test.go` measures current tokens, not reserved capacity | `TestRecordTokens_HugeCountIsBounded` passes: with a slow refill the reservations are still outstanding when `Tokens()` is read, so the drained delta is visible. |
 | `pkg/openaicompat/toolcall_ids.go` loses earlier tool-call rewrites | The inner loop mutates the shared `msg.ToolCalls` copy and writes the same message back, so every rewrite accumulates; a three-call regression test confirms all IDs are distinct and nine-character. |
 
 Round 45 (2026-10-10) reported 7 errors. Fixed: `CircuitBreaker.Reset` now

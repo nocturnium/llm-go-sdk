@@ -182,3 +182,16 @@ func TestCircuitBreaker_StaleClosedResultDoesNotClose(t *testing.T) {
 		t.Errorf("probe success did not close the circuit, state = %v, want %v", state, CircuitClosed)
 	}
 }
+
+// TestCircuitBreaker_ZeroValueIsUsable pins that a bare CircuitBreaker, with no
+// NewCircuitBreaker call, does not panic on its first admission. The type
+// documents that its zero value is ready to use.
+func TestCircuitBreaker_ZeroValueIsUsable(t *testing.T) {
+	var cb CircuitBreaker
+	if !cb.Allow() {
+		t.Fatal("zero-value breaker refused a request")
+	}
+	cb.RecordSuccess()
+	cb.RecordFailure()
+	cb.Reset()
+}

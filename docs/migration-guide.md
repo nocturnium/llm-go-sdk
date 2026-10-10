@@ -267,16 +267,18 @@ If you only use the core API, that is the entire migration, you are done.
 
 ## 2. Replace `Thinking` with `Reasoning`
 
-The `Response.Thinking()` / `StreamChunk.Thinking()` methods, the `ThinkingContent` type
-alias, and the `WithThinkingMode` option have been **removed in v5** (they were deprecated
-throughout v4). Read chain-of-thought from the canonical `Reasoning` field:
+v4 removes the deprecated `Response.Thinking` and `StreamChunk.Thinking` **fields**; the
+`Thinking()` methods, the `ThinkingContent` alias, and the `WithThinkingMode` option stay as
+deprecated aliases through v4 (they are removed in v5). Read chain-of-thought from the
+canonical `Reasoning` field:
 
 ```go
 rc := resp.Reasoning         // canonical field
 ```
 
 If you built a `Response` / `StreamChunk` struct literal with `Thinking:`, set `Reasoning:`
-instead, and replace `WithThinkingMode(true/false)` with `WithReasoning`.
+instead. `WithThinkingMode` still compiles in v4 but is deprecated; migrate to
+`WithReasoning` at your convenience before v5 removes it.
 
 ## 3. Drop any use of the `ErrorMapper` registry (it was dead code)
 

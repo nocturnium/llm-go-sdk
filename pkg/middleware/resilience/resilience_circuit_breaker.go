@@ -196,6 +196,12 @@ func (cb *CircuitBreaker) acquire() (admitted bool, p permit) {
 
 	switch cb.state {
 	case CircuitClosed:
+		// The type documents that its zero value is ready to use, so a caller
+		// that constructs a bare CircuitBreaker must not panic on the first
+		// admission. Lazily create the bucket map.
+		if cb.inflightClosed == nil {
+			cb.inflightClosed = make(map[uint64]int)
+		}
 		cb.inflightClosed[cb.generation]++
 		return true, permit{generation: cb.generation}
 

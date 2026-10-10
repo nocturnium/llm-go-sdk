@@ -58,6 +58,33 @@ var crossHostRedirectCredentialHeaders = []string{
 	"Proxy-Authorization",
 }
 
+// crossHostRedirectSafeHeaders survive a cross-origin redirect. They carry
+// content negotiation and framing rather than credentials; everything else is
+// dropped, because a caller cannot know which custom header holds a secret and
+// the destination is chosen by the redirecting server.
+var crossHostRedirectSafeHeaders = map[string]bool{
+	"Accept":          true,
+	"Accept-Encoding": true,
+	"Accept-Language": true,
+	"Content-Type":    true,
+	"User-Agent":      true,
+}
+
+// stripCrossHostCredentials removes request headers before a cross-origin
+// redirect is followed. Beyond the fixed provider credential list, every header
+// that is not in the safe allowlist is dropped, so a secret in a caller-supplied
+// custom header cannot leak to the redirect target.
+func stripCrossHostCredentials(req *http.Request) {
+	for _, header := range crossHostRedirectCredentialHeaders {
+		req.Header.Del(header)
+	}
+	for name := range req.Header {
+		if !crossHostRedirectSafeHeaders[http.CanonicalHeaderKey(name)] {
+			req.Header.Del(name)
+		}
+	}
+}
+
 // Client is an HTTP client with retry support.
 type Client struct {
 	httpClient  *http.Client
@@ -254,9 +281,7 @@ func (c *Client) installRedirectPolicy() {
 			return fmt.Errorf("redirect blocked: %w", err)
 		}
 		if len(via) > 0 && !sameRedirectOrigin(req, via[0]) {
-			for _, header := range crossHostRedirectCredentialHeaders {
-				req.Header.Del(header)
-			}
+			stripCrossHostCredentials(req)
 		}
 		return nil
 	}
