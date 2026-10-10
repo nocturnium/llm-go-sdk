@@ -68,7 +68,11 @@ var MediaPricing = map[string]MediaRate{
 	"gemini:gemini-2.5-pro-preview-tts":    {Unit: MediaUnitMTokenOut, USD: 20},
 
 	// ElevenLabs API pricing, https://elevenlabs.io/pricing/api (2026-09-05).
-	"elevenlabs:eleven_v3":                {Unit: MediaUnitKChar, USD: 0.08},
+	"elevenlabs:eleven_v3": {Unit: MediaUnitKChar, USD: 0.08},
+	// eleven_v4 carries a promotional card through October 12, 2026; the
+	// standard rate is recorded, matching the policy for other promotions.
+	"elevenlabs:eleven_v4":                {Unit: MediaUnitKChar, USD: 0.08},
+	"elevenlabs:eleven_v4_turbo":          {Unit: MediaUnitKChar, USD: 0.04},
 	"elevenlabs:eleven_multilingual_v2":   {Unit: MediaUnitKChar, USD: 0.08},
 	"elevenlabs:eleven_v3_conversational": {Unit: MediaUnitKChar, USD: 0.04},
 	"elevenlabs:eleven_flash_v2_5":        {Unit: MediaUnitKChar, USD: 0.04},

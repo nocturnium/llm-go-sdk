@@ -80,6 +80,16 @@ func TestPricing_DefaultPricing(t *testing.T) {
 		"openai:gpt-3.5-turbo-instruct",
 		"openai:davinci-002",
 		"openai:babbage-002",
+		"openai:gpt-rosalind-research",
+		"openai:gpt-5.6-cyber",
+		"togetherai:thinkingmachines/Inkling",
+		"togetherai:Qwen/Qwen3.7-Max",
+		"togetherai:moonshotai/Kimi-K3",
+		"zai:glm-5.3",
+		"zai:glm-5.3-flash",
+		"groq:openai/gpt-oss-120b",
+		"mistral:mistral-large-4",
+		"mistral:codestral",
 	}
 
 	for _, model := range expectedModels {

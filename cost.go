@@ -287,6 +287,9 @@ var DefaultPricing = map[string]Pricing{
 			Input: 60.00, Output: 270.00}},
 	},
 	"openai:gpt-5.3-codex":          {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-rosalind-research":  {Input: 5.00, Output: 25.00, CacheRead: 0.50},
+	"openai:gpt-rosalind-discovery": {Input: 5.00, Output: 25.00, CacheRead: 0.50},
+	"openai:gpt-5.6-cyber":          {Input: 12.50, Output: 75.00, CacheRead: 1.25, CacheWrite: 15.625},
 	"openai:gpt-5.2":                {Input: 1.75, Output: 14.00, CacheRead: 0.175},
 	"openai:gpt-5.2-pro":            {Input: 21.00, Output: 168.00},
 	"openai:gpt-5.1":                {Input: 1.25, Output: 10.00, CacheRead: 0.125},
@@ -417,18 +420,45 @@ var DefaultPricing = map[string]Pricing{
 	"deepseek:deepseek-reasoner": {Input: 0.55, Output: 2.19, CacheRead: 0.14},
 
 	// Cloud provider serverless/list pricing.
-	"groq:llama-3.3-70b-versatile":                                {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
+	"groq:llama-3.3-70b-versatile": {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
+	// Current Groq console catalog, read 2026-10-09. The 3.1 8B, 3.3 70B, and
+	// MiniMax M2.7 rows are enterprise-only now, so their old public rates are
+	// left off rather than kept as if current.
+	"groq:qwen/qwen3.8-27b":                    {Input: 0.80, Output: 4.00},
+	"groq:openai/gpt-oss-120b":                 {Input: 0.15, Output: 0.60},
+	"groq:openai/gpt-oss-20b":                  {Input: 0.075, Output: 0.30},
+	"groq:openai/gpt-oss-safeguard-20b":        {Input: 0.075, Output: 0.30},
+	"groq:meta-llama/llama-prompt-guard-2-22m": {Input: 0.03, Output: 0.03},
+	"groq:meta-llama/llama-prompt-guard-2-86m": {Input: 0.04, Output: 0.04},
+
+	// Mistral docs pricing, read 2026-10-09. The Large 4 promotional rate is a
+	// time-boxed launch card; the standard rate is recorded for the same reason
+	// Anthropic's Sonnet 5 promotion records its standard rate.
+	"mistral:mistral-large-4":    {Input: 1.36, Output: 4.18, CacheRead: 0.14},
+	"mistral:mistral-large-3":    {Input: 0.50, Output: 1.50, CacheRead: 0.05},
+	"mistral:mistral-medium-3.5": {Input: 1.50, Output: 7.50, CacheRead: 0.15},
+	"mistral:mistral-small-4":    {Input: 0.15, Output: 0.60, CacheRead: 0.015},
+	"mistral:ministral-3-14b":    {Input: 0.20, Output: 0.20, CacheRead: 0.02},
+	"mistral:ministral-3-8b":     {Input: 0.15, Output: 0.15, CacheRead: 0.015},
+	"mistral:ministral-3-3b":     {Input: 0.10, Output: 0.10, CacheRead: 0.01},
+	"mistral:codestral":          {Input: 0.30, Output: 0.90, CacheRead: 0.03},
+	"mistral:codestral-embed":    {Input: 0.15, CacheRead: 0.015},
 	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {Input: 0.90, Output: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
-	"perplexity:sonar":                                            {Input: 1.00, Output: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
-	"zai:glm-5.2":                                                 {Input: 1.40, Output: 4.40}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-06
-	"zai:glm-5.1":                                                 {Input: 1.40, Output: 4.40}, // docs.z.ai, verified 2026-06
-	"zai:glm-5":                                                   {Input: 1.00, Output: 3.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-5-turbo":                                             {Input: 1.20, Output: 4.00}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7":                                                 {Input: 0.60, Output: 2.20}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-06
-	"zai:glm-4.6":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.5":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.5-air":                                             {Input: 0.20, Output: 1.10}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7-Flash":                                           {},                          // Free (Z.AI direct pricing, verified 2026-10)
+	"perplexity:sonar":   {Input: 1.00, Output: 1.00},                  // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
+	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
+	"zai:glm-5.1":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5":          {Input: 1.00, Output: 3.20, CacheRead: 0.20}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5-turbo":    {Input: 1.20, Output: 4.00},                  // docs.z.ai, verified 2026-06
+	"zai:glm-4.7":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-10-09
+	"zai:glm-4.6":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-4.5":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-4.5-air":    {Input: 0.20, Output: 1.10, CacheRead: 0.03}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5.3":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"zai:glm-5.3-flash":  {Input: 0.15, Output: 0.50, CacheRead: 0.03},
+	"zai:glm-5.3-flashx": {Input: 0.37, Output: 1.25, CacheRead: 0.075},
+	"zai:glm-4.7-flashx": {Input: 0.07, Output: 0.40, CacheRead: 0.01},
+	"zai:glm-4.6v":       {Input: 0.30, Output: 0.90, CacheRead: 0.05},
+	"zai:glm-4.7-Flash":  {}, // Free (Z.AI direct pricing, verified 2026-10)
 
 	// TogetherAI (varies by model, these are examples)
 	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 1.04, Output: 1.04},
@@ -441,6 +471,19 @@ var DefaultPricing = map[string]Pricing{
 	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {Input: 0.88, Output: 0.88},
 	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {Input: 0.18, Output: 0.18},
 	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {Input: 0.60, Output: 0.60},
+	// Exact serverless IDs from docs.together.ai/docs/serverless/models, read
+	// 2026-10-09. Disputed cache rates (Qwen3.8-2.4T, Kimi-K3) are omitted rather
+	// than guessed; the standard input/output rates are not in dispute.
+	"togetherai:thinkingmachines/Inkling":      {Input: 1.00, Output: 4.05, CacheRead: 0.17},
+	"togetherai:Qwen/Qwen3.8-2.4T-A95B":        {Input: 2.00, Output: 6.00},
+	"togetherai:Qwen/Qwen3.7-Max":              {Input: 2.50, Output: 7.50, CacheRead: 0.50},
+	"togetherai:Qwen/Qwen3.6-Plus":             {Input: 0.50, Output: 3.00},
+	"togetherai:Qwen/Qwen3.7-Plus":             {Input: 0.32, Output: 1.28},
+	"togetherai:Qwen/Qwen3.8-Flash":            {Input: 0.15, Output: 0.47},
+	"togetherai:moonshotai/Kimi-K3":            {Input: 2.70, Output: 13.50},
+	"togetherai:meta-models/Muse-Glimmer-30B":  {Input: 0.35, Output: 1.50, CacheRead: 0.04},
+	"togetherai:Prism-ML/Ternary-Bonsai-27B":   {}, // Free
+	"togetherai:together/Tev1-4B-experimental": {Input: 0.042},
 }
 
 // ModelTokenPricing returns the built-in per-token pricing (Input and Output, in
