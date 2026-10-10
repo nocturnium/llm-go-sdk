@@ -123,6 +123,7 @@ func ProcessResponsesStream(
 	}()
 
 	var accumulatedContent string
+	terminal := false
 
 	for {
 		select {
@@ -138,14 +139,9 @@ func ProcessResponsesStream(
 				sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
 				return
 			}
-			// Stream ended without a terminal response.completed event; close out
-			// with whatever we have (optionally estimating usage).
-			final := llms.StreamChunk{FinishReason: llms.FinishReasonStop}
-			if config != nil && config.EstimateTokens {
-				u := llms.EstimateUsageFromMessages(config.Messages, accumulatedContent)
-				final.Usage = &u
+			if !terminal {
+				sender.DeliverTerminal(llms.StreamChunk{Error: fmt.Errorf("%s: responses stream ended before terminal event", provider), Done: true})
 			}
-			sender.SendFinal(final)
 			return
 		}
 		if err != nil {
@@ -175,6 +171,7 @@ func ProcessResponsesStream(
 			}
 
 		case "response.completed", "response.incomplete":
+			terminal = true
 			final := finalChunkFromResponse(env.Response, config, accumulatedContent)
 			sender.SendFinal(final)
 			return
@@ -221,5 +218,8 @@ func finalChunkFromResponse(resp *ResponsesResponse, config *StreamConfig, accum
 		usage = llms.EstimateUsageFromMessages(config.Messages, accumulatedContent)
 	}
 	final.Usage = &usage
+	if accumulatedContent == "" {
+		final.Content = converted.Content
+	}
 	return final
 }
