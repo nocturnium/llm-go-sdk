@@ -355,6 +355,44 @@ func TestParseTyped_EmbeddedPromotedField(t *testing.T) {
 	}
 }
 
+// A field declared directly on the outer struct shadows an embedded field with
+// the same JSON name, and encoding/json decodes into the outer field. Recursive
+// validation must pick the same field, or it applies the embedded field's schema
+// to a value the decoder never sends there and rejects valid output.
+func TestParseTyped_ShallowerFieldShadowsEmbedded(t *testing.T) {
+	type inner struct {
+		Name struct {
+			ID string `json:"id"`
+		} `json:"name"`
+	}
+	type outer struct {
+		inner
+		Name map[string]any `json:"name"`
+	}
+	// The outer map permits any object, so an arbitrary key must be accepted.
+	if _, err := parseTyped[outer](`{"name":{"anything":1}}`); err != nil {
+		t.Errorf("shadowing map field rejected: %v", err)
+	}
+
+	// The exported embedded form takes the promotion branch that used to win
+	// over the shallower outer field.
+	type outerExported struct {
+		structuredPromotedShadow
+		Name map[string]any `json:"name"`
+	}
+	if _, err := parseTyped[outerExported](`{"name":{"anything":1}}`); err != nil {
+		t.Errorf("shadowing map field rejected for exported embed: %v", err)
+	}
+}
+
+type structuredPromotedShadow struct {
+	Name structuredShadowInner `json:"name"`
+}
+
+type structuredShadowInner struct {
+	ID string `json:"id"`
+}
+
 type emptySchemaTarget struct{}
 
 type allHiddenSchemaTarget struct {
@@ -692,12 +730,17 @@ func TestSchemaFrom_EmbeddedCustomUnmarshalerNotFlattened(t *testing.T) {
 	if err != nil {
 		t.Fatalf("schemaForType: %v", err)
 	}
-	properties := schemaProperties(t, schema)
-	if _, ok := properties["V"]; ok {
-		t.Errorf("embedded custom unmarshaler's field leaked into the schema: %#v", properties)
+	// The promoted UnmarshalJSON consumes the whole outer object, so no
+	// structural schema describes what the decoder accepts. It must emit an
+	// unconstrained schema rather than advertising V or other as required keys.
+	if len(schema) != 0 {
+		t.Fatalf("expected an unconstrained schema, got %#v", schema)
 	}
-	if _, ok := properties["other"]; !ok {
-		t.Errorf("sibling field missing from schema: %#v", properties)
+
+	// Validation must agree: an object the custom decoder accepts is not
+	// rejected for missing the structural fields the schema no longer advertises.
+	if _, err := parseTyped[outer](`{"anything":1}`); err != nil {
+		t.Errorf("custom-decoded object rejected: %v", err)
 	}
 }
 

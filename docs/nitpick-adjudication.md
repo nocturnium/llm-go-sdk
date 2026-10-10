@@ -496,3 +496,20 @@ rejects a property the struct cannot populate, matching the advertised
 | `internal/httpclient/security_wiring_test.go:197` redirects to an `ftp` URL that bypasses `CheckRedirect` | The probe shows the request fails with `redirect blocked: unsupported URL scheme: ftp`; `net/http` does invoke `CheckRedirect`, whose `validateURL` rejects the scheme, and the test passes. |
 | `llmadk/envelope.go:118` exposes hidden thought text through `PartMetadata` | Documented design: with `IncludeThoughts=false` Anthropic requires the signed text on replay, so the base64 envelope is reachable in session storage and the ADK event stream until `WithEnvelopeKey` (AEAD sealing) lands in v0.2 (`docs/design/llmadk.md:303`). Recurring false positive. |
 | `pkg/providers/anthropic/models_test.go:16` omits Sonnet 4 from the expected pricing | `AssertKnownModelTokenPricingReconcilesWithDefaultPricing` iterates the expected map and the known map independently; it does not require set equality, so the test passes without the entry. |
+
+Round 55 (2026-10-10) reported 9 errors. Fixed: an SSE line of exactly
+`maxSSEEventSize` bytes is accepted instead of rejected (the check ran after the
+terminating byte, so an exact-max line was wrongly flagged); recursive
+validation picks the same field `encoding/json` does when an outer field shadows
+an embedded one, so a valid response is no longer rejected; a struct whose decode
+is governed by a promoted `UnmarshalJSON` emits an unconstrained schema and skips
+required-field checks (the custom decoder consumes the whole object and never
+populates the structural fields); the OpenRouter generic registration forwards
+`embedding_model`; and the two OpenAI integration handlers report failures with
+`t.Errorf` instead of `t.Fatal` on the server goroutine.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/codeql.yml:67` job-level blocks omit `security-events: write` | The gosec and trivy jobs declare no job-level `permissions` block, so the workflow-level `security-events: write` applies and the SARIF upload is authorized. Only `analyze` declares its own block, and it includes `security-events: write`. |
+| `llmadk/config.go:94` silently drops `Labels` | Documented deliberate classification: `Labels` are Google billing metadata ADK sets per agent, so they are ignored explicitly (`llmadk/fields.go:79`), not dropped silently. Same false positive as round 50. |
+| `pkg/providers/gemini/gemini.go:122` panics on missing `usageMetadata` | `Response.Usage` is a value (`llms.Usage`), not a pointer, so `result.Usage.TotalTokens` cannot panic; the probe with a usage-less response returns estimated usage instead. |

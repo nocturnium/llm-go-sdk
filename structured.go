@@ -238,6 +238,13 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 	if target.Kind() != reflect.Struct {
 		return nil
 	}
+	// A promoted custom UnmarshalJSON consumes the whole object, so the
+	// struct's own fields are never decoded individually and none of them is
+	// required in the sense the generated schema would enforce. The unconstrained
+	// schema reflects that; validation must not contradict it.
+	if hasPromotedCustomUnmarshaler(target) {
+		return nil
+	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(data), &raw); err != nil {
 		return nil
@@ -293,33 +300,92 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 }
 
 // structFieldByJSONName returns the struct field whose JSON name matches name,
-// following promotion through embedded structs like encoding/json.
+// following promotion through embedded structs like encoding/json. The shallowest
+// match wins: a field declared directly on target shadows one promoted from an
+// embedded struct, which is what encoding/json decodes into. Equal-depth
+// duplicates are ambiguous and encoding/json drops the name, so they are not
+// returned.
 func structFieldByJSONName(target reflect.Type, name string) (reflect.StructField, bool) {
+	field, depth, found := structFieldByJSONNameDepth(target, name, 0, nil)
+	_ = depth
+	return field, found
+}
+
+func structFieldByJSONNameDepth(target reflect.Type, name string, depth int, seen map[reflect.Type]bool) (reflect.StructField, int, bool) {
+	for target.Kind() == reflect.Pointer {
+		target = target.Elem()
+	}
+	if target.Kind() != reflect.Struct {
+		return reflect.StructField{}, 0, false
+	}
+	if seen == nil {
+		seen = make(map[reflect.Type]bool)
+	}
+	if seen[target] {
+		return reflect.StructField{}, 0, false
+	}
+	seen[target] = true
+	defer delete(seen, target)
+
+	best := reflect.StructField{}
+	bestDepth := 0
+	found := false
+	ambiguous := false
+	consider := func(field reflect.StructField, d int) {
+		if !found || d < bestDepth {
+			best, bestDepth, found, ambiguous = field, d, true, false
+			return
+		}
+		if d == bestDepth {
+			// Two fields resolve to the same name at the same depth; encoding/json
+			// treats the name as ambiguous and populates neither.
+			ambiguous = true
+		}
+	}
+
 	for i := 0; i < target.NumField(); i++ {
 		field := target.Field(i)
-		if !field.IsExported() {
-			continue
-		}
 		if field.Anonymous {
 			embedded := field.Type
 			for embedded.Kind() == reflect.Pointer {
 				embedded = embedded.Elem()
 			}
-			if embedded.Kind() == reflect.Struct {
-				if promoted, ok := structFieldByJSONName(embedded, name); ok {
-					return promoted, true
+			// An embedded struct with no explicit json name is promoted, so its
+			// fields are one level deeper. An unexported anonymous struct still
+			// promotes its exported fields, matching encoding/json and the schema
+			// walk. An embedded field with a json name is a normal field below.
+			if embedded.Kind() == reflect.Struct && embeddedJSONNameEmpty(field) {
+				if promoted, d, ok := structFieldByJSONNameDepth(embedded, name, depth+1, seen); ok {
+					consider(promoted, d)
 				}
+				continue
 			}
+		}
+		if !field.IsExported() {
+			continue
 		}
 		jsonName, skip := jsonFieldName(field)
 		if skip {
 			continue
 		}
 		if strings.EqualFold(jsonName, name) {
-			return field, true
+			consider(field, depth)
 		}
 	}
-	return reflect.StructField{}, false
+	if !found || ambiguous {
+		return reflect.StructField{}, 0, false
+	}
+	return best, bestDepth, true
+}
+
+// embeddedJSONNameEmpty reports whether an embedded field has no explicit json
+// name, meaning its fields are promoted to the parent.
+func embeddedJSONNameEmpty(field reflect.StructField) bool {
+	tag := field.Tag.Get("json")
+	if tag == "-" {
+		return false
+	}
+	return tag == "" || strings.Split(tag, ",")[0] == ""
 }
 
 // validateFieldValue recurses into nested object values the schema constrains.
@@ -622,6 +688,15 @@ func schemaForType(typ reflect.Type, seen map[reflect.Type]bool) (map[string]any
 		// subschema that strict validators reject with a 400.
 		return map[string]any{}, nil
 	case reflect.Struct:
+		// An anonymous embedded type that implements json.Unmarshaler has its
+		// method promoted to the parent, so encoding/json hands the parent's
+		// entire object to that method and never decodes the parent's own fields.
+		// No structural schema can describe what the custom decoder accepts, and
+		// the structural guess advertises keys (and required fields) it ignores.
+		// Emit an unconstrained schema rather than a wrong one.
+		if hasPromotedCustomUnmarshaler(typ) {
+			return map[string]any{}, nil
+		}
 		return schemaForStruct(typ, seen)
 	case reflect.Interface:
 		return map[string]any{}, nil
@@ -870,6 +945,37 @@ func implementsJSONUnmarshaler(typ reflect.Type) bool {
 	jsonUnmarshaler := reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
 	return typ.Implements(jsonUnmarshaler) ||
 		reflect.PointerTo(typ).Implements(jsonUnmarshaler)
+}
+
+// hasPromotedCustomUnmarshaler reports whether typ's decode is governed by an
+// anonymous embedded type that implements json.Unmarshaler. encoding/json
+// promotes such a method to the parent, so the parent's fields are never decoded
+// individually and a structural schema would advertise a shape the decoder does
+// not honor.
+func hasPromotedCustomUnmarshaler(typ reflect.Type) bool {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct {
+		return false
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.Anonymous {
+			continue
+		}
+		embedded := field.Type
+		for embedded.Kind() == reflect.Pointer {
+			embedded = embedded.Elem()
+		}
+		if embedded.Kind() != reflect.Struct {
+			continue
+		}
+		if embeddedJSONNameEmpty(field) && implementsJSONUnmarshaler(embedded) {
+			return true
+		}
+	}
+	return false
 }
 
 func implementsTextMarshaler(typ reflect.Type) bool {

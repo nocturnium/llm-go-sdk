@@ -108,6 +108,19 @@ func TestRegistry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The generic constructor must forward the embedding model like the other
+	// model and client settings.
+	c, err := llms.New("openrouter", llms.Config{APIKey: "key", Extra: map[string]string{llms.ExtraEmbeddingModel: "openai/text-embedding-3-small"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, ok := c.(*Client)
+	if !ok {
+		t.Fatalf("got %T, want *openrouter.Client", c)
+	}
+	if got := client.options.EmbeddingModel; got != "openai/text-embedding-3-small" {
+		t.Errorf("EmbeddingModel = %q, want openai/text-embedding-3-small", got)
+	}
 }
 func TestClient_ChatAndHeaders(t *testing.T) {
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {

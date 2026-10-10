@@ -348,12 +348,32 @@ func TestSSEReader_LineTooLarge(t *testing.T) {
 	}
 }
 
+// A line of exactly maxSSEEventSize bytes is within the documented bound and
+// must be accepted. The old check ran after reading the terminating byte, so an
+// exact-max line was wrongly rejected as oversized.
+func TestSSEReader_ExactMaxLineAccepted(t *testing.T) {
+	content := strings.Repeat("A", maxSSEEventSize-len("data: "))
+	data := "data: " + content + "\n\n"
+	reader := NewSSEReader(newMockReadCloser(data))
+	defer func() { _ = reader.Close() }()
+
+	event, err := reader.Read()
+	if err != nil {
+		t.Fatalf("exact-max line rejected: %v", err)
+	}
+	if len(event.Data) != len(content) {
+		t.Fatalf("got %d data bytes, want %d", len(event.Data), len(content))
+	}
+}
+
 func TestSSEReader_EventTooLarge(t *testing.T) {
 	var data strings.Builder
-	for data.Len() <= maxSSEEventSize {
+	content := 0
+	for content <= maxSSEEventSize {
 		data.WriteString("data: ")
 		data.WriteString(strings.Repeat("A", 1024))
 		data.WriteString("\n")
+		content += len("data: ") + 1024
 	}
 
 	reader := NewSSEReader(newMockReadCloser(data.String()))

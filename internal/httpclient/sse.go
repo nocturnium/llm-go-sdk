@@ -104,14 +104,18 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 		// readLine returns any data read before the error (e.g. a final line
 		// without a trailing newline at EOF), so process the line first.
 		if line != "" {
-			eventSize += len(line)
+			// Count the line content, not its terminator: the documented bound is
+			// on the bytes the caller sees, so an exact-max line must not trip the
+			// event check through its trailing newline.
+			lineContent := strings.TrimSuffix(line, "\n")
+			eventSize += len(lineContent)
 			if eventSize > maxSSEEventSize {
 				return nil, fmt.Errorf("SSE event exceeds maximum size of %d bytes", maxSSEEventSize)
 			}
 
 			// Strip the line terminator (\n and an optional preceding \r) to match
 			// bufio.Scanner's ScanLines semantics.
-			line = strings.TrimSuffix(line, "\n")
+			line = lineContent
 			line = strings.TrimSuffix(line, "\r")
 
 			switch {
@@ -194,9 +198,6 @@ func (r *SSEReader) readLine() (string, error) {
 			}
 			return "", err
 		}
-		if len(line) >= maxSSEEventSize {
-			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
-		}
 		if b == '\n' {
 			return string(line) + "\n", nil
 		}
@@ -205,6 +206,13 @@ func (r *SSEReader) readLine() (string, error) {
 			// CR-only stream. The next readLine consumes it if present.
 			r.pendingLF = true
 			return string(line) + "\n", nil
+		}
+		// Reject only a line whose content would exceed the limit; a line of
+		// exactly maxSSEEventSize bytes is within the documented bound and must be
+		// accepted. Checking before consuming the terminator wrongly rejected the
+		// exact-length case.
+		if len(line) >= maxSSEEventSize {
+			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
 		}
 		line = append(line, b)
 	}
