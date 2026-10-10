@@ -462,6 +462,8 @@ func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
 	// an in-flight call discard a response the server already delivered.
 	select {
 	case writes <- req:
+	case <-t.writerGone:
+		return orClosed(nil)
 	case <-ctx.Done():
 		return ctx.Err()
 	}

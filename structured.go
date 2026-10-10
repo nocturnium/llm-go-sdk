@@ -127,7 +127,7 @@ func generateTyped[T any](ctx context.Context, llm LLM, messages []Message, repa
 // from JSON embedded in markdown fences or surrounding prose.
 func parseTyped[T any](content string) (T, error) {
 	var value T
-	directErr := json.Unmarshal([]byte(content), &value)
+	directErr := unmarshalCandidate[T](content, &value, true)
 	if directErr == nil {
 		return value, nil
 	}
@@ -138,7 +138,7 @@ func parseTyped[T any](content string) (T, error) {
 	reason := directErr
 	for _, extracted := range extractJSONCandidates(content) {
 		var v T
-		extractedErr := json.Unmarshal([]byte(extracted), &v)
+		extractedErr := unmarshalCandidate[T](extracted, &v, false)
 		if extractedErr == nil {
 			return v, nil
 		}
@@ -154,6 +154,42 @@ func parseTyped[T any](content string) (T, error) {
 	}
 	var zero T
 	return zero, fmt.Errorf("llms: structured output does not match the schema: %w", reason)
+}
+
+// unmarshalCandidate decodes one JSON candidate into T. json.Unmarshal ignores
+// unknown object fields, so an unrelated object such as {"noise":1} would
+// otherwise satisfy a struct with its zero value. For struct targets the
+// candidate must at least name one of the struct's JSON fields; this keeps a
+// later matching object from being shadowed by unrelated prose JSON.
+func unmarshalCandidate[T any](data string, out *T, direct bool) error {
+	if err := json.Unmarshal([]byte(data), out); err != nil {
+		return err
+	}
+	if direct {
+		return nil
+	}
+	target := reflect.TypeOf(*out)
+	for target.Kind() == reflect.Pointer {
+		target = target.Elem()
+	}
+	if target.Kind() != reflect.Struct {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(data), &raw); err != nil {
+		return nil
+	}
+	for i := 0; i < target.NumField(); i++ {
+		field := target.Field(i)
+		name, skip := jsonFieldName(field)
+		if skip {
+			continue
+		}
+		if _, ok := raw[name]; ok {
+			return nil
+		}
+	}
+	return fmt.Errorf("candidate %s does not match %s", data, target)
 }
 
 // extractScalarJSON finds the first valid JSON scalar (string, number, bool, or

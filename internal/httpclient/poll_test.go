@@ -130,3 +130,14 @@ func TestPoll_CallbackErrorAfterTimeout(t *testing.T) {
 		t.Fatalf("Poll = %v, want callback error %v", err, cause)
 	}
 }
+
+// A callback that returns context.Canceled on an active context is reporting a
+// real operation failure, not asking Poll to keep retrying.
+func TestPoll_CallbackContextErrorIsReturned(t *testing.T) {
+	err := Poll(context.Background(), PollPolicy{Timeout: time.Hour}, func(context.Context) (bool, error) {
+		return false, context.Canceled
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Poll = %v, want context.Canceled", err)
+	}
+}

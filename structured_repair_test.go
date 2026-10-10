@@ -85,6 +85,19 @@ func TestGenerateTyped_SkipsUnrelatedJSONValue(t *testing.T) {
 	}
 }
 
+// An unrelated object must not satisfy a struct with its zero value; the later
+// object that actually names the struct's fields wins.
+func TestGenerateTyped_SkipsUnrelatedObject(t *testing.T) {
+	llm := &repairScriptLLM{responses: []string{`prefix {"noise":1} then {"name":"Ada","age":36}`}}
+	got, _, err := GenerateTyped[person](context.Background(), llm, []Message{{Role: RoleUser, Content: "x"}})
+	if err != nil {
+		t.Fatalf("GenerateTyped: %v", err)
+	}
+	if got.Name != "Ada" || got.Age != 36 {
+		t.Errorf("got %+v, want {Ada 36}", got)
+	}
+}
+
 // An unbalanced object must not yield one of its keys as a string result.
 func TestParseTyped_UnbalancedObjectDoesNotYieldKey(t *testing.T) {
 	if got, err := parseTyped[string](`{"name":"Ada"`); err == nil {

@@ -286,3 +286,9 @@ Also refreshed the verified rate cards for the same providers and extended
 | `structured_schema_test.go` declares an invalid recursive slice type | `GOWORK=off go test -run TestSchemaFrom_RecursiveSliceDoesNotOverflow` passes; the flagged `recSlice` definition compiles. |
 | `llmadk` does not add `set_model_response` to `AllowedFunctionNames` | `toolConfig` filters only the caller's tools and always keeps the synthetic tool; the inline comment and translation tests pin that behavior. |
 | Featherless `WithSpeechUsageHandler` is never invoked | `speech.go` reads `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event, and `TestStreamSpeech_ReportedCharacters` covers it. |
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go` leaks credentials for `https://user:se?cret@host/v1` | `url.Parse` returns `invalid port` for that form; the sanitizer only sees the error path, which strips through the last `@`. |
+| `llmadk` drops `GenerateContentConfig.Labels` | `Labels` is explicitly ignored metadata in the field-handling table, not a translated request field. |
+| `ratelimit_burst_test.go` expects an oversized non-blocking estimate to succeed | The non-blocking path rejects an effective charge above the burst by design; the table case asserts only that `Wait` returns without wedging, and the preceding blocking cases cover debt financing. |
