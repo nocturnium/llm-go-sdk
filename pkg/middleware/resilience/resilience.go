@@ -118,15 +118,16 @@ func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []llms.
 // retry is not possible once chunks have been emitted; only the initial connect
 // error is handled synchronously.
 func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
-	if !rc.breaker.Allow() {
+	admitted, halfOpenProbe := rc.breaker.acquire()
+	if !admitted {
 		return nil, ErrCircuitOpen
 	}
 	src, err := rc.llm.Stream(ctx, messages, options...)
 	if err != nil {
 		if isProviderUnhealthy(err) {
-			rc.breaker.RecordFailure()
+			rc.breaker.recordFailure(halfOpenProbe)
 		} else {
-			rc.breaker.release()
+			rc.breaker.releasePermit(halfOpenProbe)
 		}
 		return nil, err
 	}
@@ -143,11 +144,11 @@ func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, 
 		func() {
 			switch {
 			case termErr == nil:
-				rc.breaker.RecordSuccess()
+				rc.breaker.recordSuccess(halfOpenProbe)
 			case isProviderUnhealthy(termErr):
-				rc.breaker.RecordFailure()
+				rc.breaker.recordFailure(halfOpenProbe)
 			default:
-				rc.breaker.release()
+				rc.breaker.releasePermit(halfOpenProbe)
 			}
 		},
 	), nil
@@ -163,7 +164,8 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Check circuit breaker
-		if !rc.breaker.Allow() {
+		admitted, halfOpenProbe := rc.breaker.acquire()
+		if !admitted {
 			if lastErr != nil {
 				return fmt.Errorf("%w: %w", ErrCircuitOpen, lastErr)
 			}
@@ -173,7 +175,7 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		// Execute the function
 		err := fn()
 		if err == nil {
-			rc.breaker.RecordSuccess()
+			rc.breaker.recordSuccess(halfOpenProbe)
 			return nil
 		}
 
@@ -191,9 +193,9 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) {
 			if providerUnhealthy {
-				rc.breaker.RecordFailure()
+				rc.breaker.recordFailure(halfOpenProbe)
 			} else {
-				rc.breaker.release()
+				rc.breaker.releasePermit(halfOpenProbe)
 			}
 			return err
 		}
@@ -201,9 +203,9 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		// Don't retry if this was the last attempt
 		if attempt >= maxAttempts-1 {
 			if providerUnhealthy {
-				rc.breaker.RecordFailure()
+				rc.breaker.recordFailure(halfOpenProbe)
 			} else {
-				rc.breaker.release()
+				rc.breaker.releasePermit(halfOpenProbe)
 			}
 			break
 		}
@@ -218,7 +220,7 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 		// The next retry obtains its own grant. This attempt's retryable error is
 		// not terminal provider-health evidence, so release its probe permit.
-		rc.breaker.release()
+		rc.breaker.releasePermit(halfOpenProbe)
 
 		// Wait before retrying with proper timer cleanup.
 		// Using time.NewTimer instead of time.After to prevent goroutine leaks

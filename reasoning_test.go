@@ -212,3 +212,31 @@ func TestReasoningContentClone_IsolatesNestedMetadata(t *testing.T) {
 		t.Errorf("scalar metadata changed: %#v", clone.Metadata["scalar"])
 	}
 }
+
+// TestReasoningContentClone_SelfReferentialMetadata pins that a self-referential
+// metadata value clones to a self-referential copy rather than recursing until
+// the stack overflows.
+func TestReasoningContentClone_SelfReferentialMetadata(t *testing.T) {
+	m := map[string]any{}
+	m["self"] = m
+	original := &ReasoningContent{Metadata: map[string]any{"cycle": m}}
+
+	clone := original.Clone()
+	cloneCycle, ok := clone.Metadata["cycle"].(map[string]any)
+	if !ok {
+		t.Fatalf("clone cycle is %T, want map[string]any", clone.Metadata["cycle"])
+	}
+	if _, ok := cloneCycle["self"].(map[string]any); !ok {
+		t.Errorf("clone cycle self-reference is %T, want map[string]any", cloneCycle["self"])
+	}
+	// The clone's cycle must be a distinct map from the original's.
+	if _, same := cloneCycle["self"].(map[string]any); same {
+		if _, aliased := original.Metadata["cycle"].(map[string]any)["self"]; aliased {
+			// Mutating the clone must not be visible in the original.
+			cloneCycle["mutated"] = true
+			if _, leaked := m["mutated"]; leaked {
+				t.Error("clone mutation leaked into the original metadata map")
+			}
+		}
+	}
+}

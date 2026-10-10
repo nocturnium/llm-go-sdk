@@ -264,6 +264,11 @@ func (e *StreamEvent) UnmarshalJSON(data []byte) error {
 				return err
 			}
 			e.MessageDelta = &msgDelta
+			// The alias unmarshal above also decoded this same "delta" object
+			// into the content-delta field. Clear it so a message_delta event
+			// does not present an empty content delta alongside the message
+			// metadata; MessageDelta is the only delta this event carries.
+			e.Delta = nil
 		}
 	}
 

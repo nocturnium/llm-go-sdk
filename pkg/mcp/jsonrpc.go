@@ -117,7 +117,10 @@ func messageID(raw []byte) (int64, bool) {
 		return id, true
 	}
 	f, err := strconv.ParseFloat(n.String(), 64)
-	if err != nil || math.Trunc(f) != f || f < math.MinInt64 || f > math.MaxInt64 {
+	// float64(math.MaxInt64) rounds up to 2^63, so comparing against it would
+	// admit 2^63 exactly and wrap int64(f) to math.MinInt64. Reject anything at
+	// or above 2^63 instead; math.MinInt64 is exactly representable and valid.
+	if err != nil || math.Trunc(f) != f || f < math.MinInt64 || f >= 9223372036854775808.0 {
 		return 0, false
 	}
 	id = int64(f)

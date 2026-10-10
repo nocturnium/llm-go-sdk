@@ -337,3 +337,25 @@ func TestContentPart_ThinkingAlwaysCarriesText(t *testing.T) {
 		t.Errorf("text block carries a thinking field: %s", b)
 	}
 }
+
+// TestStreamEvent_MessageDeltaHasNoContentDelta pins that a message_delta event
+// exposes only MessageDelta. The alias unmarshal also decodes the same "delta"
+// object into StreamEvent.Delta; that content pointer must be cleared so callers
+// keying on Delta do not treat stop-reason metadata as an empty content delta.
+func TestStreamEvent_MessageDeltaHasNoContentDelta(t *testing.T) {
+	jsonData := `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}`
+
+	var event StreamEvent
+	if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if event.MessageDelta == nil {
+		t.Fatal("expected MessageDelta to be set")
+	}
+	if event.MessageDelta.StopReason != "end_turn" {
+		t.Errorf("StopReason = %q, want end_turn", event.MessageDelta.StopReason)
+	}
+	if event.Delta != nil {
+		t.Errorf("message_delta also set Delta = %+v; want nil", event.Delta)
+	}
+}

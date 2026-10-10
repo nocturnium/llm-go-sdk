@@ -114,51 +114,66 @@ func (r *ReasoningContent) Clone() *ReasoningContent {
 
 // cloneMetadataValue deep-copies the reference-typed values that Metadata
 // carries: slices, arrays, maps, pointers, and structs reachable through them.
-// Scalars and opaque types are returned as-is.
+// Scalars and opaque types are returned as-is. Reference values already copied
+// on the current path are reused rather than copied again, so a self-referential
+// value (m["self"] = m) clones to a self-referential copy instead of recursing
+// forever.
 func cloneMetadataValue(v any) any {
 	if v == nil {
 		return nil
 	}
-	return deepCopyValue(reflect.ValueOf(v)).Interface()
+	return deepCopyValue(reflect.ValueOf(v), make(map[uintptr]reflect.Value)).Interface()
 }
 
-func deepCopyValue(v reflect.Value) reflect.Value {
+func deepCopyValue(v reflect.Value, seen map[uintptr]reflect.Value) reflect.Value {
 	switch v.Kind() {
 	case reflect.Interface:
 		if v.IsNil() {
 			return v
 		}
-		return deepCopyValue(v.Elem())
+		return deepCopyValue(v.Elem(), seen)
 	case reflect.Pointer:
 		if v.IsNil() {
 			return v
 		}
+		if cp, ok := seen[v.Pointer()]; ok {
+			return cp
+		}
 		cp := reflect.New(v.Type().Elem())
-		cp.Elem().Set(deepCopyValue(v.Elem()))
+		seen[v.Pointer()] = cp
+		cp.Elem().Set(deepCopyValue(v.Elem(), seen))
 		return cp
 	case reflect.Slice:
 		if v.IsNil() {
 			return v
 		}
+		if cp, ok := seen[v.Pointer()]; ok {
+			return cp
+		}
 		cp := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		seen[v.Pointer()] = cp
 		for i := 0; i < v.Len(); i++ {
-			cp.Index(i).Set(deepCopyValue(v.Index(i)))
+			cp.Index(i).Set(deepCopyValue(v.Index(i), seen))
 		}
 		return cp
 	case reflect.Array:
 		cp := reflect.New(v.Type()).Elem()
 		for i := 0; i < v.Len(); i++ {
-			cp.Index(i).Set(deepCopyValue(v.Index(i)))
+			cp.Index(i).Set(deepCopyValue(v.Index(i), seen))
 		}
 		return cp
 	case reflect.Map:
 		if v.IsNil() {
 			return v
 		}
+		if cp, ok := seen[v.Pointer()]; ok {
+			return cp
+		}
 		cp := reflect.MakeMapWithSize(v.Type(), v.Len())
+		seen[v.Pointer()] = cp
 		iter := v.MapRange()
 		for iter.Next() {
-			cp.SetMapIndex(iter.Key(), deepCopyValue(iter.Value()))
+			cp.SetMapIndex(iter.Key(), deepCopyValue(iter.Value(), seen))
 		}
 		return cp
 	case reflect.Struct:
@@ -172,7 +187,7 @@ func deepCopyValue(v reflect.Value) reflect.Value {
 			}
 			switch v.Field(i).Kind() {
 			case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
-				cp.Field(i).Set(deepCopyValue(v.Field(i)))
+				cp.Field(i).Set(deepCopyValue(v.Field(i), seen))
 			}
 		}
 		return cp

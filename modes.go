@@ -125,9 +125,28 @@ func deriveAnthropicBatchPricing(base Pricing, known bool) (Pricing, bool) {
 		CacheRead:  cacheRead,
 		CacheWrite: cacheWrite,
 	}
-	// Anthropic's long-context pricing is flat, so a standard card carries no
-	// tiers; if that ever changes, carry them so the derived card tiers too.
-	derived.Tiers = base.Tiers
+	// Carry any tiers with the same 50% discount. Anthropic's long-context
+	// pricing is flat today (no standard card carries tiers), but a future
+	// tiered card must not leak standard-tier rates into the batch card.
+	if len(base.Tiers) > 0 {
+		derived.Tiers = make([]PricingTier, len(base.Tiers))
+		for i, tier := range base.Tiers {
+			discounted := PricingTier{
+				MinInputTokens: tier.MinInputTokens,
+				Input:          tier.Input * anthropicBatchDiscount,
+				Output:         tier.Output * anthropicBatchDiscount,
+				CacheRead:      tier.CacheRead * anthropicBatchDiscount,
+				CacheWrite:     tier.CacheWrite * anthropicBatchDiscount,
+			}
+			if tier.CacheRead == 0 {
+				discounted.CacheRead = discounted.Input * anthropicCacheReadRatio
+			}
+			if tier.CacheWrite == 0 {
+				discounted.CacheWrite = discounted.Input * anthropicCacheWriteRatio
+			}
+			derived.Tiers[i] = discounted
+		}
+	}
 	return derived, true
 }
 

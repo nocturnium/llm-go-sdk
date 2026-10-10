@@ -29,6 +29,17 @@ func TestMessageID(t *testing.T) {
 	if _, ok := messageID([]byte(`not json`)); ok {
 		t.Error("messageID(garbage): expected ok=false")
 	}
+	// 2^63 is exactly representable as a float64 but overflows int64; it must be
+	// rejected rather than wrapping to math.MinInt64.
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":9223372036854775808}`)); ok {
+		t.Errorf("messageID(2^63) = %d,%v; want ok=false", id, ok)
+	}
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":1e19}`)); ok {
+		t.Errorf("messageID(1e19) = %d,%v; want ok=false", id, ok)
+	}
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":9223372036854775807}`)); !ok || id != 9223372036854775807 {
+		t.Errorf("messageID(max int64) = %d,%v; want max,true", id, ok)
+	}
 }
 
 func TestExtractJSONMessage(t *testing.T) {

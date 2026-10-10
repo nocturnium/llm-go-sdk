@@ -55,3 +55,41 @@ func TestCircuitBreaker_SlowProbesStillClose(t *testing.T) {
 		t.Errorf("state = %v, want %v", state, CircuitClosed)
 	}
 }
+
+// TestCircuitBreaker_StaleClosedResultDoesNotClose pins that a request admitted
+// while the breaker was closed, which then completes after the breaker has
+// opened and moved to half-open, is not counted as a half-open probe. With
+// halfOpenMax 1 the stale success must not close the circuit on its own.
+func TestCircuitBreaker_StaleClosedResultDoesNotClose(t *testing.T) {
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithResetTimeout(time.Millisecond),
+		WithHalfOpenTimeout(time.Minute),
+		WithHalfOpenMax(1),
+	)
+
+	// Request admitted while closed.
+	admitted, staleProbe := cb.acquire()
+	if !admitted || staleProbe {
+		t.Fatalf("closed-state acquire = %v,%v; want true,false", admitted, staleProbe)
+	}
+
+	// Another request trips the breaker and the watchdog admits a half-open probe.
+	cb.RecordFailure()
+	time.Sleep(5 * time.Millisecond)
+	if !cb.Allow() {
+		t.Fatalf("half-open probe refused, state = %v", cb.State())
+	}
+
+	// The stale closed-state request now succeeds; it must not close the breaker.
+	cb.recordSuccess(staleProbe)
+	if state := cb.State(); state != CircuitHalfOpen {
+		t.Errorf("stale success closed the circuit, state = %v, want %v", state, CircuitHalfOpen)
+	}
+
+	// The real probe succeeding closes it.
+	cb.RecordSuccess()
+	if state := cb.State(); state != CircuitClosed {
+		t.Errorf("probe success did not close the circuit, state = %v, want %v", state, CircuitClosed)
+	}
+}
