@@ -79,3 +79,30 @@ func TestRateLimiter_RecordTokensRefundsOverflowDebt(t *testing.T) {
 		t.Fatalf("tokenDebt after a full refund = %d, want 0", debtAfter)
 	}
 }
+
+// A partial credit must reduce the whole charge before the burst/debt split.
+// With burst 1000, credit 500, and a 2000-token request, an implementation that
+// carried the consumed credit into debt as well would charge 2500 tokens.
+func TestRateLimiter_PartialCreditDoesNotOverchargeOversizedRequest(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(10_000))
+	rl.mu.Lock()
+	rl.tokenCredit = 500
+	rl.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := rl.WaitN(ctx, 1, 2000); err != nil {
+		t.Fatalf("WaitN failed: %v", err)
+	}
+
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	credit := rl.tokenCredit
+	rl.mu.RUnlock()
+	if credit != 0 {
+		t.Errorf("credit after waiting = %d, want 0", credit)
+	}
+	if debt != 500 {
+		t.Errorf("debt after a 2000-token request with 500 credit = %d, want 500", debt)
+	}
+}

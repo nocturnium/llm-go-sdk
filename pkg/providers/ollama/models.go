@@ -36,6 +36,10 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		return &llms.ListModelsResult{
+			Models:  models,
+			HasMore: true,
+		}, nil
 	}
 
 	return &llms.ListModelsResult{

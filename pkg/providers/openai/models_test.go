@@ -208,6 +208,30 @@ func TestListModels(t *testing.T) {
 	if gpt4o.Pricing == nil {
 		t.Error("expected pricing to be set for known model")
 	}
+	// Mutating one result must not change the shared metadata used by later
+	// results or race with concurrent listing.
+	if len(gpt4o.Types) == 0 || gpt4o.Pricing == nil {
+		t.Fatal("expected non-empty types and pricing to test isolation")
+	}
+	gpt4o.Types[0] = llms.ModelTypeImage
+	gpt4o.Pricing.Input = 999
+	again, err := client.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("second ListModels failed: %v", err)
+	}
+	for _, m := range again.Models {
+		if m.ID != "gpt-4o" {
+			continue
+		}
+		if m.Pricing != nil && m.Pricing.Input == 999 {
+			t.Error("model pricing aliases the shared metadata table")
+		}
+		for _, typ := range m.Types {
+			if typ == llms.ModelTypeImage && !gpt4o.HasType(typ) {
+				t.Error("model types alias the shared metadata table")
+			}
+		}
+	}
 
 	// Verify HasMore is false
 	if result.HasMore {

@@ -82,7 +82,7 @@ func BuildSpeechRequest(model, input string, opts *llms.SpeechOptions) *SpeechRe
 	if voice == "" {
 		voice = "alloy"
 	}
-	return &SpeechRequest{Model: effectiveModel(model, opts.Model), Input: input, Voice: voice, Instructions: opts.Instructions, Speed: opts.Speed, ResponseFormat: format}
+	return &SpeechRequest{ExtraBody: opts.Extra, Model: effectiveModel(model, opts.Model), Input: input, Voice: voice, Instructions: opts.Instructions, Speed: opts.Speed, ResponseFormat: format}
 }
 
 // ConvertSpeechResponse attaches format and usage to binary audio. Token usage wins

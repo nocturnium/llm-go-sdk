@@ -300,6 +300,9 @@ func TestListModels(t *testing.T) {
 		if len(result.Models) != 1 {
 			t.Errorf("got %d models, want 1 (limited)", len(result.Models))
 		}
+		if !result.HasMore {
+			t.Error("HasMore = false, want true when the local limit truncates the list")
+		}
 	})
 
 	t.Run("filter-by-type", func(t *testing.T) {

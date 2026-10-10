@@ -198,6 +198,35 @@ func TestWrapStream_ContextCancelEmitsTerminalChunk(t *testing.T) {
 	}
 }
 
+// TestWrapStream_ContextCancelUnblocksIdleSource pins that cancellation closes
+// the wrapper even when the source is open but idle. Previously the wrapper
+// blocked in `range source` forever and never delivered a terminal chunk.
+func TestWrapStream_ContextCancelUnblocksIdleSource(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	source := make(chan StreamChunk) // never closed by this test
+	defer close(source)
+
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		<-ctx.Done()
+	}()
+	<-started
+
+	out := WrapStream(ctx, source, ApplyOptions(WithStreamBufferSize(1)), nil)
+	cancel()
+
+	select {
+	case chunk, ok := <-out:
+		if ok && chunk.Error == nil && !chunk.Done {
+			t.Fatalf("first chunk after cancellation = %+v, want a terminal chunk", chunk)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("wrapper did not observe context cancellation on an idle source")
+	}
+}
+
 // TestStreamSender_DeliverTerminalOnce verifies a single terminal chunk is
 // emitted even if DeliverTerminal/SendFinal are called multiple times.
 func TestStreamSender_DeliverTerminalOnce(t *testing.T) {

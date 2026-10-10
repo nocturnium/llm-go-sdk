@@ -459,34 +459,73 @@ func specialSchemaForType(typ reflect.Type) (map[string]any, bool) {
 	// quoted string. There is no marshaler to inspect, but the decode path pins
 	// the wire form, so describe it as a string rather than emitting an object
 	// schema the SDK's own unmarshal would reject.
-	if implementsTextUnmarshaler(typ) && !implementsMarshaler(typ) {
+	if implementsTextUnmarshaler(typ) && !implementsJSONMarshaler(typ) {
 		return map[string]any{schemaKeyType: schemaTypeString}, true
 	}
-	// A custom marshaler is described as a string only when the type can read
-	// one back. Claiming "string" for a write-only marshaler asks the model for
-	// a value the SDK then fails to decode into the field.
-	if implementsMarshaler(typ) && implementsUnmarshaler(typ) {
+	// A custom marshaler is described as a string only when it round-trips a
+	// quoted string and its marshal output is actually a JSON string. A write-only
+	// marshaler, or one emitting an object/array, must keep the structural schema
+	// that encoding/json can decode from an object.
+	if implementsMarshaler(typ) && implementsUnmarshaler(typ) && marshalsAsJSONString(typ) {
 		return map[string]any{schemaKeyType: schemaTypeString}, true
 	}
 	return nil, false
 }
 
 func implementsMarshaler(typ reflect.Type) bool {
+	return implementsJSONMarshaler(typ) || implementsTextMarshaler(typ)
+}
+
+func implementsJSONMarshaler(typ reflect.Type) bool {
 	jsonMarshaler := reflect.TypeOf((*json.Marshaler)(nil)).Elem()
-	textMarshaler := reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
 	return typ.Implements(jsonMarshaler) ||
-		reflect.PointerTo(typ).Implements(jsonMarshaler) ||
-		typ.Implements(textMarshaler) ||
+		reflect.PointerTo(typ).Implements(jsonMarshaler)
+}
+
+// implementsJSONUnmarshaler reports whether a value of typ can be decoded from
+// the JSON a custom JSON marshaler produces.
+func implementsJSONUnmarshaler(typ reflect.Type) bool {
+	jsonUnmarshaler := reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+	return typ.Implements(jsonUnmarshaler) ||
+		reflect.PointerTo(typ).Implements(jsonUnmarshaler)
+}
+
+func implementsTextMarshaler(typ reflect.Type) bool {
+	textMarshaler := reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+	return typ.Implements(textMarshaler) ||
 		reflect.PointerTo(typ).Implements(textMarshaler)
+}
+
+// marshalsAsJSONString probes a marshaler's zero value. The reflection guard
+// keeps a panic inside a third-party MarshalJSON from escaping into schema
+// generation; an unprobeable type simply keeps its structural schema.
+func marshalsAsJSONString(typ reflect.Type) (result bool) {
+	defer func() {
+		if recover() != nil {
+			result = false
+		}
+	}()
+	v := reflect.New(typ).Elem()
+	m, ok := v.Interface().(json.Marshaler)
+	if !ok {
+		if !reflect.PointerTo(typ).Implements(reflect.TypeOf((*json.Marshaler)(nil)).Elem()) {
+			return false
+		}
+		v = reflect.New(typ)
+		m = v.Interface().(json.Marshaler)
+	}
+	data, err := m.MarshalJSON()
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	return data[0] == '"'
 }
 
 // implementsUnmarshaler reports whether a value of typ can be decoded from the
 // JSON a custom marshaler produces.
 func implementsUnmarshaler(typ reflect.Type) bool {
-	jsonUnmarshaler := reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
 	textUnmarshaler := reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
-	return typ.Implements(jsonUnmarshaler) ||
-		reflect.PointerTo(typ).Implements(jsonUnmarshaler) ||
+	return implementsJSONUnmarshaler(typ) ||
 		typ.Implements(textUnmarshaler) ||
 		reflect.PointerTo(typ).Implements(textUnmarshaler)
 }

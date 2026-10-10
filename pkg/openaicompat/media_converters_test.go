@@ -86,6 +86,11 @@ func TestMediaSpeechConverters(t *testing.T) {
 	if req.Model != "custom" || req.Voice != "nova" || req.Instructions != "soft" || *req.Speed != speed {
 		t.Fatalf("request: %+v", req)
 	}
+	// Extra options must reach the provider rather than being silently dropped.
+	withExtra := BuildSpeechRequest("default", "hi", &llms.SpeechOptions{Extra: map[string]any{"style": "cheerful"}})
+	if withExtra.ExtraBody == nil || withExtra.ExtraBody["style"] != "cheerful" {
+		t.Fatalf("extra options dropped: %+v", withExtra)
+	}
 	out := ConvertSpeechResponse([]byte("RIFF"), "audio/wav", req, nil)
 	if out.Usage.Quantity != 0 || out.Usage.Unit != "" || out.Format.Container != "wav" || out.Audio.MIMEType != "audio/wav" {
 		t.Fatalf("response: %+v", out)

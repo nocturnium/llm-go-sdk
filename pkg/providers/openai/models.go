@@ -433,8 +433,16 @@ func convertOpenAIModel(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.DisplayName = metadata.displayName
 		info.ContextLength = metadata.contextLength
 		info.MaxOutput = metadata.maxOutput
-		info.Types = metadata.types
-		info.Pricing = metadata.pricing
+		// Copy the shared slice and pricing card so a caller mutating one
+		// ModelInfo cannot change later results or race with concurrent listing.
+		info.Types = append([]llms.ModelType(nil), metadata.types...)
+		if metadata.pricing != nil {
+			pricing := *metadata.pricing
+			if len(pricing.Tiers) > 0 {
+				pricing.Tiers = append([]llms.PricingTier(nil), pricing.Tiers...)
+			}
+			info.Pricing = &pricing
+		}
 	} else {
 		info.DisplayName = formatModelName(m.ID)
 		info.Types = inferModelTypes(m.ID)

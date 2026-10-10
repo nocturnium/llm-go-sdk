@@ -329,23 +329,20 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	var tokRes *rate.Reservation
 	consumedCredit := 0
 	deferredTokens := 0
-	debtFinanced := false
 	if tokenLimiter != nil && tokens > 0 {
+		// A refund is capacity already paid for by an earlier request, so it
+		// reduces the whole charge. Apply it before splitting burst and debt:
+		// offsetting only the burst portion while also carrying the credit into
+		// debt would double-count it and overcharge the request.
+		consumedCredit = rl.consumeTokenCredit(tokens)
+		tokens -= consumedCredit
 		// A charge above the burst cannot be satisfied by one reservation. Reserve
 		// the burst-sized part now and carry the remainder as debt so the budget is
 		// still enforced instead of treating the whole estimate as paid.
 		if b := tokenLimiter.Burst(); tokens > b {
-			// The debt is the part that cannot be charged now. Charge the credit
-			// against the burst-sized portion first, and leave the rest as debt.
 			deferredTokens = tokens - b
 			tokens = b
-			debtFinanced = true
 		}
-		// A refund is capacity already paid for by an earlier request. Apply it
-		// before the bucket reservation so the refund actually admits the next
-		// request instead of merely changing the remaining count.
-		consumedCredit = rl.consumeTokenCredit(tokens)
-		tokens -= consumedCredit
 		if tokens == 0 {
 			goto reserved
 		}
@@ -356,15 +353,10 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 			return ErrRateLimitTimeout
 		}
 	}
-	// If a refund consumed part of the burst-sized reservation, the remaining
-	// estimate still has to be charged. Fold that amount into the debt rather
-	// than dropping it. The debt is committed only after the request is admitted:
-	// a canceled wait never consumed the tokens, so it must not leave debt behind
-	// (and committing early would also let a concurrent waiter settle debt for a
-	// request that may yet be refused).
-	if debtFinanced {
-		deferredTokens += consumedCredit
-	}
+	// The debt is committed only after the request is admitted: a canceled wait
+	// never consumed the tokens, so it must not leave debt behind (and committing
+	// early would also let a concurrent waiter settle debt for a request that may
+	// yet be refused).
 
 reserved:
 	delay := reqRes.Delay()

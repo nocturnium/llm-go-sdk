@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -23,11 +24,36 @@ type Client struct {
 	mediaPaths   MediaCapabilities
 	httpClient   *httpclient.Client
 	baseURL      string
-	embeddingURL string
+	embedding    *embeddingRoute
 	apiKey       string
 	headers      map[string]string
 	azureAPIKey  bool   // Use api-key header instead of Authorization
 	azureVersion string // Azure API version (appended to URLs)
+}
+
+// embeddingRoute holds the embedding base URL behind a pointer so copying a
+// Client for per-provider route overrides does not copy a lock.
+type embeddingRoute struct {
+	mu  sync.RWMutex
+	url string
+}
+
+func (r *embeddingRoute) get(fallback string) string {
+	if r == nil {
+		return fallback
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.url == "" {
+		return fallback
+	}
+	return r.url
+}
+
+func (r *embeddingRoute) set(url string) {
+	r.mu.Lock()
+	r.url = url
+	r.mu.Unlock()
 }
 
 // ClientConfig configures the client
@@ -67,7 +93,7 @@ func NewClient(config ClientConfig) *Client {
 		httpClient:   httpClient,
 		mediaPaths:   MediaCapabilities{ImagesPath: config.ImagesPath, ImageEditsPath: config.ImageEditsPath, SpeechPath: config.SpeechPath, TranscriptionsPath: config.TranscriptionsPath, VideosPath: config.VideosPath},
 		baseURL:      config.BaseURL,
-		embeddingURL: config.BaseURL,
+		embedding:    &embeddingRoute{url: config.BaseURL},
 		apiKey:       config.APIKey,
 		headers:      maps.Clone(config.Headers),
 		azureAPIKey:  config.AzureAPIKey,
@@ -218,10 +244,7 @@ func (r *StreamReader) Close() error {
 
 // CreateEmbedding sends an embedding request
 func (c *Client) CreateEmbedding(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
-	baseURL := c.embeddingURL
-	if baseURL == "" {
-		baseURL = c.baseURL
-	}
+	baseURL := c.embedding.get(c.baseURL)
 	headers := c.getHeaders()
 	var response EmbeddingResponse
 
@@ -246,7 +269,7 @@ func (c *Client) SetEmbeddingBaseURL(baseURL string) {
 	if baseURL == "" {
 		baseURL = c.baseURL
 	}
-	c.embeddingURL = baseURL
+	c.embedding.set(baseURL)
 }
 
 // ListModels retrieves the list of available models.

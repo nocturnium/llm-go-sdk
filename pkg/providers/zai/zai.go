@@ -48,6 +48,9 @@ type Client struct {
 // trailing slashes.
 func resolveBaseURL(options *options) string {
 	baseURL := options.BaseURL
+	// Switch to the coding endpoint only when the caller left the default in
+	// place. Compare before trimming so an explicit base URL that differs only by
+	// a trailing slash still counts as caller-supplied and is left alone.
 	if options.UseCodingAPI && baseURL == "https://api.z.ai/api/paas/v4" {
 		baseURL = "https://api.z.ai/api/coding/paas/v4"
 	}

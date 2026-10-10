@@ -17,6 +17,12 @@ one-liner, and `Stream`.
 
 Add the SDK to your module:
 
+Create a module first if the project does not have one yet:
+
+```bash
+go mod init example.com/hello
+```
+
 ```bash
 go get github.com/nocturnium/llm-go-sdk/v6@latest
 ```
