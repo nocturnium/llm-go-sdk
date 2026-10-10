@@ -72,6 +72,9 @@ func (p *BaseProvider) normalizeToolCallIDs(messages []llms.Message) ([]llms.Mes
 		}
 		copied := false
 		for j, tc := range msg.ToolCalls {
+			if tc.ID == "" {
+				continue
+			}
 			id := normalize(tc.ID)
 			if id == tc.ID {
 				continue

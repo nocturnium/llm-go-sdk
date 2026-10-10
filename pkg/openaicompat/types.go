@@ -291,7 +291,7 @@ func (p *StreamErrorPayload) Err() error {
 		return nil
 	}
 	message := p.Message
-	if message == "" && p.Type == "" {
+	if message == "" && p.Type == "" && p.Code == nil {
 		return nil
 	}
 	if message == "" {

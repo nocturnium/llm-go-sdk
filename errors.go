@@ -245,7 +245,7 @@ func (e ValidationError) Error() string {
 
 // Is reports whether the error matches ErrInvalidParameters
 func (e ValidationError) Is(target error) bool {
-	return errors.Is(target, ErrInvalidParameters)
+	return target == ErrInvalidParameters
 }
 
 // ValidationErrors is a collection of validation errors
