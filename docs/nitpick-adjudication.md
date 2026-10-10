@@ -292,3 +292,13 @@ Also refreshed the verified rate cards for the same providers and extended
 | `errors.go` leaks credentials for `https://user:se?cret@host/v1` | `url.Parse` returns `invalid port` for that form; the sanitizer only sees the error path, which strips through the last `@`. |
 | `llmadk` drops `GenerateContentConfig.Labels` | `Labels` is explicitly ignored metadata in the field-handling table, not a translated request field. |
 | `ratelimit_burst_test.go` expects an oversized non-blocking estimate to succeed | The non-blocking path rejects an effective charge above the burst by design; the table case asserts only that `Wait` returns without wedging, and the preceding blocking cases cover debt financing. |
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/release.yml` references unavailable checkout/setup/artifact majors | The GitHub tags API returns `v7` for checkout, `v7` for setup-go, `v7` for Goreleaser and upload-artifact, and `v8` for download-artifact. |
+| `errors.go` leaks `user:se` for `https://user:se#cret@host.example.com/v1` | `url.Parse` returns `invalid port ":se"` for that form, so `sanitizeErrorURL` uses the error path, which cuts through the last `@`; the hash/question cases pass in `errors_url_edge_test.go`. |
+| `internal/geminiapi/types_test.go` references undefined `testGetWeather` | The constant is declared in `client_test.go`; `GOWORK=off go test ./internal/geminiapi` compiles and passes. |
+| `internal/httpclient/client.go` custom dialers can return private remote addresses | A caller-supplied dialer is trusted extension code, not attacker-controlled input; the default transport's dial-time control hook remains the SSRF enforcement point. |
+| `llmadk` drops `GenerateContentConfig.Labels` | `Labels` is deliberately classified as ignored metadata in `llmadk/fields.go`. |
+| Featherless `WithSpeechUsageHandler` is never wired | `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
+| `scripts/release-decide.sh` reads `.commits` one level too deep | The git-cliff `--context` output is grouped by tag and the script's `count()` probes each group; a direct invocation returns the expected counts. |

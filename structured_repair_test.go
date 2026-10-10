@@ -98,6 +98,28 @@ func TestGenerateTyped_SkipsUnrelatedObject(t *testing.T) {
 	}
 }
 
+// A direct object that names none of the struct's exported JSON fields is not a
+// valid structured response, even though json.Unmarshal would leave the struct
+// at its zero value.
+func TestParseTyped_DirectObjectWithoutTargetFields(t *testing.T) {
+	for _, content := range []string{`{"noise":1}`, `{}`} {
+		if _, err := parseTyped[person](content); err == nil {
+			t.Errorf("parseTyped(%s) succeeded, want an error", content)
+		}
+	}
+}
+
+// Unexported fields are invisible to encoding/json, so an object naming only
+// one of them does not match the schema.
+func TestParseTyped_UnexportedFieldDoesNotMatch(t *testing.T) {
+	type hidden struct {
+		secret struct{ Value int }
+	}
+	if _, err := parseTyped[hidden](`{"Value":1}`); err == nil {
+		t.Fatal("parseTyped matched an unexported-only field, want an error")
+	}
+}
+
 // An unbalanced object must not yield one of its keys as a string result.
 func TestParseTyped_UnbalancedObjectDoesNotYieldKey(t *testing.T) {
 	if got, err := parseTyped[string](`{"name":"Ada"`); err == nil {

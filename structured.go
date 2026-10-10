@@ -165,9 +165,6 @@ func unmarshalCandidate[T any](data string, out *T, direct bool) error {
 	if err := json.Unmarshal([]byte(data), out); err != nil {
 		return err
 	}
-	if direct {
-		return nil
-	}
 	target := reflect.TypeOf(*out)
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
@@ -175,12 +172,25 @@ func unmarshalCandidate[T any](data string, out *T, direct bool) error {
 	if target.Kind() != reflect.Struct {
 		return nil
 	}
+	if direct {
+		// The caller supplied the whole response as one JSON value. A struct
+		// target still needs at least one matching field; otherwise an unrelated
+		// object would produce a zero struct as a false success.
+		return validateStructCandidate(data, target)
+	}
+	return validateStructCandidate(data, target)
+}
+
+func validateStructCandidate(data string, target reflect.Type) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(data), &raw); err != nil {
 		return nil
 	}
 	for i := 0; i < target.NumField(); i++ {
 		field := target.Field(i)
+		if !field.IsExported() {
+			continue
+		}
 		name, skip := jsonFieldName(field)
 		if skip {
 			continue

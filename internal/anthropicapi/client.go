@@ -82,7 +82,7 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("create message", err)
 	}
 
 	return &response, nil
@@ -105,7 +105,7 @@ func (c *Client) CreateMessageStream(ctx context.Context, req *MessagesRequest) 
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("create message stream", err)
 	}
 
 	return &StreamReader{
