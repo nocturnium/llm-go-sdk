@@ -320,9 +320,17 @@ func ValidateImageContent(img *ImageContent) error {
 		// window rather than the ~26MB a full decode would allocate. Sampling
 		// only the head would pass any image whose corruption sits past the
 		// first kilobyte, which is most of them.
+		// Stop one byte past the maximum so a payload that is merely close to
+		// the limit is still decoded fully, while an oversized one is refused
+		// without allocating the rest. DecodedLen (above) overestimates padded
+		// payloads, so the true decoded length is what this check enforces.
 		decoder := base64.NewDecoder(base64.StdEncoding, strings.NewReader(img.Data))
-		if _, err := io.Copy(io.Discard, decoder); err != nil {
+		decoded, err := io.Copy(io.Discard, io.LimitReader(decoder, MaxImageSize+1))
+		if err != nil {
 			return fmt.Errorf("invalid base64 data: %w", err)
+		}
+		if decoded > MaxImageSize {
+			return fmt.Errorf("image data exceeds maximum allowed size of %d bytes (decoded %d)", MaxImageSize, decoded)
 		}
 	}
 

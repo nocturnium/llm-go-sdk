@@ -356,8 +356,13 @@ func convertAnthropicModel(m *anthropicapi.ModelInfo) llms.ModelInfo {
 		}
 		info.ContextLength = metadata.contextLength
 		info.MaxOutput = metadata.maxOutput
-		info.Types = metadata.types
-		info.Pricing = metadata.pricing
+		// Copy the slices: knownModels is shared, and a caller mutating a
+		// returned ModelInfo must not change the catalog or another caller's copy.
+		info.Types = append([]llms.ModelType(nil), metadata.types...)
+		if metadata.pricing != nil {
+			pricing := *metadata.pricing
+			info.Pricing = &pricing
+		}
 	} else {
 		// Infer from model ID
 		if info.DisplayName == "" {

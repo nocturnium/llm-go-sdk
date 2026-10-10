@@ -17,6 +17,9 @@ import (
 func (c *Client) ListPrompts(ctx context.Context) ([]Prompt, error) {
 	var all []Prompt
 	cursor := ""
+	// Servers have been seen returning cycling cursors (a,b,a,b); the cursor set
+	// catches that, not just a cursor that repeats immediately.
+	seen := make(map[string]struct{})
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -26,11 +29,15 @@ func (c *Client) ListPrompts(ctx context.Context) ([]Prompt, error) {
 			return nil, fmt.Errorf("mcp: list prompts: %w", err)
 		}
 		all = append(all, res.Prompts...)
-		if res.NextCursor == "" || res.NextCursor == cursor {
-			// A server that returns the same non-empty cursor forever would loop
-			// until ctx cancellation; stop when the cursor fails to advance.
+		if res.NextCursor == "" {
 			break
 		}
+		if _, ok := seen[res.NextCursor]; ok {
+			// A cycle that never returns to empty would page forever. Stop with
+			// what has been collected; ListPrompts documents best-effort paging.
+			break
+		}
+		seen[res.NextCursor] = struct{}{}
 		cursor = res.NextCursor
 	}
 	return all, nil

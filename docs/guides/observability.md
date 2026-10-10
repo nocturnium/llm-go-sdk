@@ -421,13 +421,17 @@ All tracker methods are safe for concurrent use.
 
 `ModelUsage` fields include `Provider`, `Model`, `PromptTokens`,
 `CompletionTokens`, `CacheReadTokens`, `CacheCreationTokens`, `Requests`,
-`EstimatedCost`, `FirstUsed`, and `LastUsed`.
+`UnpricedRequests`, `EstimatedCost`, `FirstUsed`, and `LastUsed`. A non-zero
+`UnpricedRequests` means the estimate is partial: those requests' tokens are
+counted, but their cost is not.
 
 ### Pricing and custom rates
 
 The SDK ships a `DefaultPricing` table (USD per 1M tokens) covering common OpenAI,
-Anthropic, Gemini, and TogetherAI models. Models not in the table estimate to
-`$0`, supply your own rates for everything else:
+Anthropic, Gemini, and TogetherAI models. A model with no rate card is *unpriced*,
+not free: `EstimateCost` returns `known=false`, `Record` counts the request in
+`UnpricedRequests`, and its cost is left out of the estimate. Supply your own
+rates rather than reading an unpriced request as costing nothing:
 
 ```go
 custom := map[string]llms.Pricing{
