@@ -399,6 +399,9 @@ func ConvertEmbeddingResponse(resp *EmbeddingResponse) *llms.EmbeddingResponse {
 
 // BuildChatRequest builds a ChatCompletionRequest from llms types.
 func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOptions, stream bool) *ChatCompletionRequest {
+	if opts == nil {
+		opts = &llms.CallOptions{}
+	}
 	req := &ChatCompletionRequest{
 		Model:            model,
 		Messages:         ConvertMessages(messages),

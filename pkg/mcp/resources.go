@@ -16,6 +16,7 @@ import (
 func (c *Client) ListResources(ctx context.Context) ([]Resource, error) {
 	var all []Resource
 	cursor := ""
+	seen := make(map[string]struct{})
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -25,11 +26,15 @@ func (c *Client) ListResources(ctx context.Context) ([]Resource, error) {
 			return nil, fmt.Errorf("mcp: list resources: %w", err)
 		}
 		all = append(all, res.Resources...)
-		if res.NextCursor == "" || res.NextCursor == cursor {
+		if res.NextCursor == "" {
 			// A server that returns the same non-empty cursor forever would loop
 			// until ctx cancellation; stop when the cursor fails to advance.
 			break
 		}
+		if _, ok := seen[res.NextCursor]; ok {
+			return nil, fmt.Errorf("mcp: list resources: pagination cursor cycle at %q", res.NextCursor)
+		}
+		seen[res.NextCursor] = struct{}{}
 		cursor = res.NextCursor
 	}
 	return all, nil

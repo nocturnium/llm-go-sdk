@@ -277,7 +277,7 @@ func NewToolRegistry() *ToolRegistry {
 // is ignored: there is no name to dispatch on, and the model is never told about
 // it, so registering one is a caller mistake rather than a runtime condition.
 func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
-	if tool.Function == nil {
+	if tool.Function == nil || handler == nil {
 		return
 	}
 

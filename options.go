@@ -401,7 +401,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.TopP != nil && (*o.TopP < 0 || *o.TopP > 1.0) {
+	if o.TopP != nil && (math.IsNaN(*o.TopP) || math.IsInf(*o.TopP, 0) || *o.TopP < 0 || *o.TopP > 1.0) {
 		errs = append(errs, ValidationError{
 			Field:   "top_p",
 			Value:   *o.TopP,
@@ -409,7 +409,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.FrequencyPenalty != nil && (*o.FrequencyPenalty < -2.0 || *o.FrequencyPenalty > 2.0) {
+	if o.FrequencyPenalty != nil && (math.IsNaN(*o.FrequencyPenalty) || math.IsInf(*o.FrequencyPenalty, 0) || *o.FrequencyPenalty < -2.0 || *o.FrequencyPenalty > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "frequency_penalty",
 			Value:   *o.FrequencyPenalty,
@@ -417,7 +417,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.PresencePenalty != nil && (*o.PresencePenalty < -2.0 || *o.PresencePenalty > 2.0) {
+	if o.PresencePenalty != nil && (math.IsNaN(*o.PresencePenalty) || math.IsInf(*o.PresencePenalty, 0) || *o.PresencePenalty < -2.0 || *o.PresencePenalty > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "presence_penalty",
 			Value:   *o.PresencePenalty,

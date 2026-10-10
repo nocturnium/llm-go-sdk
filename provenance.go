@@ -28,10 +28,12 @@ func StampResponse(resp *Response, p Provider, model string) {
 
 // stampReasoning stamps an unstamped r in place.
 func stampReasoning(r *ReasoningContent, p Provider, model string) {
-	if r == nil || r.Provider != "" {
+	if r == nil {
 		return
 	}
-	r.Provider = p
+	if r.Provider == "" {
+		r.Provider = p
+	}
 	if r.Model == "" {
 		r.Model = model
 	}

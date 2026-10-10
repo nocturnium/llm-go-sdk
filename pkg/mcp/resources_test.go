@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -50,15 +51,12 @@ func TestClient_ListResourcesCursorCycleGuard(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	res, err := c.ListResources(ctx)
-	if err != nil {
-		t.Fatalf("ListResources: %v", err)
+	_, err := c.ListResources(ctx)
+	if err == nil || !strings.Contains(err.Error(), "cursor cycle") {
+		t.Fatalf("ListResources error = %v, want cursor cycle", err)
 	}
 	if ctx.Err() != nil {
 		t.Fatal("ListResources looped until context timeout instead of breaking on a repeated cursor")
-	}
-	if len(res) == 0 {
-		t.Fatalf("expected at least one resource, got %+v", res)
 	}
 	if calls := m.callCount(methodResourcesList); calls != 2 {
 		t.Errorf("expected exactly 2 list calls before the guard trips, got %d", calls)

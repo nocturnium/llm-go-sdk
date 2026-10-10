@@ -78,7 +78,15 @@ type PricingTier struct {
 // Usage.PromptTokens excludes cache tokens by contract, so cache reads and cache
 // creations must be added back to recover the request's true input size.
 func totalInputTokens(usage Usage) int {
-	return usage.PromptTokens + usage.CacheReadTokens + usage.CacheCreationTokens
+	max := int(^uint(0) >> 1)
+	total := usage.PromptTokens
+	for _, n := range []int{usage.CacheReadTokens, usage.CacheCreationTokens} {
+		if n > 0 && total > max-n {
+			return max
+		}
+		total += n
+	}
+	return total
 }
 
 // effective resolves the rates that apply to the given usage, substituting the

@@ -72,7 +72,7 @@ func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	for k, v := range r.extraBody {
-		if consumedExtraBodyKeys[k] {
+		if consumedExtraBodyKeys[k] || responsesTypedFieldKeys[k] {
 			continue
 		}
 		if _, exists := m[k]; exists {
@@ -82,6 +82,8 @@ func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(m)
 }
+
+var responsesTypedFieldKeys = map[string]bool{"stream": true, "model": true, "input": true, "instructions": true, "tools": true, "tool_choice": true, "temperature": true, "top_p": true, "max_output_tokens": true}
 
 // ResponsesInputItem is one item in the Responses `input` array. A single struct
 // represents all input item kinds (message, function_call, function_call_output);
