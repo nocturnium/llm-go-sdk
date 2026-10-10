@@ -178,3 +178,22 @@ func assertValidationField(t *testing.T, err error, field string) {
 	}
 	t.Fatalf("expected validation field %q in %v", field, validationErrs)
 }
+
+// A provider built with a nil client (an authoring mistake) must return the
+// configuration sentinel instead of panicking on a nil dereference.
+func TestBaseProvider_NilClientReturnsSentinel(t *testing.T) {
+	bp := openaicompat.NewBaseProvider(nil, openaicompat.ProviderConfig{
+		Provider:     llms.ProviderOpenAI,
+		DefaultModel: "gpt-4o",
+	})
+	messages := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+	if _, err := bp.GenerateContent(context.Background(), messages); !errors.Is(err, llms.ErrClientNotConfigured) {
+		t.Errorf("GenerateContent with nil client: err = %v, want ErrClientNotConfigured", err)
+	}
+	if _, err := bp.Stream(context.Background(), messages); !errors.Is(err, llms.ErrClientNotConfigured) {
+		t.Errorf("Stream with nil client: err = %v, want ErrClientNotConfigured", err)
+	}
+	if _, err := bp.Embed(context.Background(), []string{"hi"}); !errors.Is(err, llms.ErrClientNotConfigured) {
+		t.Errorf("Embed with nil client: err = %v, want ErrClientNotConfigured", err)
+	}
+}

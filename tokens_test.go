@@ -238,6 +238,21 @@ func TestTokenEstimator_TinyCharsPerTokenDoesNotUnderestimate(t *testing.T) {
 	}
 }
 
+type nilTokenizer struct{}
+
+func (*nilTokenizer) CountTokens(string) int { return 0 }
+
+// A typed-nil pointer assigned to the Tokenizer interface makes the interface
+// non-nil, so a plain nil check passes and CountTokens dereferences the nil
+// receiver. The estimator must fall back to the heuristic instead of panicking.
+func TestTokenEstimator_TypedNilTokenizerFallsBack(t *testing.T) {
+	var tok *nilTokenizer
+	estimator := &TokenEstimator{CharsPerToken: 4.0, Tokenizer: tok}
+	if got := estimator.EstimateTokens("Hello world"); got < 1 {
+		t.Errorf("got %d, want a positive estimate from the heuristic", got)
+	}
+}
+
 func TestDefaultTokenEstimator(t *testing.T) {
 	estimator := DefaultTokenEstimator()
 

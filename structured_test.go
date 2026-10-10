@@ -197,6 +197,62 @@ func TestParseTyped_TriesEveryScalarCandidate(t *testing.T) {
 	}
 }
 
+// json.Unmarshal accepts null into a non-pointer scalar, slice, array, or map
+// and leaves a zero value. The generated schema describes each as non-null, so
+// parsing must reject null rather than reporting a schema match.
+func TestParseTyped_NonPointerScalarRejectsNull(t *testing.T) {
+	if _, err := parseTyped[string]("null"); err == nil {
+		t.Error("parseTyped[string](null) succeeded, want a schema mismatch")
+	}
+	if _, err := parseTyped[int]("null"); err == nil {
+		t.Error("parseTyped[int](null) succeeded, want a schema mismatch")
+	}
+	if _, err := parseTyped[[]string]("null"); err == nil {
+		t.Error("parseTyped[[]string](null) succeeded, want a schema mismatch")
+	}
+}
+
+// A bare scalar embedded in prose ends at punctuation the JSON delimiter set
+// does not include (`true.`), so extraction must still recover the valid prefix.
+func TestParseTyped_BareScalarWithTrailingPunctuation(t *testing.T) {
+	got, err := parseTyped[bool]("The answer is true.")
+	if err != nil {
+		t.Fatalf("parseTyped[bool] failed: %v", err)
+	}
+	if !got {
+		t.Errorf("got %v, want true", got)
+	}
+	n, err := parseTyped[int]("The answer is 42.")
+	if err != nil {
+		t.Fatalf("parseTyped[int] failed: %v", err)
+	}
+	if n != 42 {
+		t.Errorf("got %d, want 42", n)
+	}
+}
+
+type structuredPromotedMeta struct {
+	ID string `json:"id"`
+}
+
+type structuredPromotedDoc struct {
+	structuredPromotedMeta
+	Name string `json:"name"`
+}
+
+// encoding/json promotes a field from an embedded struct, so a response naming
+// the promoted JSON name decodes correctly. Validation must recognize the
+// promoted name too, or it rejects a response the decoder would have populated.
+func TestParseTyped_EmbeddedPromotedField(t *testing.T) {
+	got, err := parseTyped[structuredPromotedDoc](`{"id":"x","name":"Ada"}`)
+	if err != nil {
+		t.Fatalf("parseTyped promoted field failed: %v", err)
+	}
+	if got.ID != "x" || got.Name != "Ada" {
+		t.Errorf("got %+v, want ID=x Name=Ada", got)
+	}
+}
+
 type emptySchemaTarget struct{}
 
 type allHiddenSchemaTarget struct {

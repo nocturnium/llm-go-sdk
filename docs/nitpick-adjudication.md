@@ -398,3 +398,21 @@ request's in-flight mark.
 | Featherless `WithSpeechUsageHandler` has no effect | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
 | TogetherAI image request has no `response_format`/`output_format` JSON tags | The anonymous decode struct at `image.go:67` already carries both tags; `json.Unmarshal` into it reads the marshaled body and the image tests pass. |
 | `llmadk/envelope.go:118` exposes hidden thought text through `PartMetadata` | Documented design: with `IncludeThoughts=false` Anthropic requires the signed text on replay, so `c` holds it and `docs/design/llmadk.md:303` records the base64 envelope as reachable in session storage and the event stream until `WithEnvelopeKey` (AEAD sealing) lands in v0.2. |
+
+Round 49 (2026-10-10) reported 11 errors. Fixed: `GenerateTyped` rejects a
+`null` response for a concrete scalar/slice/array/struct target and recognizes
+fields promoted through embedded structs (validation now walks the same schema
+promotion the decoder uses); a bare scalar embedded in prose is recovered when
+trailing punctuation (`true.`) is not a JSON delimiter; `TokenEstimator`
+detects a typed-nil `Tokenizer` and falls back to the heuristic; and
+`openaicompat.NewBaseProvider(nil, ...)` providers return
+`llms.ErrClientNotConfigured` from `GenerateContent`, `Stream`, and `Embed`
+instead of panicking.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go:370` leaks a credential for malformed userinfo like `https://user:se?cret@host` | `url.Parse` rejects those forms with `invalid port ":se"`, so `sanitizeErrorURL` takes the hand-cut path; the probe and `TestAPIError_ErrorRedactsAwkwardCredentialForms` show the userinfo stripped. |
+| `.github/workflows/release.yml:22` uses an unavailable `actions/checkout@v7` | `v7` is published for checkout, setup-go, and upload-artifact (verified against the GitHub tags API); the refs resolve. |
+| `pkg/observability/metrics_test.go` fixtures must populate `callResp` | `MetricsMiddleware.Call` delegates to `GenerateContent` (the LLM interface has no Call), so the fixture's `genResp` is the response the middleware reads; `TestMetricsMiddleware_Call_Success` and `TestMetricsMiddleware_ContentRecording` pass. |
+| Featherless `WithSpeechUsageHandler` is not wired | `speech.go:82` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. |
+| `llmadk/model.go:177` blocks because `DrainStream` is synchronous | `DrainStream` starts its own goroutine (`streaming.go:212`), so `stopped` returns without waiting on the provider channel. |

@@ -113,6 +113,23 @@ func isNilLLM(llm LLM) bool {
 	}
 }
 
+// isNilInterface reports whether v is nil or an interface holding a typed-nil
+// pointer. A typed-nil assigned to an interface makes the interface itself
+// non-nil, so a plain `v == nil` check misses it and a method call dereferences
+// the nil receiver.
+func isNilInterface(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
 // seenKey returns the map key used for cycle detection, and whether one exists.
 // Comparable LLM values are their own key; non-comparable ones fall back to
 // their underlying pointer. A struct whose type is comparable can still hold an

@@ -30,6 +30,9 @@ var (
 	ErrProviderNotSupported = errors.New("provider not supported")
 	ErrMissingAPIKey        = errors.New("API key is required")
 	ErrInvalidBaseURL       = errors.New("invalid base URL")
+	// ErrClientNotConfigured reports a provider whose HTTP client was never
+	// attached (a nil *Client passed to openaicompat.NewBaseProvider).
+	ErrClientNotConfigured = errors.New("HTTP client not configured")
 
 	// Parameter validation errors.
 	ErrInvalidParameters = errors.New("invalid parameters")

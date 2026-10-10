@@ -150,10 +150,12 @@ func parseTyped[T any](content string) (T, error) {
 	// "Ada"` has a valid bool before the intended string, and stopping at the
 	// first one would reject a response that contains a recoverable scalar.
 	for _, extracted := range extractScalarJSONCandidates(content) {
-		// The generated schema strips pointers and describes the pointee, so a
-		// null does not satisfy it; the scalar path must not accept one for a
-		// pointer target even though json.Unmarshal leaves the pointer nil.
-		if isJSONNull(extracted) && pointerTarget[T]() {
+		// The generated schema strips pointers and describes the pointee as a
+		// non-null scalar, so a null does not satisfy it. json.Unmarshal accepts
+		// null into a string/number/bool/slice and returns a zero value, which
+		// would turn `null` into a false success; only an interface target has an
+		// unconstrained schema that permits null.
+		if isJSONNull(extracted) && !targetPermitsNull[T]() {
 			continue
 		}
 		var v T
@@ -171,9 +173,27 @@ func pointerTarget[T any]() bool {
 	return reflect.TypeOf((*T)(nil)).Elem().Kind() == reflect.Pointer
 }
 
+// targetPermitsNull reports whether T's generated schema permits a JSON null.
+// Interfaces and maps emit an unconstrained schema ({}); every other kind is
+// described as a concrete non-null type.
+func targetPermitsNull[T any]() bool {
+	return !schemaRejectsNull(reflect.TypeOf((*T)(nil)).Elem().Kind())
+}
+
 // isJSONNull reports whether a candidate is the JSON null literal.
 func isJSONNull(s string) bool {
 	return strings.TrimSpace(s) == "null"
+}
+
+// schemaRejectsNull reports whether the generated schema for kind describes a
+// concrete non-null type. Maps and interfaces emit `{}`, which permits null.
+func schemaRejectsNull(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Map, reflect.Interface, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return false
+	default:
+		return true
+	}
 }
 
 // unmarshalCandidate decodes one JSON candidate into T. json.Unmarshal ignores
@@ -196,6 +216,13 @@ func unmarshalCandidate[T any](data string, out *T, direct bool) error {
 		}
 		return nil
 	}
+	// A non-pointer scalar, slice, array, or map also accepts null from
+	// json.Unmarshal as a zero value. The generated schema describes it as
+	// non-null, so accepting null would report a schema match for a response the
+	// schema forbids.
+	if isJSONNull(data) && schemaRejectsNull(target.Kind()) {
+		return fmt.Errorf("candidate %s is null, but the schema requires a %s", data, target)
+	}
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
@@ -216,30 +243,47 @@ func validateStructCandidate(data string, target reflect.Type) error {
 	if err := json.Unmarshal([]byte(data), &raw); err != nil {
 		return nil
 	}
-	hasVisibleField := false
-	for i := 0; i < target.NumField(); i++ {
-		field := target.Field(i)
-		if !field.IsExported() {
-			continue
+	// A response may name a field promoted through an embedded struct (for
+	// example `id` from an anonymous `Meta`), so the visible names must include
+	// promoted fields, not just the target's own. Walking through
+	// schemaForStructDepth mirrors encoding/json promotion exactly, so a name the
+	// decoder would populate counts here too.
+	visible, err := jsonVisibleFields(target)
+	if err != nil {
+		return err
+	}
+	if len(visible) == 0 {
+		// A struct with no JSON-visible fields has an object schema that permits
+		// (indeed requires) `{}`; there is no field to match, so an empty object
+		// is the only valid representation and must be accepted.
+		if len(raw) == 0 {
+			return nil
 		}
-		name, skip := jsonFieldName(field)
-		if skip {
-			continue
-		}
-		hasVisibleField = true
-		for key := range raw {
+		return fmt.Errorf("candidate %s does not match %s", data, target)
+	}
+	for key := range raw {
+		for name := range visible {
 			if strings.EqualFold(key, name) {
 				return nil
 			}
 		}
 	}
-	// A struct with no JSON-visible fields has an object schema that permits
-	// (indeed requires) `{}`; there is no field to match, so an empty object is
-	// the only valid representation and must be accepted.
-	if !hasVisibleField && len(raw) == 0 {
-		return nil
-	}
 	return fmt.Errorf("candidate %s does not match %s", data, target)
+}
+
+// jsonVisibleFields returns every JSON name encoding/json can populate on typ,
+// including names promoted through embedded structs. It reuses the schema walk
+// so validation and the advertised schema agree on which names exist.
+func jsonVisibleFields(typ reflect.Type) (map[string]struct{}, error) {
+	properties, _, err := schemaForStructDepth(typ, make(map[reflect.Type]bool))
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]struct{}, len(properties))
+	for name := range properties {
+		names[name] = struct{}{}
+	}
+	return names, nil
 }
 
 // extractScalarJSON finds the first valid JSON scalar (string, number, bool, or
@@ -295,9 +339,16 @@ func extractScalarJSONCandidates(s string) []string {
 			}
 			if end > i {
 				candidate := s[i:end]
-				if json.Valid([]byte(candidate)) {
+				// A bare scalar in prose ends at punctuation the delimiter set
+				// does not include, e.g. `true.` or `42, specifically`. When the
+				// whole run is not valid JSON, take the longest valid prefix so
+				// the embedded scalar is still recovered.
+				if !json.Valid([]byte(candidate)) {
+					candidate = longestValidScalarPrefix(candidate)
+				}
+				if candidate != "" {
 					candidates = append(candidates, candidate)
-					i = end
+					i += len(candidate)
 					continue
 				}
 			}
@@ -309,6 +360,18 @@ func extractScalarJSONCandidates(s string) []string {
 
 func isJSONScalarDelimiter(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',' || c == '}' || c == ']' || c == '`'
+}
+
+// longestValidScalarPrefix returns the longest prefix of a bare scalar run that
+// is itself valid JSON, or "" when none is. It bounds a run that swallowed
+// trailing prose punctuation, such as `true.` or `null)`.
+func longestValidScalarPrefix(run string) string {
+	for end := len(run) - 1; end > 0; end-- {
+		if json.Valid([]byte(run[:end])) {
+			return run[:end]
+		}
+	}
+	return ""
 }
 
 // quotedJSONAt scans a JSON string starting at start and returns it when it is a

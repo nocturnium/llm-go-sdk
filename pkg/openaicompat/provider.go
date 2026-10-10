@@ -121,6 +121,9 @@ func (p *BaseProvider) Call(ctx context.Context, prompt string, options ...llms.
 
 // GenerateContent generates content with more control over messages.
 func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
+	if p == nil {
+		return nil, WrapError(p.providerName(), "generate content", llms.ErrClientNotConfigured)
+	}
 	opts := llms.ApplyOptions(options...)
 
 	if err := opts.Validate(); err != nil {
@@ -140,6 +143,11 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	}
 	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
 	prepared, adjustments := p.normalizeToolCallIDs(prepared)
+	// Validate before touching the HTTP client so a misconfigured provider still
+	// reports message problems, then fail cleanly instead of dereferencing nil.
+	if p.client == nil {
+		return nil, WrapError(p.config.Provider, "generate content", llms.ErrClientNotConfigured)
+	}
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -175,6 +183,9 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 
 // Stream generates content with streaming, returning chunks via channel.
 func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+	if p == nil {
+		return nil, WrapError(p.providerName(), "stream", llms.ErrClientNotConfigured)
+	}
 	opts := llms.ApplyOptions(options...)
 
 	if err := opts.Validate(); err != nil {
@@ -194,6 +205,9 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	}
 	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
 	prepared, adjustments := p.normalizeToolCallIDs(prepared)
+	if p.client == nil {
+		return nil, WrapError(p.config.Provider, "stream", llms.ErrClientNotConfigured)
+	}
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -236,6 +250,15 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 // Provider returns the provider type.
 func (p *BaseProvider) Provider() llms.Provider {
 	return p.config.Provider
+}
+
+// providerName returns the configured provider for error wrapping, falling back
+// to a stable label for a provider whose config was never populated.
+func (p *BaseProvider) providerName() llms.Provider {
+	if p != nil && p.config.Provider != "" {
+		return p.config.Provider
+	}
+	return "openaicompat"
 }
 
 // Model returns the model name.
@@ -296,6 +319,9 @@ func (p *BaseProvider) Capabilities() llms.Capabilities {
 
 // Embed generates embeddings for one or more texts.
 func (p *BaseProvider) Embed(ctx context.Context, texts []string, options ...llms.EmbedOption) (*llms.EmbeddingResponse, error) {
+	if p == nil || p.client == nil {
+		return nil, WrapError(p.providerName(), "embed", llms.ErrClientNotConfigured)
+	}
 	if err := llms.ValidateEmbedInput(texts); err != nil {
 		return nil, err
 	}

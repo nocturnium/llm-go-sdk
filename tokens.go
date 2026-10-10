@@ -55,7 +55,7 @@ func (e *TokenEstimator) EstimateTokens(text string) int {
 	}
 
 	// Exact path: use the configured tokenizer when present.
-	if e.Tokenizer != nil {
+	if !isNilInterface(e.Tokenizer) {
 		return e.Tokenizer.CountTokens(text)
 	}
 
