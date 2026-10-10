@@ -582,3 +582,18 @@ record.
 | `pkg/observability/terminal_chunk_test.go:38` closes a shared `drained` channel twice | The fixture has no `drained` field; the stale comment was removed when the test was written. `TestStreamWrappers_DrainAfterErrorChunk` passes. |
 | `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls it on the terminal event; recurring false positive (rounds 50–58). |
 | `structured.go:181` returns the first quoted prose value for a string target | Inherently ambiguous: when the content is not valid JSON and contains several quoted strings, no rule can know which is intended. The documented behavior takes the first candidate that decodes into `T`, and `TestParseTyped_TriesEveryScalarCandidate` pins the useful case (a non-string scalar before the intended string). |
+
+Round 60 (2026-10-10) reported 8 errors. Fixed: a struct with a custom
+`json.Unmarshaler` (its own or promoted) now emits an unconstrained schema *and*
+accepts JSON null, because `{}` places no type restriction — the null check had
+contradicted the advertised schema.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.goreleaser.yml:72` escapes `!` in a way Go's regexp rejects | Go's regexp accepts `\!` (it is a literal `!`); `goreleaser check` validates the file, and the pattern parses. |
+| `internal/httpclient/client.go:221` custom `DialContext` bypasses the SSRF hook | The wrapper around a caller-provided `DialContext` calls `validateConnRemoteAddr` on the returned connection, which rejects a private peer — the custom dialer cannot land on a private address. `security_wiring_test.go` covers it. |
+| `internal/httpclient/retry_replay_test.go:118` reads `attempts` unsynchronized | The client's `DoWithRetry` returns only after the handler has written its response, so the read happens after the write; `go test -race -count=20` on the file passes. |
+| `llmadk/Makefile:3` uses the wrong module path | The nested module's `go.mod` declares `github.com/nocturnium/llm-go-sdk/llmadk`, and `apidiff` compares that path; `make -C llmadk apidiff` passes. |
+| `resilience_circuit_breaker.go:402` a stale public permit discards a post-reset outcome | Documented FIFO contract for the token-less `Allow()`/`Record*` pair (round 52 adjudication); the middleware path threads a generation-tagged permit and is unaffected. |
+| `pkg/providers/groq/options_coverage_test.go:334` relies on the environment key | The test passes `APIKey: "test-key"` explicitly, so a clean CI environment runs it. |
+| `structured.go:444` nested pointer fields accept null despite a non-null schema | Pointer fields accept null by design (rounds 53 and 58); a nil pointer is the field's natural zero and the schema advertises the pointee because OpenAI strict mode rejects nullable unions. |

@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- A struct whose decode is governed by a custom `json.Unmarshaler` (its own or promoted) accepts JSON null, matching the unconstrained `{}` schema it emits instead of rejecting a value the schema allows.
 - `CostTracker.RecordMode` prices and records under one write lock, so a concurrent `Reset` can no longer return and then be undone by an in-flight record repopulating the tracker.
 - A stream that delivered its terminal chunk is reported as a success even if the caller cancels while the wrapper goroutine drains, instead of being logged and recorded as a canceled request. A struct whose decode is governed by its own `json.Unmarshaler` emits an unconstrained structured-output schema and skips the reflected required-field check, like the promoted-embedding case.
 - Every stream wrapper (OTel, Langfuse, metrics, logging) drains the provider stream after an error chunk, so a provider that keeps producing is released instead of parking its sender. `JSONLogger` and `SlogLogger` report a nil `*LogEntry` through the sink rather than panicking. `GenerateTyped` honors a caller-supplied schema that permits JSON null instead of applying the generated non-null shape, and token-debt settlement checks the wait context between installments so a large debt cannot be charged in one uninterruptible burst.

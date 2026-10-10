@@ -834,6 +834,11 @@ func TestSchemaFrom_DirectCustomUnmarshalerNotStructural(t *testing.T) {
 	if _, err := parseTyped[structuredCustomDecoder](`{"anything":1}`); err != nil {
 		t.Errorf("custom-decoded object rejected: %v", err)
 	}
+	// The unconstrained `{}` schema places no type restriction, so null is a
+	// value it accepts; the null check must not reject it.
+	if _, err := parseTyped[structuredCustomDecoder](`null`); err != nil {
+		t.Errorf("custom-decoded null rejected: %v", err)
+	}
 }
 
 // structuredCustomDecoder consumes the whole JSON value through its own

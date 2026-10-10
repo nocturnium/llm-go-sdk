@@ -204,6 +204,12 @@ func schemaPermitsNull(typ reflect.Type) bool {
 	if typ == reflect.TypeOf(json.RawMessage{}) {
 		return true
 	}
+	// A struct with a custom UnmarshalJSON (its own or promoted) emits an
+	// unconstrained `{}` schema, which places no type restriction and so accepts
+	// null. The decode path must not reject a value the advertised schema allows.
+	if typ.Kind() == reflect.Struct && (hasPromotedCustomUnmarshaler(typ) || implementsJSONUnmarshaler(typ)) {
+		return true
+	}
 	switch typ.Kind() {
 	case reflect.Interface, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
 		return true
