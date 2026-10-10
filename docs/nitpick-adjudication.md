@@ -611,3 +611,19 @@ removed but not yet charged.
 | `pkg/observability/metrics_test.go:136` mock `Call` ignores `genResp` | `NewMetricsMiddleware`'s `Call` goes through `GenerateContent`, which returns `genResp`; `TestMetricsMiddleware_Call_Success` passes. |
 | `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls it on the terminal event; recurring false positive (rounds 50–60). |
 | `structured.go:323` matches property names case-insensitively | Deliberate: `json.Unmarshal` matches field names case-insensitively, so the validator mirrors the decoder (`TestParseTyped_CaseInsensitiveFieldMatch`). |
+
+Round 62 (2026-10-10) reported 10 errors. Fixed: section 6.4 of
+`docs/design/llmadk.md` now says the reasoning envelope lives in
+`PartMetadata`, pointing at the section 14 note that supersedes it.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `Makefile:23` builds a missing `./cmd` package | `cmd/main.go` exists and `make build` uses it; the reviewer saw a partial tree. |
+| `llmadk/config.go:182` empty `ThinkingConfig{}` skips the medium default | Deliberate: only an explicit UNSPECIFIED level means medium; a zero-value config leaves reasoning unset, pinned by the "zero-value level alone leaves reasoning unset" case in `request_test.go`. |
+| `llmadk/fields.go:163` `FunctionCallingConfig.Mode` should be rejected | It is translated and VALIDATED is rejected in `config.go` (`FieldValidatedFunctionCalling`); the llmadk tests pass. |
+| `pkg/mcp/client.go:495` cleanup drops queued progress | `dispatchNotification` captures the per-call handler into the queued closure before cleanup can run, so deleting the map entry does not affect it. |
+| `pkg/mcp/stdio_respond_test.go:28` writer cannot honor the context | `respond` bounds the wait on the writer by the context; `TestStdioRespond_HonorsContext` passes in 50 ms. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls it on the terminal event; recurring false positive. |
+| `pkg/providers/groq/options_coverage_test.go:333` lacks an API key | The test passes `APIKey: "test-key"` in `llms.Config`. |
+| `structured.go:323` case-insensitive property match | Mirrors `json.Unmarshal` by design (rounds 55, 56, 61). |
+| `structured.go:450` nested pointers accept null | Pointer fields accept null by design (round 53). |
