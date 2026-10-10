@@ -280,3 +280,9 @@ Also refreshed the verified rate cards for the same providers and extended
 | `llmadk/fake_test.go` closes a shared `streamDone` channel twice | The fake now guards the close with a `sync.Once`, and the llmadk race suite passes. |
 | `llmadk/request_test.go` indexes an empty second tool-call slice | `TestTranslate_IDlessResponsesPairWithinTheirTurn` runs and passes. |
 | `pkg/providers/togetherai/image.go` omits the `output_format` JSON tag | The decode struct already carries `json:"output_format"`; the reviewer saw a different field. |
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `structured_schema_test.go` declares an invalid recursive slice type | `GOWORK=off go test -run TestSchemaFrom_RecursiveSliceDoesNotOverflow` passes; the flagged `recSlice` definition compiles. |
+| `llmadk` does not add `set_model_response` to `AllowedFunctionNames` | `toolConfig` filters only the caller's tools and always keeps the synthetic tool; the inline comment and translation tests pin that behavior. |
+| Featherless `WithSpeechUsageHandler` is never invoked | `speech.go` reads `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event, and `TestStreamSpeech_ReportedCharacters` covers it. |

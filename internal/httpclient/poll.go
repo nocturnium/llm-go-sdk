@@ -58,11 +58,17 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 			}
 			return nil
 		}
+		if err != nil {
+			// A callback that returns the context error it observed is reporting
+			// the policy deadline, not an independent cause; preserve
+			// ErrPollTimeout for that case. A non-context error is the operation's
+			// real cause and is returned unchanged.
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				return err
+			}
+		}
 		if ctxErr := pollContextError(parent, ctx); ctxErr != nil {
 			return ctxErr
-		}
-		if err != nil {
-			return err
 		}
 		timer := time.NewTimer(pollDelay(delay, p))
 		select {

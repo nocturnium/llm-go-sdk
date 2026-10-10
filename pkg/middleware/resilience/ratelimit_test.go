@@ -761,6 +761,15 @@ func TestRateLimiter_WaitN_RejectsNegativeTokens(t *testing.T) {
 	}
 }
 
+func TestRateLimiter_WaitN_NonBlockingRejectsCanceledContext(t *testing.T) {
+	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithBlocking(false))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := rl.WaitN(ctx, 1, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("WaitN = %v, want context.Canceled", err)
+	}
+}
+
 // The non-blocking path must apply token credit before the burst check: 1000
 // credits make a 1500-token request effectively 500, which fits a 1000 burst.
 func TestRateLimiter_TryAcquire_AppliesCreditBeforeBurstCheck(t *testing.T) {

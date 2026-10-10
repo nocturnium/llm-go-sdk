@@ -451,6 +451,8 @@ func TestInferModelTypes(t *testing.T) {
 		{"gpt-3.5-turbo", []llms.ModelType{llms.ModelTypeChat}},
 		{"o1-preview", []llms.ModelType{llms.ModelTypeChat}},
 		{"o1-mini", []llms.ModelType{llms.ModelTypeChat}},
+		{"o3-2025-04-16", []llms.ModelType{llms.ModelTypeChat}},
+		{"gpt-5-2025-08-07", []llms.ModelType{llms.ModelTypeChat}},
 		{"text-embedding-3-small", []llms.ModelType{llms.ModelTypeEmbedding}},
 		{"text-embedding-ada-002", []llms.ModelType{llms.ModelTypeEmbedding}},
 		{"dall-e-3", []llms.ModelType{llms.ModelTypeImage}},

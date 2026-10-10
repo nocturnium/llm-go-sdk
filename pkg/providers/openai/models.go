@@ -555,7 +555,10 @@ func inferModelTypes(id string) []llms.ModelType {
 	}
 	if strings.HasPrefix(idLower, "gpt-4") ||
 		strings.HasPrefix(idLower, "gpt-3.5") ||
+		strings.HasPrefix(idLower, "gpt-5") ||
 		strings.HasPrefix(idLower, "o1") ||
+		strings.HasPrefix(idLower, "o3") ||
+		strings.HasPrefix(idLower, "o4") ||
 		strings.HasPrefix(idLower, "chatgpt") {
 		return []llms.ModelType{llms.ModelTypeChat}
 	}

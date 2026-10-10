@@ -128,7 +128,7 @@ func WrapError(operation string, err error) error {
 	}
 
 	var httpErr *httpclient.APIError
-	if errors.As(err, &httpErr) {
+	if errors.As(err, &httpErr) && httpErr != nil {
 		return &llms.APIError{
 			StatusCode:    httpErr.StatusCode,
 			Message:       httpErr.Message,
@@ -141,7 +141,7 @@ func WrapError(operation string, err error) error {
 	}
 
 	var apiErr *llms.APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		if apiErr.Provider == "" {
 			apiErr.Provider = llms.ProviderLlamaCpp
 		}

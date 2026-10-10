@@ -156,7 +156,12 @@ apidiff:
 		echo "Baseline $(API_BASELINE) missing. Run 'make apidiff-baseline'."; \
 		exit 1; \
 	fi
-	@out="$$(GOWORK=off apidiff -m $(API_BASELINE) $(MODULE) 2>&1 | grep -v '^Ignoring internal package' || true)"; \
+	@out="$$(GOWORK=off apidiff -m $(API_BASELINE) $(MODULE) 2>&1)"; status=$$?; \
+	out="$$(printf '%s\n' "$$out" | grep -v '^Ignoring internal package' || true)"; \
+	if [ $$status -ne 0 ] && [ -z "$$out" ]; then \
+		echo "apidiff failed to run (exit $$status)."; \
+		exit 1; \
+	fi; \
 	if [ -n "$$out" ]; then \
 		echo "Public API changed since baseline:"; \
 		echo "$$out"; \

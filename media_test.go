@@ -61,6 +61,15 @@ func TestMediaAsset_Fetch(t *testing.T) {
 	if _, err := asset.Fetch(ctx, nil); err != nil || calls.Load() != 1 {
 		t.Fatal("cache missed")
 	}
+	emptyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer emptyServer.Close()
+	empty := &MediaAsset{URL: emptyServer.URL}
+	if data, err := empty.FetchWithOptions(ctx, nil, MediaFetchOptions{AllowPrivateIPs: true, AllowHTTP: true}); err != nil || len(data) != 0 {
+		t.Fatalf("zero-byte download = %q, %v", data, err)
+	}
+	if empty.Data == nil {
+		t.Fatal("zero-byte download was not cached")
+	}
 	if _, err := (&MediaAsset{CloudURI: "gs://bucket/asset"}).Fetch(ctx, nil); !errors.Is(err, ErrInvalidParameters) {
 		t.Fatal(err)
 	}

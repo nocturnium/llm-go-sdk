@@ -276,6 +276,9 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 	if tokens < 0 {
 		return fmt.Errorf("rate limit tokens must not be negative")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if !rl.blocking {
 		return rl.tryAcquire(requests, tokens)
 	}

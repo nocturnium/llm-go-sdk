@@ -117,3 +117,16 @@ func TestPoll_DoneOnDeadlinePoll(t *testing.T) {
 		t.Fatalf("completed deadline poll: calls=%d error=%v", calls, err)
 	}
 }
+
+// A callback error is the operation's cause, not the policy timeout that
+// happened to expire while the callback was running.
+func TestPoll_CallbackErrorAfterTimeout(t *testing.T) {
+	cause := errors.New("backend failed")
+	err := Poll(context.Background(), PollPolicy{Timeout: time.Millisecond}, func(ctx context.Context) (bool, error) {
+		<-ctx.Done()
+		return false, cause
+	})
+	if !errors.Is(err, cause) {
+		t.Fatalf("Poll = %v, want callback error %v", err, cause)
+	}
+}
