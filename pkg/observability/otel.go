@@ -353,6 +353,16 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 		span.End()
 		return nil, err
 	}
+	// A nil stream with a nil error would block the processing goroutine's
+	// range forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", provider, llms.ErrIncompleteResponse)
+		duration := time.Since(start).Seconds()
+		m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+		m.recordError(ctx, span, err, attrs)
+		span.End()
+		return nil, err
+	}
 
 	// Apply options to get buffer size and timeout for backpressure handling
 	opts := llms.ApplyOptions(options...)

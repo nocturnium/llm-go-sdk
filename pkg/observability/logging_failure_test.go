@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,17 +11,19 @@ import (
 )
 
 // countingLogger records which of the two terminal paths a stream took.
+// The middleware logs from its stream goroutine, so the counters and the last
+// error are only touched atomically to keep the test race-free.
 type countingLogger struct {
-	responses int
-	errors    int
-	lastErr   error
+	responses atomic.Int32
+	errors    atomic.Int32
+	lastErr   atomic.Pointer[error]
 }
 
 func (l *countingLogger) LogRequest(context.Context, *LogEntry)  {}
-func (l *countingLogger) LogResponse(context.Context, *LogEntry) { l.responses++ }
+func (l *countingLogger) LogResponse(context.Context, *LogEntry) { l.responses.Add(1) }
 func (l *countingLogger) LogError(_ context.Context, _ *LogEntry, err error) {
-	l.errors++
-	l.lastErr = err
+	l.errors.Add(1)
+	l.lastErr.Store(&err)
 }
 
 // TestLoggingMiddleware_CanceledStreamLogsError pins that an abandoned stream
@@ -42,7 +45,7 @@ func TestLoggingMiddleware_CanceledStreamLogsError(t *testing.T) {
 	}
 
 	deadline := time.After(2 * time.Second)
-	for logger.responses+logger.errors == 0 {
+	for logger.responses.Load()+logger.errors.Load() == 0 {
 		select {
 		case <-deadline:
 			t.Fatal("logger saw neither a response nor an error")
@@ -50,11 +53,12 @@ func TestLoggingMiddleware_CanceledStreamLogsError(t *testing.T) {
 		}
 	}
 
-	if logger.errors != 1 || logger.responses != 0 {
-		t.Errorf("LogError=%d LogResponse=%d, want 1 and 0", logger.errors, logger.responses)
+	if logger.errors.Load() != 1 || logger.responses.Load() != 0 {
+		t.Errorf("LogError=%d LogResponse=%d, want 1 and 0", logger.errors.Load(), logger.responses.Load())
 	}
-	if logger.lastErr == nil || !errors.Is(logger.lastErr, context.Canceled) {
-		t.Errorf("logged error = %v, want context.Canceled", logger.lastErr)
+	loggedErr := logger.lastErr.Load()
+	if loggedErr == nil || !errors.Is(*loggedErr, context.Canceled) {
+		t.Errorf("logged error = %v, want context.Canceled", loggedErr)
 	}
 }
 

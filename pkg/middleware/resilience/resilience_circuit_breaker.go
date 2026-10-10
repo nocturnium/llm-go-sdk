@@ -268,7 +268,12 @@ func (cb *CircuitBreaker) recordSuccess(halfOpenProbe bool) {
 		}
 
 	case CircuitOpen:
-		// No action needed when circuit is open
+		// A stale closed-state request can also complete while the breaker is
+		// open. Retire its in-flight mark: leaving it set would make the next
+		// real half-open probe look stale and unable to close the breaker.
+		if cb.inflightClosed > 0 {
+			cb.inflightClosed--
+		}
 	}
 }
 
@@ -299,6 +304,9 @@ func (cb *CircuitBreaker) recordFailure(halfOpenProbe bool) {
 
 	case CircuitHalfOpen:
 		if !halfOpenProbe {
+			if cb.inflightClosed > 0 {
+				cb.inflightClosed--
+			}
 			cb.transitionTo(CircuitOpen)
 			return
 		}
@@ -310,7 +318,12 @@ func (cb *CircuitBreaker) recordFailure(halfOpenProbe bool) {
 		cb.transitionTo(CircuitOpen)
 
 	case CircuitOpen:
-		// Circuit is already open, just update the failure time
+		// Circuit is already open, just update the failure time. A stale
+		// closed-state request completing here still retires its in-flight
+		// mark, so the next real probe is not mistaken for it.
+		if cb.inflightClosed > 0 {
+			cb.inflightClosed--
+		}
 	}
 }
 

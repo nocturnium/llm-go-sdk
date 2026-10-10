@@ -97,12 +97,28 @@ func llmIdentity(llm LLM) (any, bool) {
 
 // seenKey returns the map key used for cycle detection, and whether one exists.
 // Comparable LLM values are their own key; non-comparable ones fall back to
-// their underlying pointer.
+// their underlying pointer. A struct whose type is comparable can still hold an
+// interface field with an uncomparable dynamic value (a slice), so the value is
+// only usable as a map key when a trial comparison does not panic.
 func seenKey(llm LLM) (any, bool) {
-	if reflect.TypeOf(llm).Comparable() {
+	if reflect.TypeOf(llm).Comparable() && comparableValue(llm) {
 		return llm, true
 	}
 	return llmIdentity(llm)
+}
+
+// comparableValue reports whether llm can be used as a map key without
+// panicking. A comparable interface's dynamic value can itself be uncomparable,
+// so a comparison is the only reliable test.
+func comparableValue(llm LLM) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	var probe any = llm
+	_ = probe == probe
+	return true
 }
 
 // UnwrapAll recursively unwraps all middleware to get the base LLM implementation.

@@ -184,7 +184,17 @@ func (e *LogEntry) ToLangfuseGeneration() map[string]any {
 			metadata[k] = v
 		}
 		for k, v := range e.RequestParameters {
-			metadata["param_"+k] = v
+			// A caller metadata key can legitimately be "param_<name>", so
+			// never let request parameters overwrite metadata; give the
+			// parameter a distinct key when the natural one is taken.
+			key := "param_" + k
+			for {
+				if _, exists := metadata[key]; !exists {
+					break
+				}
+				key = "param_" + key
+			}
+			metadata[key] = v
 		}
 		if e.CostUSD > 0 {
 			metadata["cost_usd"] = e.CostUSD
