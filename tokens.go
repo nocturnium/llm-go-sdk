@@ -63,6 +63,14 @@ func (e *TokenEstimator) EstimateTokens(text string) int {
 	if charsPerToken <= 0 || math.IsNaN(charsPerToken) || math.IsInf(charsPerToken, 0) {
 		charsPerToken = 4.0
 	}
+	// A positive but denormal-small ratio would overflow charCount/charsPerToken
+	// to +Inf, whose int conversion is implementation-defined and typically
+	// clamps to 1, underestimating even a one-character input. Clamp the divisor
+	// to a sane floor so the estimate stays finite and monotonic.
+	const minCharsPerToken = 1e-6
+	if charsPerToken < minCharsPerToken {
+		charsPerToken = minCharsPerToken
+	}
 
 	// Count characters (excluding whitespace for more accurate estimation)
 	charCount := 0

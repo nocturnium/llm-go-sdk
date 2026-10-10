@@ -67,7 +67,14 @@ type CircuitBreaker struct {
 	// A public Allow/RecordSuccess pair carries no probe token, so a completion
 	// in half-open is attributed to a stale closed request while one is
 	// outstanding, rather than closing the breaker as if it were a probe.
-	inflightClosed  int
+	//
+	// The count is bucketed by generation so Reset can drop the pre-reset
+	// requests: a late completion then finds no bucket to decrement instead of
+	// consuming a post-reset request's mark. Without that, a stale completion
+	// could let the breaker enter half-open while a new request is still
+	// outstanding.
+	inflightClosed  map[uint64]int
+	generation      uint64
 	lastFailureTime time.Time
 	lastStateChange time.Time
 
@@ -88,6 +95,7 @@ func NewCircuitBreaker(opts ...CircuitBreakerOption) *CircuitBreaker {
 		halfOpenTimeout: 30 * time.Second,
 		halfOpenMax:     3,
 		state:           CircuitClosed,
+		inflightClosed:  make(map[uint64]int),
 		lastStateChange: time.Now(),
 	}
 
@@ -169,18 +177,27 @@ func (cb *CircuitBreaker) Allow() bool {
 	return admitted
 }
 
-// acquire admits a request and reports whether the grant is a half-open probe.
-// The middleware threads that flag back into recordSuccess/recordFailure/release
-// so a request admitted while the breaker was closed is not mistaken for a
-// half-open probe when it completes after a later transition.
-func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
+// permit is the token acquire hands back for a granted request. It records
+// whether the grant was a half-open probe and which generation the request was
+// admitted in, so a completion can be attributed correctly even across a Reset.
+type permit struct {
+	halfOpen   bool
+	generation uint64
+}
+
+// acquire admits a request and returns its permit. The middleware threads the
+// permit back into recordSuccess/recordFailure/releasePermit so a request
+// admitted while the breaker was closed is not mistaken for a half-open probe
+// when it completes after a later transition, and a pre-Reset completion cannot
+// retire a post-Reset request's mark.
+func (cb *CircuitBreaker) acquire() (admitted bool, p permit) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	switch cb.state {
 	case CircuitClosed:
-		cb.inflightClosed++
-		return true, false
+		cb.inflightClosed[cb.generation]++
+		return true, permit{generation: cb.generation}
 
 	case CircuitOpen:
 		// Check if enough time has passed to try again
@@ -188,30 +205,54 @@ func (cb *CircuitBreaker) acquire() (admitted, halfOpen bool) {
 			// A closed-state request admitted before the breaker opened still
 			// carries no probe token. Wait for it to settle before entering
 			// half-open; otherwise its completion could be mistaken for a probe.
-			if cb.inflightClosed > 0 {
-				return false, false
+			if cb.hasInflightClosedLocked() {
+				return false, permit{}
 			}
 			cb.transitionTo(CircuitHalfOpen)
 			cb.halfOpenCount = 1
-			return true, true
+			return true, permit{halfOpen: true, generation: cb.generation}
 		}
-		return false, false
+		return false, permit{}
 
 	case CircuitHalfOpen:
 		if time.Since(cb.lastStateChange) >= cb.halfOpenTimeout {
 			cb.lastFailureTime = time.Now()
 			cb.transitionTo(CircuitOpen)
-			return false, false
+			return false, permit{}
 		}
 		// Allow limited requests in half-open state
 		if cb.halfOpenCount < cb.halfOpenMax {
 			cb.halfOpenCount++
-			return true, true
+			return true, permit{halfOpen: true, generation: cb.generation}
 		}
-		return false, false
+		return false, permit{}
 
 	default:
-		return false, false
+		return false, permit{}
+	}
+}
+
+// hasInflightClosedLocked reports whether any generation has a closed-state
+// request outstanding. The caller holds cb.mu.
+func (cb *CircuitBreaker) hasInflightClosedLocked() bool {
+	for _, n := range cb.inflightClosed {
+		if n > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// retireInflightClosedLocked retires a request admitted in generation gen. A
+// completion from a dropped generation finds no bucket and is a no-op. The
+// caller holds cb.mu.
+func (cb *CircuitBreaker) retireInflightClosedLocked(gen uint64) {
+	if n := cb.inflightClosed[gen]; n > 0 {
+		if n == 1 {
+			delete(cb.inflightClosed, gen)
+		} else {
+			cb.inflightClosed[gen] = n - 1
+		}
 	}
 }
 
@@ -221,36 +262,32 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	defer cb.mu.Unlock()
 	// acquire defers the open-to-half-open transition until every closed-state
 	// request has settled, so in half-open a public success is always a probe.
-	cb.recordSuccessLocked(cb.inflightClosed == 0)
+	cb.recordSuccessLocked(permit{halfOpen: !cb.hasInflightClosedLocked(), generation: cb.generation})
 }
 
-// recordSuccess records a successful request. halfOpenProbe is false for a
+// recordSuccess records a successful request. The permit is half-open for a
 // request admitted while the breaker was closed; such a result is stale with
 // respect to a later half-open window and must not consume a probe permit or
 // count toward closing the breaker.
-func (cb *CircuitBreaker) recordSuccess(halfOpenProbe bool) {
+func (cb *CircuitBreaker) recordSuccess(p permit) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	cb.recordSuccessLocked(halfOpenProbe)
+	cb.recordSuccessLocked(p)
 }
 
 // recordSuccessLocked implements recordSuccess; the caller holds cb.mu.
-func (cb *CircuitBreaker) recordSuccessLocked(halfOpenProbe bool) {
+func (cb *CircuitBreaker) recordSuccessLocked(p permit) {
 	switch cb.state {
 	case CircuitClosed:
 		cb.failures = 0 // Reset failure count on success
-		if cb.inflightClosed > 0 {
-			cb.inflightClosed--
-		}
+		cb.retireInflightClosedLocked(p.generation)
 
 	case CircuitHalfOpen:
-		if !halfOpenProbe {
+		if !p.halfOpen {
 			// A request admitted while closed completing in half-open: it holds
 			// no probe permit, so it can neither close the breaker nor be
 			// counted as a probe. Retire its in-flight mark.
-			if cb.inflightClosed > 0 {
-				cb.inflightClosed--
-			}
+			cb.retireInflightClosedLocked(p.generation)
 			return
 		}
 		if cb.halfOpenCount == 0 {
@@ -274,9 +311,7 @@ func (cb *CircuitBreaker) recordSuccessLocked(halfOpenProbe bool) {
 		// A stale closed-state request can also complete while the breaker is
 		// open. Retire its in-flight mark: leaving it set would make the next
 		// real half-open probe look stale and unable to close the breaker.
-		if cb.inflightClosed > 0 {
-			cb.inflightClosed--
-		}
+		cb.retireInflightClosedLocked(p.generation)
 	}
 }
 
@@ -284,38 +319,34 @@ func (cb *CircuitBreaker) recordSuccessLocked(halfOpenProbe bool) {
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	cb.recordFailureLocked(cb.inflightClosed == 0)
+	cb.recordFailureLocked(permit{halfOpen: !cb.hasInflightClosedLocked(), generation: cb.generation})
 }
 
 // recordFailure records a failed request. A stale failure from a request
 // admitted while the breaker was closed is still provider-health evidence and
 // reopens a half-open breaker, but it does not consume a probe permit it never
 // held.
-func (cb *CircuitBreaker) recordFailure(halfOpenProbe bool) {
+func (cb *CircuitBreaker) recordFailure(p permit) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	cb.recordFailureLocked(halfOpenProbe)
+	cb.recordFailureLocked(p)
 }
 
 // recordFailureLocked implements recordFailure; the caller holds cb.mu.
-func (cb *CircuitBreaker) recordFailureLocked(halfOpenProbe bool) {
+func (cb *CircuitBreaker) recordFailureLocked(p permit) {
 	cb.lastFailureTime = time.Now()
 
 	switch cb.state {
 	case CircuitClosed:
 		cb.failures++
-		if cb.inflightClosed > 0 {
-			cb.inflightClosed--
-		}
+		cb.retireInflightClosedLocked(p.generation)
 		if cb.failures >= cb.maxFailures {
 			cb.transitionTo(CircuitOpen)
 		}
 
 	case CircuitHalfOpen:
-		if !halfOpenProbe {
-			if cb.inflightClosed > 0 {
-				cb.inflightClosed--
-			}
+		if !p.halfOpen {
+			cb.retireInflightClosedLocked(p.generation)
 			cb.transitionTo(CircuitOpen)
 			return
 		}
@@ -330,9 +361,7 @@ func (cb *CircuitBreaker) recordFailureLocked(halfOpenProbe bool) {
 		// Circuit is already open, just update the failure time. A stale
 		// closed-state request completing here still retires its in-flight
 		// mark, so the next real probe is not mistaken for it.
-		if cb.inflightClosed > 0 {
-			cb.inflightClosed--
-		}
+		cb.retireInflightClosedLocked(p.generation)
 	}
 }
 
@@ -341,16 +370,16 @@ func (cb *CircuitBreaker) recordFailureLocked(halfOpenProbe bool) {
 // closed-state request instead retires its inflightClosed mark, which a later
 // half-open window would otherwise misread as a stale request and use to refuse
 // a real probe's success.
-func (cb *CircuitBreaker) releasePermit(halfOpenProbe bool) {
+func (cb *CircuitBreaker) releasePermit(p permit) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	if halfOpenProbe && cb.state == CircuitHalfOpen && cb.halfOpenCount > 0 {
+	if p.halfOpen && cb.state == CircuitHalfOpen && cb.halfOpenCount > 0 {
 		cb.halfOpenCount--
 		return
 	}
-	if !halfOpenProbe && cb.inflightClosed > 0 {
-		cb.inflightClosed--
+	if !p.halfOpen {
+		cb.retireInflightClosedLocked(p.generation)
 	}
 }
 
@@ -366,11 +395,13 @@ func (cb *CircuitBreaker) Reset() {
 	cb.failures = 0
 	cb.successes = 0
 	cb.halfOpenCount = 0
-	// Clear the closed-state in-flight count too. A request admitted before the
-	// reset that never settles would otherwise hold the open-to-half-open
-	// transition off forever, defeating the operator's escape hatch. A late
-	// completion just finds nothing to decrement.
-	cb.inflightClosed = 0
+	// Drop the pre-reset closed-state marks by advancing the generation. A
+	// request admitted before the reset that never settles would otherwise hold
+	// the open-to-half-open transition off forever, defeating the operator's
+	// escape hatch. A late completion finds no bucket for its generation and is
+	// a no-op, so it cannot retire a post-reset request's mark.
+	cb.generation++
+	cb.inflightClosed = make(map[uint64]int)
 }
 
 // stateTransition holds a captured state-change callback and its arguments.

@@ -2,6 +2,7 @@ package llms
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -121,6 +122,28 @@ func TestEmbeddingResponse_Structure(t *testing.T) {
 	// Response order, which is what the documented contract promises.
 	if vectors[0][0] != 0.4 || vectors[1][0] != 0.1 {
 		t.Errorf("vectors = %v, want them in response order", vectors)
+	}
+}
+
+// The standard OpenAI wire form puts vectors in `data`, while some providers
+// and fixtures use `embeddings`. Both must decode; only recognizing one would
+// silently leave Embeddings empty and make EmbedQuery report an incomplete
+// response.
+func TestEmbeddingResponse_DecodesDataAndEmbeddingsKeys(t *testing.T) {
+	var fromData EmbeddingResponse
+	if err := json.Unmarshal([]byte(`{"model":"m","data":[{"index":0,"embedding":[1,2],"object":"embedding"}]}`), &fromData); err != nil {
+		t.Fatal(err)
+	}
+	if len(fromData.Embeddings) != 1 || fromData.Embeddings[0].Vector[0] != 1 {
+		t.Errorf("data key: %+v", fromData)
+	}
+
+	var fromEmbeddings EmbeddingResponse
+	if err := json.Unmarshal([]byte(`{"model":"m","embeddings":[{"index":0,"embedding":[3,4]}]}`), &fromEmbeddings); err != nil {
+		t.Fatal(err)
+	}
+	if len(fromEmbeddings.Embeddings) != 1 || fromEmbeddings.Embeddings[0].Vector[0] != 3 {
+		t.Errorf("embeddings key: %+v", fromEmbeddings)
 	}
 }
 

@@ -90,7 +90,10 @@ func (r *CapabilityRegistry) Get(provider Provider, modelID string) ModelCapabil
 	return ModelCapabilities{}
 }
 
-// GetWithDefaults returns capabilities with explicit defaults applied.
+// GetWithDefaults returns capabilities with explicit defaults applied for the
+// two numeric fields (MaxContextTokens, MaxOutputTokens). Boolean capabilities
+// are left as-is: a false is indistinguishable from an unset value, so there is
+// no zero value to substitute without overriding a deliberate false.
 // This is useful for Capabilities() implementations.
 func (r *CapabilityRegistry) GetWithDefaults(provider Provider, modelID string, defaults ModelCapabilities) ModelCapabilities {
 	caps := r.Get(provider, modelID)

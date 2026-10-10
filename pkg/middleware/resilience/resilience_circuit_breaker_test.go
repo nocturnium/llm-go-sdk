@@ -39,8 +39,8 @@ func TestCircuitBreaker_ResetClearsInflightClosed(t *testing.T) {
 	// Two requests admitted while closed. One fails and opens the breaker; the
 	// other is still outstanding, so its in-flight mark survives the open.
 	for range 2 {
-		if admitted, probe := cb.acquire(); !admitted || probe {
-			t.Fatalf("closed-state acquire = %v,%v; want true,false", admitted, probe)
+		if admitted, p := cb.acquire(); !admitted || p.halfOpen {
+			t.Fatalf("closed-state acquire = %v,%+v; want true,non-probe", admitted, p)
 		}
 	}
 	cb.RecordFailure()
@@ -61,6 +61,47 @@ func TestCircuitBreaker_ResetClearsInflightClosed(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 	if !cb.Allow() {
 		t.Fatal("half-open probe refused after Reset cleared the stale in-flight mark")
+	}
+}
+
+// TestCircuitBreaker_ResetGenerationsIsolateCompletions pins that a completion
+// from before Reset cannot retire a mark recorded after it. If the counters
+// were a single shared integer, the stale completion would decrement the new
+// request's mark and let the breaker enter half-open while that request was
+// still outstanding.
+func TestCircuitBreaker_ResetGenerationsIsolateCompletions(t *testing.T) {
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithResetTimeout(time.Millisecond),
+		WithHalfOpenTimeout(time.Minute),
+		WithHalfOpenMax(1),
+	)
+
+	admitted, stale := cb.acquire()
+	if !admitted || stale.halfOpen {
+		t.Fatalf("pre-reset acquire = %v,%+v", admitted, stale)
+	}
+	cb.Reset()
+
+	// One post-reset request stays outstanding; a second trips the breaker.
+	if admitted, p := cb.acquire(); !admitted || p.halfOpen {
+		t.Fatalf("post-reset acquire = %v,%+v", admitted, p)
+	}
+	admitted, tripping := cb.acquire()
+	if !admitted || tripping.halfOpen {
+		t.Fatalf("post-reset acquire = %v,%+v", admitted, tripping)
+	}
+	cb.recordFailure(tripping) // trips the breaker open
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want open", cb.State())
+	}
+
+	// The pre-reset request settling must not retire the post-reset request's
+	// mark, so the open-to-half-open transition stays deferred.
+	cb.recordSuccess(stale)
+	time.Sleep(5 * time.Millisecond)
+	if cb.Allow() {
+		t.Fatal("half-open probe admitted while the post-reset request was outstanding")
 	}
 }
 
@@ -109,9 +150,9 @@ func TestCircuitBreaker_StaleClosedResultDoesNotClose(t *testing.T) {
 	)
 
 	// Request admitted while closed.
-	admitted, staleProbe := cb.acquire()
-	if !admitted || staleProbe {
-		t.Fatalf("closed-state acquire = %v,%v; want true,false", admitted, staleProbe)
+	admitted, stalePermit := cb.acquire()
+	if !admitted || stalePermit.halfOpen {
+		t.Fatalf("closed-state acquire = %v,%+v; want true,non-probe", admitted, stalePermit)
 	}
 
 	// Another request trips the breaker and the watchdog admits a half-open probe.
@@ -125,7 +166,7 @@ func TestCircuitBreaker_StaleClosedResultDoesNotClose(t *testing.T) {
 	}
 
 	// The stale closed-state request settling must not itself close the breaker.
-	cb.recordSuccess(staleProbe)
+	cb.recordSuccess(stalePermit)
 	if state := cb.State(); state != CircuitOpen {
 		t.Errorf("stale success changed the circuit, state = %v, want %v", state, CircuitOpen)
 	}

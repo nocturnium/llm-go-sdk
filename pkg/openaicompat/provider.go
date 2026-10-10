@@ -282,10 +282,14 @@ func (p *BaseProvider) Capabilities() llms.Capabilities {
 	// (e.g. Azure, llama.cpp), so the declaration is honored as-is.
 	caps.Embeddings = static.Embeddings
 	caps.Batch = static.Batch
-	caps.ImageGeneration = p.config.Media.Images
-	caps.VideoGeneration = p.config.Media.Videos
-	caps.Speech = p.config.Media.Speech
-	caps.Transcription = p.config.Media.Transcription
+	// Media capabilities: an explicit static declaration wins, and the Media
+	// block can only turn a capability on. This keeps a provider that declares
+	// ImageGeneration:true without a Media.Images flag from being downgraded to
+	// unsupported.
+	caps.ImageGeneration = static.ImageGeneration || p.config.Media.Images
+	caps.VideoGeneration = static.VideoGeneration || p.config.Media.Videos
+	caps.Speech = static.Speech || p.config.Media.Speech
+	caps.Transcription = static.Transcription || p.config.Media.Transcription
 
 	return caps
 }

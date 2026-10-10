@@ -228,6 +228,16 @@ func TestTokenEstimator_NonFiniteCharsPerToken(t *testing.T) {
 	}
 }
 
+// A denormal-small positive ratio used to overflow charCount/charsPerToken to
+// +Inf, whose int conversion clamps to 1, underestimating a one-character
+// input. The estimate must stay finite and large.
+func TestTokenEstimator_TinyCharsPerTokenDoesNotUnderestimate(t *testing.T) {
+	estimator := &TokenEstimator{CharsPerToken: math.SmallestNonzeroFloat64}
+	if got := estimator.EstimateTokens("x"); got < 2 {
+		t.Errorf("CharsPerToken=SmallestNonzeroFloat64: got %d, want a large estimate", got)
+	}
+}
+
 func TestDefaultTokenEstimator(t *testing.T) {
 	estimator := DefaultTokenEstimator()
 

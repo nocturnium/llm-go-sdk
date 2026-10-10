@@ -323,6 +323,25 @@ the AGENTS.md provider example now declares `EmbeddingModel` and
 | `llmadk/config.go` drops `Labels` | `Labels` is deliberately classified as ignored request metadata in `llmadk/fields.go`. |
 | `pkg/providers/azure/models.go` references an undefined `Client` | `type Client struct` is declared in `azure.go`; the package builds. |
 | Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
+
+Round 46 (2026-10-10) reported 8 errors. Fixed: `CircuitBreaker` now buckets
+`inflightClosed` by generation so a pre-`Reset` completion cannot retire a
+post-`Reset` request's mark (a plain counter allowed a stale completion to let
+the breaker enter half-open while a new request was outstanding);
+`BaseProvider.Capabilities` treats the `Media` block as additive, so an explicit
+static `ImageGeneration`/`Speech`/... declaration is no longer overwritten by a
+false `Media` flag; `EmbeddingResponse` now decodes both the standard `data`
+array and the legacy `embeddings` key; `TokenEstimator` clamps a denormal-small
+`CharsPerToken` so the estimate cannot overflow to `+Inf` and clamp to 1;
+`parseTyped` tries every embedded scalar candidate, not just the first, so a
+bool before the intended string does not reject a recoverable response; and the
+Mistral transcription test records a handler error for the test goroutine
+instead of calling `t.Fatal` inside the HTTP handler.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml` references an unpublished `actions/checkout@v7` | `v7` is a published checkout tag and `v7` is published for setup-go; the refs resolve. |
+| `capabilities_registry.go` should apply boolean defaults | Documented and pinned as numeric-only: a bool false cannot be distinguished from a deliberate false, so there is no zero value to substitute. |
 | `pkg/openaicompat/toolcall_ids.go` loses earlier tool-call rewrites | The inner loop mutates the shared `msg.ToolCalls` copy and writes the same message back, so every rewrite accumulates; a three-call regression test confirms all IDs are distinct and nine-character. |
 
 Round 45 (2026-10-10) reported 7 errors. Fixed: `CircuitBreaker.Reset` now

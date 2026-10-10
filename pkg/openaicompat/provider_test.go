@@ -61,6 +61,42 @@ func TestBaseProvider_Capabilities_StaticWinsOverRegistry(t *testing.T) {
 
 // TestBaseProvider_Capabilities_StaticOnly verifies that when the registry has
 // no entry for the model, the static config is reported as-is.
+func TestBaseProvider_Capabilities_StaticMediaWins(t *testing.T) {
+	cfg := openaicompat.ProviderConfig{
+		Provider:     llms.Provider("capmedia-test-provider"),
+		DefaultModel: "capmedia-test-model",
+		Capabilities: llms.Capabilities{
+			ImageGeneration: true,
+			Speech:          true,
+		},
+		// Media left off: the explicit static declaration must not be downgraded.
+	}
+
+	bp := openaicompat.NewBaseProvider(nil, cfg)
+	caps := bp.Capabilities()
+	if !caps.ImageGeneration {
+		t.Error("ImageGeneration = false, want true (static declaration)")
+	}
+	if !caps.Speech {
+		t.Error("Speech = false, want true (static declaration)")
+	}
+}
+
+// TestBaseProvider_Capabilities_MediaEnablesCapability verifies that a Media
+// flag still turns the matching capability on when the static config is silent.
+func TestBaseProvider_Capabilities_MediaEnablesCapability(t *testing.T) {
+	cfg := openaicompat.ProviderConfig{
+		Provider:     llms.Provider("capmedia-on-provider"),
+		DefaultModel: "capmedia-on-model",
+		Media:        openaicompat.MediaCapabilities{Videos: true},
+	}
+
+	bp := openaicompat.NewBaseProvider(nil, cfg)
+	if !bp.Capabilities().VideoGeneration {
+		t.Error("VideoGeneration = false, want true (Media.Videos)")
+	}
+}
+
 func TestBaseProvider_Capabilities_StaticOnly(t *testing.T) {
 	cfg := openaicompat.ProviderConfig{
 		Provider:     llms.Provider("capmerge-unregistered-provider"),

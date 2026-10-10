@@ -146,7 +146,10 @@ func parseTyped[T any](content string) (T, error) {
 	}
 	// A scalar T (string, number, bool) has no braces to scan for, but the
 	// response may still be a quoted scalar inside a markdown fence or prose.
-	if extracted, ok := extractScalarJSONOutsideStructures(content); ok {
+	// Every candidate is tried: prose like `The answer is true, specifically
+	// "Ada"` has a valid bool before the intended string, and stopping at the
+	// first one would reject a response that contains a recoverable scalar.
+	for _, extracted := range extractScalarJSONCandidates(content) {
 		var v T
 		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
 			return v, nil
@@ -213,7 +216,11 @@ func validateStructCandidate(data string, target reflect.Type) error {
 // null) embedded in s. Strings are found by their quotes; bare scalars are tried
 // at each position that could begin one. It returns ok=false when none parses.
 func extractScalarJSON(s string) (string, bool) {
-	return extractScalarJSONOutsideStructures(s)
+	candidates := extractScalarJSONCandidates(s)
+	if len(candidates) == 0 {
+		return "", false
+	}
+	return candidates[0], true
 }
 
 // extractScalarJSONOutsideStructures finds a scalar only outside balanced JSON
@@ -221,6 +228,19 @@ func extractScalarJSON(s string) (string, bool) {
 // object key (for example `"name"` from `{"name":"Ada"}`) and report success
 // with a value that is not the response.
 func extractScalarJSONOutsideStructures(s string) (string, bool) {
+	candidates := extractScalarJSONCandidates(s)
+	if len(candidates) == 0 {
+		return "", false
+	}
+	return candidates[0], true
+}
+
+// extractScalarJSONCandidates returns every valid JSON scalar found outside
+// balanced objects and arrays, left to right. Callers with a typed target try
+// each in turn: the first scalar that parses into T is not necessarily the one
+// the response intended (a bool can precede the answer string).
+func extractScalarJSONCandidates(s string) []string {
+	var candidates []string
 	for i := 0; i < len(s); {
 		if s[i] == '{' || s[i] == '[' {
 			if candidate, ok := balancedJSONAt(s, i); ok {
@@ -229,12 +249,14 @@ func extractScalarJSONOutsideStructures(s string) (string, bool) {
 			}
 			// An unbalanced structure means the response is malformed. Do not
 			// scan inside it and mistake an object key for a scalar result.
-			return "", false
+			return candidates
 		}
 		switch s[i] {
 		case '"':
 			if candidate, ok := quotedJSONAt(s, i); ok {
-				return candidate, true
+				candidates = append(candidates, candidate)
+				i += len(candidate)
+				continue
 			}
 		case 't', 'f', 'n', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			end := i
@@ -244,13 +266,15 @@ func extractScalarJSONOutsideStructures(s string) (string, bool) {
 			if end > i {
 				candidate := s[i:end]
 				if json.Valid([]byte(candidate)) {
-					return candidate, true
+					candidates = append(candidates, candidate)
+					i = end
+					continue
 				}
 			}
 		}
 		i++
 	}
-	return "", false
+	return candidates
 }
 
 func isJSONScalarDelimiter(c byte) bool {

@@ -2,6 +2,7 @@ package llms
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -88,6 +89,30 @@ type EmbeddingResponse struct {
 
 	// Usage contains token usage information
 	Usage EmbeddingUsage `json:"usage"`
+}
+
+// UnmarshalJSON accepts both the OpenAI-compatible `data` array and the
+// `embeddings` key. The standard wire form uses `data`, but some providers and
+// hand-written fixtures use `embeddings`; decoding only one would silently
+// leave Embeddings empty for the other.
+func (r *EmbeddingResponse) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Data       []Embedding    `json:"data"`
+		Embeddings []Embedding    `json:"embeddings"`
+		Model      string         `json:"model"`
+		Usage      EmbeddingUsage `json:"usage"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Model = raw.Model
+	r.Usage = raw.Usage
+	if raw.Data != nil {
+		r.Embeddings = raw.Data
+	} else {
+		r.Embeddings = raw.Embeddings
+	}
+	return nil
 }
 
 // Embedding represents a single embedding vector.

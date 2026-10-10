@@ -168,6 +168,19 @@ func TestParseTyped_CaseInsensitiveFieldMatch(t *testing.T) {
 	}
 }
 
+// Prose can contain a valid scalar before the intended one (a bool before a
+// quoted answer). Extraction must try every scalar candidate so a later one
+// that matches T is not missed.
+func TestParseTyped_TriesEveryScalarCandidate(t *testing.T) {
+	got, err := parseTyped[string](`The answer is true, specifically "Ada"`)
+	if err != nil {
+		t.Fatalf("parseTyped[string] failed: %v", err)
+	}
+	if got != "Ada" {
+		t.Errorf("got %q, want Ada", got)
+	}
+}
+
 // A nested object inside a valid enclosing JSON value is part of that value,
 // not a separate top-level payload. Descending into the envelope would let an
 // unrelated wrapper satisfy the schema with the nested object and return data
