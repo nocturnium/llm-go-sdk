@@ -47,6 +47,9 @@ var providerConfig = openaicompat.ProviderConfig{
 type Client struct {
 	openaicompat.BaseProvider
 	options *options
+	// models lists deployments at the account-level /openai/models route; the
+	// chat client's base URL is scoped to one deployment, which has no /models.
+	models *openaicompat.Client
 }
 
 // New creates a new Azure OpenAI client with the given options.
@@ -96,6 +99,9 @@ func New(opts ...Option) (*Client, error) {
 	clientConfig.AllowHTTP = options.AllowHTTP
 
 	client := openaicompat.NewClient(clientConfig)
+	modelsConfig := clientConfig
+	modelsConfig.BaseURL = buildAzureAccountURL(options.Endpoint)
+	modelsClient := openaicompat.NewClient(modelsConfig)
 	if options.EmbeddingBaseURL != "" {
 		client.SetEmbeddingBaseURL(options.EmbeddingBaseURL)
 	}
@@ -108,7 +114,20 @@ func New(opts ...Option) (*Client, error) {
 	return &Client{
 		BaseProvider: openaicompat.NewBaseProvider(client, cfg),
 		options:      options,
+		models:       modelsClient,
 	}, nil
+}
+
+// buildAzureAccountURL returns the account-level Azure OpenAI base URL
+// (https://{resource}.openai.azure.com/openai), used for model listing.
+func buildAzureAccountURL(endpoint string) string {
+	u, err := url.Parse(strings.TrimSuffix(endpoint, "/"))
+	if err != nil {
+		return strings.TrimSuffix(endpoint, "/") + "/openai"
+	}
+	u.Path = path.Join(strings.TrimRight(u.Path, "/"), "openai")
+	u.RawPath = path.Join(strings.TrimRight(u.EscapedPath(), "/"), "openai")
+	return u.String()
 }
 
 // buildAzureBaseURL constructs the Azure OpenAI base URL.

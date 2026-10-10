@@ -225,16 +225,16 @@ func (rl *RateLimiter) settleTokenDebt(ctx context.Context, tokenLimiter *rate.L
 			break
 		}
 		n := min(debt, burst)
-		rl.tokenDebt -= n
-		rl.mu.Unlock()
-
+		// Reserve while holding rl.mu so a concurrent refund in RecordTokens
+		// never observes the debt already deducted but not yet charged to the
+		// bucket, which would cancel it against less debt than is outstanding.
 		reservation := tokenLimiter.ReserveN(now, n)
 		if !reservation.OK() {
-			rl.mu.Lock()
-			rl.tokenDebt += n
 			rl.mu.Unlock()
 			break
 		}
+		rl.tokenDebt -= n
+		rl.mu.Unlock()
 		if d := reservation.DelayFrom(now); d > delay {
 			delay = d
 		}

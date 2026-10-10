@@ -597,3 +597,17 @@ contradicted the advertised schema.
 | `resilience_circuit_breaker.go:402` a stale public permit discards a post-reset outcome | Documented FIFO contract for the token-less `Allow()`/`Record*` pair (round 52 adjudication); the middleware path threads a generation-tagged permit and is unaffected. |
 | `pkg/providers/groq/options_coverage_test.go:334` relies on the environment key | The test passes `APIKey: "test-key"` explicitly, so a clean CI environment runs it. |
 | `structured.go:444` nested pointer fields accept null despite a non-null schema | Pointer fields accept null by design (rounds 53 and 58); a nil pointer is the field's natural zero and the schema advertises the pointee because OpenAI strict mode rejects nullable unions. |
+
+Round 61 (2026-10-10) reported 6 errors. Fixed: Azure `ListModels` now calls the
+account-level `/openai/models` route instead of appending `/models` to the
+deployment-scoped base URL, and `settleTokenDebt` reserves from the token bucket
+before it deducts the installment from `tokenDebt` (under the same lock), so a
+concurrent refund in `RecordTokens` can no longer see debt that was already
+removed but not yet charged.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `imagegen_test.go:36` `t.Fatal` is taken for a valid generator | `AsImageGenerator` returns a non-nil interface with ok=true for the stub, so `(g == nil) == want` is `false == true` and the branch is not taken; `TestImageCapabilities` passes. |
+| `pkg/observability/metrics_test.go:136` mock `Call` ignores `genResp` | `NewMetricsMiddleware`'s `Call` goes through `GenerateContent`, which returns `genResp`; `TestMetricsMiddleware_Call_Success` passes. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | `speech.go` calls it on the terminal event; recurring false positive (rounds 50–60). |
+| `structured.go:323` matches property names case-insensitively | Deliberate: `json.Unmarshal` matches field names case-insensitively, so the validator mirrors the decoder (`TestParseTyped_CaseInsensitiveFieldMatch`). |

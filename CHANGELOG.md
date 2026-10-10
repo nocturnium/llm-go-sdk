@@ -41,6 +41,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Azure `ListModels` queries the account-level `/openai/models` route; it previously appended `/models` to the deployment-scoped URL and so always fell back to the single configured deployment.
+- Token-debt settlement in the rate limiter charges the bucket before it removes the installment from the debt, so a concurrent `RecordTokens` refund cannot cancel against debt that was already deducted but not yet reserved.
 - A struct whose decode is governed by a custom `json.Unmarshaler` (its own or promoted) accepts JSON null, matching the unconstrained `{}` schema it emits instead of rejecting a value the schema allows.
 - `CostTracker.RecordMode` prices and records under one write lock, so a concurrent `Reset` can no longer return and then be undone by an in-flight record repopulating the tracker.
 - A stream that delivered its terminal chunk is reported as a success even if the caller cancels while the wrapper goroutine drains, instead of being logged and recorded as a canceled request. A struct whose decode is governed by its own `json.Unmarshaler` emits an unconstrained structured-output schema and skips the reflected required-field check, like the promoted-embedding case.
