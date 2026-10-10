@@ -73,7 +73,12 @@ type CircuitBreaker struct {
 	// consuming a post-reset request's mark. Without that, a stale completion
 	// could let the breaker enter half-open while a new request is still
 	// outstanding.
-	inflightClosed  map[uint64]int
+	inflightClosed map[uint64]int
+	// publicPermits retains grants made through Allow until the matching public
+	// RecordSuccess or RecordFailure call. The internal middleware passes its
+	// permit directly, but the older public API has no permit parameter. Keeping
+	// these tokens preserves the admission generation across Reset.
+	publicPermits   []permit
 	generation      uint64
 	lastFailureTime time.Time
 	lastStateChange time.Time
@@ -173,7 +178,12 @@ func (cb *CircuitBreaker) State() CircuitState {
 
 // Allow checks if a request should be allowed through
 func (cb *CircuitBreaker) Allow() bool {
-	admitted, _ := cb.acquire()
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	admitted, p := cb.acquireLocked()
+	if admitted {
+		cb.publicPermits = append(cb.publicPermits, p)
+	}
 	return admitted
 }
 
@@ -193,6 +203,11 @@ type permit struct {
 func (cb *CircuitBreaker) acquire() (admitted bool, p permit) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	return cb.acquireLocked()
+}
+
+// acquireLocked admits a request. The caller holds cb.mu.
+func (cb *CircuitBreaker) acquireLocked() (admitted bool, p permit) {
 
 	switch cb.state {
 	case CircuitClosed:
@@ -266,9 +281,14 @@ func (cb *CircuitBreaker) retireInflightClosedLocked(gen uint64) {
 func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	// acquire defers the open-to-half-open transition until every closed-state
-	// request has settled, so in half-open a public success is always a probe.
-	cb.recordSuccessLocked(permit{halfOpen: !cb.hasInflightClosedLocked(), generation: cb.generation})
+	p, ok := cb.takePublicPermitLocked()
+	if !ok {
+		// Record methods predate Allow and are also used to report an
+		// externally observed health result. Preserve that use when there is no
+		// unresolved public grant to match.
+		p = permit{halfOpen: !cb.hasInflightClosedLocked(), generation: cb.generation}
+	}
+	cb.recordSuccessLocked(p)
 }
 
 // recordSuccess records a successful request. The permit is half-open for a
@@ -325,7 +345,25 @@ func (cb *CircuitBreaker) recordSuccessLocked(p permit) {
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	cb.recordFailureLocked(permit{halfOpen: !cb.hasInflightClosedLocked(), generation: cb.generation})
+	p, ok := cb.takePublicPermitLocked()
+	if !ok {
+		p = permit{halfOpen: !cb.hasInflightClosedLocked(), generation: cb.generation}
+	}
+	cb.recordFailureLocked(p)
+}
+
+// takePublicPermitLocked returns the oldest unresolved grant made through the
+// public Allow API. Reset intentionally leaves old grants queued: their late
+// completions must consume their old-generation permit before a post-reset
+// completion can be attributed to a new request.
+func (cb *CircuitBreaker) takePublicPermitLocked() (permit, bool) {
+	if len(cb.publicPermits) == 0 {
+		return permit{}, false
+	}
+	p := cb.publicPermits[0]
+	cb.publicPermits[0] = permit{}
+	cb.publicPermits = cb.publicPermits[1:]
+	return p, true
 }
 
 // recordFailure records a failed request. A stale failure from a request

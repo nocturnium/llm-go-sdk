@@ -174,7 +174,10 @@ To stop early from inside the loop (for example, once you have enough output), c
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 
-stream, _ := client.Stream(ctx, messages)
+stream, err := client.Stream(ctx, messages)
+if err != nil {
+	panic(err) // setup error; a nil channel would block forever
+}
 for chunk := range stream {
 	if chunk.Error != nil {
 		break

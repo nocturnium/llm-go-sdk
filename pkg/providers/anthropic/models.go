@@ -282,7 +282,7 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	// Fetch models from API
 	resp, err := c.client.ListModels(ctx, params)
 	if err != nil {
-		return nil, llms.WrapProviderError(llms.ProviderAnthropic, "list models", err)
+		return nil, anthropicapi.WrapError("list models", err)
 	}
 
 	// Convert to unified ModelInfo format

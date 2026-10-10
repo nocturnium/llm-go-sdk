@@ -466,3 +466,21 @@ func TestToolRegistry_ToolsReturnsIndependentCopies(t *testing.T) {
 		t.Errorf("parameters leaked: %s", second[0].Function.Parameters)
 	}
 }
+
+// Register must copy the caller's Tool: the registry keys dispatch on the name
+// captured at registration, so a later mutation of the caller's Function.Name
+// would otherwise advertise a name with no handler behind it.
+func TestToolRegistry_RegisterCopiesCallerTool(t *testing.T) {
+	registry := NewToolRegistry()
+	tool := NewFunctionTool("weather", "Get weather", map[string]any{"type": "object"})
+	registry.Register(tool, func(context.Context, json.RawMessage) (any, error) { return "sunny", nil })
+
+	tool.Function.Name = "mutated"
+	tools := registry.Tools()
+	if len(tools) != 1 || tools[0].Function.Name != "weather" {
+		t.Fatalf("registry tool mutated through caller's pointer: %+v", tools)
+	}
+	if _, ok := registry.Handler("weather"); !ok {
+		t.Error("handler for the registered name is missing")
+	}
+}

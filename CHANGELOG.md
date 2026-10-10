@@ -41,6 +41,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Embedding responses requested with `encoding_format: "base64"` decode again: `llms.Embedding` and the OpenAI-compatible wire type accept the base64 string of little-endian float32s as well as the default float array. `ToolRegistry.Register` copies the caller's `Tool` so a later mutation cannot advertise a name with no handler, and `GenerateTyped[*T]` rejects a `null` response instead of returning a nil value that violates its schema.
+- The public `CircuitBreaker.Allow`/`RecordSuccess`/`RecordFailure` API carries the admission generation, so a request admitted before `Reset` that settles after it can no longer retire a post-`Reset` request's in-flight mark and let the breaker enter half-open while that request is outstanding.
 - An Anthropic thinking block with empty text (recent models return signature-only blocks) is replayed with its `thinking` field, which the API requires; it was dropped as empty and the next turn failed with "thinking: Field required".
 - The Anthropic default model is now `claude-sonnet-5` (was `claude-sonnet-4-20250514`, which the API now answers with 404), and the Gemini default moved off `gemini-2.5-flash` (which Gemini no longer offers to new users; see the Gemini entry under Changed for the current default). Both were found by the llmadk live gate.
 - Gemini tool parameters and response schemas are sent as JSON Schema (`parametersJsonSchema`, `responseJsonSchema`). The OpenAPI-subset fields they went in before answer standard keywords such as `additionalProperties`, present in every schema generated from a Go struct, with a 400.

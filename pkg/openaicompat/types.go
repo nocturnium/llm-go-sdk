@@ -395,6 +395,27 @@ type EmbeddingData struct {
 	Index     int       `json:"index"`
 }
 
+// UnmarshalJSON decodes an embedding that may arrive as a float array or as the
+// base64 string form requested by EncodingFormat "base64".
+func (e *EmbeddingData) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Object    string          `json:"object"`
+		Embedding json.RawMessage `json:"embedding"`
+		Index     int             `json:"index"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	vector, err := llms.DecodeEmbeddingVector(raw.Embedding)
+	if err != nil {
+		return err
+	}
+	e.Object = raw.Object
+	e.Embedding = vector
+	e.Index = raw.Index
+	return nil
+}
+
 // EmbeddingUsage represents token usage for embeddings
 type EmbeddingUsage struct {
 	PromptTokens int `json:"prompt_tokens"`

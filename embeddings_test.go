@@ -2,7 +2,10 @@ package llms
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"math"
 	"testing"
 )
 
@@ -144,6 +147,32 @@ func TestEmbeddingResponse_DecodesDataAndEmbeddingsKeys(t *testing.T) {
 	}
 	if len(fromEmbeddings.Embeddings) != 1 || fromEmbeddings.Embeddings[0].Vector[0] != 3 {
 		t.Errorf("embeddings key: %+v", fromEmbeddings)
+	}
+}
+
+// WithEncodingFormat("base64") makes OpenAI return each vector as a base64
+// string of little-endian float32s. Decoding only the float-array form would
+// leave the vector empty or fail the response for that caller.
+func TestEmbeddingResponse_DecodesBase64Vectors(t *testing.T) {
+	var payload []byte
+	for _, v := range []float32{0.5, -1.25} {
+		var b [4]byte
+		binary.LittleEndian.PutUint32(b[:], math.Float32bits(v))
+		payload = append(payload, b[:]...)
+	}
+	encoded := base64.StdEncoding.EncodeToString(payload)
+
+	var resp EmbeddingResponse
+	body := `{"model":"m","data":[{"index":0,"embedding":"` + encoded + `","object":"embedding"}]}`
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Embeddings) != 1 {
+		t.Fatalf("embeddings = %+v, want one", resp.Embeddings)
+	}
+	vector := resp.Embeddings[0].Vector
+	if len(vector) != 2 || vector[0] != 0.5 || vector[1] != -1.25 {
+		t.Errorf("vector = %v, want [0.5 -1.25]", vector)
 	}
 }
 

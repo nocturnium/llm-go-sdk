@@ -150,6 +150,12 @@ func parseTyped[T any](content string) (T, error) {
 	// "Ada"` has a valid bool before the intended string, and stopping at the
 	// first one would reject a response that contains a recoverable scalar.
 	for _, extracted := range extractScalarJSONCandidates(content) {
+		// The generated schema strips pointers and describes the pointee, so a
+		// null does not satisfy it; the scalar path must not accept one for a
+		// pointer target even though json.Unmarshal leaves the pointer nil.
+		if isJSONNull(extracted) && pointerTarget[T]() {
+			continue
+		}
 		var v T
 		if err := json.Unmarshal([]byte(extracted), &v); err == nil {
 			return v, nil
@@ -157,6 +163,17 @@ func parseTyped[T any](content string) (T, error) {
 	}
 	var zero T
 	return zero, fmt.Errorf("llms: structured output does not match the schema: %w", reason)
+}
+
+// pointerTarget reports whether T is a pointer type, so the caller can reject a
+// null that the schema (which strips pointers) does not permit.
+func pointerTarget[T any]() bool {
+	return reflect.TypeOf((*T)(nil)).Elem().Kind() == reflect.Pointer
+}
+
+// isJSONNull reports whether a candidate is the JSON null literal.
+func isJSONNull(s string) bool {
+	return strings.TrimSpace(s) == "null"
 }
 
 // unmarshalCandidate decodes one JSON candidate into T. json.Unmarshal ignores
@@ -169,9 +186,14 @@ func unmarshalCandidate[T any](data string, out *T, direct bool) error {
 		return err
 	}
 	target := reflect.TypeOf(*out)
-	// A JSON null leaves an interface-typed *out holding a nil interface, so
-	// reflect.TypeOf returns nil. There is no struct to validate in that case.
+	// A JSON null leaves the decoded value nil, so reflect.TypeOf returns nil.
+	// For an interface target (T = any) null is a valid value with no schema to
+	// violate. For a pointer target the generated schema strips the pointer and
+	// describes the pointee, so a null does not satisfy it and must be rejected.
 	if target == nil {
+		if pointerTarget[T]() {
+			return fmt.Errorf("candidate %s is null, but the schema requires a %s", data, reflect.TypeOf((*T)(nil)).Elem())
+		}
 		return nil
 	}
 	for target.Kind() == reflect.Pointer {

@@ -155,6 +155,22 @@ func TestParseTyped_InterfaceTargetNull(t *testing.T) {
 	}
 }
 
+// The generated schema strips pointers and describes the pointee, so a null
+// response does not satisfy it. GenerateTyped[*T] must reject null rather than
+// returning a nil value that violates the advertised schema.
+func TestParseTyped_PointerTargetRejectsNull(t *testing.T) {
+	if _, err := parseTyped[*structuredTestResult](`null`); err == nil {
+		t.Fatal("parseTyped[*T](null) succeeded, want a schema mismatch")
+	}
+	got, err := parseTyped[*structuredTestResult](`{"name":"Ada"}`)
+	if err != nil {
+		t.Fatalf("parseTyped[*T] object failed: %v", err)
+	}
+	if got == nil || got.Name != "Ada" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 // json.Unmarshal matches struct fields case-insensitively, so a response using
 // "Name" for a field tagged json:"name" decodes successfully. The struct
 // candidate check must accept it too rather than forcing an unnecessary repair.

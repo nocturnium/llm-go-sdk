@@ -195,3 +195,41 @@ func TestCircuitBreaker_ZeroValueIsUsable(t *testing.T) {
 	cb.RecordFailure()
 	cb.Reset()
 }
+
+// TestCircuitBreaker_PublicCompletionCannotRetirePostResetRequest pins that a
+// request admitted through the public Allow API before Reset keeps its own
+// generation. If RecordSuccess synthesized the current generation, the stale
+// completion would retire a post-Reset request's in-flight mark and let the
+// breaker enter half-open while that request was still outstanding.
+func TestCircuitBreaker_PublicCompletionCannotRetirePostResetRequest(t *testing.T) {
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithResetTimeout(time.Millisecond),
+		WithHalfOpenTimeout(time.Minute),
+		WithHalfOpenMax(1),
+	)
+
+	// A request admitted through Allow before Reset, still outstanding.
+	if !cb.Allow() {
+		t.Fatal("pre-reset Allow refused")
+	}
+	cb.Reset()
+
+	// A post-reset request stays outstanding. It must keep its mark when the
+	// pre-reset request's completion arrives below.
+	if !cb.Allow() {
+		t.Fatal("post-reset Allow refused")
+	}
+
+	// The pre-reset request fails, which opens the breaker. Its completion
+	// carries the pre-reset generation and must not retire the post-reset mark.
+	cb.RecordFailure()
+	if cb.State() != CircuitOpen {
+		t.Fatalf("state = %v, want open", cb.State())
+	}
+
+	time.Sleep(5 * time.Millisecond)
+	if cb.Allow() {
+		t.Fatal("half-open probe admitted while the post-reset request was outstanding")
+	}
+}

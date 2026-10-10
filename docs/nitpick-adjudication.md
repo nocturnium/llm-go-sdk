@@ -377,3 +377,24 @@ mutex, removing the latent handler/test-goroutine race.
 | `llmadk/model.go` blocks on cancellation because `DrainStream` is synchronous | `DrainStream` starts its own goroutine, so `stopped` returns immediately; the adapter does not wait on the provider's channel. |
 | `scripts/release-decide.sh` passes a revision range as the `--context` output path | `--context` is a boolean flag; the range is a positional argument. `scripts/release-decide_test.sh` passes against git-cliff 2.13.1. |
 | Featherless `WithSpeechUsageHandler` is not wired | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
+
+Round 48 (2026-10-10) reported 12 errors. Fixed: the streaming guide no longer
+discards the `Stream` setup error before ranging over the channel; the
+embeddings example bounds the printed vector and guards an empty response;
+`pkg/providers/anthropic` model listing wraps API errors with
+`anthropicapi.WrapError` for consistent provider mapping; `parseTyped` and
+`unmarshalCandidate` reject `null` for a pointer target the generated schema
+describes as its non-null pointee; `ToolRegistry` copies the caller's `Tool` and
+`Function` on `Register`, so a later mutation cannot desynchronize the advertised
+name from its handler; base64 embedding responses now decode in both
+`llms.Embedding` and the OpenAI-compatible wire type; and the public
+`CircuitBreaker.Allow`/`RecordSuccess`/`RecordFailure` API now carries the
+admission generation, so a pre-`Reset` completion cannot retire a post-`Reset`
+request's in-flight mark.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/model.go` blocks because `DrainStream` is synchronous | `DrainStream` starts its own goroutine (`streaming.go:212`), so `stopped` returns without waiting on the provider channel. |
+| Featherless `WithSpeechUsageHandler` has no effect | `speech.go` invokes it on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` covers it. |
+| TogetherAI image request has no `response_format`/`output_format` JSON tags | The anonymous decode struct at `image.go:67` already carries both tags; `json.Unmarshal` into it reads the marshaled body and the image tests pass. |
+| `llmadk/envelope.go:118` exposes hidden thought text through `PartMetadata` | Documented design: with `IncludeThoughts=false` Anthropic requires the signed text on replay, so `c` holds it and `docs/design/llmadk.md:303` records the base64 envelope as reachable in session storage and the event stream until `WithEnvelopeKey` (AEAD sealing) lands in v0.2. |

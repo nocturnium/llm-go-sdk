@@ -280,6 +280,10 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 	if tool.Function == nil || handler == nil {
 		return
 	}
+	// Copy the caller's Tool and Function before storing: the registry keys
+	// dispatch on the name captured here, so a later mutation of the caller's
+	// tool.Function would otherwise advertise a name with no handler.
+	tool = cloneTool(tool)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -296,6 +300,18 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 	}
 	r.handlers[name] = handler
 	r.tools = append(r.tools, tool)
+}
+
+// cloneTool returns a copy of tool whose Function and Parameters are not shared
+// with the caller.
+func cloneTool(tool Tool) Tool {
+	if tool.Function == nil {
+		return tool
+	}
+	fn := *tool.Function
+	fn.Parameters = append(json.RawMessage(nil), fn.Parameters...)
+	tool.Function = &fn
+	return tool
 }
 
 // RegisterFunc registers a tool with a typed handler. It is a package-level
@@ -333,12 +349,7 @@ func (r *ToolRegistry) Tools() []Tool {
 	defer r.mu.RUnlock()
 	result := make([]Tool, len(r.tools))
 	for i, tool := range r.tools {
-		if tool.Function != nil {
-			fn := *tool.Function
-			fn.Parameters = append(json.RawMessage(nil), fn.Parameters...)
-			tool.Function = &fn
-		}
-		result[i] = tool
+		result[i] = cloneTool(tool)
 	}
 	return result
 }
