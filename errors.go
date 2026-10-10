@@ -361,6 +361,13 @@ func sanitizeErrorURL(rawURL string) string {
 		return scheme + candidate
 	}
 	u.User = nil
+	// Malformed userinfo containing a reserved '?' or '#' before the '@' is
+	// parsed into Host rather than User (url treats the text before the last
+	// reserved character as the host). Clear the credential material before the
+	// last '@' in the authority as well as in Path/Opaque.
+	if at := strings.LastIndex(u.Host, "@"); at >= 0 {
+		u.Host = u.Host[at+1:]
+	}
 	// A reserved character in a password (for example a slash) makes
 	// url.Parse treat the credential as part of the path while leaving the
 	// trailing "@host" in Host. If the path contains an '@', drop everything

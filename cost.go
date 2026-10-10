@@ -519,10 +519,15 @@ func ModelTokenPricing(provider Provider, model string) (*Pricing, bool) {
 	if !ok {
 		return nil, false
 	}
-	return &Pricing{
-		Input:  pricing.Input,
-		Output: pricing.Output,
-	}, true
+	// Copy the whole card, not just Input/Output: cache rates and long-context
+	// tiers are part of the published price and dropping them would make this
+	// helper's value disagree with EstimateCost. Copy the tier slice so the
+	// returned card cannot alias the global table.
+	out := pricing
+	if len(pricing.Tiers) > 0 {
+		out.Tiers = append([]PricingTier(nil), pricing.Tiers...)
+	}
+	return &out, true
 }
 
 // ModelUsage tracks usage for a specific model.

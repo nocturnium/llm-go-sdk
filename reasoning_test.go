@@ -231,6 +231,27 @@ func TestReasoningContentClone_DistinctEmptySliceTypes(t *testing.T) {
 	}
 }
 
+// TestReasoningContentClone_DistinctMapTypes pins the same memo-key rule for
+// maps: two named map types can share one underlying map, and keying only on
+// pointer and kind would clone one as the other's static type.
+func TestReasoningContentClone_DistinctMapTypes(t *testing.T) {
+	type intMap map[string]int
+	type stringMap map[string]string
+	sharedInt := intMap{"a": 1}
+	original := &ReasoningContent{Metadata: map[string]any{
+		"ints":    sharedInt,
+		"strings": stringMap(nil),
+	}}
+
+	clone := original.Clone()
+	if _, ok := clone.Metadata["ints"].(intMap); !ok {
+		t.Fatalf("ints cloned as %T, want intMap", clone.Metadata["ints"])
+	}
+	if _, ok := clone.Metadata["strings"].(stringMap); !ok {
+		t.Fatalf("strings cloned as %T, want stringMap", clone.Metadata["strings"])
+	}
+}
+
 // TestReasoningContentClone_SelfReferentialMetadata pins that a self-referential
 // metadata value clones to a self-referential copy rather than recursing until
 // the stack overflows.

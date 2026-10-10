@@ -239,6 +239,31 @@ func TestListModels_PreservesPagination(t *testing.T) {
 	}
 }
 
+// ModelInfo must search later pages rather than stopping at the first. A model
+// on page two would otherwise be reported as not found even though the server
+// returned HasMore=true.
+func TestModelInfo_SearchesLaterPages(t *testing.T) {
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("after") {
+		case "":
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-4o","object":"model"}],"has_more":true,"last_id":"page-2"}`))
+		case "page-2":
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-5.4","object":"model"}],"has_more":false}`))
+		default:
+			t.Errorf("unexpected after=%q", r.URL.Query().Get("after"))
+		}
+	})
+
+	info, err := client.ModelInfo(context.Background(), "gpt-5.4")
+	if err != nil {
+		t.Fatalf("ModelInfo failed: %v", err)
+	}
+	if info == nil || info.ID != "gpt-5.4" {
+		t.Fatalf("ModelInfo = %+v, want gpt-5.4 from the second page", info)
+	}
+}
+
 func TestListModels_WithTypeFilter(t *testing.T) {
 	client := setupMockServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

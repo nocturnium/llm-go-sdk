@@ -15,6 +15,9 @@ type ImageOptions struct {
 	AspectRatio string
 	// N configures the request's N value.
 	N int
+	// NSet records whether N was explicitly configured. N is an int, so
+	// WithImageCount(0) is distinguishable from "unset" only by tracking it.
+	NSet bool
 	// Seed configures the request's Seed value.
 	Seed *int64
 	// NegativePrompt configures the request's NegativePrompt value.
@@ -56,7 +59,9 @@ func WithImageAspectRatio(value string) ImageOption {
 }
 
 // WithImageCount sets N for the request.
-func WithImageCount(value int) ImageOption { return func(o *ImageOptions) { o.N = value } }
+func WithImageCount(value int) ImageOption {
+	return func(o *ImageOptions) { o.N = value; o.NSet = true }
+}
 
 // WithImageSeed sets Seed for the request.
 func WithImageSeed(value int64) ImageOption { return func(o *ImageOptions) { o.Seed = &value } }

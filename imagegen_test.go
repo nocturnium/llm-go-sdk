@@ -14,7 +14,7 @@ func TestApplyImageOptions(t *testing.T) {
 		t.Fatalf("defaults: %+v", got)
 	}
 	got := ApplyImageOptions(WithImageModel("Model"), WithImageSize("Size"), WithImageAspectRatio("AspectRatio"), WithImageCount(3), WithImageSeed(int64(7)), WithImageNegativePrompt("NegativePrompt"), WithImageQuality("Quality"), WithImageFormat("OutputFormat"), WithImageSafetyTolerance(3), WithImageExtra(map[string]any{"custom": true}))
-	want := &ImageOptions{Model: "Model", Size: "Size", AspectRatio: "AspectRatio", N: 3, Seed: testImageSeedPointer(), NegativePrompt: "NegativePrompt", Quality: "Quality", OutputFormat: "OutputFormat", SafetyTolerance: testImageSafetyTolerancePointer(), Extra: map[string]any{"custom": true}}
+	want := &ImageOptions{Model: "Model", Size: "Size", AspectRatio: "AspectRatio", N: 3, NSet: true, Seed: testImageSeedPointer(), NegativePrompt: "NegativePrompt", Quality: "Quality", OutputFormat: "OutputFormat", SafetyTolerance: testImageSafetyTolerancePointer(), Extra: map[string]any{"custom": true}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}

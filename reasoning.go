@@ -179,7 +179,10 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 		if v.IsNil() {
 			return v
 		}
-		key := cloneKey{ptr: v.Pointer(), kind: v.Kind()}
+		// The map type belongs in the key: two named map types can share the same
+		// underlying map, and reusing a clone of the wrong static type would
+		// either mis-assign or panic when the value is placed in a typed field.
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), type_: v.Type()}
 		if cp, ok := seen[key]; ok {
 			return cp
 		}

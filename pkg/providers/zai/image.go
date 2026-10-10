@@ -23,6 +23,11 @@ func (c *Client) GenerateImage(ctx context.Context, prompt string, opts ...llms.
 	if o.N < 0 || o.N > 1 || (o.Quality != "" && o.Quality != "hd" && o.Quality != "standard") {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
 	}
+	// An explicit WithImageCount(0) is a request for zero images, not "unset".
+	// Reject it rather than returning a one-image success for a different count.
+	if o.NSet && o.N == 0 {
+		return nil, c.mediaError(llms.ErrInvalidParameters)
+	}
 	model := o.Model
 	if model == "" {
 		model = providerConfig.DefaultImageModel

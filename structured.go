@@ -151,7 +151,7 @@ func parseTyped[T any](content string) (T, error) {
 // repairPrompt is the correction instruction sent to the model on a repair turn.
 func repairPrompt(parseErr error) string {
 	return "Your previous reply could not be parsed as JSON matching the required schema (" +
-		parseErr.Error() + "). Reply again with ONLY the corrected JSON object, no prose, " +
+		parseErr.Error() + "). Reply again with ONLY the corrected JSON value, no prose, " +
 		"no markdown code fences, no explanation."
 }
 

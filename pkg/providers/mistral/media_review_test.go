@@ -29,7 +29,7 @@ func TestTranscribe_AudioUsageAndRepeatedContext(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer r.MultipartForm.RemoveAll()
-		if !reflect.DeepEqual(r.MultipartForm.Value["context_bias"], []string{"one", "two"}) || r.FormValue("context_bias[]") != "" {
+		if !reflect.DeepEqual(r.MultipartForm.Value["context_bias[]"], []string{"one", "two"}) || r.FormValue("context_bias") != "" {
 			t.Error(r.MultipartForm)
 		}
 		fmt.Fprint(w, `{"text":"hi","usage":{"prompt_audio_seconds":90}}`)

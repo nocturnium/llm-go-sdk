@@ -54,7 +54,7 @@ func TestTranscribe_NativeFields(t *testing.T) {
 			return
 		}
 		defer r.MultipartForm.RemoveAll()
-		for k, v := range map[string]string{"file_url": "https://example.com/audio.wav", "diarize": "true", "timestamp_granularities": "word", "context_bias": "Codex", "language": "en"} {
+		for k, v := range map[string]string{"file_url": "https://example.com/audio.wav", "diarize": "true", "timestamp_granularities": "word", "context_bias[]": "Codex", "language": "en"} {
 			if r.FormValue(k) != v {
 				t.Errorf("%s: %v", k, r.MultipartForm.Value)
 			}

@@ -382,16 +382,31 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 // Returns nil, llms.ErrModelNotFound if the model is not found.
 func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo, error) {
 	// OpenAI doesn't have a dedicated single-model endpoint that returns rich data,
-	// so we fetch all models and filter
-	result, err := c.ListModels(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, m := range result.Models {
-		if m.ID == modelID {
-			return &m, nil
+	// so page through the models list until the ID is found or the server says
+	// there is no next page. A single ListModels call would report not-found for
+	// a model on a later page even though the server returned HasMore=true.
+	cursor := ""
+	for {
+		opts := []llms.ListModelsOption{}
+		if cursor != "" {
+			opts = append(opts, llms.WithModelCursor(cursor))
 		}
+		result, err := c.ListModels(ctx, opts...)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range result.Models {
+			if m.ID == modelID {
+				return &m, nil
+			}
+		}
+		if !result.HasMore || result.NextCursor == "" {
+			break
+		}
+		if result.NextCursor == cursor {
+			break
+		}
+		cursor = result.NextCursor
 	}
 
 	return nil, llms.ErrModelNotFound

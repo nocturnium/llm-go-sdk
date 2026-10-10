@@ -131,6 +131,29 @@ func TestModelTokenPricing(t *testing.T) {
 	}
 }
 
+// TestModelTokenPricing_RetainsCacheAndTiers pins that the helper returns the
+// whole published card. Returning only Input/Output would silently drop the
+// cache rates and long-context tier, making ModelTokenPricing disagree with
+// EstimateCost for the same model and usage.
+func TestModelTokenPricing_RetainsCacheAndTiers(t *testing.T) {
+	pricing, ok := ModelTokenPricing(ProviderOpenAI, "gpt-5.6-sol")
+	if !ok {
+		t.Fatal("expected pricing for openai:gpt-5.6-sol")
+	}
+	if pricing.CacheRead == 0 || pricing.CacheWrite == 0 {
+		t.Errorf("cache rates dropped: %+v", pricing)
+	}
+	if len(pricing.Tiers) == 0 {
+		t.Fatalf("long-context tiers dropped: %+v", pricing)
+	}
+	// The returned tier slice must not alias the global table.
+	pricing.Tiers[0].Input = 999
+	second, _ := ModelTokenPricing(ProviderOpenAI, "gpt-5.6-sol")
+	if second.Tiers[0].Input == 999 {
+		t.Error("returned tier aliases the global pricing table")
+	}
+}
+
 func TestNewCostTracker_Defaults(t *testing.T) {
 	tracker := NewCostTracker()
 

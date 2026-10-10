@@ -37,6 +37,28 @@ func TestClient_OnProgress(t *testing.T) {
 	}
 }
 
+// MCP progress tokens may be strings or numbers. A numeric token must decode
+// and correlate to the request that opted in, not fail with a type error.
+func TestClient_OnProgress_NumericToken(t *testing.T) {
+	m := newMockTransport()
+	c := mustClient(t, m)
+	defer func() { _ = c.Close() }()
+
+	var got ProgressNotification
+	var wg sync.WaitGroup
+	wg.Add(1)
+	c.OnProgress(func(pn ProgressNotification) {
+		got = pn
+		wg.Done()
+	})
+
+	m.emit([]byte(`{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":42,"progress":1,"total":3}}`))
+	wg.Wait()
+	if key := progressTokenKey(got.ProgressToken); key != "42" {
+		t.Errorf("numeric progress token key = %q, want 42", key)
+	}
+}
+
 // A client-level OnLog handler must receive a log notification with its level and
 // structured data preserved.
 func TestClient_OnLog(t *testing.T) {

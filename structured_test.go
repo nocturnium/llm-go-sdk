@@ -264,6 +264,27 @@ func TestSchemaFrom_TextOnlyUnmarshalerIsString(t *testing.T) {
 	}
 }
 
+// TestSchemaFrom_PromotedMarshalerIsString pins that a struct embedding a
+// scalar marshaler (time.Time) is described as its scalar wire form, not as an
+// object. encoding/json promotes the embedded MarshalJSON, so an object schema
+// would not match what the type actually emits.
+func TestSchemaFrom_PromotedMarshalerIsString(t *testing.T) {
+	type result struct {
+		When structuredEmbeddedTime `json:"when"`
+	}
+	schema, err := SchemaFrom[result]()
+	if err != nil {
+		t.Fatalf("SchemaFrom returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(schema, &decoded); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+	assertSchema(t, schemaProperties(t, decoded)["when"], map[string]any{"type": "string"})
+}
+
+type structuredEmbeddedTime struct{ time.Time }
+
 // TestSchemaFrom_JSONNumberIsNumeric pins that json.Number is described as a
 // JSON number. It implements both marshaler interfaces, but its wire form is a
 // number, so a string schema makes the model return a quoted value that

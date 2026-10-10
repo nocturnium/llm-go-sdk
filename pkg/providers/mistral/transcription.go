@@ -54,10 +54,13 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		fields["diarize"] = "true"
 	}
 	if o.WordTimestamps {
-		files = append(files, httpclient.MultipartFile{Field: "timestamp_granularities", Data: []byte("word")})
+		fields["timestamp_granularities"] = "word"
 	}
 	for _, term := range o.Keyterms {
-		files = append(files, httpclient.MultipartFile{Field: "context_bias", Data: []byte(term)})
+		// context_bias is a repeated scalar form field. A file part would be
+		// treated as an upload, so emit each keyterm as a regular (filename-less)
+		// repeated field under the key Mistral documents.
+		files = append(files, httpclient.MultipartFile{Field: "context_bias[]", Data: []byte(term)})
 	}
 
 	extraFiles, err := openaicompat.ApplyMultipartExtra(fields, o.Extra, "model", "file", "file_url", "language", "prompt", "diarize")

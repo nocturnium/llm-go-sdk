@@ -117,9 +117,10 @@ func newModelsServer(t *testing.T) *httptest.Server {
 					"owned_by": "Meta",
 				},
 				{
-					"id":      "whisper-large-v3",
-					"object":  "model",
-					"created": int64(1700000001),
+					"id":       "whisper-large-v3",
+					"object":   "model",
+					"created":  int64(1700000001),
+					"owned_by": "OpenAI",
 				},
 				{
 					"id":      "llama-3.2-90b-vision-preview",
