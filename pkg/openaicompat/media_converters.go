@@ -310,6 +310,11 @@ func ApplyMultipartExtra(fields map[string]string, extra map[string]any, reserve
 		}
 		switch typed := value.(type) {
 		case string, bool, int, float64:
+			// A scalar becomes a form field. Writing to a nil map panics, so a
+			// caller passing nil must supply at least an empty map for those.
+			if fields == nil {
+				return nil, fmt.Errorf("multipart extra %q requires a non-nil fields map: %w", key, llms.ErrInvalidParameters)
+			}
 			fields[key] = fmt.Sprint(typed)
 		case []string:
 			for _, item := range typed {

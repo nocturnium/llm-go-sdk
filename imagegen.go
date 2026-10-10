@@ -36,6 +36,9 @@ type ImageOption func(*ImageOptions)
 func ApplyImageOptions(options ...ImageOption) *ImageOptions {
 	opts := &ImageOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts

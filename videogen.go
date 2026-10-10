@@ -43,6 +43,9 @@ type VideoOption func(*VideoOptions)
 func ApplyVideoOptions(options ...VideoOption) *VideoOptions {
 	opts := &VideoOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts

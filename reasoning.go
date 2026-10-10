@@ -122,10 +122,20 @@ func cloneMetadataValue(v any) any {
 	if v == nil {
 		return nil
 	}
-	return deepCopyValue(reflect.ValueOf(v), make(map[uintptr]reflect.Value)).Interface()
+	return deepCopyValue(reflect.ValueOf(v), make(map[cloneKey]reflect.Value)).Interface()
 }
 
-func deepCopyValue(v reflect.Value, seen map[uintptr]reflect.Value) reflect.Value {
+// cloneKey identifies a reference value for the deep-copy memo. The length is
+// part of the key so two slices that share a starting address but differ in
+// length (overlapping subslices) are treated as distinct values rather than one
+// returning the other's clone.
+type cloneKey struct {
+	ptr  uintptr
+	len  int
+	kind reflect.Kind
+}
+
+func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Value {
 	switch v.Kind() {
 	case reflect.Interface:
 		if v.IsNil() {
@@ -136,22 +146,24 @@ func deepCopyValue(v reflect.Value, seen map[uintptr]reflect.Value) reflect.Valu
 		if v.IsNil() {
 			return v
 		}
-		if cp, ok := seen[v.Pointer()]; ok {
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind()}
+		if cp, ok := seen[key]; ok {
 			return cp
 		}
 		cp := reflect.New(v.Type().Elem())
-		seen[v.Pointer()] = cp
+		seen[key] = cp
 		cp.Elem().Set(deepCopyValue(v.Elem(), seen))
 		return cp
 	case reflect.Slice:
 		if v.IsNil() {
 			return v
 		}
-		if cp, ok := seen[v.Pointer()]; ok {
+		key := cloneKey{ptr: v.Pointer(), len: v.Len(), kind: v.Kind()}
+		if cp, ok := seen[key]; ok {
 			return cp
 		}
 		cp := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		seen[v.Pointer()] = cp
+		seen[key] = cp
 		for i := 0; i < v.Len(); i++ {
 			cp.Index(i).Set(deepCopyValue(v.Index(i), seen))
 		}
@@ -166,11 +178,12 @@ func deepCopyValue(v reflect.Value, seen map[uintptr]reflect.Value) reflect.Valu
 		if v.IsNil() {
 			return v
 		}
-		if cp, ok := seen[v.Pointer()]; ok {
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind()}
+		if cp, ok := seen[key]; ok {
 			return cp
 		}
 		cp := reflect.MakeMapWithSize(v.Type(), v.Len())
-		seen[v.Pointer()] = cp
+		seen[key] = cp
 		iter := v.MapRange()
 		for iter.Next() {
 			cp.SetMapIndex(deepCopyValue(iter.Key(), seen), deepCopyValue(iter.Value(), seen))

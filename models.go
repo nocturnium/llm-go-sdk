@@ -176,6 +176,9 @@ func WithModelCursor(cursor string) ListModelsOption {
 func ApplyListModelsOptions(opts ...ListModelsOption) *ListModelsOptions {
 	options := &ListModelsOptions{}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

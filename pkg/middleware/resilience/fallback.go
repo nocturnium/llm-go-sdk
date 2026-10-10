@@ -300,8 +300,13 @@ func (fc *FallbackChain) Stream(ctx context.Context, messages []llms.Message, op
 		}
 		switch {
 		case !ok:
-			// Stream closed without any chunk; treat as an (empty) success.
+			// Stream closed without any chunk; treat as an (empty) success, and
+			// report it the same way a first-chunk success is reported so the
+			// health/success callback fires consistently.
 			fc.markHealthyID(cand.id)
+			if fc.onSuccess != nil {
+				fc.onSuccess(cand.pos, client)
+			}
 			return forwardStream(ctx, opts, llms.StreamChunk{Done: true}, src, nil), nil
 		case first.Error != nil:
 			lastErr = first.Error

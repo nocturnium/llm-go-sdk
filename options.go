@@ -375,6 +375,9 @@ func WithWebSearchEnabled() CallOption {
 func ApplyOptions(opts ...CallOption) *CallOptions {
 	options := DefaultCallOptions()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

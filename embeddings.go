@@ -136,6 +136,9 @@ type EmbedOption func(*EmbedOptions)
 func ApplyEmbedOptions(options ...EmbedOption) *EmbedOptions {
 	opts := &EmbedOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts
@@ -277,6 +280,9 @@ type RerankOption func(*RerankOptions)
 func ApplyRerankOptions(options ...RerankOption) *RerankOptions {
 	opts := &RerankOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts

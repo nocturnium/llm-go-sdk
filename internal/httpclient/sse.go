@@ -37,6 +37,10 @@ type SSEReader struct {
 	br     *bufio.Reader
 	reader io.ReadCloser
 	closed atomic.Bool // Tracks if Close() has been called to prevent double-close
+	// pendingLF is set after a bare CR terminator: the next byte is consumed and
+	// discarded only if it is a LF, so a CRLF pair that arrives split across two
+	// reads is still one terminator without ever blocking on lookahead.
+	pendingLF bool
 }
 
 // NewSSEReader creates a new SSE reader from a response body
@@ -163,6 +167,17 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 // reader that only splits on LF merges a CR-only stream into one line and
 // leaves the carriage returns in the data.
 func (r *SSEReader) readLine() (string, error) {
+	// A CR from the previous line may have been followed by a LF that had not
+	// arrived yet. Consume it only if it is already buffered; a blocking read
+	// here would stall a CR-only stream.
+	if r.pendingLF {
+		r.pendingLF = false
+		if r.br.Buffered() > 0 {
+			if next, peekErr := r.br.Peek(1); peekErr == nil && len(next) == 1 && next[0] == '\n' {
+				_, _ = r.br.ReadByte()
+			}
+		}
+	}
 	var line []byte
 	for {
 		b, err := r.br.ReadByte()
@@ -179,10 +194,9 @@ func (r *SSEReader) readLine() (string, error) {
 			return string(line) + "\n", nil
 		}
 		if b == '\r' {
-			// A CRLF pair is one terminator: consume the paired LF if present.
-			if next, peekErr := r.br.Peek(1); peekErr == nil && len(next) == 1 && next[0] == '\n' {
-				_, _ = r.br.ReadByte()
-			}
+			// Defer the LF: it may not have arrived yet, and peeking would block a
+			// CR-only stream. The next readLine consumes it if present.
+			r.pendingLF = true
 			return string(line) + "\n", nil
 		}
 		line = append(line, b)

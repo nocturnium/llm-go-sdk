@@ -104,6 +104,9 @@ func ApplyBatchOptions(opts ...BatchOption) *BatchOptions {
 		ContinueOnError: true,
 	}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

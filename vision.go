@@ -305,8 +305,13 @@ func ValidateImageContent(img *ImageContent) error {
 		// Check approximate decoded size before decoding to prevent OOM.
 		// Base64 encoding increases size by ~33%, so decoded size ≈ encoded size * 3/4.
 		encoded := strings.NewReplacer("\r", "", "\n", "").Replace(img.Data)
+		// DecodedLen overestimates a padded payload whose decoded length is not
+		// a multiple of three, which would reject an image of exactly
+		// MaxImageSize bytes. Add one to the limit so a valid maximum-size image
+		// is not refused; the streaming decode below still enforces the real
+		// bound on what is actually read.
 		decodedSize := base64.StdEncoding.DecodedLen(len(encoded))
-		if decodedSize > MaxImageSize {
+		if decodedSize > MaxImageSize+1 {
 			return fmt.Errorf("image data appears to exceed maximum allowed size of %d bytes (estimated %d bytes)", MaxImageSize, decodedSize)
 		}
 
