@@ -350,7 +350,7 @@ func (c *Client) GetModel(ctx context.Context, modelID string) (*ModelInfo, erro
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("get model", err)
 	}
 
 	return &response, nil

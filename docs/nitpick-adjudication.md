@@ -448,3 +448,16 @@ cancellation instead of risking a hang.
 | `errors.go:373` leaks credentials when a password contains `?` or `#` | `url.Parse` rejects those forms with `invalid port ":se"`, so `sanitizeErrorURL` takes the hand-cut path; the probe shows every form rendered as `https://host/v1`. |
 | `pkg/observability/metrics_test.go:151` expects an unset mock response | `MetricsMiddleware.Call` delegates to `GenerateContent` (the LLM interface has no `Call`), so the fixture's `genResp` is the response the middleware reads; `TestMetricsMiddleware_Call_Success` passes. |
 | Featherless `WithSpeechUsageHandler` is not connected | `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. |
+
+Round 52 (2026-10-10) reported 7 errors. Fixed: `GenerateTyped` validates
+required fields through nested slices and accepts `null` for a `json.RawMessage`
+target; `anthropicapi.Client.GetModel` normalizes its error (the provider no
+longer double-wraps); the Langfuse span takes the maximum streamed tool-call
+count instead of the last chunk's; a half-open probe admitted before `Reset` is
+dropped rather than reopening the fresh breaker; and the MCP stdio writer bounds
+a single stdin write so a child that stops draining its pipe cannot park the
+writer goroutine forever.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| Featherless `WithSpeechUsageHandler` is never wired into the client | `speech.go` reads `c.options.SpeechUsageHandler` on the terminal `speech.audio.done` event; `TestStreamSpeech_ReportedCharacters` passes. The reviewer saw the options file alone. |

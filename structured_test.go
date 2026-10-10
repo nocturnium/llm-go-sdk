@@ -267,6 +267,17 @@ func TestParseTyped_MissingRequiredFieldsRejected(t *testing.T) {
 	if _, err := parseTyped[[]structuredTestResult](`[{"name":"Ada"}]`); err == nil {
 		t.Error("partial object in slice accepted, want a missing-field error")
 	}
+	if _, err := parseTyped[[][]structuredTestResult](`[[{"name":"Ada"}]]`); err == nil {
+		t.Error("partial object in nested slice accepted, want a missing-field error")
+	}
+}
+
+// json.RawMessage emits an unconstrained schema, so a null is valid for it even
+// though it is not an interface or map.
+func TestParseTyped_RawMessageAcceptsNull(t *testing.T) {
+	if _, err := parseTyped[json.RawMessage]("null"); err != nil {
+		t.Errorf("parseTyped[json.RawMessage](null) failed: %v", err)
+	}
 }
 
 type structuredPromotedDoc struct {

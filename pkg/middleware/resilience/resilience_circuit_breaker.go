@@ -309,6 +309,9 @@ func (cb *CircuitBreaker) recordSuccess(p permit) {
 
 // recordSuccessLocked implements recordSuccess; the caller holds cb.mu.
 func (cb *CircuitBreaker) recordSuccessLocked(p permit) {
+	if cb.stalePermitLocked(p) {
+		return
+	}
 	switch cb.state {
 	case CircuitClosed:
 		cb.failures = 0 // Reset failure count on success
@@ -384,6 +387,9 @@ func (cb *CircuitBreaker) recordFailure(p permit) {
 
 // recordFailureLocked implements recordFailure; the caller holds cb.mu.
 func (cb *CircuitBreaker) recordFailureLocked(p permit) {
+	if cb.stalePermitLocked(p) {
+		return
+	}
 	cb.lastFailureTime = time.Now()
 
 	switch cb.state {
@@ -413,6 +419,16 @@ func (cb *CircuitBreaker) recordFailureLocked(p permit) {
 		// mark, so the next real probe is not mistaken for it.
 		cb.retireInflightClosedLocked(p.generation)
 	}
+}
+
+// stalePermitLocked reports whether p is a half-open probe admitted before a
+// Reset. Reset drops the half-open window (and the closed-state marks) by
+// advancing the generation, so a probe from the old generation must not close,
+// reopen, or consume a permit in the fresh one. A stale closed-state completion
+// is still provider-health evidence, which recordFailure keeps. The caller
+// holds cb.mu.
+func (cb *CircuitBreaker) stalePermitLocked(p permit) bool {
+	return p.halfOpen && p.generation != cb.generation
 }
 
 // releasePermit abandons an allowed request without treating it as provider

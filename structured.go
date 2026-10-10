@@ -181,6 +181,10 @@ func schemaPermitsNull(typ reflect.Type) bool {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
+	// json.RawMessage emits an unconstrained schema, so a null is valid.
+	if typ == reflect.TypeOf(json.RawMessage{}) {
+		return true
+	}
 	switch typ.Kind() {
 	case reflect.Interface, reflect.Map, reflect.Chan, reflect.Func, reflect.UnsafePointer:
 		return true
@@ -316,19 +320,15 @@ func validateFieldValue(value json.RawMessage, typ reflect.Type) error {
 	case reflect.Struct:
 		return validateObjectRequiredFields(string(value), typ)
 	case reflect.Slice, reflect.Array:
+		// Recurse per element so a nested slice ([][]Person) is validated all the
+		// way down, not just one level.
 		elem := typ.Elem()
-		for elem.Kind() == reflect.Pointer {
-			elem = elem.Elem()
-		}
-		if elem.Kind() != reflect.Struct {
-			return nil
-		}
 		var items []json.RawMessage
 		if err := json.Unmarshal(value, &items); err != nil {
 			return nil
 		}
 		for _, item := range items {
-			if err := validateObjectRequiredFields(string(item), elem); err != nil {
+			if err := validateFieldValue(item, elem); err != nil {
 				return err
 			}
 		}

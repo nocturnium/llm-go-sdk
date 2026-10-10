@@ -24,6 +24,13 @@ const stdioShutdownGrace = 2 * time.Second
 // writeQueueDepth bounds the frames waiting on the writer goroutine.
 const writeQueueDepth = 64
 
+// stdioWriteTimeout bounds a single stdin write. A child that stops draining its
+// stdin (a wedged server, or a grandchild holding the pipe) would otherwise park
+// the writer goroutine forever, and every caller would wait out its own context
+// with no write ever completing. The bound only applies when the pipe exposes a
+// write deadline (a real subprocess does).
+const stdioWriteTimeout = 30 * time.Second
+
 // errTransportClosed is returned when a request is made on a closed transport or
 // the server's stdout closed while a request was in flight.
 var errTransportClosed = errors.New("mcp: transport closed")
@@ -461,7 +468,7 @@ func (t *stdioTransport) serve(req *writeRequest) error {
 			return err
 		}
 	}
-	return t.writeDirect(req.payload)
+	return t.writeDirect(req.ctx, req.payload)
 }
 
 // write queues a frame and waits for the writer goroutine, bounded by ctx.
@@ -500,7 +507,17 @@ func (t *stdioTransport) write(ctx context.Context, payload []byte) error {
 	}
 }
 
-func (t *stdioTransport) writeDirect(payload []byte) error {
+func (t *stdioTransport) writeDirect(ctx context.Context, payload []byte) error {
+	if d, ok := t.stdin.(writeDeadliner); ok {
+		deadline := time.Now().Add(stdioWriteTimeout)
+		if ctx != nil {
+			if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+				deadline = dl
+			}
+		}
+		_ = d.SetWriteDeadline(deadline)
+		defer func() { _ = d.SetWriteDeadline(time.Time{}) }()
+	}
 	if _, err := t.stdin.Write(payload); err != nil {
 		return fmt.Errorf("mcp: write request: %w", err)
 	}
@@ -508,6 +525,13 @@ func (t *stdioTransport) writeDirect(payload []byte) error {
 		return fmt.Errorf("mcp: write request: %w", err)
 	}
 	return nil
+}
+
+// writeDeadliner is implemented by *os.File and net.Conn. Bounding the write
+// requires one of those; an arbitrary io.WriteCloser falls back to the caller's
+// context, which cannot interrupt a blocked Write.
+type writeDeadliner interface {
+	SetWriteDeadline(time.Time) error
 }
 
 func (t *stdioTransport) removePending(id int64) {

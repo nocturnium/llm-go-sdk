@@ -324,11 +324,11 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	// Anthropic has a dedicated endpoint for getting a single model
 	resp, err := c.client.GetModel(ctx, modelID)
 	if err != nil {
-		wrapped := anthropicapi.WrapError("get model", err)
-		if errors.Is(wrapped, llms.ErrModelNotFound) {
+		// The client already normalizes the error with provider context.
+		if errors.Is(err, llms.ErrModelNotFound) {
 			return nil, llms.ErrModelNotFound
 		}
-		return nil, wrapped
+		return nil, err
 	}
 
 	info := convertAnthropicModel(resp)

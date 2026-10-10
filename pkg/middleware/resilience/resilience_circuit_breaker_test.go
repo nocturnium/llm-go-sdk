@@ -106,6 +106,39 @@ func TestCircuitBreaker_ResetGenerationsIsolateCompletions(t *testing.T) {
 }
 
 // TestCircuitBreaker_SlowProbesStillClose pins that a caller slower than
+// TestCircuitBreaker_ResetDropsStaleHalfOpenProbe pins that a half-open probe
+// admitted before Reset cannot reopen or consume a permit in the fresh
+// generation once Reset has returned the breaker to a clean closed state.
+func TestCircuitBreaker_ResetDropsStaleHalfOpenProbe(t *testing.T) {
+	cb := NewCircuitBreaker(
+		WithMaxFailures(1),
+		WithResetTimeout(time.Millisecond),
+		WithHalfOpenTimeout(time.Minute),
+		WithHalfOpenMax(1),
+	)
+	cb.RecordFailure() // open
+	time.Sleep(5 * time.Millisecond)
+	admitted, probe := cb.acquire()
+	if !admitted || !probe.halfOpen {
+		t.Fatalf("probe acquire = %v,%+v", admitted, probe)
+	}
+
+	cb.Reset()
+	if cb.State() != CircuitClosed {
+		t.Fatalf("state after Reset = %v, want closed", cb.State())
+	}
+
+	// The stale probe failing must not reopen the fresh, clean breaker.
+	cb.recordFailure(probe)
+	if state := cb.State(); state != CircuitClosed {
+		t.Errorf("stale probe failure reopened the breaker, state = %v, want closed", state)
+	}
+	if cb.failures != 0 {
+		t.Errorf("stale probe failure counted as %d failures, want 0", cb.failures)
+	}
+}
+
+// TestCircuitBreaker_SlowProbesStillClose pins that a caller slower than
 // halfOpenMax requests per halfOpenTimeout can still close the circuit. The
 // half-open watchdog used to measure the whole half-open window from entry, so
 // a healthy provider probed once per window never closed.

@@ -499,7 +499,13 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 				finishReason = string(chunk.FinishReason)
 			}
 			if len(chunk.ToolCalls) > 0 {
-				toolCallCount = len(chunk.ToolCalls)
+				// Providers may deliver tool calls across several chunks (deltas)
+				// or as one cumulative list on the terminal chunk. Taking the
+				// maximum reports the full count in both styles; assigning the
+				// last chunk's length would undercount the delta case.
+				if n := len(chunk.ToolCalls); n > toolCallCount {
+					toolCallCount = n
+				}
 			}
 		}
 	}()
