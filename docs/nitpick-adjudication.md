@@ -207,3 +207,23 @@ run, which would have skipped that commit's release forever.
 | `MetricsMiddleware.Call` should invoke the underlying `Call` | `LLM` has no `Call` method; the one-shot helper is the package function `llms.Call`, and routing through `GenerateContent` is the only way to obtain usage for cost and token metrics. The comment documents the choice. |
 | A custom `json.Marshaler`/`Unmarshaler` should not be forced to a string schema | The SDK defines the round-trip contract for these types as a JSON string; a type that marshals to another shape is not supported by the typed-decode path, and the existing test pins the string schema. |
 | `GenerateContentConfig.Labels` is silently dropped | `fields.go` marks it `ignored` deliberately: it is Google billing metadata ADK sets per agent, and rejecting it would break every ADK Go caller. The comment records the decision. |
+
+Round 23 on the same branch reported eight errors, again with almost no overlap
+with rounds 21 and 22. The real ones were already closed by the commits above:
+nil options in `ApplyOptions` and its siblings, the CR-terminator lookahead in
+the SSE reader, panic recovery in the MCP notification pump, and the missing
+success callback on an empty fallback stream. Added the rate-card refresh that
+the 2026-10-09 review called for: the current `gpt-5.6-sol` standard, Batch,
+Flex, and Fast cards; Batch/Flex/Fast cards for the `gpt-6` families; the exact
+`gpt-5.2-pro`, `gpt-5-pro`, `o1-pro`, `o3-pro`, `chat-latest`, and older OpenAI
+snapshot IDs; and the OpenAI image-token and duration cards. The remaining
+run-23 errors are the stale CI action-version and `.goreleaser.yml` regex claims
+below.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.goreleaser.yml` escaped exclamation marks break changelog parsing | `goreleaser check` validates the file with v2.13.0, and the escaped `\!` regexes parse as intended. |
+| `mockserver.go` concurrently closes shared notification channels | Every close goes through `closeOnce`, which recovers the already-closed panic; the race detector passes on the suite. |
+| `llms.go:92` function pointers do not uniquely identify wrapper values | Function pointers can collide for closures from one code object, which is why `seenKey` only uses the pointer as a fallback key; cycle detection still terminates and the reviewer supplied no concrete collision. |
+| Capping a token charge at the bucket burst silently under-enforces the limit | The cap only applies to a single request larger than the bucket, which would otherwise fail permanently; the case is documented in the code and covered by the rate-limit tests. |
+| Mode pricing ignores long-context tiers | Known and documented in `resolveModePricing` and pinned by `TestBuiltInModeCardsCarryNoLongContextTier`; the published long-context Batch/Flex columns are not transcribed rather than guessed. |

@@ -66,6 +66,20 @@ func TestPricing_DefaultPricing(t *testing.T) {
 		"perplexity:sonar",
 		"zai:glm-4.7",
 		"zai:glm-4.7-Flash",
+		// Exact OpenAI IDs added in the 2026-10-09 rate refresh.
+		"openai:gpt-5.2-pro",
+		"openai:gpt-5-pro",
+		"openai:o1-pro",
+		"openai:o3-pro",
+		"openai:chat-latest",
+		"openai:gpt-4o-2024-05-13",
+		"openai:gpt-4-turbo-2024-04-09",
+		"openai:gpt-4-0613",
+		"openai:gpt-3.5-turbo-0125",
+		"openai:gpt-3.5-turbo-1106",
+		"openai:gpt-3.5-turbo-instruct",
+		"openai:davinci-002",
+		"openai:babbage-002",
 	}
 
 	for _, model := range expectedModels {

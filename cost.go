@@ -227,9 +227,9 @@ var DefaultPricing = map[string]Pricing{
 	// output, for the entire request). The mini/nano variants publish no
 	// long-context row, so they are flat. Pro variants have no cached-input rate.
 	"openai:gpt-5.6-sol": {
-		Input: 5.00, Output: 30.00, CacheRead: 0.50, CacheWrite: 6.25,
+		Input: 4.00, Output: 20.00, CacheRead: 0.40, CacheWrite: 5.00,
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
-			Input: 10.00, Output: 45.00, CacheRead: 1.00, CacheWrite: 12.50}},
+			Input: 8.00, Output: 30.00, CacheRead: 0.80, CacheWrite: 10.00}},
 	},
 	"openai:gpt-5.6-terra": {
 		Input: 2.00, Output: 12.00, CacheRead: 0.20, CacheWrite: 2.50,
@@ -286,9 +286,22 @@ var DefaultPricing = map[string]Pricing{
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
 			Input: 60.00, Output: 270.00}},
 	},
-	"openai:gpt-5.3-codex": {Input: 1.75, Output: 14.00, CacheRead: 0.175},
-	"openai:gpt-5.2":       {Input: 1.75, Output: 14.00, CacheRead: 0.175},
-	"openai:gpt-5.1":       {Input: 1.25, Output: 10.00, CacheRead: 0.125},
+	"openai:gpt-5.3-codex":          {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-5.2":                {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-5.2-pro":            {Input: 21.00, Output: 168.00},
+	"openai:gpt-5.1":                {Input: 1.25, Output: 10.00, CacheRead: 0.125},
+	"openai:gpt-5-pro":              {Input: 15.00, Output: 120.00},
+	"openai:o1-pro":                 {Input: 150.00, Output: 600.00},
+	"openai:o3-pro":                 {Input: 20.00, Output: 80.00},
+	"openai:chat-latest":            {Input: 5.00, Output: 30.00, CacheRead: 0.50},
+	"openai:gpt-4o-2024-05-13":      {Input: 5.00, Output: 15.00},
+	"openai:gpt-4-turbo-2024-04-09": {Input: 10.00, Output: 30.00},
+	"openai:gpt-4-0613":             {Input: 30.00, Output: 60.00},
+	"openai:gpt-3.5-turbo-0125":     {Input: 0.50, Output: 1.50},
+	"openai:gpt-3.5-turbo-1106":     {Input: 1.00, Output: 2.00},
+	"openai:gpt-3.5-turbo-instruct": {Input: 1.50, Output: 2.00},
+	"openai:davinci-002":            {Input: 2.00, Output: 2.00},
+	"openai:babbage-002":            {Input: 0.40, Output: 0.40},
 
 	// OpenAI Embeddings
 	"openai:text-embedding-3-small": {Input: 0.02},

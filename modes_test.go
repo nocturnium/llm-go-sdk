@@ -56,9 +56,9 @@ func TestModeUsesPublishedRatesNotAMultiplier(t *testing.T) {
 		wantInput  float64
 		wantOutput float64
 	}{
-		{"gpt-5.6-sol", PricingModeBatch, 2.50, 15.00},
-		{"gpt-5.6-sol", PricingModeFlex, 2.50, 15.00},
-		{"gpt-5.6-sol", PricingModeFast, 10.00, 60.00},  // 2.0x standard
+		{"gpt-5.6-sol", PricingModeBatch, 2.00, 10.00},
+		{"gpt-5.6-sol", PricingModeFlex, 2.00, 10.00},
+		{"gpt-5.6-sol", PricingModeFast, 8.00, 40.00},   // 2.0x standard
 		{"gpt-5.5", PricingModeFast, 12.50, 75.00},      // 2.5x standard
 		{"gpt-5.4-mini", PricingModeFast, 1.50, 9.00},   // 2.0x standard
 		{"gpt-5.4-nano", PricingModeBatch, 0.10, 0.625}, // 0.5x standard
@@ -222,13 +222,13 @@ func TestBuiltInModeCardsCarryNoLongContextTier(t *testing.T) {
 		t.Fatal("gpt-5.6-sol batch pricing should be known")
 	}
 
-	// Standard tiers up to the long-context card (10/45).
-	wantStandard := float64(openAILongContextThreshold)/1e6*10.00 + 45.00
+	// Standard tiers up to the long-context card (8/30).
+	wantStandard := float64(openAILongContextThreshold)/1e6*8.00 + 30.00
 	if !approxEqual(standard, wantStandard) {
 		t.Errorf("standard cost = %v, want %v (long-context tier)", standard, wantStandard)
 	}
-	// Batch stays on the short-context card (2.50/15.00), the documented gap.
-	wantBatch := float64(openAILongContextThreshold)/1e6*2.50 + 15.00
+	// Batch stays on the short-context card (2.00/10.00), the documented gap.
+	wantBatch := float64(openAILongContextThreshold)/1e6*2.00 + 10.00
 	if !approxEqual(batch, wantBatch) {
 		t.Errorf("batch cost = %v, want %v (short-context batch card)", batch, wantBatch)
 	}

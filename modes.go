@@ -54,9 +54,13 @@ func modePricingKey(provider Provider, model string, mode PricingMode) string {
 var modePricing = map[string]Pricing{
 	// OpenAI Batch (50% off standard for these models, but transcribed rather
 	// than derived, the discount is not uniform provider-wide).
-	"openai:gpt-5.6-sol:batch":   {Input: 2.50, Output: 15.00, CacheRead: 0.25, CacheWrite: 3.125},
+	"openai:gpt-5.6-sol:batch":   {Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50},
 	"openai:gpt-5.6-terra:batch": {Input: 1.00, Output: 6.00, CacheRead: 0.10, CacheWrite: 1.25},
 	"openai:gpt-5.6-luna:batch":  {Input: 0.10, Output: 0.60, CacheRead: 0.01, CacheWrite: 0.125},
+	"openai:gpt-6.1-sol:batch":   {Input: 1.00, Output: 5.00, CacheRead: 0.05, CacheWrite: 1.25},
+	"openai:gpt-6-sol:batch":     {Input: 1.00, Output: 5.00, CacheRead: 0.10, CacheWrite: 1.25},
+	"openai:gpt-6-astra:batch":   {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"openai:gpt-6-luna:batch":    {Input: 0.05, Output: 0.25, CacheRead: 0.005, CacheWrite: 0.0625},
 	"openai:gpt-5.5:batch":       {Input: 2.50, Output: 15.00, CacheRead: 0.25},
 	"openai:gpt-5.4:batch":       {Input: 1.25, Output: 7.50, CacheRead: 0.13},
 	"openai:gpt-5.4-mini:batch":  {Input: 0.375, Output: 2.25, CacheRead: 0.0375},
@@ -65,9 +69,13 @@ var modePricing = map[string]Pricing{
 	// OpenAI Flex. Matches Batch for the current families, but is listed
 	// separately because Flex covers a different (shorter) model list and the two
 	// tiers are not documented as equivalent.
-	"openai:gpt-5.6-sol:flex":   {Input: 2.50, Output: 15.00, CacheRead: 0.25, CacheWrite: 3.125},
+	"openai:gpt-5.6-sol:flex":   {Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50},
 	"openai:gpt-5.6-terra:flex": {Input: 1.00, Output: 6.00, CacheRead: 0.10, CacheWrite: 1.25},
 	"openai:gpt-5.6-luna:flex":  {Input: 0.10, Output: 0.60, CacheRead: 0.01, CacheWrite: 0.125},
+	"openai:gpt-6.1-sol:flex":   {Input: 1.00, Output: 5.00, CacheRead: 0.05, CacheWrite: 1.25},
+	"openai:gpt-6-sol:flex":     {Input: 1.00, Output: 5.00, CacheRead: 0.10, CacheWrite: 1.25},
+	"openai:gpt-6-astra:flex":   {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"openai:gpt-6-luna:flex":    {Input: 0.05, Output: 0.25, CacheRead: 0.005, CacheWrite: 0.0625},
 	"openai:gpt-5.5:flex":       {Input: 2.50, Output: 15.00, CacheRead: 0.25},
 	"openai:gpt-5.4:flex":       {Input: 1.25, Output: 7.50, CacheRead: 0.13},
 	"openai:gpt-5.4-mini:flex":  {Input: 0.375, Output: 2.25, CacheRead: 0.0375},
@@ -76,9 +84,13 @@ var modePricing = map[string]Pricing{
 	// OpenAI Fast mode (formerly Priority processing). Ratios to standard vary by
 	// model (2x on gpt-5.6-sol, 2.5x on gpt-5.5, 2x on gpt-5.4-mini), which is
 	// why these are transcribed individually. gpt-5.4-nano has no Fast row.
-	"openai:gpt-5.6-sol:fast":   {Input: 10.00, Output: 60.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"openai:gpt-5.6-sol:fast":   {Input: 8.00, Output: 40.00, CacheRead: 0.80, CacheWrite: 10.00},
 	"openai:gpt-5.6-terra:fast": {Input: 4.00, Output: 24.00, CacheRead: 0.40, CacheWrite: 5.00},
 	"openai:gpt-5.6-luna:fast":  {Input: 0.40, Output: 2.40, CacheRead: 0.04, CacheWrite: 0.50},
+	"openai:gpt-6.1-sol:fast":   {Input: 4.00, Output: 20.00, CacheRead: 0.20, CacheWrite: 5.00},
+	"openai:gpt-6-sol:fast":     {Input: 4.00, Output: 20.00, CacheRead: 0.40, CacheWrite: 5.00},
+	"openai:gpt-6-astra:fast":   {Input: 20.00, Output: 100.00, CacheRead: 2.00, CacheWrite: 25.00},
+	"openai:gpt-6-luna:fast":    {Input: 0.20, Output: 1.00, CacheRead: 0.02, CacheWrite: 0.25},
 	"openai:gpt-5.5:fast":       {Input: 12.50, Output: 75.00, CacheRead: 1.25},
 	"openai:gpt-5.4:fast":       {Input: 5.00, Output: 30.00, CacheRead: 0.50},
 	"openai:gpt-5.4-mini:fast":  {Input: 1.50, Output: 9.00, CacheRead: 0.15},

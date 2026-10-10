@@ -191,7 +191,7 @@ func TestDefaultPricing_LongContextTiers(t *testing.T) {
 		},
 		{
 			name: "gpt-5.6-sol", provider: ProviderOpenAI, model: "gpt-5.6-sol",
-			shortIn: 5.00, shortOut: 30.00, longIn: 10.00, longOut: 45.00,
+			shortIn: 4.00, shortOut: 20.00, longIn: 8.00, longOut: 30.00,
 			threshold: openAILongContextThreshold,
 		},
 		{
