@@ -118,7 +118,9 @@ func (t *stdioTransport) deliverNotification(raw []byte) {
 	fn := t.notifyFn
 	t.notifyMu.RUnlock()
 	if fn != nil {
-		go fn(append([]byte(nil), raw...))
+		// Capture the per-call handler before a following response removes it.
+		// The client queues user callbacks on its bounded notification pump.
+		fn(raw)
 	}
 }
 
