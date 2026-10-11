@@ -779,3 +779,18 @@ rounding; and `RunTools` returns an error for a nil `LLM`.
 | `pkg/providers/synthetic/models_test.go:153` catalog has eight code models, test wants nine | `TestListModels` passes; the catalog has ten `ModelTypeCode` entries. |
 | `structured.go:171` scalar extraction returns the first quoted prose value | Inherently ambiguous with several quoted strings (round 59 entry); no rule can know which is intended. |
 | `featherless-options.go:107` never invokes the handler | Recurring; `speech.go` calls it on the terminal event. |
+
+Round 74 (2026-10-10) reported 8 errors. Fixed: `LoggingMiddleware` now applies
+the call options to each `LogEntry` (`PopulateFromCallOptions`) for `Call`,
+`GenerateContent` and `Stream`, so trace overrides and explicit request
+parameters appear in request, response and error entries; the method existed
+and was tested but was never called.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `internal/httpclient/ssrf_dial_test.go:197` redirect test expects `CheckRedirect` for an FTP target | The test passes; the assertion accepts the unsupported-scheme error `net/http` returns before `CheckRedirect` runs. |
+| `pkg/mcp/stdio_respond_test.go:28` writer cannot honor the context | Recurring (round 62); `respond` bounds the wait, and `TestStdioRespond_HonorsContext` passes in 50 ms. |
+| `pkg/observability/metrics_test.go:133`, `:610` mock `Call` returns unset `callResp` | Recurring (rounds 61, 63); `MetricsMiddleware.Call` goes through `GenerateContent`, which returns `genResp`. Both tests pass. |
+| `pkg/providers/featherless/featherless.go:71` handler ignored | Recurring; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
+| `structured.go:450` pointer fields accept null | By design (round 53). |
+| `structured_test.go:938` `reflect.StructOf` rejects an unnamed anonymous field | The test passes: Go accepts an anonymous field of an unnamed struct type when the type has no methods to promote. |

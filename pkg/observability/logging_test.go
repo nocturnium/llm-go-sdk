@@ -918,3 +918,37 @@ func TestJSONLoggerReportsWriteFailures(t *testing.T) {
 		t.Fatalf("callback received %v, want the sink error", got)
 	}
 }
+
+// Request parameters and trace overrides passed as call options must reach the
+// logged entry for every operation, on the request and the response.
+func TestLoggingMiddleware_LogsCallOptions(t *testing.T) {
+	var requests, responses []*LogEntry
+	logger := &testLogger{
+		onRequest:  func(e *LogEntry) { requests = append(requests, e) },
+		onResponse: func(e *LogEntry) { responses = append(responses, e) },
+	}
+	llm := &mockLLM{
+		provider: llms.ProviderAnthropic,
+		model:    "claude-3",
+		genFn: func(context.Context, []llms.Message, ...llms.CallOption) (*llms.Response, error) {
+			return &llms.Response{Content: "ok"}, nil
+		},
+	}
+	mw := NewLoggingMiddleware(llm, logger)
+	msgs := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+
+	if _, err := mw.GenerateContent(context.Background(), msgs, llms.WithMaxTokens(77)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mw.Call(context.Background(), "hi", llms.WithMaxTokens(77)); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 2 || len(responses) != 2 {
+		t.Fatalf("got %d requests and %d responses, want 2 each", len(requests), len(responses))
+	}
+	for _, e := range append(requests, responses...) {
+		if got := e.RequestParameters["max_tokens"]; got != 77 {
+			t.Errorf("%s entry max_tokens = %v, want 77", e.Operation, got)
+		}
+	}
+}

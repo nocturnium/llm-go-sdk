@@ -394,6 +394,7 @@ func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...
 		Timestamp: start,
 		Streaming: false,
 	}
+	entry.PopulateFromCallOptions(llms.ApplyOptions(options...))
 
 	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
@@ -426,6 +427,7 @@ func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []llms
 		Timestamp: start,
 		Streaming: false,
 	}
+	entry.PopulateFromCallOptions(llms.ApplyOptions(options...))
 
 	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
@@ -461,6 +463,7 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		Timestamp: start,
 		Streaming: true,
 	}
+	entry.PopulateFromCallOptions(llms.ApplyOptions(options...))
 
 	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
