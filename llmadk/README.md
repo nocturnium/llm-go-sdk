@@ -4,7 +4,7 @@ Run any [llm-go-sdk](https://github.com/nocturnium/llm-go-sdk) provider as the
 model behind a [Google ADK Go](https://github.com/google/adk-go) agent.
 
 ```bash
-go get github.com/nocturnium/llm-go-sdk/v6/llmadk
+go get github.com/nocturnium/llm-go-sdk/llmadk
 ```
 
 ```go

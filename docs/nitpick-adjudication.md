@@ -711,3 +711,15 @@ keeps no per-request charge for a `WaitN` call with a different explicit count.
 | `llmadk/testdata/fixtures/zai/tool_loop.json:4` fixture model disagrees with responses | The field is the model the scenario requested (`glm-4.7`, as in the live-gate record); the provider answered with `glm-5.3-flash`. The harness does not key anything off the response model. |
 | `llmadk/config.go:94` labels silently discarded | Deliberate and listed as `ignored` in the field table (round 64). |
 | `featherless-options.go:107`, `structured.go:450` | Recurring false positives (handler wired in `speech.go`; null pointers mirror `encoding/json`, round 53). |
+
+Round 69 (2026-10-10) reported 6 errors. Fixed: `llmadk/README.md` told users to
+`go get github.com/nocturnium/llm-go-sdk/v6/llmadk`, but the nested module is
+declared as `github.com/nocturnium/llm-go-sdk/llmadk` in `llmadk/go.mod`.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `errors.go:377` `https://user:secret?x@example.com/path` keeps the credential | Probed: `sanitizeErrorURL` returns `https://example.com/path` for that URL, for the `#` variant, and for a `?` inside the password. |
+| `llmadk/Makefile:3` should use the v6 module path | The nested module is `github.com/nocturnium/llm-go-sdk/llmadk` (`llmadk/go.mod`), so the Makefile path is correct; the README was the stale one. |
+| `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64, 66); a zero-value config leaves reasoning unset by design. |
+| `pkg/mcp/stdio.go:262` response retains bufio's buffer | `readBoundedLine` does `append(line, fragment...)` onto a nil slice, which copies the fragment, so no slice aliases the reader's buffer. |
+| `structured.go:323`, `structured.go:450` | Recurring: case-insensitive matching and null pointers mirror `encoding/json` (rounds 53, 55). |
