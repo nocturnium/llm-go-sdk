@@ -1025,3 +1025,13 @@ the llmadk bridge rejects a negative `CandidateCount`.
 | `internal/httpclient/poll.go:49` policy timeout bypassed | By design: `TestPoll_DoneOnDeadlinePoll` pins that a callback completing during the policy deadline is a success, and a callback error is the operation's cause. |
 | `pkg/providers/featherless/featherless-options.go:107` callback not wired | Recurring (rounds 89–91): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
 | `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82, 89, 90); `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |
+
+Round 93 (2026-10-10) reported 3 errors, all false positives. For clarity the
+transcription branch now sets an explicit `rawResponse` flag instead of
+comparing the target against `&raw`; behavior is unchanged.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:26` unavailable action versions | Recurring (rounds 48, 50, 54–58, 64, 79, 84, 87, 89, 90, 92); `checkout`, `setup-go`, `upload-artifact` and `codecov-action` all publish `v7`. |
+| `pkg/openaicompat/client.go:547` text transcription leaves the result empty | `&raw` is the address of the same local variable on both sides, so the comparison is not "a newly allocated pointer"; `TestTranscriptionCompatibility` decodes non-empty `text`, `srt` and `vtt` bodies. The reviewer's premise about `&` in Go is wrong. |
+| `pkg/providers/featherless/featherless-options.go:107` callback not connected | Recurring (rounds 89–92): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |

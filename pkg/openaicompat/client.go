@@ -536,15 +536,17 @@ func (c *Client) CreateTranscription(ctx context.Context, req *TranscriptionRequ
 	var out TranscriptionResponse
 	var raw []byte
 	var target any = &out
+	rawResponse := false
 	switch fields["response_format"] {
 	case contentTypeText, "srt", "vtt":
+		rawResponse = true
 		target = &raw
 	}
 	err = c.httpClient.DoMultipart(ctx, http.MethodPost, c.mediaURL(c.mediaPaths.TranscriptionsPath, "/audio/transcriptions"), fields, files, c.getHeaders(), target)
 	if err != nil {
 		return nil, err
 	}
-	if target == &raw {
+	if rawResponse {
 		out.Text = string(raw)
 	}
 	return &out, nil
