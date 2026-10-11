@@ -10,6 +10,10 @@ import (
 	"sync/atomic"
 )
 
+// maxSSEEventSize bounds one event as read from the wire: a line may hold at
+// most this many bytes, and the lines of one event together at most this many,
+// both counted with their field names ("data: " and the like) but without line
+// terminators. A data payload of exactly this size therefore does not fit.
 const maxSSEEventSize = 4 * 1024 * 1024 // 4MB
 
 // SSEEvent represents a Server-Sent Event

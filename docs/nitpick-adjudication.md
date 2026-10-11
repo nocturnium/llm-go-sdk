@@ -846,3 +846,15 @@ Round 79 (2026-10-10) reported 7 errors, all false positives; no code change.
 | `resilience_circuit_breaker.go:506` Reset leaves stale public permits | Documented FIFO contract for the token-less `Allow()`/`Record*` pair (rounds 52, 61, 64). |
 | `featherless.go:62` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
 | `pkg/providers/togetherai/image.go:67` fields untagged | Recurring (round 72); the fields are tagged and the image tests pass. |
+
+Round 80 (2026-10-10) reported 6 errors. Fixed (documentation): the comment on
+`maxSSEEventSize` now says the limit counts wire bytes including field names
+such as `data: `, so a payload of exactly 4 MiB does not fit.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `Makefile:96` `gofmt -l .` cannot take a directory | `gofmt` walks a directory argument recursively; the same command is a required gate in this repository and prints nothing. |
+| `batch.go:368` in-flight cancellation returned as success | Deliberate and commented: requests that started record their own context error in `Results`, and only a short `Results` signals unstarted work. `TestConcurrentBatcher_ContextCancellation` passes. |
+| `structured.go:868` tagged unexported embedded struct advertised but never decoded | Probed: `encoding/json` populates `struct{ inner \`json:"in"\` }` from `{"in":{"a":"x"}}`, so the schema matches the decoder. |
+| `featherless-options.go:107` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
+| `structured.go:450` pointer fields accept null | By design (round 53). |
