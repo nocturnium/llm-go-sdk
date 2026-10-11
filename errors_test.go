@@ -762,6 +762,16 @@ func TestGetErrorDetails(t *testing.T) {
 			t.Errorf("expected root cause to be original error")
 		}
 	})
+
+	t.Run("typed-nil APIError", func(t *testing.T) {
+		var err error = (*APIError)(nil)
+		details := GetErrorDetails(err)
+		if details.StatusCode != 0 || details.Provider != "" {
+			t.Errorf("details = %+v, want empty", details)
+		}
+		// FormatError must not panic on the typed-nil; an empty message is fine.
+		_ = FormatError(err)
+	})
 }
 
 func TestFormatError(t *testing.T) {

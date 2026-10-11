@@ -1100,3 +1100,13 @@ error classification.
 | `pkg/providers/huggingface/huggingface.go:40` batch capability without an interface | Recurring (round 90): `Capabilities()` narrows the batch flag by deployment mode like Infinity; `SupportsBatch` reads the flag, and no `BatchProcessor` is promised by it. |
 | `pkg/providers/mistral/transcription.go:71` typed response format ignored | Recurring (rounds 91–97): `llms.TranscribeOptions` has no response-format field; `response_format` is read from `Extra` and non-`json` values are rejected. |
 | `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82, 89, 90, 92, 95): `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |
+
+Round 99 (2026-10-10) reported 4 errors. Fixed: non-finite provider-reported
+charges are banked as zero; typed-nil `*APIError` no longer panics error-detail
+extraction or formatting; and recursive structured-output types validate nested
+values against the unconstrained schema the generator emits at the recursion
+point.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/middleware/resilience/ratelimit.go:566` `RecordTokens` settles an explicit `WaitN` charge | Recurring (rounds 62, 63, 86, 95): `RecordTokens` settles only the estimate-sized charge; the limiter keeps no per-request charge for a different explicit count, and the method comment states this. |

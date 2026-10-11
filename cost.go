@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 )
@@ -174,11 +175,25 @@ func (u Usage) nonNegative() Usage {
 	if u.ReasoningTokens < 0 {
 		u.ReasoningTokens = 0
 	}
-	if u.Cost != nil && *u.Cost < 0 {
-		zero := 0.0
-		u.Cost = &zero
+	if u.Cost != nil {
+		// A negative charge would refund tracked spend, and a non-finite one
+		// (NaN, ±Inf) would poison every total it touches; neither is a real
+		// invoice, so bank zero instead.
+		if *u.Cost < 0 || math.IsNaN(*u.Cost) || math.IsInf(*u.Cost, 0) {
+			zero := 0.0
+			u.Cost = &zero
+		}
 	}
 	return u
+}
+
+// costValue returns the reported charge, already clamped by nonNegative, or
+// zero when the usage carries none.
+func (u Usage) costValue() float64 {
+	if u.Cost == nil {
+		return 0
+	}
+	return *u.Cost
 }
 
 // costForMode computes cost under a billing mode. A mode's rate card replaces
@@ -651,9 +666,10 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) (floa
 func (t *CostTracker) costFor(provider Provider, model, key string, usage Usage, mode PricingMode) (float64, bool) {
 	// A provider-reported charge is what was billed, so it outranks every rate
 	// card, including one registered on this tracker: an estimate cannot be more
-	// accurate than the invoice.
+	// accurate than the invoice. RecordMode already clamps non-finite and negative
+	// charges through Usage.nonNegative; clamp again here for direct callers.
 	if usage.Cost != nil {
-		return *usage.Cost, true
+		return usage.nonNegative().costValue(), true
 	}
 	standard, standardKnown := t.pricing[key]
 	if !standardKnown && mode == PricingModeStandard {

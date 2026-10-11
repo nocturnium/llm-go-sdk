@@ -344,6 +344,28 @@ func TestParseTyped_MissingRequiredFieldsRejected(t *testing.T) {
 	}
 }
 
+type recursiveNode struct {
+	Value int            `json:"value"`
+	Next  *recursiveNode `json:"next,omitempty"`
+}
+
+// The generated schema emits an unconstrained object once a type recurs, so a
+// nested value that omits the recursive fields must validate, not be required to
+// repeat the whole shape.
+func TestParseTyped_RecursiveFieldUsesUnconstrainedSchema(t *testing.T) {
+	got, err := parseTyped[recursiveNode](`{"value":1,"next":{}}`)
+	if err != nil {
+		t.Fatalf("recursive partial object rejected: %v", err)
+	}
+	if got.Value != 1 || got.Next == nil {
+		t.Fatalf("got %+v", got)
+	}
+	// The top level still requires its own fields.
+	if _, err := parseTyped[recursiveNode](`{}`); err == nil {
+		t.Error("top-level missing field accepted, want an error")
+	}
+}
+
 // json.RawMessage emits an unconstrained schema, so a null is valid for it even
 // though it is not an interface or map.
 func TestParseTyped_RawMessageAcceptsNull(t *testing.T) {

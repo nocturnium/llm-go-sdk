@@ -256,7 +256,7 @@ func unmarshalCandidate[T any](data string, out *T, callerSchema bool) error {
 	// A struct target still needs every required field; a slice or array of
 	// structs needs each element validated. Anything else has no object schema
 	// to enforce.
-	return validateFieldValue(json.RawMessage(data), target)
+	return validateFieldValue(json.RawMessage(data), target, make(map[reflect.Type]bool))
 }
 
 // validateObjectRequiredFields enforces the generated schema's required list for
@@ -264,13 +264,23 @@ func unmarshalCandidate[T any](data string, out *T, callerSchema bool) error {
 // partial response is otherwise decoded to zero values and never triggers the
 // repair turn, even though the advertised schema (and OpenAI strict mode)
 // requires every non-skipped field.
-func validateObjectRequiredFields(data string, target reflect.Type) error {
+func validateObjectRequiredFields(data string, target reflect.Type, chain map[reflect.Type]bool) error {
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
 	if target.Kind() != reflect.Struct {
 		return nil
 	}
+	// schemaForType emits an unconstrained `{}` for a struct type already on the
+	// generation path, so a recursive field such as `Next *Node` advertises no
+	// required properties. Validation must agree: once a type is on the current
+	// chain, its nested value is accepted rather than required to repeat the
+	// whole shape.
+	if chain[target] {
+		return nil
+	}
+	chain[target] = true
+	defer delete(chain, target)
 	// A custom UnmarshalJSON — the struct's own, or one promoted from an
 	// anonymous embedded type — consumes the whole value, so the struct's own
 	// fields are never decoded individually and none of them is required in the
@@ -343,7 +353,7 @@ func validateObjectRequiredFields(data string, target reflect.Type) error {
 		if !ok {
 			continue
 		}
-		if err := validateFieldValue(value, field.Type); err != nil {
+		if err := validateFieldValue(value, field.Type, chain); err != nil {
 			return err
 		}
 	}
@@ -442,7 +452,7 @@ func embeddedJSONNameEmpty(field reflect.StructField) bool {
 // validateFieldValue recurses into nested object values the schema constrains.
 // Slices and arrays describe each element, and pointers are stripped the same
 // way schemaForType strips them.
-func validateFieldValue(value json.RawMessage, typ reflect.Type) error {
+func validateFieldValue(value json.RawMessage, typ reflect.Type, chain map[reflect.Type]bool) error {
 	// A pointer field's natural zero is nil, which JSON null encodes, so a
 	// pointer field accepts null even though the generated schema strips the
 	// pointer and describes the pointee as non-null. (A top-level *T target is
@@ -464,7 +474,7 @@ func validateFieldValue(value json.RawMessage, typ reflect.Type) error {
 	}
 	switch typ.Kind() {
 	case reflect.Struct:
-		return validateObjectRequiredFields(string(value), typ)
+		return validateObjectRequiredFields(string(value), typ, chain)
 	case reflect.Slice, reflect.Array:
 		// Recurse per element so a nested slice ([][]Person) is validated all the
 		// way down, not just one level.
@@ -474,7 +484,7 @@ func validateFieldValue(value json.RawMessage, typ reflect.Type) error {
 			return nil
 		}
 		for _, item := range items {
-			if err := validateFieldValue(item, elem); err != nil {
+			if err := validateFieldValue(item, elem, chain); err != nil {
 				return err
 			}
 		}

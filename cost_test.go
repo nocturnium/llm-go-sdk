@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -762,6 +763,27 @@ func TestEstimateCost_NegativeUsageIsClamped(t *testing.T) {
 	}
 	if total := tracker.GetTotalCost(); total <= 0 {
 		t.Fatalf("total cost = %f, negative usage reduced it", total)
+	}
+}
+
+// A non-finite provider-reported charge must not poison totals.
+func TestEstimateCost_NonFiniteReportedCostIsZero(t *testing.T) {
+	for name, value := range map[string]float64{
+		"+Inf": math.Inf(1),
+		"-Inf": math.Inf(-1),
+		"NaN":  math.NaN(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := value
+			tracker := NewCostTracker()
+			cost, _ := tracker.Record(ProviderOpenAI, "gpt-4o", Usage{Cost: &bad})
+			if math.IsNaN(cost) || math.IsInf(cost, 0) || cost != 0 {
+				t.Fatalf("recorded cost = %v, want 0", cost)
+			}
+			if total := tracker.GetTotalCost(); math.IsNaN(total) || math.IsInf(total, 0) {
+				t.Fatalf("total cost = %v, want finite", total)
+			}
+		})
 	}
 }
 

@@ -575,7 +575,7 @@ func GetErrorDetails(err error) ErrorDetails {
 
 	// Extract API error details
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		details.StatusCode = apiErr.StatusCode
 		details.RetryAfter = apiErr.RetryAfter
 		details.RequestID = apiErr.RequestID
@@ -594,13 +594,13 @@ func FormatError(err error) string {
 
 	// Check for APIError - use its formatted message
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		return apiErr.Error()
 	}
 
 	// Check for ProviderError
 	var provErr *ProviderError
-	if errors.As(err, &provErr) {
+	if errors.As(err, &provErr) && provErr != nil {
 		return provErr.Error()
 	}
 
@@ -612,7 +612,7 @@ func FormatError(err error) string {
 
 	// Check for StreamError
 	var streamErr *StreamError
-	if errors.As(err, &streamErr) {
+	if errors.As(err, &streamErr) && streamErr != nil {
 		return streamErr.Error()
 	}
 
@@ -662,7 +662,7 @@ func WrapHTTPError(provider Provider, operation string, err error) error {
 
 	// Check if it's already an APIError and add provider if missing
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		if apiErr.Provider == "" {
 			apiErr.Provider = provider
 		}
