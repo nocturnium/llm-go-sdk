@@ -1110,3 +1110,7 @@ point.
 | Finding | Why it does not stand |
 | --- | --- |
 | `pkg/middleware/resilience/ratelimit.go:566` `RecordTokens` settles an explicit `WaitN` charge | Recurring (rounds 62, 63, 86, 95): `RecordTokens` settles only the estimate-sized charge; the limiter keeps no per-request charge for a different explicit count, and the method comment states this. |
+
+Round 100 (2026-10-11) reported **0 errors** (90 warnings). The error count
+reached zero: every round 89–99 issue is fixed or recorded above as a false
+positive, and no new error appeared.
