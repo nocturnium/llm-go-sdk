@@ -142,11 +142,43 @@ func (p Pricing) cacheWriteRate() float64 {
 // configured, the whole request is priced at the highest matching tier.
 func (p Pricing) cost(usage Usage) float64 {
 	const perMillion = 1_000_000.0
+	// A malformed or adversarially reported negative count must not reduce the
+	// bill (or create a refund against the tracker), so clamp before pricing.
+	usage = usage.nonNegative()
 	e := p.effective(usage)
 	return float64(usage.PromptTokens)/perMillion*e.Input +
 		float64(usage.CompletionTokens)/perMillion*e.Output +
 		float64(usage.CacheReadTokens)/perMillion*e.cacheReadRate() +
 		float64(usage.CacheCreationTokens)/perMillion*e.cacheWriteRate()
+}
+
+// nonNegative returns a copy of usage with negative token counts clamped to
+// zero. Cost and recorded totals must never move backward because a report was
+// malformed.
+func (u Usage) nonNegative() Usage {
+	if u.PromptTokens < 0 {
+		u.PromptTokens = 0
+	}
+	if u.CompletionTokens < 0 {
+		u.CompletionTokens = 0
+	}
+	if u.TotalTokens < 0 {
+		u.TotalTokens = 0
+	}
+	if u.CacheReadTokens < 0 {
+		u.CacheReadTokens = 0
+	}
+	if u.CacheCreationTokens < 0 {
+		u.CacheCreationTokens = 0
+	}
+	if u.ReasoningTokens < 0 {
+		u.ReasoningTokens = 0
+	}
+	if u.Cost != nil && *u.Cost < 0 {
+		zero := 0.0
+		u.Cost = &zero
+	}
+	return u
 }
 
 // costForMode computes cost under a billing mode. A mode's rate card replaces
@@ -658,6 +690,7 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 	// makes Reset and RecordMode atomic with respect to each other.
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	usage = usage.nonNegative()
 	cost, known := t.costFor(provider, model, key, usage, mode)
 
 	u, ok := t.usage[key]

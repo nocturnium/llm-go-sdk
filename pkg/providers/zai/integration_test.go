@@ -626,7 +626,10 @@ func TestClient_WithSystemMessage(t *testing.T) {
 		// Verify system message
 		sysMsg, ok := messages[0].(map[string]any)
 		if !ok {
-			t.Fatal("first message is not a map")
+			// The handler runs on the httptest server's goroutine, where
+			// t.Fatal would only stop that goroutine. Report and return.
+			t.Error("first message is not a map")
+			return
 		}
 		if sysMsg["role"] != "system" {
 			t.Errorf("expected first message role=system, got %v", sysMsg["role"])

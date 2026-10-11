@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Cost estimation clamps negative token counts and a negative provider-reported charge to zero, so malformed usage cannot refund tracked spend. The tools example JSON-encodes the model-supplied weather unit instead of splicing it into a string.
 - A cache entry at its exact expiry instant is a miss rather than a hit, and the llmadk bridge rejects a negative `CandidateCount` instead of dropping it.
 - `IsTemporary` and `APIError.IsRetryable` treat a typed-nil `*APIError` as non-retryable instead of panicking. The unused scalar extractors that returned only the first embedded candidate are gone.
 - `ProviderFromError` returns an empty provider for a typed-nil `*ProviderError` or `*APIError` instead of panicking in the unwrap chain. An explicit `ollama.WithBaseURL` is no longer redirected by `OLLAMA_HOST`, so a caller can pin the endpoint regardless of process environment. Dated GPT-4.1 snapshot IDs are classified as vision-capable in `openai.ListModels`, matching the undated aliases.

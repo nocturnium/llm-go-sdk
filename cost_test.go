@@ -742,6 +742,29 @@ func TestEstimateCost_UnknownPricing(t *testing.T) {
 	}
 }
 
+// A malformed negative report must not refund spend or reduce a recorded cost.
+func TestEstimateCost_NegativeUsageIsClamped(t *testing.T) {
+	positive, _ := EstimateCost(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: 1000, CompletionTokens: 500})
+	negative, _ := EstimateCost(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: -1000, CompletionTokens: -500})
+	if negative < 0 || negative != 0 {
+		t.Fatalf("negative cost = %f, want 0", negative)
+	}
+	if positive <= 0 {
+		t.Fatalf("positive control = %f, want > 0", positive)
+	}
+
+	tracker := NewCostTracker()
+	if got, _ := tracker.Record(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: 1000, CompletionTokens: 500}); got <= 0 {
+		t.Fatalf("recorded positive cost = %f", got)
+	}
+	if got, _ := tracker.Record(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: -1_000_000, CompletionTokens: -1_000_000}); got != 0 {
+		t.Fatalf("recorded negative-usage cost = %f, want 0", got)
+	}
+	if total := tracker.GetTotalCost(); total <= 0 {
+		t.Fatalf("total cost = %f, negative usage reduced it", total)
+	}
+}
+
 func TestEstimateCost_LocalProvidersIntentionallyUnpriced(t *testing.T) {
 	tests := []struct {
 		provider Provider

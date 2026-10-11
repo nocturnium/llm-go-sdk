@@ -173,8 +173,18 @@ func executeTool(name, arguments string) string {
 		if unit == "fahrenheit" {
 			temp = 72
 		}
-		return fmt.Sprintf(`{"temperature": %d, "unit": "%s", "condition": "sunny", "humidity": 45}`,
-			temp, unit)
+		// The model chose the unit, so quote it through JSON rather than
+		// interpolating it into a hand-built string.
+		result, err := json.Marshal(map[string]any{
+			"temperature": temp,
+			"unit":        unit,
+			"condition":   "sunny",
+			"humidity":    45,
+		})
+		if err != nil {
+			return `{"error": "could not encode weather result"}`
+		}
+		return string(result)
 
 	case "calculator":
 		var args struct {

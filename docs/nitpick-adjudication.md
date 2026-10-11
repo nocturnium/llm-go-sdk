@@ -1045,3 +1045,19 @@ Round 94 (2026-10-10) reported 5 errors, all false positives.
 | `pkg/providers/featherless/featherless-options.go:107` handler unused | Recurring (rounds 89–93): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
 | `pkg/providers/mistral/transcription.go:52` typed response format ignored | `llms.TranscribeOptions` has no `ResponseFormat` field; a `response_format` in `Extra` is read, and any value other than `json` is rejected as documented. |
 | `structured.go:450` nested pointers accept null | Recurring (rounds 53, 55, 56, 61, 62, 65, 68, 89, 90): a nil pointer is the field's natural zero, and the generated schema advertises the pointee because OpenAI strict mode rejects nullable unions. |
+
+Round 95 (2026-10-10) reported 11 errors. Fixed: negative usage is clamped to
+zero in cost estimation and recording; the tools example JSON-encodes the
+model-supplied unit; and the Z.AI system-message test reports from its HTTP
+handler instead of calling `t.Fatal` off the test goroutine.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/middleware/resilience/ratelimit.go:566` `RecordTokens` refunds an explicit `WaitN` charge | Documented contract (rounds 62, 63, 86): `RecordTokens` settles only the estimate-sized charge; the limiter keeps no per-request charge for a different explicit count, as its comment states. |
+| `pkg/observability/logging.go:579` incomplete stream logged as success | Recurring: `EnsureTerminal` synthesizes a clean `Done` for a source that closes without one, so the consumer sees success and the log matches it. |
+| `pkg/openaicompat/client.go:559` array extras rejected before repeated handling | Recurring (rounds 89, 90): `ExtraBody` is scalar-only by contract; the repeated path serves typed slice fields such as `TimestampGranularities`. |
+| `pkg/providers/featherless/featherless-options.go:107` handler unused | Recurring (rounds 89–94): `speech.go` invokes the handler on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/togetherai/media_transport.go:32` version retained for v2 routes | Recurring (rounds 72, 76, 77, 82, 89, 90, 92): `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |
+| `structured.go:330` case-insensitive property match | Recurring (rounds 53, 55, 56, 61, 62, 65, 68, 89, 90, 94): matching mirrors `encoding/json`'s field lookup. |
+| `structured.go:450` pointer fields accept null | Recurring: a nil pointer is the field's natural zero. |
+| `structured_repair_test.go:153` `repairScriptLLM` missing `Call` | `TestGenerateTypedWithRepair` compiles and passes; the root `go test`/`go vet` gates are green, so the full LLM interface is satisfied. |
