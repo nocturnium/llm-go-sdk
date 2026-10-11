@@ -2,8 +2,10 @@ package synthetic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -173,16 +175,41 @@ func TestWithEmbeddingModel(t *testing.T) {
 	}
 }
 
-func TestEmbedRequiresModel(t *testing.T) {
-	client, err := New(WithAPIKey("test-key"))
+// TestEmbedUsesDefaultModel verifies that a Synthetic client sends the catalog
+// embedding model when the caller does not pick one.
+func TestEmbedUsesDefaultModel(t *testing.T) {
+	var gotModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		gotModel, _ = req["model"].(string)
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data": []map[string]any{
+				{"object": "embedding", "embedding": []float32{0.1, 0.2}, "index": 0},
+			},
+			"model": "hf:nomic-ai/nomic-embed-text-v1.5",
+			"usage": map[string]any{"prompt_tokens": 1, "total_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	client, err := New(
+		WithAPIKey("test-key"),
+		WithBaseURL(server.URL),
+		WithAllowPrivateIPs(), WithAllowHTTP(),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error creating client: %v", err)
 	}
 
-	// Attempt to embed without specifying a model
-	_, err = client.Embed(context.Background(), []string{"test"})
-	if !errors.Is(err, llms.ErrEmbeddingModelRequired) {
-		t.Errorf("expected ErrEmbeddingModelRequired, got %v", err)
+	if _, err := client.Embed(context.Background(), []string{"test"}); err != nil {
+		t.Fatalf("Embed failed: %v", err)
+	}
+	if gotModel != "hf:nomic-ai/nomic-embed-text-v1.5" {
+		t.Errorf("model = %q, want the default embedding model", gotModel)
 	}
 }
 

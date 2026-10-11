@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Multipart uploads reject a JSON response that is followed by more data than the response size limit, as the raw and binary paths already did.
+- The Synthetic provider now defaults its embedding model to `hf:nomic-ai/nomic-embed-text-v1.5`, so an embedding call without an explicit model no longer fails with `ErrEmbeddingModelRequired` after the provider started advertising embedding support.
 - The Langfuse OTel middleware records token usage when a provider reports prompt or completion tokens without a total.
 - `RateLimiter.Reset` is no longer undone by a `Wait` that was already in flight: its late token debt and credit are discarded rather than applied to the freshly reset limiter.
 - The logging, metrics and Langfuse OTel middlewares return `ErrIncompleteResponse` when a wrapped provider's `Stream` returns a nil channel with no error, instead of handing the caller a channel that never closes.

@@ -910,3 +910,20 @@ whitespace-only 2xx body still leaves the target untouched.
 | `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82); `video.go` strips the `/v1` suffix before joining, and the video proxy-prefix test passes. |
 | `scripts/release-decide.sh:74` undefined jq variable | Recurring (rounds 71, 72); the jq program is in double quotes, so the shell substitutes `$1` first. |
 | `structured.go:450` nested pointers accept null | By design (round 53). |
+
+Round 85 (2026-10-10) reported 8 errors. Fixed: the Synthetic provider sets
+`hf:nomic-ai/nomic-embed-text-v1.5` as its default embedding model, so an
+embedding call without an explicit model works after the provider began
+advertising embedding support (round 31); the `TestClient_Call_Convenience`
+handler in `pkg/providers/zai/integration_test.go` reports a bad request shape
+with `t.Error` and returns instead of calling `t.Fatal` on the handler goroutine,
+which would have left the client blocked.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `internal/httpclient/security.go:131` hostnames resolving to private addresses | Literal-host checks are the first layer; the shared transport's dial `Control` hook rejects private, loopback, link-local, and metadata addresses after DNS resolution (round 27). |
+| `llmadk/testdata/fixtures/zai/tool_loop.json:4` fixture model differs | Recurring (round 68); the field is the requested model, not the one the provider answered with. |
+| `options.go:439` mismatched `toolTypeFunction` comparison | Recurring (rounds 72, 74); `Tool.Type` and `ToolTypeFunction` are both `ToolType`, so the comparison compiles and the tests pass. |
+| `pkg/providers/featherless/featherless.go:71` speech usage handler never wired | Recurring; `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event. |
+| `scripts/release-decide.sh:74` undefined jq variable | Recurring (rounds 71, 72, 84); the jq program is in double quotes, so the shell substitutes `$1` first. |
+| `structured.go:459` pointer fields accept null | By design (round 53). |

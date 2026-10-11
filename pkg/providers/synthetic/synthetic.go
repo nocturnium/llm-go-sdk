@@ -11,7 +11,7 @@ import (
 // providerConfig defines Synthetic-specific configuration
 var providerConfig = openaicompat.ProviderConfig{
 	Provider:              llms.ProviderSynthetic,
-	DefaultEmbeddingModel: "", // Set if embeddings are supported
+	DefaultEmbeddingModel: "hf:nomic-ai/nomic-embed-text-v1.5",
 	Capabilities: llms.Capabilities{
 		Streaming:        true,
 		Tools:            true,
