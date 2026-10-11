@@ -14,6 +14,7 @@ type options struct {
 	Model          string
 	EmbeddingModel string
 	BaseURL        string
+	baseURLSet     bool // explicit WithBaseURL takes precedence over OLLAMA_HOST
 	HTTPClient     *http.Client
 	Timeout        time.Duration
 	// AllowPrivateIPs allows requests to private/loopback IPs.
@@ -54,6 +55,7 @@ func WithModel(model string) Option {
 func WithBaseURL(url string) Option {
 	return func(o *options) {
 		o.BaseURL = url
+		o.baseURLSet = true
 	}
 }
 

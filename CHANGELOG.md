@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `ProviderFromError` returns an empty provider for a typed-nil `*ProviderError` or `*APIError` instead of panicking in the unwrap chain. An explicit `ollama.WithBaseURL` is no longer redirected by `OLLAMA_HOST`, so a caller can pin the endpoint regardless of process environment. Dated GPT-4.1 snapshot IDs are classified as vision-capable in `openai.ListModels`, matching the undated aliases.
 - Multipart uploads reject a JSON response that is followed by more data than the response size limit, as the raw and binary paths already did.
 - An MCP parse-error reply now includes `"id": null` when the request id could not be recovered, so peers that validate JSON-RPC response shape accept it.
 - The Synthetic provider now defaults its embedding model to `hf:nomic-ai/nomic-embed-text-v1.5`, so an embedding call without an explicit model no longer fails with `ErrEmbeddingModelRequired` after the provider started advertising embedding support.

@@ -553,6 +553,11 @@ func inferModelTypes(id string) []llms.ModelType {
 	if strings.HasPrefix(idLower, "gpt-4o") {
 		return []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}
 	}
+	// Dated GPT-4.1 snapshots (for example gpt-4.1-2025-04-14) miss the exact
+	// knownModels lookup but carry the same vision capability as the aliases.
+	if strings.HasPrefix(idLower, "gpt-4.1") {
+		return []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}
+	}
 	if strings.HasPrefix(idLower, "gpt-4") ||
 		strings.HasPrefix(idLower, "gpt-3.5") ||
 		strings.HasPrefix(idLower, "gpt-5") ||

@@ -989,3 +989,16 @@ as the protocol requires.
 | `pkg/openaicompat/client.go:554` array extras are rejected before repeated-field handling | The repeated path handles typed slice fields such as `TimestampGranularities`; `ExtraBody` is deliberately scalar-only, and `TestMultipartExtrasRejectNonScalars` pins that contract. |
 | `structured.go:322`, `structured.go:450` case-insensitive matching and null pointers | Recurring (rounds 53, 55, 56, 61, 62, 65, 68): matching mirrors `encoding/json`, and a nil pointer is the natural zero for a pointer field. |
 | `pkg/providers/featherless/featherless.go:71` `SpeechUsageHandler` is never wired | The handler is threaded through the speech stream path and covered by the Featherless media tests. |
+
+Round 90 (2026-10-10) reported 8 errors. Fixed: `ProviderFromError` no longer
+panics on a typed-nil `*ProviderError` or `*APIError`; `ollama.WithBaseURL`
+wins over `OLLAMA_HOST`; and dated GPT-4.1 snapshot IDs are classified as
+vision-capable.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:26` unavailable action major versions | Recurring (rounds 48, 50, 54–58, 64, 79, 84, 87, 89); `v7` and `v8` are published and resolve. |
+| `llmadk/fields.go:163` VALIDATED mode classified as translated | `FunctionCallingConfig.Mode` is translated for AUTO/ANY/NONE; only VALIDATED is rejected, via the `FieldValidatedFunctionCalling` check and `WithIgnore` path in `config.go`. |
+| `pkg/providers/featherless/featherless-options.go:107` handler not wired | Recurring (round 89): `speech.go` reads `c.options.SpeechUsageHandler` on the terminal event, and the media tests cover it. |
+| `pkg/providers/huggingface/huggingface.go:40` unsupported batch capability | Recurring convention: `Capabilities()` narrows the superset by deployment mode, and batch is advertised for embeddings/ambiguous modes like Infinity; no `BatchProcessor` is promised by the flag. |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82, 89); `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |

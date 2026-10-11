@@ -575,6 +575,16 @@ func TestProviderFromError(t *testing.T) {
 			},
 			expected: ProviderAnthropic,
 		},
+		{
+			name:     "typed-nil ProviderError",
+			err:      (*ProviderError)(nil),
+			expected: "",
+		},
+		{
+			name:     "typed-nil APIError",
+			err:      (*APIError)(nil),
+			expected: "",
+		},
 	}
 
 	for _, tc := range tests {

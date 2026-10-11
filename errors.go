@@ -125,6 +125,9 @@ var apiStatusClassifications = map[int]apiStatusClassification{
 // The error message includes status code, type, code, message, and optionally
 // request context (URL, method) and request ID for debugging.
 func (e *APIError) Error() string {
+	if e == nil {
+		return ""
+	}
 	var result string
 
 	// Build base error message
@@ -159,6 +162,9 @@ func (e *APIError) Error() string {
 
 // Unwrap returns the underlying error based on status code
 func (e *APIError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.underlyingError()
 }
 
@@ -173,6 +179,9 @@ func (e *APIError) Is(target error) bool {
 
 // underlyingError maps status codes and error types to sentinel errors
 func (e *APIError) underlyingError() error {
+	if e == nil {
+		return nil
+	}
 	// Quota exhaustion is a permanent billing failure even though providers return
 	// it with a 429 status. Classify it by code before the status map, otherwise
 	// it masquerades as a retryable rate limit and the exported ErrQuotaExceeded
@@ -430,6 +439,9 @@ type ProviderError struct {
 
 // Error implements the error interface.
 func (e *ProviderError) Error() string {
+	if e == nil {
+		return ""
+	}
 	if e.Operation != "" {
 		return fmt.Sprintf("%s: %s: %v", e.Provider, e.Operation, e.Err)
 	}
@@ -438,6 +450,9 @@ func (e *ProviderError) Error() string {
 
 // Unwrap returns the underlying error for errors.Is/As compatibility
 func (e *ProviderError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.Err
 }
 
@@ -467,11 +482,11 @@ func ProviderFromError(err error) Provider {
 	// The unwrap chain does not cover matches behind a custom As method, so
 	// fall back to errors.As for both types.
 	var provErr *ProviderError
-	if errors.As(err, &provErr) && provErr.Provider != "" {
+	if errors.As(err, &provErr) && provErr != nil && provErr.Provider != "" {
 		return provErr.Provider
 	}
 	var apiErr *APIError
-	if errors.As(err, &apiErr) && apiErr.Provider != "" {
+	if errors.As(err, &apiErr) && apiErr != nil && apiErr.Provider != "" {
 		return apiErr.Provider
 	}
 	return ""
@@ -732,10 +747,16 @@ func providerInTree(err error) Provider {
 	for err != nil {
 		switch e := err.(type) {
 		case *ProviderError:
+			if e == nil {
+				return ""
+			}
 			if e.Provider != "" {
 				return e.Provider
 			}
 		case *APIError:
+			if e == nil {
+				return ""
+			}
 			if e.Provider != "" {
 				return e.Provider
 			}

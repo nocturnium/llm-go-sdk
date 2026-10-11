@@ -446,6 +446,8 @@ func TestInferModelTypes(t *testing.T) {
 	}{
 		{"gpt-4o", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
 		{"gpt-4o-mini", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
+		{"gpt-4.1-2025-04-14", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
+		{"gpt-4.1-mini-2025-04-14", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
 		{"gpt-4-turbo", []llms.ModelType{llms.ModelTypeChat}},
 		{"gpt-4", []llms.ModelType{llms.ModelTypeChat}},
 		{"gpt-3.5-turbo", []llms.ModelType{llms.ModelTypeChat}},
