@@ -347,6 +347,57 @@ func TestWrapError_NilAndNonAPIError(t *testing.T) {
 	}
 }
 
+// Every low-level Gemini method must normalize transport/API errors to
+// *llms.APIError, not only GenerateContent. These paths are consumed by the
+// provider's retry and fallback classifiers.
+func TestClient_ErrorNormalization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "bad", "code": 400}})
+	}))
+	defer server.Close()
+	client := NewClient(ClientConfig{BaseURL: server.URL, APIKey: "k", AllowPrivateIPs: true, AllowHTTP: true})
+
+	tests := []struct {
+		name string
+		call func() error
+	}{
+		{"embed content", func() error {
+			_, err := client.EmbedContent(context.Background(), "gemini-pro", &EmbedContentRequest{Content: EmbeddingContent{Parts: []EmbeddingPart{{Text: "x"}}}})
+			return err
+		}},
+		{"batch embed contents", func() error {
+			_, err := client.BatchEmbedContents(context.Background(), "gemini-pro", &BatchEmbedContentsRequest{})
+			return err
+		}},
+		{"list models", func() error {
+			_, err := client.ListModels(context.Background(), nil)
+			return err
+		}},
+		{"get model", func() error {
+			_, err := client.GetModel(context.Background(), "gemini-pro")
+			return err
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			var apiErr *llms.APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("expected *llms.APIError, got %T: %v", err, err)
+			}
+			if apiErr.Provider != llms.ProviderGemini {
+				t.Errorf("provider = %q, want %q", apiErr.Provider, llms.ProviderGemini)
+			}
+		})
+	}
+}
+
 func TestClient_GenerateContentStream(t *testing.T) {
 	sseData := `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Hello"}]}}]}
 

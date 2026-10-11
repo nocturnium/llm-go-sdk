@@ -7,6 +7,47 @@ import (
 	"time"
 )
 
+// TestWrapStream_NilOptions verifies the wrappers tolerate a nil *CallOptions.
+// GetBufferSize accepts nil, so the send-timeout lookup must too rather than
+// dereferencing opts and panicking before a stream is returned.
+func TestWrapStream_NilOptions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	source := make(chan StreamChunk, 1)
+	source <- StreamChunk{Done: true}
+	close(source)
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("WrapStream with nil options panicked: %v", r)
+			}
+		}()
+		out := WrapStream(ctx, source, nil, nil)
+		for chunk := range out {
+			_ = chunk
+			// drain
+		}
+	}()
+
+	source2 := make(chan StreamChunk, 1)
+	source2 <- StreamChunk{Done: true}
+	close(source2)
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("WrapStreamWithFinalizer with nil options panicked: %v", r)
+			}
+		}()
+		out := WrapStreamWithFinalizer(ctx, source2, nil, nil, nil)
+		for chunk := range out {
+			_ = chunk
+			// drain
+		}
+	}()
+}
+
 func TestCollectStream(t *testing.T) {
 	t.Run("clean stream returns content and terminal metadata", func(t *testing.T) {
 		usage := &Usage{PromptTokens: 3, CompletionTokens: 5, TotalTokens: 8}
@@ -161,6 +202,35 @@ func TestWrapStream_ContextCancelEmitsTerminalChunk(t *testing.T) {
 	}
 }
 
+// TestWrapStream_ContextCancelUnblocksIdleSource pins that cancellation closes
+// the wrapper even when the source is open but idle. Previously the wrapper
+// blocked in `range source` forever and never delivered a terminal chunk.
+func TestWrapStream_ContextCancelUnblocksIdleSource(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	source := make(chan StreamChunk) // never closed by this test
+	defer close(source)
+
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		<-ctx.Done()
+	}()
+	<-started
+
+	out := WrapStream(ctx, source, ApplyOptions(WithStreamBufferSize(1)), nil)
+	cancel()
+
+	select {
+	case chunk, ok := <-out:
+		if ok && chunk.Error == nil && !chunk.Done {
+			t.Fatalf("first chunk after cancellation = %+v, want a terminal chunk", chunk)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("wrapper did not observe context cancellation on an idle source")
+	}
+}
+
 // TestStreamSender_DeliverTerminalOnce verifies a single terminal chunk is
 // emitted even if DeliverTerminal/SendFinal are called multiple times.
 func TestStreamSender_DeliverTerminalOnce(t *testing.T) {
@@ -206,6 +276,34 @@ func TestStreamSender_SendResultTimeout(t *testing.T) {
 	}()
 	if stop := sender.ForwardTerminalOnEarlyExit(result); !stop {
 		t.Fatal("expected ForwardTerminalOnEarlyExit to report stop=true on timeout")
+	}
+}
+
+// If DeliverTerminal's bounded wait times out, the terminal chunk was never
+// delivered. Recording it as sent would make a later EnsureTerminal a silent
+// no-op and the consumer would see a plain channel close with no terminal
+// chunk. The guard must be re-armed so a retry can still land once the consumer
+// makes room.
+func TestStreamSender_DeliverTerminalRetriesAfterTimeout(t *testing.T) {
+	chunks := make(chan StreamChunk, 1)
+	chunks <- StreamChunk{Content: "blocked"} // saturate the buffer
+	sender := NewStreamSender(context.Background(), chunks, 20*time.Millisecond)
+
+	sender.DeliverTerminal(StreamChunk{Done: true})
+	if sender.terminalSent.Load() {
+		t.Fatal("terminalSent stayed set after an abandoned delivery")
+	}
+
+	// Make room, then retry: the retry must deliver the terminal chunk.
+	<-chunks
+	sender.EnsureTerminal()
+	select {
+	case got := <-chunks:
+		if !got.Done {
+			t.Errorf("got %#v, want a terminal Done chunk", got)
+		}
+	default:
+		t.Fatal("EnsureTerminal did not retry after the abandoned delivery")
 	}
 }
 

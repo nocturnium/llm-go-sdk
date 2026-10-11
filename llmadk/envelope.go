@@ -123,8 +123,11 @@ func setEnvelope(part *genai.Part, env []byte) {
 func partSignature(p *genai.Part) (envelope, decodeResult) {
 	if v, ok := p.PartMetadata[partMetadataKey]; ok {
 		s, isString := v.(string)
+		if !isString {
+			return envelope{}, sigInvalid
+		}
 		raw, err := base64.StdEncoding.DecodeString(s)
-		if !isString || err != nil {
+		if err != nil {
 			return envelope{}, sigInvalid
 		}
 		return decodeEnvelope(raw)

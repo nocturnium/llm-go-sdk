@@ -53,6 +53,10 @@ type SamplingRequest struct {
 	// explicit 0 is distinguishable from an omitted field without changing the
 	// exported type.
 	temperatureSet bool
+	// approvedMaxTokens is the cap the approver permitted. It is reapplied after
+	// host call options so those options cannot widen the approved budget.
+	approvedMaxTokens    int
+	approvedMaxTokensSet bool
 }
 
 // UnmarshalJSON decodes the request and notes whether temperature was present.
@@ -225,8 +229,12 @@ func gateSampling(handler SamplingHandler, approve SamplingApprover) requestHand
 			// and the server should not retry it.
 			return nil, &RPCError{Code: CodeInvalidRequest, Message: message}
 		}
-		// An approval may only tighten the budget the server asked for.
+		// Record only a cap the approver actually imposed. Recording the server's
+		// request here would let it override the host's WithMaxTokens option, which
+		// is supposed to win when the approver set no ceiling of its own.
 		if approval.MaxTokens > 0 && approval.MaxTokens < req.MaxTokens {
+			req.approvedMaxTokens = approval.MaxTokens
+			req.approvedMaxTokensSet = true
 			req.MaxTokens = approval.MaxTokens
 		}
 
@@ -258,10 +266,16 @@ func samplingFromLLM(llm llms.LLM, extra []llms.CallOption) SamplingHandler {
 			options = append(options, llms.WithStopWords(req.StopSequences))
 		}
 		options = append(options, extra...)
+		if req.approvedMaxTokensSet {
+			options = append(options, llms.WithMaxTokens(req.approvedMaxTokens))
+		}
 
 		resp, err := llm.GenerateContent(ctx, messages, options...)
 		if err != nil {
 			return SamplingResult{}, fmt.Errorf("mcp: sampling completion failed: %w", err)
+		}
+		if resp == nil {
+			return SamplingResult{}, fmt.Errorf("mcp: sampling completion returned no response")
 		}
 		return SamplingResult{
 			Role:       "assistant",

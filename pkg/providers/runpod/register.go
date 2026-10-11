@@ -16,6 +16,9 @@ func init() {
 		if cfg.Model != "" {
 			opts = append(opts, WithModel(cfg.Model))
 		}
+		if embed := cfg.Extra[llms.ExtraEmbeddingModel]; embed != "" {
+			opts = append(opts, WithEmbeddingModel(embed))
+		}
 		if cfg.BaseURL != "" {
 			opts = append(opts, WithBaseURL(cfg.BaseURL))
 		}

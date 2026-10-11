@@ -446,6 +446,21 @@ func TestStreamError_Unwrap(t *testing.T) {
 	}
 }
 
+// A typed-nil StreamError in an error interface must not panic the error
+// classification methods.
+func TestStreamError_TypedNil(t *testing.T) {
+	var err error = (*StreamError)(nil)
+	if got := err.Error(); got != "" {
+		t.Errorf("Error() = %q, want empty", got)
+	}
+	if errors.Is(err, ErrStreamInterrupted) {
+		t.Error("a typed-nil StreamError must not match ErrStreamInterrupted")
+	}
+	if errors.Is(err, errors.New("x")) {
+		t.Error("a typed-nil StreamError must not match an unrelated error")
+	}
+}
+
 func TestProviderError_Error(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -513,6 +528,36 @@ func TestWrapProviderError(t *testing.T) {
 	}
 }
 
+// A caller may wrap a cancellation alongside the API error. WrapHTTPError must
+// keep both: returning the bare APIError would drop context.Canceled, so retry
+// classification would see a retryable status and retry canceled work.
+func TestWrapHTTPError_PreservesContextCancellation(t *testing.T) {
+	apiErr := &APIError{StatusCode: 500, Message: "boom"}
+	wrapped := fmt.Errorf("request: %w: %w", context.Canceled, apiErr)
+	got := WrapHTTPError(ProviderOpenAI, "chat", wrapped)
+	if !errors.Is(got, context.Canceled) {
+		t.Errorf("errors.Is(got, context.Canceled) = false: %v", got)
+	}
+	var out *APIError
+	if !errors.As(got, &out) {
+		t.Errorf("errors.As(got, *APIError) = false: %v", got)
+	}
+}
+
+// An API error that is not paired with an outer cancellation must come back
+// unchanged, so the provider stamp is added without altering the value.
+func TestWrapHTTPError_NoContextError(t *testing.T) {
+	apiErr := &APIError{StatusCode: 500, Message: "boom"}
+	got := WrapHTTPError(ProviderOpenAI, "chat", apiErr)
+	var out *APIError
+	if !errors.As(got, &out) || out != apiErr {
+		t.Errorf("WrapHTTPError returned %#v, want the original *APIError", got)
+	}
+	if errors.Is(got, context.Canceled) {
+		t.Errorf("unexpected context cancellation on %v", got)
+	}
+}
+
 func TestProviderFromError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -545,6 +590,16 @@ func TestProviderFromError(t *testing.T) {
 			},
 			expected: ProviderAnthropic,
 		},
+		{
+			name:     "typed-nil ProviderError",
+			err:      (*ProviderError)(nil),
+			expected: "",
+		},
+		{
+			name:     "typed-nil APIError",
+			err:      (*APIError)(nil),
+			expected: "",
+		},
 	}
 
 	for _, tc := range tests {
@@ -566,6 +621,11 @@ func TestIsTemporary(t *testing.T) {
 		{
 			name:     "nil error",
 			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "typed-nil APIError",
+			err:      (*APIError)(nil),
 			expected: false,
 		},
 		{
@@ -644,6 +704,17 @@ func TestIsTemporary(t *testing.T) {
 	}
 }
 
+// A wrapped context error must win over an APIError that would otherwise look
+// retryable. Retrying a canceled request ignores the caller's decision and can
+// send work that was explicitly stopped.
+func TestIsTemporary_ContextBeatsAPIError(t *testing.T) {
+	apiErr := &APIError{StatusCode: 429, Message: "rate limited"}
+	wrapped := fmt.Errorf("provider request: %w: %w", context.Canceled, apiErr)
+	if IsTemporary(wrapped) {
+		t.Error("canceled request carrying an APIError must not be temporary")
+	}
+}
+
 func TestGetErrorDetails(t *testing.T) {
 	t.Run("nil error", func(t *testing.T) {
 		details := GetErrorDetails(nil)
@@ -690,6 +761,16 @@ func TestGetErrorDetails(t *testing.T) {
 		if !errors.Is(details.RootCause, rootCause) {
 			t.Errorf("expected root cause to be original error")
 		}
+	})
+
+	t.Run("typed-nil APIError", func(t *testing.T) {
+		var err error = (*APIError)(nil)
+		details := GetErrorDetails(err)
+		if details.StatusCode != 0 || details.Provider != "" {
+			t.Errorf("details = %+v, want empty", details)
+		}
+		// FormatError must not panic on the typed-nil; an empty message is fine.
+		_ = FormatError(err)
 	})
 }
 

@@ -61,6 +61,42 @@ func TestBaseProvider_Capabilities_StaticWinsOverRegistry(t *testing.T) {
 
 // TestBaseProvider_Capabilities_StaticOnly verifies that when the registry has
 // no entry for the model, the static config is reported as-is.
+func TestBaseProvider_Capabilities_StaticMediaWins(t *testing.T) {
+	cfg := openaicompat.ProviderConfig{
+		Provider:     llms.Provider("capmedia-test-provider"),
+		DefaultModel: "capmedia-test-model",
+		Capabilities: llms.Capabilities{
+			ImageGeneration: true,
+			Speech:          true,
+		},
+		// Media left off: the explicit static declaration must not be downgraded.
+	}
+
+	bp := openaicompat.NewBaseProvider(nil, cfg)
+	caps := bp.Capabilities()
+	if !caps.ImageGeneration {
+		t.Error("ImageGeneration = false, want true (static declaration)")
+	}
+	if !caps.Speech {
+		t.Error("Speech = false, want true (static declaration)")
+	}
+}
+
+// TestBaseProvider_Capabilities_MediaEnablesCapability verifies that a Media
+// flag still turns the matching capability on when the static config is silent.
+func TestBaseProvider_Capabilities_MediaEnablesCapability(t *testing.T) {
+	cfg := openaicompat.ProviderConfig{
+		Provider:     llms.Provider("capmedia-on-provider"),
+		DefaultModel: "capmedia-on-model",
+		Media:        openaicompat.MediaCapabilities{Videos: true},
+	}
+
+	bp := openaicompat.NewBaseProvider(nil, cfg)
+	if !bp.Capabilities().VideoGeneration {
+		t.Error("VideoGeneration = false, want true (Media.Videos)")
+	}
+}
+
 func TestBaseProvider_Capabilities_StaticOnly(t *testing.T) {
 	cfg := openaicompat.ProviderConfig{
 		Provider:     llms.Provider("capmerge-unregistered-provider"),
@@ -141,4 +177,23 @@ func assertValidationField(t *testing.T, err error, field string) {
 		}
 	}
 	t.Fatalf("expected validation field %q in %v", field, validationErrs)
+}
+
+// A provider built with a nil client (an authoring mistake) must return the
+// configuration sentinel instead of panicking on a nil dereference.
+func TestBaseProvider_NilClientReturnsSentinel(t *testing.T) {
+	bp := openaicompat.NewBaseProvider(nil, openaicompat.ProviderConfig{
+		Provider:     llms.ProviderOpenAI,
+		DefaultModel: "gpt-4o",
+	})
+	messages := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+	if _, err := bp.GenerateContent(context.Background(), messages); !errors.Is(err, llms.ErrClientNotConfigured) {
+		t.Errorf("GenerateContent with nil client: err = %v, want ErrClientNotConfigured", err)
+	}
+	if _, err := bp.Stream(context.Background(), messages); !errors.Is(err, llms.ErrClientNotConfigured) {
+		t.Errorf("Stream with nil client: err = %v, want ErrClientNotConfigured", err)
+	}
+	if _, err := bp.Embed(context.Background(), []string{"hi"}); !errors.Is(err, llms.ErrClientNotConfigured) {
+		t.Errorf("Embed with nil client: err = %v, want ErrClientNotConfigured", err)
+	}
 }

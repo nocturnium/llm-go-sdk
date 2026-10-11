@@ -3,6 +3,7 @@ package llms
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -374,6 +375,9 @@ func WithWebSearchEnabled() CallOption {
 func ApplyOptions(opts ...CallOption) *CallOptions {
 	options := DefaultCallOptions()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options
@@ -384,7 +388,7 @@ func ApplyOptions(opts ...CallOption) *CallOptions {
 func (o *CallOptions) Validate() error {
 	var errs ValidationErrors
 
-	if o.Temperature != nil && (*o.Temperature < 0 || *o.Temperature > 2.0) {
+	if o.Temperature != nil && (math.IsNaN(*o.Temperature) || math.IsInf(*o.Temperature, 0) || *o.Temperature < 0 || *o.Temperature > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "temperature",
 			Value:   *o.Temperature,
@@ -400,7 +404,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.TopP != nil && (*o.TopP < 0 || *o.TopP > 1.0) {
+	if o.TopP != nil && (math.IsNaN(*o.TopP) || math.IsInf(*o.TopP, 0) || *o.TopP < 0 || *o.TopP > 1.0) {
 		errs = append(errs, ValidationError{
 			Field:   "top_p",
 			Value:   *o.TopP,
@@ -408,7 +412,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.FrequencyPenalty != nil && (*o.FrequencyPenalty < -2.0 || *o.FrequencyPenalty > 2.0) {
+	if o.FrequencyPenalty != nil && (math.IsNaN(*o.FrequencyPenalty) || math.IsInf(*o.FrequencyPenalty, 0) || *o.FrequencyPenalty < -2.0 || *o.FrequencyPenalty > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "frequency_penalty",
 			Value:   *o.FrequencyPenalty,
@@ -416,7 +420,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	if o.PresencePenalty != nil && (*o.PresencePenalty < -2.0 || *o.PresencePenalty > 2.0) {
+	if o.PresencePenalty != nil && (math.IsNaN(*o.PresencePenalty) || math.IsInf(*o.PresencePenalty, 0) || *o.PresencePenalty < -2.0 || *o.PresencePenalty > 2.0) {
 		errs = append(errs, ValidationError{
 			Field:   "presence_penalty",
 			Value:   *o.PresencePenalty,
@@ -424,29 +428,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	for i, tool := range o.Tools {
-		if tool.Type == "" {
-			errs = append(errs, ValidationError{
-				Field:   fmt.Sprintf("tools[%d].type", i),
-				Value:   tool.Type,
-				Message: "type is required",
-			})
-		}
-		if tool.Type == ToolTypeFunction && tool.Function == nil {
-			errs = append(errs, ValidationError{
-				Field:   fmt.Sprintf("tools[%d].function", i),
-				Value:   nil,
-				Message: "function definition is required for function type tools",
-			})
-		}
-		if tool.Function != nil && tool.Function.Name == "" {
-			errs = append(errs, ValidationError{
-				Field:   fmt.Sprintf("tools[%d].function.name", i),
-				Value:   "",
-				Message: "function name is required",
-			})
-		}
-	}
+	errs = append(errs, validateToolOptions(o.Tools)...)
 
 	if o.ResponseFormat != nil {
 		switch o.ResponseFormat.Type {
@@ -472,4 +454,34 @@ func (o *CallOptions) Validate() error {
 		return errs
 	}
 	return nil
+}
+
+// validateToolOptions checks each tool definition for the fields a provider
+// needs to serialize it.
+func validateToolOptions(tools []Tool) ValidationErrors {
+	var errs ValidationErrors
+	for i, tool := range tools {
+		if tool.Type == "" {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tools[%d].type", i),
+				Value:   tool.Type,
+				Message: "type is required",
+			})
+		}
+		if tool.Type == ToolTypeFunction && tool.Function == nil {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tools[%d].function", i),
+				Value:   nil,
+				Message: "function definition is required for function type tools",
+			})
+		}
+		if tool.Function != nil && tool.Function.Name == "" {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tools[%d].function.name", i),
+				Value:   "",
+				Message: "function name is required",
+			})
+		}
+	}
+	return errs
 }

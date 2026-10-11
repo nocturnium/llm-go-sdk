@@ -3,6 +3,7 @@ package llms
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 )
@@ -42,6 +43,13 @@ type Pricing struct {
 	Tiers []PricingTier `json:"tiers,omitempty"`
 }
 
+// clonePricing returns an ownership-safe copy of a pricing card. Pricing.Tiers
+// is mutable caller-owned data, so copying Pricing by value is insufficient.
+func clonePricing(p Pricing) Pricing {
+	p.Tiers = append([]PricingTier(nil), p.Tiers...)
+	return p
+}
+
 // PricingTier is a set of rates that replaces a Pricing's base rates once a
 // request's total input token count reaches MinInputTokens. It is deliberately
 // not an embedded Pricing: tiers do not nest, and the flat fields make that
@@ -71,7 +79,15 @@ type PricingTier struct {
 // Usage.PromptTokens excludes cache tokens by contract, so cache reads and cache
 // creations must be added back to recover the request's true input size.
 func totalInputTokens(usage Usage) int {
-	return usage.PromptTokens + usage.CacheReadTokens + usage.CacheCreationTokens
+	maxInt := int(^uint(0) >> 1)
+	total := usage.PromptTokens
+	for _, n := range []int{usage.CacheReadTokens, usage.CacheCreationTokens} {
+		if n > 0 && total > maxInt-n {
+			return maxInt
+		}
+		total += n
+	}
+	return total
 }
 
 // effective resolves the rates that apply to the given usage, substituting the
@@ -127,11 +143,57 @@ func (p Pricing) cacheWriteRate() float64 {
 // configured, the whole request is priced at the highest matching tier.
 func (p Pricing) cost(usage Usage) float64 {
 	const perMillion = 1_000_000.0
+	// A malformed or adversarially reported negative count must not reduce the
+	// bill (or create a refund against the tracker), so clamp before pricing.
+	usage = usage.nonNegative()
 	e := p.effective(usage)
 	return float64(usage.PromptTokens)/perMillion*e.Input +
 		float64(usage.CompletionTokens)/perMillion*e.Output +
 		float64(usage.CacheReadTokens)/perMillion*e.cacheReadRate() +
 		float64(usage.CacheCreationTokens)/perMillion*e.cacheWriteRate()
+}
+
+// nonNegative returns a copy of usage with negative token counts clamped to
+// zero. Cost and recorded totals must never move backward because a report was
+// malformed.
+func (u Usage) nonNegative() Usage {
+	if u.PromptTokens < 0 {
+		u.PromptTokens = 0
+	}
+	if u.CompletionTokens < 0 {
+		u.CompletionTokens = 0
+	}
+	if u.TotalTokens < 0 {
+		u.TotalTokens = 0
+	}
+	if u.CacheReadTokens < 0 {
+		u.CacheReadTokens = 0
+	}
+	if u.CacheCreationTokens < 0 {
+		u.CacheCreationTokens = 0
+	}
+	if u.ReasoningTokens < 0 {
+		u.ReasoningTokens = 0
+	}
+	if u.Cost != nil {
+		// A negative charge would refund tracked spend, and a non-finite one
+		// (NaN, ±Inf) would poison every total it touches; neither is a real
+		// invoice, so bank zero instead.
+		if *u.Cost < 0 || math.IsNaN(*u.Cost) || math.IsInf(*u.Cost, 0) {
+			zero := 0.0
+			u.Cost = &zero
+		}
+	}
+	return u
+}
+
+// costValue returns the reported charge, already clamped by nonNegative, or
+// zero when the usage carries none.
+func (u Usage) costValue() float64 {
+	if u.Cost == nil {
+		return 0
+	}
+	return *u.Cost
 }
 
 // costForMode computes cost under a billing mode. A mode's rate card replaces
@@ -183,6 +245,11 @@ const (
 // conflicting public prices for the current version; Azure, RunPod, Infinity,
 // Featherless, and Synthetic are BYO deployment/subscription or volatile model
 // ID surfaces without stable per-token list pricing.
+//
+// Configure this table before concurrent use; concurrent mutation while a
+// lookup runs is a data race, the same rule [MediaPricing] documents. A tracker
+// snapshots it at construction, so pass custom rates to [NewCostTracker] or
+// [CostTracker.SetPricing] rather than editing the global map at runtime.
 var DefaultPricing = map[string]Pricing{
 	// OpenAI (cached input billed at ~0.5×; automatic caching has no write cost).
 	"openai:gpt-4o":                 {Input: 2.50, Output: 10.00, CacheRead: 1.25},
@@ -212,9 +279,9 @@ var DefaultPricing = map[string]Pricing{
 	// output, for the entire request). The mini/nano variants publish no
 	// long-context row, so they are flat. Pro variants have no cached-input rate.
 	"openai:gpt-5.6-sol": {
-		Input: 5.00, Output: 30.00, CacheRead: 0.50, CacheWrite: 6.25,
+		Input: 4.00, Output: 20.00, CacheRead: 0.40, CacheWrite: 5.00,
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
-			Input: 10.00, Output: 45.00, CacheRead: 1.00, CacheWrite: 12.50}},
+			Input: 8.00, Output: 30.00, CacheRead: 0.80, CacheWrite: 10.00}},
 	},
 	"openai:gpt-5.6-terra": {
 		Input: 2.00, Output: 12.00, CacheRead: 0.20, CacheWrite: 2.50,
@@ -225,6 +292,26 @@ var DefaultPricing = map[string]Pricing{
 		Input: 0.20, Output: 1.20, CacheRead: 0.02, CacheWrite: 0.25,
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
 			Input: 0.40, Output: 1.80, CacheRead: 0.04, CacheWrite: 0.50}},
+	},
+	"openai:gpt-6.1-sol": {
+		Input: 2.00, Output: 10.00, CacheRead: 0.10, CacheWrite: 2.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 4.00, Output: 15.00, CacheRead: 0.20, CacheWrite: 5.00}},
+	},
+	"openai:gpt-6-sol": {
+		Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 4.00, Output: 15.00, CacheRead: 0.40, CacheWrite: 5.00}},
+	},
+	"openai:gpt-6-astra": {
+		Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 20.00, Output: 75.00, CacheRead: 2.00, CacheWrite: 25.00}},
+	},
+	"openai:gpt-6-luna": {
+		Input: 0.10, Output: 0.50, CacheRead: 0.01, CacheWrite: 0.125,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 0.20, Output: 0.75, CacheRead: 0.02, CacheWrite: 0.25}},
 	},
 	"openai:gpt-5":        {Input: 1.25, Output: 10.00, CacheRead: 0.125},
 	"openai:gpt-5-mini":   {Input: 0.25, Output: 2.00, CacheRead: 0.025},
@@ -251,9 +338,25 @@ var DefaultPricing = map[string]Pricing{
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
 			Input: 60.00, Output: 270.00}},
 	},
-	"openai:gpt-5.3-codex": {Input: 1.75, Output: 14.00, CacheRead: 0.175},
-	"openai:gpt-5.2":       {Input: 1.75, Output: 14.00, CacheRead: 0.175},
-	"openai:gpt-5.1":       {Input: 1.25, Output: 10.00, CacheRead: 0.125},
+	"openai:gpt-5.3-codex":          {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-rosalind-research":  {Input: 5.00, Output: 25.00, CacheRead: 0.50},
+	"openai:gpt-rosalind-discovery": {Input: 5.00, Output: 25.00, CacheRead: 0.50},
+	"openai:gpt-5.6-cyber":          {Input: 12.50, Output: 75.00, CacheRead: 1.25, CacheWrite: 15.625},
+	"openai:gpt-5.2":                {Input: 1.75, Output: 14.00, CacheRead: 0.175},
+	"openai:gpt-5.2-pro":            {Input: 21.00, Output: 168.00},
+	"openai:gpt-5.1":                {Input: 1.25, Output: 10.00, CacheRead: 0.125},
+	"openai:gpt-5-pro":              {Input: 15.00, Output: 120.00},
+	"openai:o1-pro":                 {Input: 150.00, Output: 600.00},
+	"openai:o3-pro":                 {Input: 20.00, Output: 80.00},
+	"openai:chat-latest":            {Input: 5.00, Output: 30.00, CacheRead: 0.50},
+	"openai:gpt-4o-2024-05-13":      {Input: 5.00, Output: 15.00},
+	"openai:gpt-4-turbo-2024-04-09": {Input: 10.00, Output: 30.00},
+	"openai:gpt-4-0613":             {Input: 30.00, Output: 60.00},
+	"openai:gpt-3.5-turbo-0125":     {Input: 0.50, Output: 1.50},
+	"openai:gpt-3.5-turbo-1106":     {Input: 1.00, Output: 2.00},
+	"openai:gpt-3.5-turbo-instruct": {Input: 1.50, Output: 2.00},
+	"openai:davinci-002":            {Input: 2.00, Output: 2.00},
+	"openai:babbage-002":            {Input: 0.40, Output: 0.40},
 
 	// OpenAI Embeddings
 	"openai:text-embedding-3-small": {Input: 0.02},
@@ -282,10 +385,18 @@ var DefaultPricing = map[string]Pricing{
 	// The table records the standard $3/$15 rate: a static map cannot express a
 	// time-boxed promotion, and estimates that silently expire are worse than
 	// estimates that are consistently conservative.
-	"anthropic:claude-fable-5":             {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
-	"anthropic:claude-mythos-5":            {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
-	"anthropic:claude-opus-5":              {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
-	"anthropic:claude-sonnet-5":            {Input: 3.00, Output: 15.00, CacheRead: 0.30, CacheWrite: 3.75},
+	"anthropic:claude-fable-5":    {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-mythos-5":   {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-opus-5":     {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-sonnet-5":   {Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50},
+	"anthropic:claude-fable-5-1":  {Input: 10.00, Output: 50.00, CacheRead: 0.25, CacheWrite: 12.50},
+	"anthropic:claude-opus-5-5":   {Input: 4.00, Output: 20.00, CacheRead: 0.20, CacheWrite: 5.00},
+	"anthropic:claude-sonnet-5-5": {Input: 2.00, Output: 10.00, CacheRead: 0.10, CacheWrite: 2.50},
+	"anthropic:claude-haiku-5-5": {
+		Input: 0.10, Output: 0.50, CacheRead: 0.01, CacheWrite: 0.125,
+		Tiers: []PricingTier{{MinInputTokens: 100001,
+			Input: 0.50, Output: 2.50, CacheRead: 0.05, CacheWrite: 0.625}},
+	},
 	"anthropic:claude-opus-4-8":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
 	"anthropic:claude-opus-4-7":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
 	"anthropic:claude-opus-4-6":            {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
@@ -319,7 +430,8 @@ var DefaultPricing = map[string]Pricing{
 	// 2027-01-01 (Input 1.50, Output 7.50, CacheRead 0.15), per Google's pricing
 	// page; TestGemini38FlashRateChange fails from that date as the reminder.
 	"gemini:gemini-3.8-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
-	"gemini:gemini-3.6-flash":      {Input: 1.50, Output: 7.50, CacheRead: 0.15},
+	"gemini:gemini-3.6-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
+	"gemini:gemini-3.7-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
 	"gemini:gemini-3.5-flash":      {Input: 1.50, Output: 9.00, CacheRead: 0.15},
 	"gemini:gemini-3.5-flash-lite": {Input: 0.30, Output: 2.50, CacheRead: 0.03},
 	"gemini:gemini-3.1-pro-preview": {
@@ -358,27 +470,91 @@ var DefaultPricing = map[string]Pricing{
 	// DeepSeek (cache hits billed at a steep discount).
 	"deepseek:deepseek-chat":     {Input: 0.27, Output: 1.10, CacheRead: 0.07},
 	"deepseek:deepseek-reasoner": {Input: 0.55, Output: 2.19, CacheRead: 0.14},
+	// Current DeepSeek API aliases, read 2026-10-09. Recorded at peak rates;
+	// off-peak is 0.50x and is a time-window card a static map cannot express.
+	"deepseek:deepseek-v4-flash":            {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"deepseek:deepseek-v4-flash-vision-exp": {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"deepseek:deepseek-v4-pro":              {Input: 1.32, Output: 3.96, CacheRead: 0.044},
 
 	// Cloud provider serverless/list pricing.
-	"groq:llama-3.3-70b-versatile":                                {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
+	"groq:llama-3.3-70b-versatile": {Input: 0.59, Output: 0.79}, // Groq list price (cloudzero.com/blog/groq-pricing, helicone.ai), verified 2026-06
+	// Current Groq console catalog, read 2026-10-09. The 3.1 8B, 3.3 70B, and
+	// MiniMax M2.7 rows are enterprise-only now, so their old public rates are
+	// left off rather than kept as if current.
+	"groq:qwen/qwen3.8-27b":                    {Input: 0.80, Output: 4.00},
+	"groq:openai/gpt-oss-120b":                 {Input: 0.15, Output: 0.60},
+	"groq:openai/gpt-oss-20b":                  {Input: 0.075, Output: 0.30},
+	"groq:openai/gpt-oss-safeguard-20b":        {Input: 0.075, Output: 0.30},
+	"groq:meta-llama/llama-prompt-guard-2-22m": {Input: 0.03, Output: 0.03},
+	"groq:meta-llama/llama-prompt-guard-2-86m": {Input: 0.04, Output: 0.04},
+
+	// Mistral docs pricing, read 2026-10-09. The Large 4 promotional rate is a
+	// time-boxed launch card; the standard rate is recorded for the same reason
+	// Anthropic's Sonnet 5 promotion records its standard rate.
+	"mistral:mistral-large-4":    {Input: 1.36, Output: 4.18, CacheRead: 0.14},
+	"mistral:mistral-large-3":    {Input: 0.50, Output: 1.50, CacheRead: 0.05},
+	"mistral:mistral-medium-3.5": {Input: 1.50, Output: 7.50, CacheRead: 0.15},
+	"mistral:mistral-small-4":    {Input: 0.15, Output: 0.60, CacheRead: 0.015},
+	"mistral:ministral-3-14b":    {Input: 0.20, Output: 0.20, CacheRead: 0.02},
+	"mistral:ministral-3-8b":     {Input: 0.15, Output: 0.15, CacheRead: 0.015},
+	"mistral:ministral-3-3b":     {Input: 0.10, Output: 0.10, CacheRead: 0.01},
+	"mistral:codestral":          {Input: 0.30, Output: 0.90, CacheRead: 0.03},
+	"mistral:codestral-embed":    {Input: 0.15, CacheRead: 0.015},
+
 	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {Input: 0.90, Output: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
-	"perplexity:sonar":                                            {Input: 1.00, Output: 1.00}, // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
-	"zai:glm-5.2":                                                 {Input: 1.40, Output: 4.40}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-06
-	"zai:glm-5.1":                                                 {Input: 1.40, Output: 4.40}, // docs.z.ai, verified 2026-06
-	"zai:glm-5":                                                   {Input: 1.00, Output: 3.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-5-turbo":                                             {Input: 1.20, Output: 4.00}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7":                                                 {Input: 0.60, Output: 2.20}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-06
-	"zai:glm-4.6":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.5":                                                 {Input: 0.60, Output: 2.20}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.5-air":                                             {Input: 0.20, Output: 1.10}, // docs.z.ai, verified 2026-06
-	"zai:glm-4.7-Flash":                                           {Input: 0.06, Output: 0.40}, // Z.AI GLM-4.7-Flash (pricepertoken.com/z-ai/glm-4.7-flash), verified 2026-06
+	// Exact Fireworks serverless IDs, verified 2026-10-09. Priority/Fast/US
+	// residency have separate cards with no universal multiplier, so only the
+	// standard short-context rates are recorded here.
+	"fireworks:accounts/fireworks/models/ember-1":                        {Input: 3.00, Output: 15.00, CacheRead: 0.30},
+	"fireworks:accounts/fireworks/models/kimi-k3":                        {Input: 3.00, Output: 15.00, CacheRead: 0.30},
+	"fireworks:accounts/fireworks/models/deepseek-v4p1-flash":            {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"fireworks:accounts/fireworks/models/glm-5p3":                        {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"fireworks:accounts/fireworks/models/glm-5p3-flash":                  {Input: 0.15, Output: 0.50, CacheRead: 0.03},
+	"fireworks:accounts/fireworks/models/qwen3p8-max":                    {Input: 2.00, Output: 6.00, CacheRead: 0.25},
+	"fireworks:accounts/fireworks/models/minimax-m3":                     {Input: 0.30, Output: 1.20, CacheRead: 0.06},
+	"fireworks:accounts/fireworks/models/nemotron-3-ultra-nvfp4":         {Input: 0.60, Output: 2.40, CacheRead: 0.12},
+	"fireworks:accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {Input: 0.05, Output: 0.20, CacheRead: 0.01},
+	"fireworks:accounts/fireworks/models/gpt-oss-120b":                   {Input: 0.15, Output: 0.60, CacheRead: 0.015},
+	"perplexity:sonar":   {Input: 1.00, Output: 1.00},                  // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
+	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
+	"zai:glm-5.1":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5":          {Input: 1.00, Output: 3.20, CacheRead: 0.20}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5-turbo":    {Input: 1.20, Output: 4.00},                  // docs.z.ai, verified 2026-06
+	"zai:glm-4.7":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-10-09
+	"zai:glm-4.6":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-4.5":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-4.5-air":    {Input: 0.20, Output: 1.10, CacheRead: 0.03}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5.3":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"zai:glm-5.3-flash":  {Input: 0.15, Output: 0.50, CacheRead: 0.03},
+	"zai:glm-5.3-flashx": {Input: 0.37, Output: 1.25, CacheRead: 0.075},
+	"zai:glm-4.7-flashx": {Input: 0.07, Output: 0.40, CacheRead: 0.01},
+	"zai:glm-4.6v":       {Input: 0.30, Output: 0.90, CacheRead: 0.05},
+	"zai:glm-4.7-Flash":  {}, // Free (Z.AI direct pricing, verified 2026-10)
 
 	// TogetherAI (varies by model, these are examples)
-	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 0.88, Output: 0.88},
+	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 1.04, Output: 1.04},
+	"togetherai:MiniMaxAI/MiniMax-M3":                          {Input: 0.30, Output: 1.20, CacheRead: 0.06},
+	"togetherai:zai-org/GLM-5.3":                               {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"togetherai:zai-org/GLM-5.3-Flash":                         {Input: 0.15, Output: 0.50, CacheRead: 0.03},
+	"togetherai:deepseek-ai/DeepSeek-V4.1-Flash":               {Input: 0.30, Output: 1.20, CacheRead: 0.006},
+	"togetherai:deepseek-ai/DeepSeek-V4-Pro-0813":              {Input: 1.32, Output: 3.96, CacheRead: 0.13},
 	"togetherai:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {Input: 3.50, Output: 3.50},
 	"togetherai:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo":  {Input: 0.88, Output: 0.88},
 	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {Input: 0.18, Output: 0.18},
 	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {Input: 0.60, Output: 0.60},
+	// Exact serverless IDs from docs.together.ai/docs/serverless/models, read
+	// 2026-10-09. Disputed cache rates (Qwen3.8-2.4T, Kimi-K3) are omitted rather
+	// than guessed; the standard input/output rates are not in dispute.
+	"togetherai:thinkingmachines/Inkling":      {Input: 1.00, Output: 4.05, CacheRead: 0.17},
+	"togetherai:Qwen/Qwen3.8-2.4T-A95B":        {Input: 2.00, Output: 6.00},
+	"togetherai:Qwen/Qwen3.7-Max":              {Input: 2.50, Output: 7.50, CacheRead: 0.50},
+	"togetherai:Qwen/Qwen3.6-Plus":             {Input: 0.50, Output: 3.00},
+	"togetherai:Qwen/Qwen3.7-Plus":             {Input: 0.32, Output: 1.28},
+	"togetherai:Qwen/Qwen3.8-Flash":            {Input: 0.15, Output: 0.47},
+	"togetherai:moonshotai/Kimi-K3":            {Input: 2.70, Output: 13.50},
+	"togetherai:meta-models/Muse-Glimmer-30B":  {Input: 0.35, Output: 1.50, CacheRead: 0.04},
+	"togetherai:Prism-ML/Ternary-Bonsai-27B":   {}, // Free
+	"togetherai:together/Tev1-4B-experimental": {Input: 0.042},
 }
 
 // ModelTokenPricing returns the built-in per-token pricing (Input and Output, in
@@ -391,27 +567,39 @@ func ModelTokenPricing(provider Provider, model string) (*Pricing, bool) {
 	if !ok {
 		return nil, false
 	}
-	return &Pricing{
-		Input:  pricing.Input,
-		Output: pricing.Output,
-	}, true
+	// Copy the whole card, not just Input/Output: cache rates and long-context
+	// tiers are part of the published price and dropping them would make this
+	// helper's value disagree with EstimateCost. Copy the tier slice so the
+	// returned card cannot alias the global table.
+	out := pricing
+	if len(pricing.Tiers) > 0 {
+		out.Tiers = append([]PricingTier(nil), pricing.Tiers...)
+	}
+	return &out, true
 }
 
 // ModelUsage tracks usage for a specific model.
 type ModelUsage struct {
-	Provider            Provider  `json:"provider"`
-	Model               string    `json:"model"`
-	PromptTokens        int64     `json:"prompt_tokens"`
-	CompletionTokens    int64     `json:"completion_tokens"`
-	CacheReadTokens     int64     `json:"cache_read_tokens"`
-	CacheCreationTokens int64     `json:"cache_creation_tokens"`
-	Requests            int64     `json:"requests"`
-	EstimatedCost       float64   `json:"estimated_cost_usd"`
-	FirstUsed           time.Time `json:"first_used"`
-	LastUsed            time.Time `json:"last_used"`
+	Provider            Provider `json:"provider"`
+	Model               string   `json:"model"`
+	PromptTokens        int64    `json:"prompt_tokens"`
+	CompletionTokens    int64    `json:"completion_tokens"`
+	CacheReadTokens     int64    `json:"cache_read_tokens"`
+	CacheCreationTokens int64    `json:"cache_creation_tokens"`
+	Requests            int64    `json:"requests"`
+	// UnpricedRequests counts requests for which no rate card or provider-reported
+	// cost was available. Their tokens are included above, but EstimatedCost
+	// excludes them, so a non-zero value makes a partial report explicit.
+	UnpricedRequests int64     `json:"unpriced_requests,omitempty"`
+	EstimatedCost    float64   `json:"estimated_cost_usd"`
+	FirstUsed        time.Time `json:"first_used"`
+	LastUsed         time.Time `json:"last_used"`
 }
 
 // CostTracker tracks token usage and estimated costs across providers/models.
+//
+// Create one with [NewCostTracker]; the zero value has no pricing or usage maps
+// and is not usable.
 //
 // Thread-safety: All methods are safe for concurrent use. The tracker uses
 // an RWMutex internally to allow concurrent reads (GetUsage, GetTotalCost,
@@ -437,11 +625,11 @@ func NewCostTracker(customPricing ...map[string]Pricing) *CostTracker {
 	// Merge default and custom pricing
 	pricing := make(map[string]Pricing)
 	for k, v := range DefaultPricing {
-		pricing[k] = v
+		pricing[k] = clonePricing(v)
 	}
 	for _, cp := range customPricing {
 		for k, v := range cp {
-			pricing[k] = v
+			pricing[k] = clonePricing(v)
 		}
 	}
 
@@ -465,9 +653,6 @@ const maxSafeTokenCount = 1<<62 - 1
 // SetPricing.
 // If token counts approach overflow (extremely unlikely), the record is skipped
 // to prevent data corruption.
-//
-// Lock contention optimization: Cost calculation is performed before acquiring
-// the write lock to minimize lock hold time under high concurrency.
 func (t *CostTracker) Record(provider Provider, model string, usage Usage) (float64, bool) {
 	return t.RecordMode(provider, model, usage, PricingModeStandard)
 }
@@ -482,9 +667,10 @@ func (t *CostTracker) Record(provider Provider, model string, usage Usage) (floa
 func (t *CostTracker) costFor(provider Provider, model, key string, usage Usage, mode PricingMode) (float64, bool) {
 	// A provider-reported charge is what was billed, so it outranks every rate
 	// card, including one registered on this tracker: an estimate cannot be more
-	// accurate than the invoice.
+	// accurate than the invoice. RecordMode already clamps non-finite and negative
+	// charges through Usage.nonNegative; clamp again here for direct callers.
 	if usage.Cost != nil {
-		return *usage.Cost, true
+		return usage.nonNegative().costValue(), true
 	}
 	standard, standardKnown := t.pricing[key]
 	if !standardKnown && mode == PricingModeStandard {
@@ -513,15 +699,16 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 	key := t.makeKey(provider, model)
 	now := time.Now()
 
-	// Pre-calculate cost OUTSIDE the write lock to minimize lock hold time.
-	// Mode resolution reads the tracker's overlay, so it shares this read lock.
-	t.mu.RLock()
-	cost, known := t.costFor(provider, model, key, usage, mode)
-	t.mu.RUnlock()
-
-	// Now acquire write lock for minimal duration
+	// Price and update under one write lock. Cost resolution reads the tracker's
+	// pricing overlay, and a concurrent Reset clears the usage map and mode costs;
+	// computing the cost under a read lock and then reacquiring the write lock let
+	// a Reset land between the two, after which this call repopulated the tracker
+	// the operator had just cleared. Holding the write lock for the whole update
+	// makes Reset and RecordMode atomic with respect to each other.
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	usage = usage.nonNegative()
+	cost, known := t.costFor(provider, model, key, usage, mode)
 
 	u, ok := t.usage[key]
 	if !ok {
@@ -535,7 +722,10 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 
 	// Check for potential overflow before adding (extremely conservative).
 	// In practice, this would require processing quadrillions of tokens.
-	if u.PromptTokens > maxSafeTokenCount || u.CompletionTokens > maxSafeTokenCount {
+	if wouldOverflow(u.PromptTokens, int64(usage.PromptTokens)) ||
+		wouldOverflow(u.CompletionTokens, int64(usage.CompletionTokens)) ||
+		wouldOverflow(u.CacheReadTokens, int64(usage.CacheReadTokens)) ||
+		wouldOverflow(u.CacheCreationTokens, int64(usage.CacheCreationTokens)) {
 		// Counters have reached safe maximum - skip this record to prevent overflow.
 		// In production, consider rotating to a new tracking window or alerting.
 		u.LastUsed = now
@@ -547,10 +737,17 @@ func (t *CostTracker) RecordMode(provider Provider, model string, usage Usage, m
 	u.CacheReadTokens += int64(usage.CacheReadTokens)
 	u.CacheCreationTokens += int64(usage.CacheCreationTokens)
 	u.Requests++
+	if !known {
+		u.UnpricedRequests++
+	}
 	u.LastUsed = now
 	u.EstimatedCost += cost
 	t.modeCost[mode] += cost
 	return cost, known
+}
+
+func wouldOverflow(total, add int64) bool {
+	return add < 0 || total > maxSafeTokenCount || add > maxSafeTokenCount-total
 }
 
 // SetModePricing registers a rate card for a provider/model under a billing
@@ -566,7 +763,7 @@ func (t *CostTracker) SetModePricing(provider Provider, model string, mode Prici
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.modePricing[modePricingKey(provider, model, mode)] = pricing
+	t.modePricing[modePricingKey(provider, model, mode)] = clonePricing(pricing)
 }
 
 // GetModeCosts returns accumulated cost broken down by billing mode. The
@@ -671,7 +868,7 @@ func (t *CostTracker) Reset() {
 func (t *CostTracker) SetPricing(provider Provider, model string, pricing Pricing) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pricing[t.makeKey(provider, model)] = pricing
+	t.pricing[t.makeKey(provider, model)] = clonePricing(pricing)
 }
 
 // GetPricing returns pricing for a model.
@@ -679,7 +876,7 @@ func (t *CostTracker) GetPricing(provider Provider, model string) (Pricing, bool
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	p, ok := t.pricing[t.makeKey(provider, model)]
-	return p, ok
+	return clonePricing(p), ok
 }
 
 func (t *CostTracker) makeKey(provider Provider, model string) string {
@@ -730,7 +927,9 @@ func (m *CostMiddleware) GenerateContent(ctx context.Context, messages []Message
 
 	// Options are applied only after the call succeeds so the error path does not
 	// pay for a CallOptions allocation it will not use.
-	m.tracker.RecordMode(m.llm.Provider(), m.llm.Model(), resp.Usage, ApplyOptions(options...).PricingMode)
+	opts := ApplyOptions(options...)
+	provider, model := m.servedIdentity(resp.Provider, resp.Model, opts)
+	m.tracker.RecordMode(provider, model, resp.Usage, opts.PricingMode)
 	return resp, nil
 }
 
@@ -743,20 +942,42 @@ func (m *CostMiddleware) Stream(ctx context.Context, messages []Message, options
 
 	opts := ApplyOptions(options...)
 	var lastUsage *Usage
+	var streamProvider Provider
+	var streamModel string
 
 	return WrapStreamWithFinalizer(ctx, stream, opts,
 		func(chunk StreamChunk) StreamChunk {
 			if chunk.Usage != nil {
 				lastUsage = chunk.Usage
+				if chunk.Provider != "" || chunk.Model != "" {
+					streamProvider, streamModel = chunk.Provider, chunk.Model
+				}
 			}
 			return chunk
 		},
 		func() {
 			if lastUsage != nil {
-				m.tracker.RecordMode(m.llm.Provider(), m.llm.Model(), *lastUsage, opts.PricingMode)
+				provider, model := m.servedIdentity(streamProvider, streamModel, opts)
+				m.tracker.RecordMode(provider, model, *lastUsage, opts.PricingMode)
 			}
 		},
 	), nil
+}
+
+// servedIdentity uses the provider's response provenance when available. An
+// explicit WithModel override remains the best fallback when a provider does
+// not populate response metadata.
+func (m *CostMiddleware) servedIdentity(provider Provider, model string, opts *CallOptions) (Provider, string) {
+	if provider == "" {
+		provider = m.llm.Provider()
+	}
+	if model == "" {
+		model = opts.Model
+	}
+	if model == "" {
+		model = m.llm.Model()
+	}
+	return provider, model
 }
 
 // Provider returns the underlying LLM's provider.

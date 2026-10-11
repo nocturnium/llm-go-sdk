@@ -46,6 +46,9 @@ func WithBatchPollInterval(d time.Duration) NativeBatcherOption {
 func NewNativeBatcher(client *Client, opts ...NativeBatcherOption) *NativeBatcher {
 	b := &NativeBatcher{client: client, interval: defaultBatchPollInterval}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(b)
 	}
 	return b

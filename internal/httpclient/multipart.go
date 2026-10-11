@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -97,10 +96,16 @@ func (c *Client) DoMultipart(ctx context.Context, method, path string, fields ma
 		return nil
 	}
 	if out != nil {
-		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(out); err != nil {
-			// An empty 2xx body leaves the target zero-valued, matching DoJSON:
-			// the upload succeeded and the endpoint returned no payload.
-			if !errors.Is(err, io.EOF) {
+		data, err := readMultipartRawBody(resp)
+		if err != nil {
+			return err
+		}
+		// An empty 2xx body leaves the target zero-valued, matching DoJSON: the
+		// upload succeeded and the endpoint returned no payload. Reading the whole
+		// bounded body first also rejects a valid JSON value followed by more
+		// bytes than the limit, which a streaming decode would stop short of.
+		if len(bytes.TrimSpace(data)) > 0 {
+			if err := json.Unmarshal(data, out); err != nil {
 				return fmt.Errorf("decode multipart response: %w", err)
 			}
 		}

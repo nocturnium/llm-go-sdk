@@ -55,7 +55,10 @@ func TestBlockedPrompt_Stream(t *testing.T) {
 }
 
 func TestConvertResponse_NoCandidatesKeepsUsage(t *testing.T) {
-	out := convertResponse(&geminiapi.GenerateContentResponse{PromptFeedback: &geminiapi.PromptFeedback{BlockReason: "SAFETY"}, UsageMetadata: &geminiapi.UsageMetadata{PromptTokenCount: 3, TotalTokenCount: 3}})
+	out, err := convertResponse(&geminiapi.GenerateContentResponse{PromptFeedback: &geminiapi.PromptFeedback{BlockReason: "SAFETY"}, UsageMetadata: &geminiapi.UsageMetadata{PromptTokenCount: 3, TotalTokenCount: 3}})
+	if err != nil {
+		t.Fatalf("convertResponse returned error: %v", err)
+	}
 	if out.Usage.PromptTokens != 3 || out.FinishReason != llms.FinishReasonContentFilter {
 		t.Fatalf("out = %+v", out)
 	}

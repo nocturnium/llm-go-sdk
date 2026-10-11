@@ -56,9 +56,9 @@ func TestModeUsesPublishedRatesNotAMultiplier(t *testing.T) {
 		wantInput  float64
 		wantOutput float64
 	}{
-		{"gpt-5.6-sol", PricingModeBatch, 2.50, 15.00},
-		{"gpt-5.6-sol", PricingModeFlex, 2.50, 15.00},
-		{"gpt-5.6-sol", PricingModeFast, 10.00, 60.00},  // 2.0x standard
+		{"gpt-5.6-sol", PricingModeBatch, 4.00, 15.00},  // long-context batch tier
+		{"gpt-5.6-sol", PricingModeFlex, 4.00, 15.00},   // long-context flex tier
+		{"gpt-5.6-sol", PricingModeFast, 8.00, 40.00},   // 2.0x standard
 		{"gpt-5.5", PricingModeFast, 12.50, 75.00},      // 2.5x standard
 		{"gpt-5.4-mini", PricingModeFast, 1.50, 9.00},   // 2.0x standard
 		{"gpt-5.4-nano", PricingModeBatch, 0.10, 0.625}, // 0.5x standard
@@ -74,6 +74,37 @@ func TestModeUsesPublishedRatesNotAMultiplier(t *testing.T) {
 			want := c.wantInput + c.wantOutput
 			if !approxEqual(got, want) {
 				t.Errorf("cost = %v, want %v (input %v + output %v)", got, want, c.wantInput, c.wantOutput)
+			}
+		})
+	}
+}
+
+// TestModeCardsApplyLongContextTiers pins that a mode card's transcribing tier
+// is actually used above the long-context threshold. The absolute rates are
+// asserted so a mode card that carries only the short-context numbers cannot
+// pass by silently falling back to them.
+func TestModeCardsApplyLongContextTiers(t *testing.T) {
+	cases := []struct {
+		model      string
+		mode       PricingMode
+		wantInput  float64
+		wantOutput float64
+	}{
+		{"gpt-5.6-sol", PricingModeBatch, 4.00, 15.00},
+		{"gpt-5.6-sol", PricingModeFlex, 4.00, 15.00},
+		{"gpt-6-luna", PricingModeBatch, 0.10, 0.375},
+		{"gpt-5.5", PricingModeFlex, 5.00, 22.50},
+	}
+	for _, c := range cases {
+		t.Run(c.model+"/"+string(c.mode), func(t *testing.T) {
+			usage := Usage{PromptTokens: openAILongContextThreshold, CompletionTokens: 1_000_000}
+			got, ok := EstimateCostMode(ProviderOpenAI, c.model, usage, c.mode)
+			if !ok {
+				t.Fatalf("no rate card known for %s/%s", c.model, c.mode)
+			}
+			want := float64(openAILongContextThreshold)/1e6*c.wantInput + c.wantOutput
+			if !approxEqual(got, want) {
+				t.Errorf("long-context cost = %v, want %v (input %v + output %v)", got, want, c.wantInput, c.wantOutput)
 			}
 		})
 	}
@@ -203,17 +234,11 @@ func TestModeCardResolvesItsOwnTiers(t *testing.T) {
 	}
 }
 
-// TestBuiltInModeCardsCarryNoLongContextTier documents a known limitation as a
-// deliberate choice rather than an accident.
-//
-// OpenAI publishes separate long-context columns for its Batch and Flex tiers,
-// which are not transcribed here. So a batch request above the 272K threshold is
-// priced at short-context batch rates and reads low, while the same request at
-// standard rates correctly tiers up. Encoding a guessed long-context batch rate
-// would be worse than reading low, so the gap stands until the numbers are
-// transcribed. If they are, this test should start failing, that is the signal
-// to delete it.
-func TestBuiltInModeCardsCarryNoLongContextTier(t *testing.T) {
+// TestBuiltInModeCardsCarryLongContextTiers pins the published long-context
+// Batch/Flex rows. A mode card replaces the standard card wholesale, so if it
+// only carried short-context rates a request above 272K input tokens would be
+// billed below the published price.
+func TestBuiltInModeCardsCarryLongContextTiers(t *testing.T) {
 	longRequest := Usage{PromptTokens: openAILongContextThreshold, CompletionTokens: 1_000_000}
 
 	standard, _ := EstimateCost(ProviderOpenAI, "gpt-5.6-sol", longRequest)
@@ -222,15 +247,15 @@ func TestBuiltInModeCardsCarryNoLongContextTier(t *testing.T) {
 		t.Fatal("gpt-5.6-sol batch pricing should be known")
 	}
 
-	// Standard tiers up to the long-context card (10/45).
-	wantStandard := float64(openAILongContextThreshold)/1e6*10.00 + 45.00
+	// Standard tiers up to the long-context card (8/30).
+	wantStandard := float64(openAILongContextThreshold)/1e6*8.00 + 30.00
 	if !approxEqual(standard, wantStandard) {
 		t.Errorf("standard cost = %v, want %v (long-context tier)", standard, wantStandard)
 	}
-	// Batch stays on the short-context card (2.50/15.00), the documented gap.
-	wantBatch := float64(openAILongContextThreshold)/1e6*2.50 + 15.00
+	// Batch tiers up to its published long-context row (4.00/15.00).
+	wantBatch := float64(openAILongContextThreshold)/1e6*4.00 + 15.00
 	if !approxEqual(batch, wantBatch) {
-		t.Errorf("batch cost = %v, want %v (short-context batch card)", batch, wantBatch)
+		t.Errorf("batch cost = %v, want %v (long-context batch tier)", batch, wantBatch)
 	}
 }
 

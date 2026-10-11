@@ -10,10 +10,11 @@ import (
 // and an opaque URL whose credential never reaches url.URL.User.
 func TestAPIError_ErrorRedactsAwkwardCredentialForms(t *testing.T) {
 	cases := map[string]string{
-		"slash in the password":    "https://user:se/cret@host.example.com/v1",
-		"opaque form":              "https:KEY-SECRET@host.example.com/v1",
-		"hash in the password":     "https://user:se#cret@host.example.com/v1",
-		"question in the password": "https://user:se?cret@host.example.com/v1",
+		"slash in the password":              "https://user:se/cret@host.example.com/v1",
+		"numeric credential split from host": "https://user:1234/secret@host",
+		"opaque form":                        "https:KEY-SECRET@host.example.com/v1",
+		"hash in the password":               "https://user:se#cret@host.example.com/v1",
+		"question in the password":           "https://user:se?cret@host.example.com/v1",
 	}
 
 	for name, raw := range cases {

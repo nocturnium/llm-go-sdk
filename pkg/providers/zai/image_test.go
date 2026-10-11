@@ -57,6 +57,15 @@ func TestImage_Generation(t *testing.T) {
 	}
 }
 
+func TestImage_RejectsExplicitZeroCount(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) {
+		t.Error("unexpected HTTP request for a rejected zero image count")
+	})
+	if _, err := c.GenerateImage(context.Background(), "tree", llms.WithImageCount(0)); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("GenerateImage(WithImageCount(0)) = %v, want ErrInvalidParameters", err)
+	}
+}
+
 func TestImage_Validation(t *testing.T) {
 	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
 	if _, err := c.GenerateImage(context.Background(), ""); !errors.Is(err, llms.ErrEmptyPrompt) {

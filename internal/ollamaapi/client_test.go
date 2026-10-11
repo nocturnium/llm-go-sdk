@@ -600,6 +600,29 @@ func TestClient_SendsAPIKeyOnManagementRoutes(t *testing.T) {
 // TestEmbed_SendsTruncateFalse pins that truncate reaches the wire when false.
 // Ollama defaults /api/embed truncate to true, so an omitted false silently
 // truncates input the caller asked the server to reject.
+func TestEmbed_OmitsDefaultTruncate(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(EmbedResponse{Embeddings: [][]float32{{0.1}}}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	if _, err := client.Embed(context.Background(), &EmbedRequest{Model: "nomic-embed-text", Input: "Hello world"}); err != nil {
+		t.Fatalf("Embed failed: %v", err)
+	}
+	if _, ok := body["truncate"]; ok {
+		t.Fatal("request body set truncate; the server would not apply its default")
+	}
+}
+
 func TestEmbed_SendsTruncateFalse(t *testing.T) {
 	var body map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -615,10 +638,11 @@ func TestEmbed_SendsTruncateFalse(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{BaseURL: server.URL, AllowPrivateIPs: true, AllowHTTP: true})
+	noTruncate := false
 	if _, err := client.Embed(context.Background(), &EmbedRequest{
 		Model:    "nomic-embed-text",
 		Input:    "Hello world",
-		Truncate: false,
+		Truncate: &noTruncate,
 	}); err != nil {
 		t.Fatalf("Embed failed: %v", err)
 	}
@@ -629,5 +653,26 @@ func TestEmbed_SendsTruncateFalse(t *testing.T) {
 	}
 	if got != false {
 		t.Errorf("truncate = %v, want false", got)
+	}
+}
+
+// PullRequest.Stream must serialize an explicit false. Ollama's pull default is
+// streaming, so omitting the field would stream when the caller asked for one
+// response.
+func TestPullRequest_SendsExplicitFalseStream(t *testing.T) {
+	body, err := json.Marshal(PullRequest{Name: "llama3.2", Stream: false})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	stream, ok := got["stream"]
+	if !ok {
+		t.Fatal("request body omitted stream; the server would default it to true")
+	}
+	if stream != false {
+		t.Errorf("stream = %v, want false", stream)
 	}
 }

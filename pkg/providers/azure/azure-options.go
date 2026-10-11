@@ -14,6 +14,8 @@ type options struct {
 	Endpoint            string // Full Azure endpoint (e.g., https://myresource.openai.azure.com)
 	DeploymentName      string // Deployment name (required)
 	EmbeddingDeployment string // Embedding deployment name
+	ChatBaseURL         string // Base URL for the chat deployment
+	EmbeddingBaseURL    string // Base URL for the embedding deployment, when distinct
 	APIVersion          string // API version (default: 2024-02-15-preview)
 	HTTPClient          *http.Client
 	Timeout             time.Duration
@@ -98,6 +100,9 @@ func WithAllowHTTP() Option {
 func apply(opts ...Option) *options {
 	options := defaultOptions()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

@@ -60,6 +60,7 @@ conformance where the provider supports it.
 ```go
 schema := json.RawMessage(`{
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "sentiment": {"type": "string"},
     "confidence": {"type": "number"}
@@ -204,7 +205,9 @@ func main() {
     fmt.Printf("Prep:   %d min\n", recipe.PrepMinutes)
     fmt.Printf("Veg:    %v\n", recipe.Vegetarian)
     fmt.Printf("Items:  %v\n", recipe.Ingredients)
-    fmt.Printf("Tokens: %d\n", resp.Usage.TotalTokens)
+    if resp.Usage != nil {
+        fmt.Printf("Tokens: %d\n", resp.Usage.TotalTokens)
+    }
 }
 ```
 

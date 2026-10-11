@@ -267,16 +267,18 @@ If you only use the core API, that is the entire migration, you are done.
 
 ## 2. Replace `Thinking` with `Reasoning`
 
-The `Response.Thinking()` / `StreamChunk.Thinking()` methods, the `ThinkingContent` type
-alias, and the `WithThinkingMode` option have been **removed in v5** (they were deprecated
-throughout v4). Read chain-of-thought from the canonical `Reasoning` field:
+v4 removes the deprecated `Response.Thinking` and `StreamChunk.Thinking` **fields**; the
+`Thinking()` methods, the `ThinkingContent` alias, and the `WithThinkingMode` option stay as
+deprecated aliases through v4 (they are removed in v5). Read chain-of-thought from the
+canonical `Reasoning` field:
 
 ```go
 rc := resp.Reasoning         // canonical field
 ```
 
 If you built a `Response` / `StreamChunk` struct literal with `Thinking:`, set `Reasoning:`
-instead, and replace `WithThinkingMode(true/false)` with `WithReasoning`.
+instead. `WithThinkingMode` still compiles in v4 but is deprecated; migrate to
+`WithReasoning` at your convenience before v5 removes it.
 
 ## 3. Drop any use of the `ErrorMapper` registry (it was dead code)
 
@@ -412,7 +414,7 @@ at a time.
 
 | Change | v1 | v2 | Migration |
 |--------|----|----|-----------|
-| **Tool handlers take a context** | `func(args json.RawMessage) (any, error)` | `func(ctx context.Context, args json.RawMessage) (any, error)` | Add `ctx context.Context` as the first parameter of every `ToolHandler` / `RegisterFunc` handler. `ToolRegistry.Handle` and `HandleAll` also gain a leading `ctx`. Handlers now receive a context that is canceled when the agent loop is canceled or a turn errors, honor it for long-running tools. |
+| **Tool handlers** | `func(args json.RawMessage) (any, error)` | `func(args json.RawMessage) (any, error)` | Handler signatures are unchanged. Pass request-scoped cancellation through tool arguments or application context when needed. |
 | **Sampling penalties are pointers** | `FrequencyPenalty float64`, `PresencePenalty float64` | `*float64` | If you set these via the `WithFrequencyPenalty` / `WithPresencePenalty` options, no change is needed. If you construct `CallOptions` as a struct literal, wrap values in a `*float64` (an explicit `0` is now distinguishable from unset). |
 | **`MustParseToolArguments` removed** | `MustParseToolArguments[T](tc)` (panicked on malformed model output) |, | Use the error-returning `ParseToolArguments[T](tc)` or `ParseToolArgumentsMap(tc)`. The `Must` variant was a denial-of-service risk because it panicked on model-controlled JSON. |
 | **RunPod registry error value** | `llms.New("runpod", cfg)` without `endpoint_id` returned `runpod.ErrMissingEndpointID` | returns an error wrapping `llms.ErrInvalidParameters` (names both provider and key) | Construction still fails the same way; only the error *value* changed. If you matched `errors.Is(err, runpod.ErrMissingEndpointID)` on the **registry** path, match `llms.ErrInvalidParameters` instead. The direct `runpod.New(...)` constructor still returns `ErrMissingEndpointID`. |

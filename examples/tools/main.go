@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"time"
 
@@ -98,7 +99,8 @@ func runToolExample(ctx context.Context, client llms.LLM, prompt string, tools [
 	fmt.Printf("User: %s\n\n", prompt)
 
 	// Loop to handle tool calls
-	for i := 0; i < 5; i++ { // Max 5 iterations to prevent infinite loops
+	const maxIterations = 5 // Cap tool-call rounds to prevent infinite loops.
+	for i := 0; i < maxIterations; i++ {
 		resp, err := client.GenerateContent(ctx, messages,
 			llms.WithTools(tools),
 		)
@@ -135,9 +137,13 @@ func runToolExample(ctx context.Context, client llms.LLM, prompt string, tools [
 		} else {
 			// No more tool calls, we have the final response
 			fmt.Printf("Assistant: %s\n", resp.Content)
-			break
+			return
 		}
 	}
+
+	// The model kept requesting tools past the cap, so there is no final
+	// assistant response to show. Say so rather than ending as if it completed.
+	fmt.Printf("Reached the %d-iteration tool-call limit without a final response.\n", maxIterations)
 }
 
 // executeTool simulates executing a tool and returning results.
@@ -153,10 +159,19 @@ func executeTool(name, arguments string) string {
 		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 			return fmt.Sprintf(`{"error": %q}`, "could not parse arguments: "+err.Error())
 		}
+		if args.Location == "" {
+			return `{"error": "location is required"}`
+		}
 
 		unit := args.Unit
 		if unit == "" {
 			unit = "celsius"
+		}
+		// The schema enumerates celsius and fahrenheit; a model that sends
+		// anything else is asking for a reading this tool cannot produce, so
+		// reject it rather than labeling a Celsius value with an arbitrary unit.
+		if unit != "celsius" && unit != "fahrenheit" {
+			return fmt.Sprintf(`{"error": %q}`, "unsupported unit: "+unit)
 		}
 
 		// Simulated weather data
@@ -164,34 +179,56 @@ func executeTool(name, arguments string) string {
 		if unit == "fahrenheit" {
 			temp = 72
 		}
-		return fmt.Sprintf(`{"temperature": %d, "unit": "%s", "condition": "sunny", "humidity": 45}`,
-			temp, unit)
+		// The model chose the unit, so quote it through JSON rather than
+		// interpolating it into a hand-built string.
+		result, err := json.Marshal(map[string]any{
+			"temperature": temp,
+			"unit":        unit,
+			"condition":   "sunny",
+			"humidity":    45,
+		})
+		if err != nil {
+			return `{"error": "could not encode weather result"}`
+		}
+		return string(result)
 
 	case "calculator":
 		var args struct {
-			Operation string  `json:"operation"`
-			A         float64 `json:"a"`
-			B         float64 `json:"b"`
+			Operation string   `json:"operation"`
+			A         *float64 `json:"a"`
+			B         *float64 `json:"b"`
 		}
 		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 			return fmt.Sprintf(`{"error": %q}`, "could not parse arguments: "+err.Error())
 		}
+		// A missing operand would otherwise read as a zero value and return a
+		// fabricated result; require both operands explicitly.
+		if args.A == nil || args.B == nil {
+			return `{"error": "operands a and b are required"}`
+		}
+		a, b := *args.A, *args.B
 
 		var result float64
 		switch args.Operation {
 		case "add":
-			result = args.A + args.B
+			result = a + b
 		case "subtract":
-			result = args.A - args.B
+			result = a - b
 		case "multiply":
-			result = args.A * args.B
+			result = a * b
 		case "divide":
-			if args.B == 0 {
+			if b == 0 {
 				return `{"error": "division by zero"}`
 			}
-			result = args.A / args.B
+			result = a / b
 		default:
 			return `{"error": "unknown operation"}`
+		}
+		// float64 arithmetic can overflow to +Inf or produce NaN (for example
+		// 1e308 * 10 or 0/0 in a later operation); %g renders those as +Inf/NaN,
+		// which is not valid JSON and would break the model's tool-result parse.
+		if math.IsInf(result, 0) || math.IsNaN(result) {
+			return `{"error": "result is not a finite number"}`
 		}
 		return fmt.Sprintf(`{"result": %g}`, result)
 

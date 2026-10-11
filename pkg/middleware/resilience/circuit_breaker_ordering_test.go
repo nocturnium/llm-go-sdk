@@ -53,7 +53,10 @@ func TestCircuitBreaker_CallbackOrdering(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for callbacks; got %v", order)
+			mu.Lock()
+			snapshot := append([]CircuitState(nil), order...)
+			mu.Unlock()
+			t.Fatalf("timed out waiting for callbacks; got %v", snapshot)
 		}
 		time.Sleep(2 * time.Millisecond)
 	}

@@ -10,6 +10,10 @@ import (
 	"sync/atomic"
 )
 
+// maxSSEEventSize bounds one event as read from the wire: a line may hold at
+// most this many bytes, and the lines of one event together at most this many,
+// both counted with their field names ("data: " and the like) but without line
+// terminators. A data payload of exactly this size therefore does not fit.
 const maxSSEEventSize = 4 * 1024 * 1024 // 4MB
 
 // SSEEvent represents a Server-Sent Event
@@ -37,6 +41,10 @@ type SSEReader struct {
 	br     *bufio.Reader
 	reader io.ReadCloser
 	closed atomic.Bool // Tracks if Close() has been called to prevent double-close
+	// pendingLF is set after a bare CR terminator: the next byte is consumed and
+	// discarded only if it is a LF, so a CRLF pair that arrives split across two
+	// reads is still one terminator without ever blocking on lookahead.
+	pendingLF bool
 }
 
 // NewSSEReader creates a new SSE reader from a response body
@@ -100,14 +108,18 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 		// readLine returns any data read before the error (e.g. a final line
 		// without a trailing newline at EOF), so process the line first.
 		if line != "" {
-			eventSize += len(line)
+			// Count the line content, not its terminator: the documented bound is
+			// on the bytes the caller sees, so an exact-max line must not trip the
+			// event check through its trailing newline.
+			lineContent := strings.TrimSuffix(line, "\n")
+			eventSize += len(lineContent)
 			if eventSize > maxSSEEventSize {
 				return nil, fmt.Errorf("SSE event exceeds maximum size of %d bytes", maxSSEEventSize)
 			}
 
 			// Strip the line terminator (\n and an optional preceding \r) to match
 			// bufio.Scanner's ScanLines semantics.
-			line = strings.TrimSuffix(line, "\n")
+			line = lineContent
 			line = strings.TrimSuffix(line, "\r")
 
 			switch {
@@ -157,24 +169,56 @@ func (r *SSEReader) Read() (*SSEEvent, error) {
 	}
 }
 
+// readLine reads one line, including its terminator. LF, CRLF, and a bare CR
+// all terminate a line, and every terminator is normalized to "\n" so the
+// caller's TrimSuffix logic keeps working. The SSE spec accepts all three; a
+// reader that only splits on LF merges a CR-only stream into one line and
+// leaves the carriage returns in the data.
 func (r *SSEReader) readLine() (string, error) {
+	// A CR from the previous line may have been followed by a LF that had not
+	// arrived yet. Read it now, on the following call, after the previous line
+	// has already been handed to the caller. If the byte is not a LF the stream
+	// used a bare CR terminator, so put it back and parse it as the next line's
+	// first byte. This runs before the line loop so the paired LF is never
+	// mistaken for the empty line that dispatches an SSE event.
+	if r.pendingLF {
+		r.pendingLF = false
+		b, err := r.br.ReadByte()
+		switch {
+		case errors.Is(err, io.EOF):
+			return "", io.EOF
+		case err != nil:
+			return "", err
+		case b != '\n':
+			_ = r.br.UnreadByte()
+		}
+	}
 	var line []byte
 	for {
-		fragment, err := r.br.ReadSlice('\n')
-		if len(line)+len(fragment) > maxSSEEventSize {
-			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
-		}
-		line = append(line, fragment...)
-		if errors.Is(err, bufio.ErrBufferFull) {
-			continue
-		}
+		b, err := r.br.ReadByte()
 		if err != nil {
 			if len(line) > 0 {
 				return string(line), err
 			}
 			return "", err
 		}
-		return string(line), nil
+		if b == '\n' {
+			return string(line) + "\n", nil
+		}
+		if b == '\r' {
+			// Defer the LF: it may not have arrived yet, and peeking would block a
+			// CR-only stream. The next readLine consumes it if present.
+			r.pendingLF = true
+			return string(line) + "\n", nil
+		}
+		// Reject only a line whose content would exceed the limit; a line of
+		// exactly maxSSEEventSize bytes is within the documented bound and must be
+		// accepted. Checking before consuming the terminator wrongly rejected the
+		// exact-length case.
+		if len(line) >= maxSSEEventSize {
+			return "", fmt.Errorf("SSE line exceeds maximum size of %d bytes", maxSSEEventSize)
+		}
+		line = append(line, b)
 	}
 }
 

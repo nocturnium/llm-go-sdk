@@ -5,6 +5,7 @@
 package infinity
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -159,15 +160,11 @@ func (c *Client) embedRunPod(ctx context.Context, texts []string, model string, 
 			fmt.Errorf("runpod job failed with status: %s", runPodResp.Status))
 	}
 
-	if len(runPodResp.Output) == 0 {
+	// Parse the embedded output, unwrapping either the object or array shape.
+	outputBytes, ok := runPodResp.payloadOf()
+	if !ok {
 		return nil, llms.WrapProviderError(llms.ProviderInfinity, "embed",
 			fmt.Errorf("runpod returned empty output"))
-	}
-
-	// Parse the embedded output - it's the first element wrapped in the Output array
-	outputBytes, err := json.Marshal(runPodResp.Output[0])
-	if err != nil {
-		return nil, llms.WrapProviderError(llms.ProviderInfinity, "embed", err)
 	}
 
 	var embedOutput runPodEmbeddingOutput
@@ -290,15 +287,11 @@ func (c *Client) rerankRunPod(ctx context.Context, query string, documents []str
 			fmt.Errorf("runpod job failed with status: %s", runPodResp.Status))
 	}
 
-	if len(runPodResp.Output) == 0 {
+	// Parse the rerank output, unwrapping either the object or array shape.
+	outputBytes, ok := runPodResp.payloadOf()
+	if !ok {
 		return nil, llms.WrapProviderError(llms.ProviderInfinity, "rerank",
 			fmt.Errorf("runpod returned empty output"))
-	}
-
-	// Parse the rerank output
-	outputBytes, err := json.Marshal(runPodResp.Output[0])
-	if err != nil {
-		return nil, llms.WrapProviderError(llms.ProviderInfinity, "rerank", err)
 	}
 
 	var rerankResp rerankAPIResponse
@@ -389,8 +382,30 @@ type runPodResponse struct {
 	Status        string `json:"status"`
 	DelayTime     int    `json:"delayTime"`
 	ExecutionTime int    `json:"executionTime"`
-	Output        []any  `json:"output"`
-	WorkerID      string `json:"workerId"`
+	// Output is captured raw because Runpod puts the handler result here either
+	// as a single JSON object (an ordinary handler return) or as a one-element
+	// array (a streaming handler with output aggregation). payloadOf unwraps
+	// both shapes.
+	Output   json.RawMessage `json:"output"`
+	WorkerID string          `json:"workerId"`
+}
+
+// payloadOf returns the JSON bytes of the Runpod output payload. An array
+// yields its first element; an object is returned as-is. ok is false when the
+// output is absent or empty.
+func (r *runPodResponse) payloadOf() (json.RawMessage, bool) {
+	raw := bytes.TrimSpace(r.Output)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil, false
+	}
+	if raw[0] == '[' {
+		var arr []json.RawMessage
+		if err := json.Unmarshal(raw, &arr); err != nil || len(arr) == 0 {
+			return nil, false
+		}
+		return arr[0], true
+	}
+	return raw, true
 }
 
 // runPodEmbeddingOutput is the embedding output from RunPod.

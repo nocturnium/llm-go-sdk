@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
@@ -46,8 +45,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 		fields["prompt"] = o.Prompt
 	}
 	format := "json"
-	if o.Diarize || o.WordTimestamps || o.Language != "" {
+	if o.Diarize || o.WordTimestamps {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
+	}
+	if o.Language != "" {
+		fields["language"] = o.Language
 	}
 	for _, term := range o.Keyterms {
 		files = append(files, httpclient.MultipartFile{Field: "hotwords[]", Data: []byte(term)})
@@ -94,7 +96,17 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	for _, w := range wire.Words {
 		speaker := w.Speaker
 		if speaker == "" && len(w.SpeakerID) > 0 && string(w.SpeakerID) != "null" {
-			speaker = strings.Trim(string(w.SpeakerID), "\"")
+			// speaker_id arrives as either a JSON number or a JSON string. Unmarshal
+			// rather than trimming quotes, so an escaped string ("a\nb") is decoded
+			// once instead of being returned still escaped.
+			var id string
+			if err := json.Unmarshal(w.SpeakerID, &id); err != nil {
+				var num json.Number
+				if numErr := json.Unmarshal(w.SpeakerID, &num); numErr == nil {
+					id = num.String()
+				}
+			}
+			speaker = id
 		}
 		out.Words = append(out.Words, llms.TranscriptWord{Word: w.Word, Start: w.Start, End: w.End, Speaker: speaker})
 	}

@@ -292,11 +292,19 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 		m.recordError(ctx, span, err, attrs)
 		return nil, err
 	}
+	// An LLM implementation may return a nil response with a nil error; the
+	// declared return type permits it. Report it as an incomplete response
+	// rather than panicking on the usage dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", m.llm.Provider(), llms.ErrIncompleteResponse)
+		m.recordError(ctx, span, err, attrs)
+		return nil, err
+	}
 
 	m.setGenAIResponseAttributes(span, m.resolveModel(opts), resp, duration)
 
 	// Record token metrics
-	if resp.Usage.TotalTokens > 0 {
+	if usageReported(resp.Usage) {
 		m.promptTokens.Add(ctx, int64(resp.Usage.PromptTokens), metric.WithAttributes(attrs...))
 		m.completionTokens.Add(ctx, int64(resp.Usage.CompletionTokens), metric.WithAttributes(attrs...))
 	}
@@ -356,6 +364,15 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 		span.End()
 		return nil, err
 	}
+	// A nil stream with a nil error would block the processing goroutine's range
+	// forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", m.llm.Provider(), llms.ErrIncompleteResponse)
+		m.requestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
+		m.recordError(ctx, span, err, attrs)
+		span.End()
+		return nil, err
+	}
 
 	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
 	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)
@@ -375,6 +392,7 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 		var finishReason string
 		var toolCallCount int
 		var hadError bool
+		var completed bool
 		var firstChunkReceived bool
 		var ttft time.Duration
 
@@ -438,7 +456,9 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			}
 
 			if !hadError {
-				if err := ctx.Err(); err != nil {
+				// A stream that delivered its terminal chunk already succeeded; a
+				// cancellation observed after it must not fail the span.
+				if err := ctx.Err(); err != nil && !completed {
 					hadError = true
 					m.recordError(ctx, span, err, attrs)
 				}
@@ -469,6 +489,10 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				hadError = true
 				m.recordError(ctx, span, chunk.Error, attrs)
 				return
@@ -490,8 +514,17 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
 			}
+			if chunk.Done {
+				completed = true
+			}
 			if len(chunk.ToolCalls) > 0 {
-				toolCallCount = len(chunk.ToolCalls)
+				// Providers may deliver tool calls across several chunks (deltas)
+				// or as one cumulative list on the terminal chunk. Taking the
+				// maximum reports the full count in both styles; assigning the
+				// last chunk's length would undercount the delta case.
+				if n := len(chunk.ToolCalls); n > toolCallCount {
+					toolCallCount = n
+				}
 			}
 		}
 	}()
@@ -643,7 +676,7 @@ func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, mod
 		keyGenAIResponseFinishReason.String(string(resp.FinishReason)),
 	)
 
-	if resp.Usage.TotalTokens > 0 {
+	if usageReported(resp.Usage) {
 		span.SetAttributes(
 			keyGenAIUsagePromptTokens.Int(resp.Usage.PromptTokens),
 			keyGenAIUsageCompletionTokens.Int(resp.Usage.CompletionTokens),
@@ -686,3 +719,10 @@ var (
 	_ llms.LLM     = (*LangfuseOTelMiddleware)(nil)
 	_ llms.Wrapper = (*LangfuseOTelMiddleware)(nil)
 )
+
+// usageReported reports whether the provider returned any token counts. Some
+// providers omit the total while still reporting prompt and completion tokens,
+// so the total alone is not a reliable signal.
+func usageReported(u llms.Usage) bool {
+	return u.TotalTokens > 0 || u.PromptTokens > 0 || u.CompletionTokens > 0
+}

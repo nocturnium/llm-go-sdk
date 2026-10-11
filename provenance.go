@@ -28,10 +28,12 @@ func StampResponse(resp *Response, p Provider, model string) {
 
 // stampReasoning stamps an unstamped r in place.
 func stampReasoning(r *ReasoningContent, p Provider, model string) {
-	if r == nil || r.Provider != "" {
+	if r == nil {
 		return
 	}
-	r.Provider = p
+	if r.Provider == "" {
+		r.Provider = p
+	}
 	if r.Model == "" {
 		r.Model = model
 	}
@@ -49,7 +51,7 @@ func stampToolCall(tc *ToolCall, p Provider) {
 // allocation per reasoning delta, which is cheap next to the network read that
 // produced it and keeps producers free to reuse what they send.
 func stampChunk(chunk StreamChunk, p Provider, model string) StreamChunk {
-	if chunk.Reasoning != nil && chunk.Reasoning.Provider == "" {
+	if chunk.Reasoning != nil && (chunk.Reasoning.Provider == "" || chunk.Reasoning.Model == "") {
 		chunk.Reasoning = chunk.Reasoning.Clone()
 		stampReasoning(chunk.Reasoning, p, model)
 	}

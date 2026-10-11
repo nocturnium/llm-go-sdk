@@ -341,8 +341,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	// Fetch models from API
-	resp, err := c.Client().ListModels(ctx)
+	// Fetch models from API. The endpoint accepts a cursor (last_id) and reports
+	// has_more/last_id when a page is truncated, so pass the cursor through and
+	// preserve the server's pagination state instead of claiming the list is
+	// complete.
+	query := map[string]string(nil)
+	if options.Cursor != "" {
+		query = map[string]string{"after": options.Cursor}
+	}
+	resp, err := c.Client().ListModelsWithQuery(ctx, query)
 	if err != nil {
 		return nil, llms.WrapProviderError(llms.ProviderOpenAI, "list models", err)
 	}
@@ -360,13 +367,21 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	}
 
 	// apply limit if specified
+	hasMore := resp.HasMore
+	nextCursor := resp.LastID
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		// The returned prefix ends before the server's page cursor. Point the
+		// caller at the last model actually returned so continuing from it does
+		// not skip the models between here and resp.LastID.
+		nextCursor = models[len(models)-1].ID
+		hasMore = true
 	}
 
 	return &llms.ListModelsResult{
-		Models:  models,
-		HasMore: false, // OpenAI doesn't paginate the models endpoint
+		Models:     models,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
 	}, nil
 }
 
@@ -374,16 +389,31 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 // Returns nil, llms.ErrModelNotFound if the model is not found.
 func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo, error) {
 	// OpenAI doesn't have a dedicated single-model endpoint that returns rich data,
-	// so we fetch all models and filter
-	result, err := c.ListModels(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, m := range result.Models {
-		if m.ID == modelID {
-			return &m, nil
+	// so page through the models list until the ID is found or the server says
+	// there is no next page. A single ListModels call would report not-found for
+	// a model on a later page even though the server returned HasMore=true.
+	cursor := ""
+	for {
+		opts := []llms.ListModelsOption{}
+		if cursor != "" {
+			opts = append(opts, llms.WithModelCursor(cursor))
 		}
+		result, err := c.ListModels(ctx, opts...)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range result.Models {
+			if m.ID == modelID {
+				return &m, nil
+			}
+		}
+		if !result.HasMore || result.NextCursor == "" {
+			break
+		}
+		if result.NextCursor == cursor {
+			break
+		}
+		cursor = result.NextCursor
 	}
 
 	return nil, llms.ErrModelNotFound
@@ -410,8 +440,16 @@ func convertOpenAIModel(m *openaicompat.ModelResponse) llms.ModelInfo {
 		info.DisplayName = metadata.displayName
 		info.ContextLength = metadata.contextLength
 		info.MaxOutput = metadata.maxOutput
-		info.Types = metadata.types
-		info.Pricing = metadata.pricing
+		// Copy the shared slice and pricing card so a caller mutating one
+		// ModelInfo cannot change later results or race with concurrent listing.
+		info.Types = append([]llms.ModelType(nil), metadata.types...)
+		if metadata.pricing != nil {
+			pricing := *metadata.pricing
+			if len(pricing.Tiers) > 0 {
+				pricing.Tiers = append([]llms.PricingTier(nil), pricing.Tiers...)
+			}
+			info.Pricing = &pricing
+		}
 	} else {
 		info.DisplayName = formatModelName(m.ID)
 		info.Types = inferModelTypes(m.ID)
@@ -515,9 +553,17 @@ func inferModelTypes(id string) []llms.ModelType {
 	if strings.HasPrefix(idLower, "gpt-4o") {
 		return []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}
 	}
+	// Dated GPT-4.1 snapshots (for example gpt-4.1-2025-04-14) miss the exact
+	// knownModels lookup but carry the same vision capability as the aliases.
+	if strings.HasPrefix(idLower, "gpt-4.1") {
+		return []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}
+	}
 	if strings.HasPrefix(idLower, "gpt-4") ||
 		strings.HasPrefix(idLower, "gpt-3.5") ||
+		strings.HasPrefix(idLower, "gpt-5") ||
 		strings.HasPrefix(idLower, "o1") ||
+		strings.HasPrefix(idLower, "o3") ||
+		strings.HasPrefix(idLower, "o4") ||
 		strings.HasPrefix(idLower, "chatgpt") {
 		return []llms.ModelType{llms.ModelTypeChat}
 	}

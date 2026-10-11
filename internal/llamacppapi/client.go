@@ -35,6 +35,13 @@ type ClientConfig struct {
 
 // NewClient creates a new llama.cpp native API client.
 func NewClient(config ClientConfig) *Client {
+	baseURL := strings.TrimSuffix(config.BaseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+		config.AllowPrivateIPs = true
+		config.AllowHTTP = true
+	}
 	var hcOpts []httpclient.ClientOption
 	if config.HTTPClient != nil {
 		hcOpts = append(hcOpts, httpclient.WithHTTPClient(config.HTTPClient))
@@ -47,12 +54,6 @@ func NewClient(config ClientConfig) *Client {
 		httpclient.WithAllowHTTP(config.AllowHTTP),
 	)
 	httpClient := httpclient.NewClient(hcOpts...)
-
-	baseURL := strings.TrimSuffix(config.BaseURL, "/")
-	baseURL = strings.TrimSuffix(baseURL, "/v1")
-	if baseURL == "" {
-		baseURL = defaultBaseURL
-	}
 
 	return &Client{
 		httpClient: httpClient,
@@ -127,7 +128,7 @@ func WrapError(operation string, err error) error {
 	}
 
 	var httpErr *httpclient.APIError
-	if errors.As(err, &httpErr) {
+	if errors.As(err, &httpErr) && httpErr != nil {
 		return &llms.APIError{
 			StatusCode:    httpErr.StatusCode,
 			Message:       httpErr.Message,
@@ -140,7 +141,7 @@ func WrapError(operation string, err error) error {
 	}
 
 	var apiErr *llms.APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		if apiErr.Provider == "" {
 			apiErr.Provider = llms.ProviderLlamaCpp
 		}

@@ -53,3 +53,40 @@ func TestChain_OrderAndNilSkip(t *testing.T) {
 		t.Error("UnwrapAll should reach the base provider through the chain")
 	}
 }
+
+// selfWrapper returns itself from Unwrap, producing a cycle. It carries a slice
+// so the wrapper value is non-comparable, exercising the fallback identity used
+// when a wrapper cannot be used as its own map key.
+type selfWrapper struct {
+	LLM
+	//lint:ignore U1000 keeps the wrapper non-comparable for the fallback-identity test
+	pad []int
+}
+
+func (w *selfWrapper) Unwrap() LLM { return w }
+
+func TestUnwrapAll_CyclicNonComparableWrapper(t *testing.T) {
+	w := &selfWrapper{LLM: NewMockLLM()}
+	if got := UnwrapAll(w); got != LLM(w) {
+		t.Errorf("UnwrapAll(cyclic) = %v, want the wrapper itself", got)
+	}
+	if mws := GetMiddleware(w); len(mws) != 1 {
+		t.Errorf("GetMiddleware(cyclic) returned %d wrappers, want 1", len(mws))
+	}
+}
+
+// typedNilWrapper is a value-receiver wrapper; calling Unwrap on a nil pointer
+// to it panics, which is exactly the case a typed-nil interface hides.
+type typedNilWrapper struct{ LLM }
+
+func (typedNilWrapper) Unwrap() LLM { return nil }
+
+func TestUnwrapAll_TypedNilWrapper(t *testing.T) {
+	var wrapper *typedNilWrapper
+	if got := UnwrapAll(wrapper); got != nil {
+		t.Errorf("UnwrapAll(typed nil) = %v, want nil", got)
+	}
+	if got := GetMiddleware(wrapper); len(got) != 0 {
+		t.Errorf("GetMiddleware(typed nil) returned %d wrappers, want 0", len(got))
+	}
+}

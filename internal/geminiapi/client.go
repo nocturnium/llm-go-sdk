@@ -90,7 +90,7 @@ func (c *Client) GenerateContent(ctx context.Context, model string, req *Generat
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("generate content", err)
 	}
 
 	return &response, nil
@@ -114,7 +114,7 @@ func (c *Client) GenerateContentStream(ctx context.Context, model string, req *G
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("stream generate content", err)
 	}
 
 	return &StreamReader{
@@ -233,7 +233,7 @@ func (c *Client) EmbedContent(ctx context.Context, model string, req *EmbedConte
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("embed content", err)
 	}
 
 	return &response, nil
@@ -258,7 +258,7 @@ func (c *Client) BatchEmbedContents(ctx context.Context, model string, req *Batc
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("batch embed contents", err)
 	}
 
 	return &response, nil
@@ -293,7 +293,7 @@ func (c *Client) ListModels(ctx context.Context, params *ModelsListParams) (*Mod
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("list models", err)
 	}
 
 	return &response, nil
@@ -319,7 +319,7 @@ func (c *Client) GetModel(ctx context.Context, modelName string) (*ModelInfo, er
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("get model", err)
 	}
 
 	return &response, nil

@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"sync"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -24,17 +25,31 @@ func TestMedia_ForbiddenWithoutModeration(t *testing.T) {
 	}
 }
 func TestTranscribe_AudioUsageAndRepeatedContext(t *testing.T) {
+	var mu sync.Mutex
+	var handlerErr error
 	c := mediaTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
-			t.Fatal(err)
+			// The handler runs on its own goroutine; record the failure for the
+			// test goroutine instead of calling t.Fatal here.
+			mu.Lock()
+			handlerErr = err
+			mu.Unlock()
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 		defer r.MultipartForm.RemoveAll()
-		if !reflect.DeepEqual(r.MultipartForm.Value["context_bias"], []string{"one", "two"}) || r.FormValue("context_bias[]") != "" {
+		if !reflect.DeepEqual(r.MultipartForm.Value["context_bias[]"], []string{"one", "two"}) || r.FormValue("context_bias") != "" {
 			t.Error(r.MultipartForm)
 		}
 		fmt.Fprint(w, `{"text":"hi","usage":{"prompt_audio_seconds":90}}`)
 	})
 	out, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("wav"), MIMEType: "audio/wav"}, llms.WithTranscribeKeyterms([]string{"one", "two"}))
+	mu.Lock()
+	recorded := handlerErr
+	mu.Unlock()
+	if recorded != nil {
+		t.Fatalf("handler: %v", recorded)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

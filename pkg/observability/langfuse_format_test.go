@@ -2,6 +2,7 @@ package observability
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -204,5 +205,16 @@ func TestTruncateContent_UTF8Safe(t *testing.T) {
 	}
 	if result != "ab..." {
 		t.Errorf("truncateContent returned %q, want %q", result, "ab...")
+	}
+}
+
+func TestFormatOutput_StructuredOmitsAbsentUsage(t *testing.T) {
+	out := FormatOutput(&llms.Response{Content: "hi"}, OutputFormatStructured)
+	if strings.Contains(out, "usage") {
+		t.Errorf("response without usage must omit the usage object: %s", out)
+	}
+	out = FormatOutput(&llms.Response{Content: "hi", Usage: llms.Usage{PromptTokens: 3, TotalTokens: 3}}, OutputFormatStructured)
+	if !strings.Contains(out, `"prompt_tokens":3`) {
+		t.Errorf("reported usage must be kept: %s", out)
 	}
 }

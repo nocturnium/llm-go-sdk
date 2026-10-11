@@ -26,6 +26,9 @@ func (t *translator) reject(field Field, isHard bool, detail string) error {
 // config translates a GenerateContentConfig. Every field is translated,
 // ignored or rejected; see fieldHandling for the table.
 func (t *translator) config(cfg *genai.GenerateContentConfig) error {
+	if cfg == nil {
+		return nil
+	}
 	add := func(o llms.CallOption) { t.tr.callOptions = append(t.tr.callOptions, o) }
 
 	if cfg.Temperature != nil {
@@ -46,7 +49,7 @@ func (t *translator) config(cfg *genai.GenerateContentConfig) error {
 	if cfg.FrequencyPenalty != nil {
 		add(llms.WithFrequencyPenalty(float64(*cfg.FrequencyPenalty)))
 	}
-	if cfg.CandidateCount > 1 {
+	if cfg.CandidateCount > 1 || cfg.CandidateCount < 0 {
 		return t.reject("GenerateContentConfig.CandidateCount", true, fmt.Sprintf("%d candidates", cfg.CandidateCount))
 	}
 	if len(cfg.ResponseModalities) > 0 {
@@ -310,8 +313,11 @@ func (t *translator) toolConfig(tc *genai.ToolConfig, tools []llms.Tool) ([]llms
 	case genai.FunctionCallingConfigModeAny:
 		switch {
 		case len(names) == 1 && !t.tr.structured:
+			// Filter the tool list as well as pinning the choice: a provider
+			// that honors the tool definitions but ignores tool_choice must
+			// not be handed a tool outside the caller's allowlist.
 			add(llms.WithToolChoiceTool(names[0]))
-			return tools, nil
+			return filterTools(tools, names), nil
 		default:
 			add(llms.WithToolChoiceRequired())
 			return filterTools(tools, names), nil

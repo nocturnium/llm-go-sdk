@@ -75,8 +75,10 @@ type ModelInfo struct {
 	// Pricing contains cost information for using this model
 	Pricing *Pricing `json:"pricing,omitempty"`
 
-	// CreatedAt is when the model was released or added
-	CreatedAt time.Time `json:"created_at,omitempty"`
+	// CreatedAt is when the model was released or added. omitzero, not
+	// omitempty: time.Time is a struct, and encoding/json never treats a struct
+	// as empty, so omitempty would still serialize the year-1 zero value.
+	CreatedAt time.Time `json:"created_at,omitzero"`
 
 	// FromCache indicates whether this information came from cached data
 	// rather than a live API call
@@ -176,6 +178,9 @@ func WithModelCursor(cursor string) ListModelsOption {
 func ApplyListModelsOptions(opts ...ListModelsOption) *ListModelsOptions {
 	options := &ListModelsOptions{}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

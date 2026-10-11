@@ -29,6 +29,25 @@ func TestMessageID(t *testing.T) {
 	if _, ok := messageID([]byte(`not json`)); ok {
 		t.Error("messageID(garbage): expected ok=false")
 	}
+	// 2^63 is exactly representable as a float64 but overflows int64; it must be
+	// rejected rather than wrapping to math.MinInt64.
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":9223372036854775808}`)); ok {
+		t.Errorf("messageID(2^63) = %d,%v; want ok=false", id, ok)
+	}
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":1e19}`)); ok {
+		t.Errorf("messageID(1e19) = %d,%v; want ok=false", id, ok)
+	}
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":9223372036854775807}`)); !ok || id != 9223372036854775807 {
+		t.Errorf("messageID(max int64) = %d,%v; want max,true", id, ok)
+	}
+	// A negative number just below math.MinInt64 rounds to math.MinInt64 as a
+	// float64, so a float-based check would accept it as a different, valid ID.
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":-9223372036854775809}`)); ok {
+		t.Errorf("messageID(-2^63-1) = %d,%v; want ok=false", id, ok)
+	}
+	if id, ok := messageID([]byte(`{"jsonrpc":"2.0","id":-9223372036854775808}`)); !ok || id != -9223372036854775808 {
+		t.Errorf("messageID(min int64) = %d,%v; want min,true", id, ok)
+	}
 }
 
 func TestExtractJSONMessage(t *testing.T) {
@@ -69,6 +88,17 @@ func TestExtractJSONMessage(t *testing.T) {
 	if string(got) != string(batch) {
 		t.Errorf("batch SSE extraction failed: got %s", got)
 	}
+
+	// CRLF-separated events: the SSE spec allows \r\n line endings, so the
+	// event boundary is \r\n\r\n and a split on \n\n alone would merge the
+	// notification and response into one unparseable event.
+	crlfSSE := []byte("event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\r\n\r\n" +
+		"event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}\r\n\r\n")
+	got = extractJSONMessage(crlfSSE)
+	probe.Result.OK = false
+	if err := json.Unmarshal(got, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("CRLF SSE extraction failed: got %q err %v", got, err)
+	}
 }
 
 func TestExtractFrames(t *testing.T) {
@@ -100,6 +130,20 @@ func TestExtractFrames(t *testing.T) {
 	probe.Result.OK = false
 	if err := json.Unmarshal(resp, &probe); err != nil || !probe.Result.OK {
 		t.Errorf("SSE response not extracted: %q err %v", resp, err)
+	}
+
+	// SSE with CRLF line endings, which the spec permits. A CRLF body used to
+	// split as one merged event because it contains no "\n\n".
+	crlf := []byte(
+		"event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":2}}\r\n\r\n" +
+			"event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ok\":true}}\r\n\r\n")
+	resp, notes = extractFrames(crlf)
+	if len(notes) != 1 {
+		t.Fatalf("CRLF SSE: expected 1 notification, got %d", len(notes))
+	}
+	probe.Result.OK = false
+	if err := json.Unmarshal(resp, &probe); err != nil || !probe.Result.OK {
+		t.Errorf("CRLF SSE response not extracted: %q err %v", resp, err)
 	}
 
 	// A batch carrying a notification and a response.

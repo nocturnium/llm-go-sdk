@@ -95,17 +95,28 @@ jobs:
         run: go test -race ./...
 
       - name: Create and push tag
+        id: tag
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
-            echo "Tag ${VERSION} already exists; aborting to avoid clobber."
-            exit 1
+            # A previous run pushed the tag, then failed before GoReleaser
+            # finished. The tag points at this same commit (this run only
+            # starts when a new releasable commit lands), so reuse it rather
+            # than aborting and leaving the version unretryable. A tag that
+            # points elsewhere is a real conflict and still fails.
+            if [ "$(git rev-parse "refs/tags/${VERSION}^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "Tag ${VERSION} already exists and points at a different commit; aborting."
+              exit 1
+            fi
+            echo "Tag ${VERSION} already exists on this commit; reusing it."
+            exit 0
           fi
           git tag -a "${VERSION}" -m "${VERSION}"
           git push origin "${VERSION}"
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
       # GoReleaser's SBOM step shells out to syft, which is not preinstalled.
       - name: Install Syft (SBOM generation)
@@ -125,11 +136,27 @@ jobs:
           GORELEASER_PREVIOUS_TAG: ${{ needs.version.outputs.previous }}
 
       - name: Upload release artifacts
+        id: artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-artifacts-${{ needs.version.outputs.version }}
           path: dist/*
           retention-days: 30
+
+      # A tag pushed before GoReleaser runs is the release baseline: if the
+      # release fails, that tag must not stay behind, or the next push would
+      # compute changes from a commit that never produced artifacts and skip it
+      # forever. Only remove a tag this run created, so a reused or pre-existing
+      # tag is never touched.
+      - name: Remove the tag if the release failed
+        # GoReleaser has already published the GitHub release by this point. A
+        # transient artifact-upload failure must not delete the release's tag,
+        # or the next run would compute a different version baseline.
+        if: failure() && steps.tag.outputs.created == 'true' && steps.artifacts.outcome != 'failure'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          git push origin ":refs/tags/${VERSION}"
 
   # No changelog job: CHANGELOG.md is hand-written. A git-cliff regeneration
   # would replace the curated [Unreleased] prose with one line per commit, and

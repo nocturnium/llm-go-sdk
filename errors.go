@@ -30,6 +30,9 @@ var (
 	ErrProviderNotSupported = errors.New("provider not supported")
 	ErrMissingAPIKey        = errors.New("API key is required")
 	ErrInvalidBaseURL       = errors.New("invalid base URL")
+	// ErrClientNotConfigured reports a provider whose HTTP client was never
+	// attached (a nil *Client passed to openaicompat.NewBaseProvider).
+	ErrClientNotConfigured = errors.New("HTTP client not configured")
 
 	// Parameter validation errors.
 	ErrInvalidParameters = errors.New("invalid parameters")
@@ -122,6 +125,9 @@ var apiStatusClassifications = map[int]apiStatusClassification{
 // The error message includes status code, type, code, message, and optionally
 // request context (URL, method) and request ID for debugging.
 func (e *APIError) Error() string {
+	if e == nil {
+		return ""
+	}
 	var result string
 
 	// Build base error message
@@ -156,16 +162,26 @@ func (e *APIError) Error() string {
 
 // Unwrap returns the underlying error based on status code
 func (e *APIError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.underlyingError()
 }
 
 // Is reports whether the error matches a target error
 func (e *APIError) Is(target error) bool {
-	return errors.Is(e.underlyingError(), target)
+	underlying := e.underlyingError()
+	if underlying == nil || target == nil {
+		return false
+	}
+	return errors.Is(underlying, target)
 }
 
 // underlyingError maps status codes and error types to sentinel errors
 func (e *APIError) underlyingError() error {
+	if e == nil {
+		return nil
+	}
 	// Quota exhaustion is a permanent billing failure even though providers return
 	// it with a 429 status. Classify it by code before the status map, otherwise
 	// it masquerades as a retryable rate limit and the exported ErrQuotaExceeded
@@ -212,6 +228,9 @@ func (e *APIError) underlyingError() error {
 
 // IsRetryable returns true if the error is likely transient and the request can be retried
 func (e *APIError) IsRetryable() bool {
+	if e == nil {
+		return false
+	}
 	// Quota exhaustion is a permanent billing failure regardless of the (often
 	// 429) status code; never report it as retryable.
 	switch e.Code {
@@ -245,7 +264,7 @@ func (e ValidationError) Error() string {
 
 // Is reports whether the error matches ErrInvalidParameters
 func (e ValidationError) Is(target error) bool {
-	return errors.Is(ErrInvalidParameters, target)
+	return target == ErrInvalidParameters
 }
 
 // ValidationErrors is a collection of validation errors
@@ -290,6 +309,11 @@ func (e ValidationErrors) Is(target error) bool {
 
 // Unwrap returns ErrInvalidParameters for errors.Is compatibility
 func (e ValidationErrors) Unwrap() error {
+	// An empty collection carries no validation failure, so it must not match
+	// ErrInvalidParameters through errors.Is.
+	if len(e) == 0 {
+		return nil
+	}
 	return ErrInvalidParameters
 }
 
@@ -303,11 +327,17 @@ type StreamError struct {
 
 // Error implements the error interface.
 func (e *StreamError) Error() string {
+	if e == nil {
+		return ""
+	}
 	return fmt.Sprintf("stream error after %d chunks (%d bytes): %v", e.ChunksRead, e.BytesRead, e.Cause)
 }
 
 // Unwrap returns the underlying cause
 func (e *StreamError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.Cause
 }
 
@@ -320,6 +350,9 @@ func (e *StreamError) Unwrap() error {
 // answered yes to everything and IsTemporary told callers to retry a stream
 // the user had canceled.
 func (e *StreamError) Is(target error) bool {
+	if e == nil {
+		return false
+	}
 	if target == ErrStreamInterrupted {
 		return true
 	}
@@ -341,23 +374,48 @@ func sanitizeErrorURL(rawURL string) string {
 		if idx := strings.Index(trimmed, "://"); idx >= 0 {
 			scheme, trimmed = trimmed[:idx+3], trimmed[idx+3:]
 		}
-		// The credential goes first, before the query and fragment are cut: a
-		// password containing '?' or '#' would otherwise have its tail removed
-		// here and its head left behind with no '@' for the scan to find.
-		// Cutting at the last '@' can lose a path segment that legitimately
-		// contains one, which is the right way to be wrong in a redactor.
-		if idx := strings.LastIndex(trimmed, "@"); idx >= 0 {
-			trimmed = trimmed[idx+1:]
+		// Credentials can contain reserved characters that make url.Parse fail.
+		// The last '@' before the first '?' or '#' is the userinfo terminator; a
+		// path may contain '@' after the authority, but keeping it is safer than
+		// leaving any head of a credential behind. Strip query and fragment from
+		// the remainder so keys in either do not leak.
+		candidate := trimmed
+		if at := strings.LastIndex(candidate, "@"); at >= 0 {
+			candidate = candidate[at+1:]
 		}
-		if idx := strings.Index(trimmed, "?"); idx >= 0 {
-			trimmed = trimmed[:idx]
+		if idx := strings.IndexAny(candidate, "?#"); idx >= 0 {
+			candidate = candidate[:idx]
 		}
-		if idx := strings.Index(trimmed, "#"); idx >= 0 {
-			trimmed = trimmed[:idx]
-		}
-		return scheme + trimmed
+		return scheme + candidate
 	}
 	u.User = nil
+	// Malformed userinfo containing a reserved '?' or '#' before the '@' is
+	// parsed into Host rather than User (url treats the text before the last
+	// reserved character as the host). Clear the credential material before the
+	// last '@' in the authority as well as in Path/Opaque.
+	if at := strings.LastIndex(u.Host, "@"); at >= 0 {
+		u.Host = u.Host[at+1:]
+	} else if strings.ContainsAny(u.Host, "?#") {
+		// A lone '?' or '#' in the host without an '@' is credential material
+		// that url.Parse could not place in User. Nothing host-like precedes it.
+		u.Host = ""
+	}
+	// A reserved character in a password (for example a slash) makes
+	// url.Parse treat the credential as part of the path while leaving the
+	// trailing "@host" in Host. If the path contains an '@', drop everything
+	// through it so the head of a split credential cannot survive.
+	if at := strings.Index(u.Path, "@"); at >= 0 {
+		// url.Parse can put the credential itself ("user:1234") in Host when
+		// the malformed password contains a slash, leaving the terminal @host in
+		// Path. Drop that host too; it is userinfo, not an address.
+		if strings.Contains(u.Host, ":") {
+			u.Host = ""
+		}
+		u.Path = u.Path[at+1:]
+	}
+	if at := strings.Index(u.RawPath, "@"); at >= 0 {
+		u.RawPath = u.RawPath[at+1:]
+	}
 	u.RawQuery = ""
 	u.ForceQuery = false
 	u.Fragment = ""
@@ -393,6 +451,9 @@ type ProviderError struct {
 
 // Error implements the error interface.
 func (e *ProviderError) Error() string {
+	if e == nil {
+		return ""
+	}
 	if e.Operation != "" {
 		return fmt.Sprintf("%s: %s: %v", e.Provider, e.Operation, e.Err)
 	}
@@ -401,6 +462,9 @@ func (e *ProviderError) Error() string {
 
 // Unwrap returns the underlying error for errors.Is/As compatibility
 func (e *ProviderError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.Err
 }
 
@@ -420,16 +484,23 @@ func WrapProviderError(provider Provider, operation string, err error) error {
 // ProviderFromError extracts the provider from an error if it's a ProviderError or APIError.
 // Returns empty string if the error doesn't contain provider information.
 func ProviderFromError(err error) Provider {
+	// Walk the whole error tree rather than using errors.As once: an outer
+	// ProviderError may carry an empty Provider when the caller only wanted to
+	// attach an operation, while an inner wrapper, a sibling branch of a
+	// multi-wrapped error, or an APIError still names the provider that failed.
+	if p := providerInTree(err); p != "" {
+		return p
+	}
+	// The unwrap chain does not cover matches behind a custom As method, so
+	// fall back to errors.As for both types.
 	var provErr *ProviderError
-	if errors.As(err, &provErr) {
+	if errors.As(err, &provErr) && provErr != nil && provErr.Provider != "" {
 		return provErr.Provider
 	}
-
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil && apiErr.Provider != "" {
 		return apiErr.Provider
 	}
-
 	return ""
 }
 
@@ -440,16 +511,18 @@ func IsTemporary(err error) bool {
 		return false
 	}
 
-	// Check APIError
-	var apiErr *APIError
-	if errors.As(err, &apiErr) {
-		return apiErr.IsRetryable()
-	}
-
 	// A canceled or expired context is the caller's decision, not a transient
-	// provider fault: retrying it wastes a call and ignores the deadline.
+	// provider fault: retrying it wastes a call and ignores the deadline. Check
+	// this before APIError classification because an error can carry both a
+	// wrapped context error and a retryable-looking APIError.
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
+	}
+
+	// Check APIError
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr != nil {
+		return apiErr.IsRetryable()
 	}
 
 	// Check common transient errors
@@ -495,28 +568,14 @@ func GetErrorDetails(err error) ErrorDetails {
 
 	details := ErrorDetails{
 		IsRetryable: IsTemporary(err),
-		RootCause:   errors.Unwrap(err),
-	}
-
-	// If no wrapped error, root cause is the error itself
-	if details.RootCause == nil {
-		details.RootCause = err
-	} else {
-		// Keep unwrapping to find the root
-		for {
-			next := errors.Unwrap(details.RootCause)
-			if next == nil {
-				break
-			}
-			details.RootCause = next
-		}
+		RootCause:   rootCause(err),
 	}
 
 	details.Provider = ProviderFromError(err)
 
 	// Extract API error details
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		details.StatusCode = apiErr.StatusCode
 		details.RetryAfter = apiErr.RetryAfter
 		details.RequestID = apiErr.RequestID
@@ -535,13 +594,13 @@ func FormatError(err error) string {
 
 	// Check for APIError - use its formatted message
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		return apiErr.Error()
 	}
 
 	// Check for ProviderError
 	var provErr *ProviderError
-	if errors.As(err, &provErr) {
+	if errors.As(err, &provErr) && provErr != nil {
 		return provErr.Error()
 	}
 
@@ -553,7 +612,7 @@ func FormatError(err error) string {
 
 	// Check for StreamError
 	var streamErr *StreamError
-	if errors.As(err, &streamErr) {
+	if errors.As(err, &streamErr) && streamErr != nil {
 		return streamErr.Error()
 	}
 
@@ -603,15 +662,34 @@ func WrapHTTPError(provider Provider, operation string, err error) error {
 
 	// Check if it's already an APIError and add provider if missing
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		if apiErr.Provider == "" {
 			apiErr.Provider = provider
+		}
+		// A caller may wrap a cancellation alongside the API error
+		// (fmt.Errorf("%w: %w", context.Canceled, apiErr)). Returning the bare
+		// APIError would drop the cancellation, so retry classification sees a
+		// retryable status and retries work whose context is already done.
+		if ctxErr := firstContextError(err); ctxErr != nil && !errors.Is(apiErr, ctxErr) {
+			return fmt.Errorf("%w: %w", ctxErr, apiErr)
 		}
 		return apiErr
 	}
 
 	// For other errors, wrap with provider context
 	return WrapProviderError(provider, operation, err)
+}
+
+// firstContextError returns the first context cancellation sentinel err matches,
+// or nil. It distinguishes an outer cancellation from the API error itself so a
+// genuine timeout survives wrapping.
+func firstContextError(err error) error {
+	for _, target := range []error{context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, target) {
+			return target
+		}
+	}
+	return nil
 }
 
 // ErrPlanRequired indicates a paid plan is required (HTTP 402).
@@ -649,3 +727,65 @@ func (e *ModerationError) Error() string {
 
 // Unwrap returns ErrContentFiltered for errors.Is compatibility.
 func (e *ModerationError) Unwrap() error { return ErrContentFiltered }
+
+// rootCause follows Unwrap chains to the innermost error. For an error that
+// wraps several (fmt.Errorf with multiple %w, errors.Join) it follows the first
+// non-nil child, so the %w: %w wrapper WrapHTTPError builds for a canceled
+// request still reports its cause rather than the wrapper itself.
+func rootCause(err error) error {
+	for {
+		var next error
+		switch u := err.(type) { //nolint:errorlint // walks one unwrap level at a time; errors.As would skip levels
+		case interface{ Unwrap() error }:
+			next = u.Unwrap()
+		case interface{ Unwrap() []error }:
+			for _, child := range u.Unwrap() {
+				if child != nil {
+					next = child
+					break
+				}
+			}
+		}
+		if next == nil {
+			return err
+		}
+		err = next
+	}
+}
+
+// providerInTree returns the first non-empty provider found depth-first in
+// err's wrap tree, following both Unwrap() error and Unwrap() []error.
+func providerInTree(err error) Provider {
+	for err != nil {
+		switch e := err.(type) { //nolint:errorlint // inspects this node before walking its children below
+		case *ProviderError:
+			if e == nil {
+				return ""
+			}
+			if e.Provider != "" {
+				return e.Provider
+			}
+		case *APIError:
+			if e == nil {
+				return ""
+			}
+			if e.Provider != "" {
+				return e.Provider
+			}
+		}
+		switch u := err.(type) { //nolint:errorlint // walks one unwrap level at a time; errors.As would skip levels
+		case interface{ Unwrap() error }:
+			err = u.Unwrap()
+		case interface{ Unwrap() []error }:
+			for _, child := range u.Unwrap() {
+				if p := providerInTree(child); p != "" {
+					return p
+				}
+			}
+			return ""
+		default:
+			return ""
+		}
+	}
+	return ""
+}

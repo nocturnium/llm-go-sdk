@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -184,7 +185,17 @@ func (e *LogEntry) ToLangfuseGeneration() map[string]any {
 			metadata[k] = v
 		}
 		for k, v := range e.RequestParameters {
-			metadata["param_"+k] = v
+			// A caller metadata key can legitimately be "param_<name>", so
+			// never let request parameters overwrite metadata; give the
+			// parameter a distinct key when the natural one is taken.
+			key := "param_" + k
+			for {
+				if _, exists := metadata[key]; !exists {
+					break
+				}
+				key = "param_" + key
+			}
+			metadata[key] = v
 		}
 		if e.CostUSD > 0 {
 			metadata["cost_usd"] = e.CostUSD
@@ -384,6 +395,7 @@ func (m *LoggingMiddleware) Call(ctx context.Context, prompt string, options ...
 		Timestamp: start,
 		Streaming: false,
 	}
+	entry.PopulateFromCallOptions(llms.ApplyOptions(options...))
 
 	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
@@ -416,6 +428,7 @@ func (m *LoggingMiddleware) GenerateContent(ctx context.Context, messages []llms
 		Timestamp: start,
 		Streaming: false,
 	}
+	entry.PopulateFromCallOptions(llms.ApplyOptions(options...))
 
 	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
@@ -451,11 +464,20 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		Timestamp: start,
 		Streaming: true,
 	}
+	entry.PopulateFromCallOptions(llms.ApplyOptions(options...))
 
 	m.logger.LogRequest(ctx, m.scrubContent(entry))
 
 	stream, err := m.llm.Stream(ctx, messages, options...)
 	if err != nil {
+		entry.Duration = time.Since(start)
+		m.logger.LogError(ctx, m.scrubContent(entry), err)
+		return nil, err
+	}
+	// A nil stream with a nil error would block the processing goroutine's range
+	// forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", entry.Provider, llms.ErrIncompleteResponse)
 		entry.Duration = time.Since(start)
 		m.logger.LogError(ctx, m.scrubContent(entry), err)
 		return nil, err
@@ -480,6 +502,7 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		var toolCalls []llms.ToolCall
 		contentTruncated := false
 		streamInterrupted := false
+		completed := false
 
 		for chunk := range stream {
 			// Use StreamSender to handle backpressure - if consumer stops reading,
@@ -495,6 +518,10 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				entry.Duration = time.Since(start)
 				m.logger.LogError(ctx, m.scrubContent(entry), chunk.Error)
 				return
@@ -515,6 +542,9 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			if chunk.Usage != nil {
 				usage = chunk.Usage
 			}
+			if chunk.Done {
+				completed = true
+			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
 			}
@@ -532,7 +562,11 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		// A stream that was abandoned or canceled is a failure, and logging it
 		// through LogResponse made it byte-identical to a clean one: the only
 		// marker was a suffix on Content, which the default redaction strips.
-		if err := ctx.Err(); err != nil {
+		// A completed stream is logged as a response even if the caller's
+		// context is canceled by the time this goroutine reaches the check: the
+		// terminal chunk was already delivered, and reporting a cancellation
+		// would turn a finished request into a spurious failure.
+		if err := ctx.Err(); err != nil && !completed {
 			entry.Content += "...[stream canceled]"
 			m.logger.LogError(ctx, m.scrubContent(entry), err)
 			return

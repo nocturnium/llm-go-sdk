@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
@@ -19,7 +20,8 @@ type fakeLLM struct {
 	responses []*llms.Response
 	calls     []fakeCall
 	// streamDone is closed when a Stream goroutine exits.
-	streamDone chan struct{}
+	streamDone     chan struct{}
+	streamDoneOnce atomic.Pointer[sync.Once]
 	// noTerminal makes Stream close without a final chunk.
 	noTerminal bool
 	caps       *llms.Capabilities
@@ -74,7 +76,16 @@ func (f *fakeLLM) Stream(ctx context.Context, messages []llms.Message, options .
 		defer func() {
 			close(out)
 			if done != nil {
-				close(done)
+				once := f.streamDoneOnce.Load()
+				if once == nil {
+					candidate := &sync.Once{}
+					if f.streamDoneOnce.CompareAndSwap(nil, candidate) {
+						once = candidate
+					} else {
+						once = f.streamDoneOnce.Load()
+					}
+				}
+				once.Do(func() { close(done) })
 			}
 		}()
 		s := llms.NewStreamSender(ctx, out, 0)

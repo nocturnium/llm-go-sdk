@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.26'
+  GO_VERSION: '1.26.9'
 
 jobs:
   test:
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.26.x']
+        go-version: ['1.26.9']
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -48,7 +48,7 @@ jobs:
         run: GOWORK=off go test -tags=integration -run '^$' ./...
 
       - name: Upload coverage to Codecov
-        if: matrix.go-version == '1.26.x'
+        if: matrix.go-version == '1.26.9'
         uses: codecov/codecov-action@v7
         with:
           files: coverage.out
@@ -93,7 +93,7 @@ jobs:
           cache: true
 
       - name: Install apidiff
-        run: GOWORK=off go install golang.org/x/exp/cmd/apidiff@latest
+        run: GOWORK=off go install golang.org/x/exp/cmd/apidiff@v0.0.0-20261011100332-faecfb24eb49
 
       - name: Check public API against baseline
         run: make apidiff
@@ -170,6 +170,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -191,7 +193,7 @@ jobs:
       # created (and GitHub Pages enabled) for storage to succeed; until then,
       # don't fail CI: the benchmarks above still run on every push to main.
       - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@v1.22.2
         continue-on-error: true
         with:
           tool: 'go'

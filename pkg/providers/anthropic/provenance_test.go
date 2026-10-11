@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -65,10 +66,13 @@ data: {"type":"message_stop"}`,
 // provider signed is not sent (Anthropic rejects a signature it did not issue)
 // while Anthropic's own block is, and that the response is stamped.
 func TestGenerateContent_DropsForeignThinking(t *testing.T) {
+	var mu sync.Mutex
 	var body string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		body = string(b)
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"claude-reported","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":1}}`))
 	}))
@@ -93,11 +97,14 @@ func TestGenerateContent_DropsForeignThinking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(body, "own-sig") {
-		t.Errorf("own thinking block missing from request: %s", body)
+	mu.Lock()
+	gotBody := body
+	mu.Unlock()
+	if !strings.Contains(gotBody, "own-sig") {
+		t.Errorf("own thinking block missing from request: %s", gotBody)
 	}
-	if strings.Contains(body, "gemini-sig") || strings.Contains(body, "gemini thought") {
-		t.Errorf("foreign thinking block sent: %s", body)
+	if strings.Contains(gotBody, "gemini-sig") || strings.Contains(gotBody, "gemini thought") {
+		t.Errorf("foreign thinking block sent: %s", gotBody)
 	}
 	if resp.Provider != llms.ProviderAnthropic || resp.Model != c.Model() || resp.ModelVersion != "claude-reported" {
 		t.Errorf("identity = %q/%q/%q", resp.Provider, resp.Model, resp.ModelVersion)

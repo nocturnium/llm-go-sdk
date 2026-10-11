@@ -32,6 +32,11 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	var contextLength int
 	if props, propsErr := c.nativeClient.GetProps(ctx); propsErr == nil {
 		contextLength = props.DefaultGenerationSettings.NCtx
+	} else if ctxErr := ctx.Err(); ctxErr != nil {
+		// Do not report success once the caller's context is canceled, even if
+		// the model list itself already returned. The properties call is part of
+		// the same request and its cancellation error is authoritative.
+		return nil, ctxErr
 	}
 
 	models := make([]llms.ModelInfo, 0, len(resp.Data))

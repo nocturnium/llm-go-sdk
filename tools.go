@@ -277,14 +277,41 @@ func NewToolRegistry() *ToolRegistry {
 // is ignored: there is no name to dispatch on, and the model is never told about
 // it, so registering one is a caller mistake rather than a runtime condition.
 func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
-	if tool.Function == nil {
+	if tool.Function == nil || handler == nil {
 		return
 	}
+	// Copy the caller's Tool and Function before storing: the registry keys
+	// dispatch on the name captured here, so a later mutation of the caller's
+	// tool.Function would otherwise advertise a name with no handler.
+	tool = cloneTool(tool)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.handlers[tool.Function.Name] = handler
+	name := tool.Function.Name
+	if _, exists := r.handlers[name]; exists {
+		for i, existing := range r.tools {
+			if existing.Function != nil && existing.Function.Name == name {
+				r.tools[i] = tool
+				break
+			}
+		}
+		r.handlers[name] = handler
+		return
+	}
+	r.handlers[name] = handler
 	r.tools = append(r.tools, tool)
+}
+
+// cloneTool returns a copy of tool whose Function and Parameters are not shared
+// with the caller.
+func cloneTool(tool Tool) Tool {
+	if tool.Function == nil {
+		return tool
+	}
+	fn := *tool.Function
+	fn.Parameters = append(json.RawMessage(nil), fn.Parameters...)
+	tool.Function = &fn
+	return tool
 }
 
 // RegisterFunc registers a tool with a typed handler. It is a package-level
@@ -297,7 +324,7 @@ func (r *ToolRegistry) Register(tool Tool, handler ToolHandler) {
 //	    return map[string]any{"temperature": 72}, nil
 //	})
 func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Context, T) (any, error)) {
-	if tool.Function == nil {
+	if tool.Function == nil || handler == nil {
 		return
 	}
 
@@ -309,10 +336,7 @@ func RegisterFunc[T any](r *ToolRegistry, tool Tool, handler func(context.Contex
 		return handler(ctx, parsed)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.handlers[tool.Function.Name] = wrappedHandler
-	r.tools = append(r.tools, tool)
+	r.Register(tool, wrappedHandler)
 }
 
 // Tools returns the registered tools for use with WithTools.
@@ -325,12 +349,7 @@ func (r *ToolRegistry) Tools() []Tool {
 	defer r.mu.RUnlock()
 	result := make([]Tool, len(r.tools))
 	for i, tool := range r.tools {
-		if tool.Function != nil {
-			fn := *tool.Function
-			fn.Parameters = append(json.RawMessage(nil), fn.Parameters...)
-			tool.Function = &fn
-		}
-		result[i] = tool
+		result[i] = cloneTool(tool)
 	}
 	return result
 }
@@ -377,6 +396,9 @@ func (r *ToolRegistry) Handle(ctx context.Context, tc ToolCall) (Message, error)
 
 // HandleAll executes handlers for all tool calls in a response and returns tool messages.
 func (r *ToolRegistry) HandleAll(ctx context.Context, resp *Response) ([]Message, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("%w: response is nil", ErrToolCallFailed)
+	}
 	messages := make([]Message, 0, len(resp.ToolCalls))
 
 	for _, tc := range resp.ToolCalls {

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
@@ -321,6 +323,25 @@ func TestClient_ListModels_UsesCustomHTTPClient(t *testing.T) {
 	if len(resp.Data) != 1 || resp.Data[0].ID != "test-model" {
 		t.Fatalf("unexpected models response: %+v", resp.Data)
 	}
+}
+
+// TestClient_SetEmbeddingBaseURL_Concurrent guards the race between Azure
+// configuring the embedding route and embedding requests reading it.
+func TestClient_SetEmbeddingBaseURL_Concurrent(t *testing.T) {
+	client := NewClient(ClientConfig{BaseURL: "https://api.example.invalid/v1", APIKey: "k", AllowPrivateIPs: true})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			client.SetEmbeddingBaseURL(fmt.Sprintf("https://api.example.invalid/v1/route/%d", i))
+		}(i)
+		go func() {
+			defer wg.Done()
+			_ = client.embedding.get(client.baseURL)
+		}()
+	}
+	wg.Wait()
 }
 
 func TestClient_ListModelsWithQuery_PreservesAzureAPIVersion(t *testing.T) {

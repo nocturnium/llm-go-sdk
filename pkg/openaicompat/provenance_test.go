@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -113,10 +114,13 @@ func TestBaseProvider_StreamContract(t *testing.T) {
 // reasoning another provider produced never reaches the Responses API, while
 // the provider's own replays.
 func TestBaseProvider_ResponsesDropsForeignReasoning(t *testing.T) {
+	var mu sync.Mutex
 	var body string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		body = string(b)
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"r","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}`))
 	}))
@@ -146,10 +150,13 @@ func TestBaseProvider_ResponsesDropsForeignReasoning(t *testing.T) {
 	if _, err := p.GenerateContent(context.Background(), msgs); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(body, "rs_own") {
-		t.Errorf("own reasoning item missing from request: %s", body)
+	mu.Lock()
+	gotBody := body
+	mu.Unlock()
+	if !strings.Contains(gotBody, "rs_own") {
+		t.Errorf("own reasoning item missing from request: %s", gotBody)
 	}
-	if strings.Contains(body, "rs_foreign") {
-		t.Errorf("foreign reasoning item sent: %s", body)
+	if strings.Contains(gotBody, "rs_foreign") {
+		t.Errorf("foreign reasoning item sent: %s", gotBody)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai"
 )
 

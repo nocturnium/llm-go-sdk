@@ -98,7 +98,9 @@ func WithMetricsMeter(meter metric.Meter) MetricsOption {
 // WithMetricsCostTracker sets a custom cost tracker
 func WithMetricsCostTracker(tracker *llms.CostTracker) MetricsOption {
 	return func(m *MetricsMiddleware) {
-		m.costTracker = tracker
+		if tracker != nil {
+			m.costTracker = tracker
+		}
 	}
 }
 
@@ -155,7 +157,10 @@ func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...
 	m.incrementActive(ctx, attrs)
 	defer m.decrementActive(ctx, attrs)
 
-	// Use GenerateContent internally to get usage info
+	// The LLM interface has no Call method; the one-shot helper is the package
+	// function llms.Call, which itself delegates to GenerateContent. Calling
+	// GenerateContent directly here preserves that contract while exposing usage
+	// for cost and token metrics.
 	messages := []llms.Message{{Role: llms.RoleUser, Content: prompt}}
 	resp, err := m.llm.GenerateContent(ctx, messages, options...)
 
@@ -163,6 +168,14 @@ func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...
 	m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 
 	if err != nil {
+		m.recordError(ctx, span, err, attrs)
+		m.successRateWindow.Record(false)
+		return "", err
+	}
+	// An LLM implementation may return (nil, nil); report it as an incomplete
+	// response instead of panicking on the dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", provider, llms.ErrIncompleteResponse)
 		m.recordError(ctx, span, err, attrs)
 		m.successRateWindow.Record(false)
 		return "", err
@@ -217,6 +230,14 @@ func (m *MetricsMiddleware) GenerateContent(ctx context.Context, messages []llms
 	m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 
 	if err != nil {
+		m.recordError(ctx, span, err, attrs)
+		m.successRateWindow.Record(false)
+		return nil, err
+	}
+	// An LLM implementation may return (nil, nil); report it as an incomplete
+	// response instead of panicking on the dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", provider, llms.ErrIncompleteResponse)
 		m.recordError(ctx, span, err, attrs)
 		m.successRateWindow.Record(false)
 		return nil, err
@@ -278,6 +299,15 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		m.successRateWindow.Record(false)
 		return nil, err
 	}
+	// A nil stream with a nil error would block the processing goroutine's range
+	// forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", provider, llms.ErrIncompleteResponse)
+		m.requestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
+		m.recordError(ctx, span, err, attrs)
+		m.successRateWindow.Record(false)
+		return nil, err
+	}
 
 	opts := llms.ApplyOptions(options...)
 	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
@@ -306,6 +336,7 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		var firstTokenTime time.Time
 		var hadFirstToken bool
 		var hadError bool
+		var completed bool
 
 		// Pre-allocate some capacity to reduce allocations
 		contentBuilder.Grow(1024)
@@ -331,7 +362,9 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 
 			if !hadError {
-				if err := ctx.Err(); err != nil {
+				// A delivered terminal chunk makes the request a success; a
+				// cancellation observed after it must not fail the sample.
+				if err := ctx.Err(); err != nil && !completed {
 					hadError = true
 					m.recordError(ctx, span, err, attrs)
 					m.successRateWindow.Record(false)
@@ -384,6 +417,10 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				hadError = true
 				m.recordError(ctx, span, chunk.Error, attrs)
 				m.successRateWindow.Record(false)
@@ -406,6 +443,9 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
+			}
+			if chunk.Done {
+				completed = true
 			}
 			if len(chunk.ToolCalls) > 0 {
 				toolCallCount = len(chunk.ToolCalls)

@@ -456,7 +456,10 @@ func TestClient_Call_Convenience(t *testing.T) {
 
 		messages, ok := req["messages"].([]any)
 		if !ok {
-			t.Fatal("messages is not a []any")
+			// t.Fatal on a handler goroutine stops that goroutine, not the test,
+			// and leaves the client waiting for a response that never comes.
+			t.Error("messages is not a []any")
+			return
 		}
 		if len(messages) != 1 {
 			t.Errorf("expected 1 message, got %d", len(messages))
@@ -464,7 +467,8 @@ func TestClient_Call_Convenience(t *testing.T) {
 
 		msg, ok := messages[0].(map[string]any)
 		if !ok {
-			t.Fatal("message is not a map[string]any")
+			t.Errorf("message is %T, want map[string]any", messages[0])
+			return
 		}
 		if msg["role"] != "user" {
 			t.Errorf("expected role=user, got %v", msg["role"])
@@ -622,7 +626,10 @@ func TestClient_WithSystemMessage(t *testing.T) {
 		// Verify system message
 		sysMsg, ok := messages[0].(map[string]any)
 		if !ok {
-			t.Fatal("first message is not a map")
+			// The handler runs on the httptest server's goroutine, where
+			// t.Fatal would only stop that goroutine. Report and return.
+			t.Error("first message is not a map")
+			return
 		}
 		if sysMsg["role"] != "system" {
 			t.Errorf("expected first message role=system, got %v", sysMsg["role"])

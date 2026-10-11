@@ -282,7 +282,8 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	// Fetch models from API
 	resp, err := c.client.ListModels(ctx, params)
 	if err != nil {
-		return nil, llms.WrapProviderError(llms.ProviderAnthropic, "list models", err)
+		// The client already normalizes the error with provider context.
+		return nil, err
 	}
 
 	// Convert to unified ModelInfo format
@@ -323,11 +324,11 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	// Anthropic has a dedicated endpoint for getting a single model
 	resp, err := c.client.GetModel(ctx, modelID)
 	if err != nil {
-		wrapped := anthropicapi.WrapError("get model", err)
-		if errors.Is(wrapped, llms.ErrModelNotFound) {
+		// The client already normalizes the error with provider context.
+		if errors.Is(err, llms.ErrModelNotFound) {
 			return nil, llms.ErrModelNotFound
 		}
-		return nil, wrapped
+		return nil, err
 	}
 
 	info := convertAnthropicModel(resp)
@@ -356,8 +357,13 @@ func convertAnthropicModel(m *anthropicapi.ModelInfo) llms.ModelInfo {
 		}
 		info.ContextLength = metadata.contextLength
 		info.MaxOutput = metadata.maxOutput
-		info.Types = metadata.types
-		info.Pricing = metadata.pricing
+		// Copy the slices: knownModels is shared, and a caller mutating a
+		// returned ModelInfo must not change the catalog or another caller's copy.
+		info.Types = append([]llms.ModelType(nil), metadata.types...)
+		if metadata.pricing != nil {
+			pricing := *metadata.pricing
+			info.Pricing = &pricing
+		}
 	} else {
 		// Infer from model ID
 		if info.DisplayName == "" {
@@ -379,6 +385,34 @@ func convertAnthropicModel(m *anthropicapi.ModelInfo) llms.ModelInfo {
 }
 
 // formatClaudeModelName creates a display name from a model ID.
+// joinVersionNumbers turns "3 5" into "3.5" but leaves a lone number alone, so
+// "claude-2-unknown" keeps its dash-derived space instead of becoming
+// "Claude.2 unknown".
+func joinVersionNumbers(name string) string {
+	fields := strings.Fields(name)
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if len(out) > 0 && isAllDigits(out[len(out)-1]) && isAllDigits(f) {
+			out[len(out)-1] += "." + f
+			continue
+		}
+		out = append(out, f)
+	}
+	return strings.Join(out, " ")
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func formatClaudeModelName(id string) string {
 	// Handle common patterns
 	name := id
@@ -390,11 +424,10 @@ func formatClaudeModelName(id string) string {
 		name = "Claude" + name[6:]
 	}
 
-	// Fix version numbers (e.g., "3 5" becomes "3.5")
-	name = strings.ReplaceAll(name, " 5 ", ".5 ")
-	name = strings.ReplaceAll(name, " 0 ", ".0 ")
-	name = strings.ReplaceAll(name, " 1 ", ".1 ")
-	name = strings.ReplaceAll(name, " 2 ", ".2 ")
+	// Fix version numbers (e.g., "3 5" becomes "3.5"). Only join a number to a
+	// preceding number: an unversioned ID like "claude-2-unknown" must not become
+	// "Claude.2 unknown".
+	name = joinVersionNumbers(name)
 
 	// Capitalize model tier names
 	for _, tier := range []string{"opus", "sonnet", "haiku", "instant"} {

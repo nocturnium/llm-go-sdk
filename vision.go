@@ -2,9 +2,11 @@ package llms
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,6 +135,9 @@ func NewImageFromFile(path string) (ContentPart, error) {
 // The mediaType must be specified (e.g., "image/png").
 // Returns an error if the data exceeds MaxImageSize (20MB).
 func NewImageFromReader(r io.Reader, mediaType string) (ContentPart, error) {
+	if r == nil {
+		return ContentPart{}, errors.New("image reader is required")
+	}
 	// Use LimitReader to prevent reading more than MaxImageSize + 1 byte.
 	// Reading exactly MaxImageSize+1 lets us detect oversized data.
 	limitedReader := io.LimitReader(r, MaxImageSize+1)
@@ -300,9 +305,15 @@ func ValidateImageContent(img *ImageContent) error {
 
 		// Check approximate decoded size before decoding to prevent OOM.
 		// Base64 encoding increases size by ~33%, so decoded size ≈ encoded size * 3/4.
-		approxDecodedSize := len(img.Data) * 3 / 4
-		if approxDecodedSize > MaxImageSize {
-			return fmt.Errorf("image data appears to exceed maximum allowed size of %d bytes (estimated %d bytes)", MaxImageSize, approxDecodedSize)
+		encoded := strings.NewReplacer("\r", "", "\n", "").Replace(img.Data)
+		// DecodedLen overestimates a padded payload whose decoded length is not
+		// a multiple of three, which would reject an image of exactly
+		// MaxImageSize bytes. Add one to the limit so a valid maximum-size image
+		// is not refused; the streaming decode below still enforces the real
+		// bound on what is actually read.
+		decodedSize := base64.StdEncoding.DecodedLen(len(encoded))
+		if decodedSize > MaxImageSize+1 {
+			return fmt.Errorf("image data appears to exceed maximum allowed size of %d bytes (estimated %d bytes)", MaxImageSize, decodedSize)
 		}
 
 		// Validate the whole base64 payload without keeping the decoded bytes:
@@ -310,15 +321,26 @@ func ValidateImageContent(img *ImageContent) error {
 		// window rather than the ~26MB a full decode would allocate. Sampling
 		// only the head would pass any image whose corruption sits past the
 		// first kilobyte, which is most of them.
+		// Stop one byte past the maximum so a payload that is merely close to
+		// the limit is still decoded fully, while an oversized one is refused
+		// without allocating the rest. DecodedLen (above) overestimates padded
+		// payloads, so the true decoded length is what this check enforces.
 		decoder := base64.NewDecoder(base64.StdEncoding, strings.NewReader(img.Data))
-		if _, err := io.Copy(io.Discard, decoder); err != nil {
+		decoded, err := io.Copy(io.Discard, io.LimitReader(decoder, MaxImageSize+1))
+		if err != nil {
 			return fmt.Errorf("invalid base64 data: %w", err)
+		}
+		if decoded > MaxImageSize {
+			return fmt.Errorf("image data exceeds maximum allowed size of %d bytes (decoded %d)", MaxImageSize, decoded)
 		}
 	}
 
 	if img.Source == ImageSourceURL {
-		// Basic URL validation
-		if !strings.HasPrefix(img.Data, "http://") && !strings.HasPrefix(img.Data, "https://") {
+		// Basic URL validation. Require a real http(s) host: malformed values
+		// such as "https://" or "http://?x" would otherwise reach the provider
+		// and fail there instead of at the caller.
+		parsed, err := url.Parse(img.Data)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return fmt.Errorf("invalid image URL: must start with http:// or https://")
 		}
 

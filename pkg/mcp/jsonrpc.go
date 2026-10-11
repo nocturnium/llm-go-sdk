@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
+	"math/big"
 	"strconv"
 )
 
@@ -116,12 +116,20 @@ func messageID(raw []byte) (int64, bool) {
 	if err == nil {
 		return id, true
 	}
-	f, err := strconv.ParseFloat(n.String(), 64)
-	if err != nil || math.Trunc(f) != f || f < math.MinInt64 || f > math.MaxInt64 {
+	// Parse exactly rather than through float64. A decimal just below
+	// math.MinInt64 rounds to math.MinInt64 as a float and would pass a bounds
+	// check as a different, valid ID. big.Rat preserves the literal value and
+	// accepts exponent notation, so an integral value can be range-checked
+	// exactly. Bound the literal length first so a hostile peer cannot make the
+	// parse allocate arbitrarily large integers.
+	if len(n.String()) > 64 {
 		return 0, false
 	}
-	id = int64(f)
-	return id, true
+	r, ok := new(big.Rat).SetString(n.String())
+	if !ok || !r.IsInt() || !r.Num().IsInt64() {
+		return 0, false
+	}
+	return r.Num().Int64(), true
 }
 
 // decodeResult unmarshals a JSON-RPC response's result into out, returning any
@@ -158,23 +166,9 @@ func decodeResult(raw []byte, out any) error {
 // each event's "data:" lines are assembled independently and the last event with
 // a JSON-RPC payload is returned.
 func extractJSONMessage(body []byte) []byte {
-	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
-		return trimmed
-	}
 	var last []byte
-	for _, event := range bytes.Split(body, []byte("\n\n")) {
-		var data bytes.Buffer
-		for _, line := range bytes.Split(event, []byte("\n")) {
-			line = bytes.TrimRight(line, "\r")
-			if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
-				data.Write(bytes.TrimSpace(rest))
-				data.WriteByte('\n')
-			}
-		}
-		if payload := bytes.TrimSpace(data.Bytes()); len(payload) > 0 && (payload[0] == '{' || payload[0] == '[') {
-			last = payload
-		}
+	for _, payload := range collectJSONPayloads(body) {
+		last = payload
 	}
 	return last
 }
@@ -214,10 +208,14 @@ func collectJSONPayloads(body []byte) [][]byte {
 		return [][]byte{trimmed}
 	}
 	var payloads [][]byte
-	for _, event := range bytes.Split(body, []byte("\n\n")) {
+	// Normalize CRLF to LF first: the SSE spec allows CR, LF, or CRLF line
+	// endings, and an event separated by \r\n\r\n contains no "\n\n" to split
+	// on, so a CRLF body would otherwise parse as one merged event.
+	normalized := bytes.ReplaceAll(body, []byte("\r\n"), []byte("\n"))
+	normalized = bytes.ReplaceAll(normalized, []byte("\r"), []byte("\n"))
+	for _, event := range bytes.Split(normalized, []byte("\n\n")) {
 		var data bytes.Buffer
 		for _, line := range bytes.Split(event, []byte("\n")) {
-			line = bytes.TrimRight(line, "\r")
 			if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
 				data.Write(bytes.TrimSpace(rest))
 				data.WriteByte('\n')
@@ -308,6 +306,12 @@ func encodeResponse(id json.RawMessage, result any) ([]byte, error) {
 // encodeErrorResponse marshals a JSON-RPC error response echoing the request's
 // raw id verbatim.
 func encodeErrorResponse(id json.RawMessage, code int, message string) ([]byte, error) {
+	// JSON-RPC requires an error response whose request id cannot be determined
+	// to carry an explicit null id. rpcResponse.ID is omitempty so a successful
+	// request with an empty id would otherwise marshal no id field at all.
+	if len(id) == 0 {
+		id = json.RawMessage("null")
+	}
 	return json.Marshal(rpcResponse{
 		JSONRPC: jsonRPCVersion,
 		ID:      id,

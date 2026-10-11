@@ -67,20 +67,39 @@ func WithMaxLength(maxLength int) SlogLoggerOption {
 
 // LogRequest logs an LLM request
 func (l *SlogLogger) LogRequest(ctx context.Context, entry *LogEntry) {
+	if entry == nil {
+		l.reportNilEntry(ctx)
+		return
+	}
 	attrs := l.buildRequestAttrs(entry)
 	l.logger.LogAttrs(ctx, l.level, "llm_request", attrs...)
 }
 
 // LogResponse logs an LLM response
 func (l *SlogLogger) LogResponse(ctx context.Context, entry *LogEntry) {
+	if entry == nil {
+		l.reportNilEntry(ctx)
+		return
+	}
 	attrs := l.buildResponseAttrs(entry)
 	l.logger.LogAttrs(ctx, l.level, "llm_response", attrs...)
 }
 
 // LogError logs an error
 func (l *SlogLogger) LogError(ctx context.Context, entry *LogEntry, err error) {
+	if entry == nil {
+		l.reportNilEntry(ctx)
+		return
+	}
 	attrs := l.buildErrorAttrs(entry, err)
 	l.logger.LogAttrs(ctx, slog.LevelError, "llm_error", attrs...)
+}
+
+// reportNilEntry surfaces a nil *LogEntry through the logger instead of
+// panicking in the caller. The methods are exported, and the middleware always
+// passes a populated entry, so this only guards direct callers.
+func (l *SlogLogger) reportNilEntry(ctx context.Context) {
+	l.logger.LogAttrs(ctx, slog.LevelError, "llm_log_entry_nil", slog.String("error", errNilLogEntry.Error()))
 }
 
 func (l *SlogLogger) buildRequestAttrs(entry *LogEntry) []slog.Attr {
@@ -152,6 +171,10 @@ func (l *SlogLogger) buildResponseAttrs(entry *LogEntry) []slog.Attr {
 }
 
 func (l *SlogLogger) buildErrorAttrs(entry *LogEntry, err error) []slog.Attr {
+	errorText := "<nil>"
+	if err != nil {
+		errorText = err.Error()
+	}
 	attrs := []slog.Attr{
 		slog.String("request_id", entry.RequestID),
 		slog.String("provider", string(entry.Provider)),
@@ -161,7 +184,7 @@ func (l *SlogLogger) buildErrorAttrs(entry *LogEntry, err error) []slog.Attr {
 		// Sanitize CR/LF in the error: an upstream/provider error can echo
 		// user-controlled input, so escape it like other user-influenced values
 		// to prevent forged log lines (CWE-117).
-		slog.String("error", sanitizeLogValue(err.Error())),
+		slog.String("error", sanitizeLogValue(errorText)),
 	}
 
 	// Add structured error information

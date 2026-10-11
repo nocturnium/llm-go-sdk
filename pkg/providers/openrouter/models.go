@@ -104,21 +104,31 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 			name = m.ID
 		}
 		info := llms.ModelInfo{ID: m.ID, DisplayName: name, Provider: c.Provider(), ContextLength: m.ContextLength, Types: []llms.ModelType{}}
+		seenTypes := make(map[llms.ModelType]bool)
+		addType := func(t llms.ModelType) {
+			if seenTypes[t] {
+				return
+			}
+			seenTypes[t] = true
+			info.Types = append(info.Types, t)
+		}
 		for _, modality := range m.Architecture.OutputModalities {
 			switch modality {
 			case "text":
-				info.Types = append(info.Types, llms.ModelTypeChat)
+				addType(llms.ModelTypeChat)
 			case "image":
-				info.Types = append(info.Types, llms.ModelTypeImage)
+				addType(llms.ModelTypeImage)
 			case "audio", "speech":
-				info.Types = append(info.Types, llms.ModelTypeAudio)
+				// OpenRouter reports the same capability as both "audio" and
+				// "speech" on some entries; one ModelTypeAudio is enough.
+				addType(llms.ModelTypeAudio)
 			case "video":
-				info.Types = append(info.Types, llms.ModelTypeVideo)
+				addType(llms.ModelTypeVideo)
 			}
 		}
 		for _, modality := range m.Architecture.InputModalities {
 			if modality == "image" {
-				info.Types = append(info.Types, llms.ModelTypeVision)
+				addType(llms.ModelTypeVision)
 			}
 		}
 		if m.Created > 0 {

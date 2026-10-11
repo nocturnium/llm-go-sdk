@@ -2,6 +2,8 @@ package llms
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -796,5 +798,18 @@ func TestApplyModelFiltersReturnsCopy(t *testing.T) {
 	// Original should not be modified
 	if testModels[0].ID != original[0].ID {
 		t.Error("ApplyModelFilters did not return a copy; original was modified")
+	}
+}
+
+// TestModelInfo_ZeroCreatedAtOmitted pins that an unknown creation time is not
+// serialized as the year-1 zero value. time.Time is a struct, so omitempty
+// alone cannot omit it.
+func TestModelInfo_ZeroCreatedAtOmitted(t *testing.T) {
+	data, err := json.Marshal(ModelInfo{ID: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "created_at") {
+		t.Fatalf("zero CreatedAt serialized: %s", data)
 	}
 }

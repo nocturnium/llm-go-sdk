@@ -83,12 +83,16 @@ func TestInboundMalformedRequestReturnsParseError(t *testing.T) {
 	m := newMockTransport()
 	c := clientWithHandlers(t, m, nil)
 
-	// Bypass emitRequest's classification, which would reject this frame.
-	c.dispatchRequest([]byte(`{"jsonrpc":"2.0","id":1`), json.RawMessage("1"))
+	// Bypass emitRequest's classification, which would reject this frame. No id
+	// could be recovered from it, so the reply must carry an explicit null id.
+	c.dispatchRequest([]byte(`{"jsonrpc":"2.0","id":1`), nil)
 
 	resp := decodeResponse(t, awaitResponses(t, m, 1)[0])
 	if resp.Error == nil || resp.Error.Code != CodeParseError {
 		t.Fatalf("response = %+v, want ParseError", resp.Error)
+	}
+	if string(resp.ID) != "null" {
+		t.Fatalf("response id = %q, want explicit null", resp.ID)
 	}
 }
 

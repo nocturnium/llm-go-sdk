@@ -177,7 +177,7 @@ func TestContentPart_ToolResult(t *testing.T) {
 	part := ContentPart{
 		Type:      "tool_result",
 		ToolUseID: testToolID,
-		Content:   `{"temperature": 72}`,
+		Content:   &ToolResultContent{Text: `{"temperature": 72}`},
 	}
 
 	data, err := json.Marshal(part)
@@ -196,13 +196,63 @@ func TestContentPart_ToolResult(t *testing.T) {
 	if decoded.ToolUseID != testToolID {
 		t.Errorf("expected tool_use_id=toolu_123, got %s", decoded.ToolUseID)
 	}
+	if decoded.Content == nil || decoded.Content.Text != `{"temperature": 72}` {
+		t.Errorf("expected string content to round-trip, got %+v", decoded.Content)
+	}
+}
+
+// Anthropic accepts an array of content blocks as tool_result content, so a
+// response carrying that shape must decode instead of failing the whole call.
+func TestContentPart_ToolResultArrayContent(t *testing.T) {
+	const raw = `{"type":"tool_result","tool_use_id":"toolu_123","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}`
+	var part ContentPart
+	if err := json.Unmarshal([]byte(raw), &part); err != nil {
+		t.Fatalf("failed to unmarshal array content: %v", err)
+	}
+	if part.Content == nil || len(part.Content.Array) != 2 {
+		t.Fatalf("array content = %+v, want two blocks", part.Content)
+	}
+	if part.Content.Array[0].Text != "first" || part.Content.Array[1].Text != "second" {
+		t.Errorf("array content = %+v, want the two text blocks", part.Content.Array)
+	}
+
+	data, err := json.Marshal(part)
+	if err != nil {
+		t.Fatalf("failed to re-marshal array content: %v", err)
+	}
+	var roundTrip map[string]any
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("failed to unmarshal round trip: %v", err)
+	}
+	if _, ok := roundTrip["content"].([]any); !ok {
+		t.Errorf("round-tripped content = %#v, want an array", roundTrip["content"])
+	}
+}
+
+func TestContentPart_ToolResultEmptyArrayContent(t *testing.T) {
+	const raw = `{"type":"tool_result","tool_use_id":"toolu_123","content":[]}`
+	var part ContentPart
+	if err := json.Unmarshal([]byte(raw), &part); err != nil {
+		t.Fatalf("failed to unmarshal empty array content: %v", err)
+	}
+	data, err := json.Marshal(part)
+	if err != nil {
+		t.Fatalf("failed to re-marshal empty array content: %v", err)
+	}
+	var roundTrip map[string]any
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("failed to unmarshal round trip: %v", err)
+	}
+	if _, ok := roundTrip["content"].([]any); !ok {
+		t.Errorf("round-tripped content = %#v, want an empty array", roundTrip["content"])
+	}
 }
 
 func TestContentPart_ToolResultWithError(t *testing.T) {
 	part := ContentPart{
 		Type:      "tool_result",
 		ToolUseID: testToolID,
-		Content:   "Error: Location not found",
+		Content:   &ToolResultContent{Text: "Error: Location not found"},
 		IsError:   true,
 	}
 
@@ -335,5 +385,51 @@ func TestContentPart_ThinkingAlwaysCarriesText(t *testing.T) {
 	b, _ = json.Marshal(ContentPart{Type: "text", Text: "hi"})
 	if strings.Contains(string(b), "thinking") {
 		t.Errorf("text block carries a thinking field: %s", b)
+	}
+}
+
+// TestStreamEvent_MessageDeltaHasNoContentDelta pins that a message_delta event
+// exposes only MessageDelta. The alias unmarshal also decodes the same "delta"
+// object into StreamEvent.Delta; that content pointer must be cleared so callers
+// keying on Delta do not treat stop-reason metadata as an empty content delta.
+func TestStreamEvent_MessageDeltaHasNoContentDelta(t *testing.T) {
+	jsonData := `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":5}}`
+
+	var event StreamEvent
+	if err := json.Unmarshal([]byte(jsonData), &event); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if event.MessageDelta == nil {
+		t.Fatal("expected MessageDelta to be set")
+	}
+	if event.MessageDelta.StopReason != "end_turn" {
+		t.Errorf("StopReason = %q, want end_turn", event.MessageDelta.StopReason)
+	}
+	if event.Delta != nil {
+		t.Errorf("message_delta also set Delta = %+v; want nil", event.Delta)
+	}
+}
+
+func TestToolResultContent_UnmarshalLeadingWhitespace(t *testing.T) {
+	var msg struct {
+		Content ToolResultContent `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(`{"content":  "result"}`), &msg); err != nil {
+		t.Fatalf("unmarshal string with leading whitespace: %v", err)
+	}
+	if msg.Content.Text != "result" {
+		t.Errorf("Text = %q, want result", msg.Content.Text)
+	}
+}
+
+// A caller that sets Array to a non-nil empty slice wants the array form, not
+// the empty string the string form would produce.
+func TestToolResultContent_ExplicitEmptyArrayMarshalsAsArray(t *testing.T) {
+	data, err := json.Marshal(ToolResultContent{Array: []ContentPart{}})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(data) != "[]" {
+		t.Errorf("marshal = %s, want []", data)
 	}
 }

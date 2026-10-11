@@ -61,6 +61,21 @@ func TestMediaImageConverters(t *testing.T) {
 	}
 }
 
+// TestMarshalMediaExtra_PreservesLargeIntegers pins that a provider-specific
+// integer above 2^53 round-trips exactly instead of being rounded through a
+// float64 decode.
+func TestMarshalMediaExtra_PreservesLargeIntegers(t *testing.T) {
+	data, err := marshalMediaExtra(struct {
+		Seed int64 `json:"seed"`
+	}{Seed: 9007199254740993}, map[string]any{"n": 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "9007199254740993") {
+		t.Fatalf("large integer lost precision: %s", data)
+	}
+}
+
 func TestMediaSpeechConverters(t *testing.T) {
 	req := BuildSpeechRequest("default", "你好", &llms.SpeechOptions{})
 	if req.Model != "default" || req.ResponseFormat != "mp3" || req.Voice != "alloy" {
@@ -70,6 +85,11 @@ func TestMediaSpeechConverters(t *testing.T) {
 	req = BuildSpeechRequest("default", "你好", &llms.SpeechOptions{Model: "custom", Voice: "nova", Instructions: "soft", Speed: &speed, Format: llms.AudioFormat{Container: "wav"}})
 	if req.Model != "custom" || req.Voice != "nova" || req.Instructions != "soft" || *req.Speed != speed {
 		t.Fatalf("request: %+v", req)
+	}
+	// Extra options must reach the provider rather than being silently dropped.
+	withExtra := BuildSpeechRequest("default", "hi", &llms.SpeechOptions{Extra: map[string]any{"style": "cheerful"}})
+	if withExtra.ExtraBody == nil || withExtra.ExtraBody["style"] != "cheerful" {
+		t.Fatalf("extra options dropped: %+v", withExtra)
 	}
 	out := ConvertSpeechResponse([]byte("RIFF"), "audio/wav", req, nil)
 	if out.Usage.Quantity != 0 || out.Usage.Unit != "" || out.Format.Container != "wav" || out.Audio.MIMEType != "audio/wav" {
@@ -216,6 +236,11 @@ func TestVideoStatusCostAndUnknown(t *testing.T) {
 		if out := ConvertVideoStatus(&obj); out.Cost != nil {
 			t.Fatal(out)
 		}
+	}
+	// A higher-resolution result has no published rate, so it must not report a
+	// nonzero quantity with an empty unit (which reads as billable usage).
+	if out := ConvertVideoStatus(&VideoObject{Status: "completed", Model: "sora-2", Seconds: "4", Size: "1024x1792"}); out.Cost != nil {
+		t.Fatalf("unexpected cost for unpriced size: %+v", out)
 	}
 }
 

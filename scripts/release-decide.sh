@@ -35,7 +35,7 @@ root)
 llmadk)
 	match='llmadk/v[0-9]*'
 	pattern='^llmadk/v[0-9]+\.'
-	pathflag=(--include-path 'llmadk/**')
+	pathflag=(--include-path 'llmadk/**' --include-path '.github/workflows/llmadk*.yml')
 	prefix='llmadk/v'
 	;;
 *)

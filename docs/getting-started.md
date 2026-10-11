@@ -17,6 +17,12 @@ one-liner, and `Stream`.
 
 Add the SDK to your module:
 
+Create a module first if the project does not have one yet:
+
+```bash
+go mod init example.com/hello
+```
+
 ```bash
 go get github.com/nocturnium/llm-go-sdk/v6@latest
 ```
@@ -251,8 +257,12 @@ for chunk := range stream {
 		log.Fatalf("stream error: %v", chunk.Error)
 	}
 	if chunk.Done {
+		tokens := 0
+		if chunk.Usage != nil {
+			tokens = chunk.Usage.TotalTokens
+		}
 		fmt.Printf("\n[done: %s, %d tokens]\n",
-			chunk.FinishReason, chunk.Usage.TotalTokens)
+			chunk.FinishReason, tokens)
 		break
 	}
 	fmt.Print(chunk.Content)

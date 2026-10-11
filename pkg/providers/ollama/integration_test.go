@@ -759,13 +759,16 @@ func TestDeleteModel(t *testing.T) {
 // TestCopyModel tests model copying.
 func TestCopyModel(t *testing.T) {
 	copied := false
+	var copiedMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/copy" && r.Method == http.MethodPost {
 			var req ollamaapi.CopyRequest
 			json.NewDecoder(r.Body).Decode(&req)
 
 			if req.Source == "llama3.2" && req.Destination == "my-llama" {
+				copiedMu.Lock()
 				copied = true
+				copiedMu.Unlock()
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -787,7 +790,10 @@ func TestCopyModel(t *testing.T) {
 		t.Fatalf("CopyModel failed: %v", err)
 	}
 
-	if !copied {
+	copiedMu.Lock()
+	gotCopied := copied
+	copiedMu.Unlock()
+	if !gotCopied {
 		t.Error("expected model to be copied")
 	}
 }

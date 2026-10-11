@@ -489,44 +489,63 @@ func toolDemoAction(c commandContext) error {
 		_, _ = fmt.Fprintln(c.out, "Model response (no tool call):", resp.Content)
 		return nil
 	}
+	if resp.ToolCalls[0].Function == nil {
+		return fmt.Errorf("model returned a tool call without a function")
+	}
 
 	_, _ = fmt.Fprintf(c.out, "Model requested tool call: %s\n", resp.ToolCalls[0].Function.Name)
 	_, _ = fmt.Fprintf(c.out, "Arguments: %s\n", resp.ToolCalls[0].Function.Arguments)
 	_, _ = fmt.Fprintln(c.out)
 
-	// Parse arguments.
-	var args struct {
-		Location string `json:"location"`
-		Unit     string `json:"unit"`
-	}
-	if err := json.Unmarshal([]byte(resp.ToolCalls[0].Function.Arguments), &args); err != nil {
-		return fmt.Errorf("failed to parse arguments: %w", err)
-	}
-
-	// Simulate tool response.
-	unit := args.Unit
-	if unit == "" {
-		unit = "fahrenheit"
-	}
-	weatherResult := fmt.Sprintf(`{"location": "%s", "temperature": 72, "unit": "%s", "condition": "sunny", "humidity": 45}`, args.Location, unit)
-
-	_, _ = fmt.Fprintf(c.out, "Tool response: %s\n", weatherResult)
-	_, _ = fmt.Fprintln(c.out)
-
 	// Add assistant message with tool calls and tool response.
-	messages = append(messages,
-		llms.Message{
-			Role:      llms.RoleAssistant,
-			Content:   resp.Content,
-			ToolCalls: resp.ToolCalls,
-		},
-		llms.Message{
+	messages = append(messages, llms.Message{
+		Role:      llms.RoleAssistant,
+		Content:   resp.Content,
+		ToolCalls: resp.ToolCalls,
+	})
+	for _, call := range resp.ToolCalls {
+		name := ""
+		if call.Function != nil {
+			name = call.Function.Name
+		}
+		if call.Function == nil {
+			return fmt.Errorf("model returned a tool call without a function")
+		}
+
+		var args struct {
+			Location string `json:"location"`
+			Unit     string `json:"unit"`
+		}
+		if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+			return fmt.Errorf("failed to parse arguments for %s: %w", name, err)
+		}
+
+		unit := args.Unit
+		if unit == "" {
+			unit = "fahrenheit"
+		}
+		weatherPayload := struct {
+			Location    string `json:"location"`
+			Temperature int    `json:"temperature"`
+			Unit        string `json:"unit"`
+			Condition   string `json:"condition"`
+			Humidity    int    `json:"humidity"`
+		}{args.Location, 72, unit, "sunny", 45}
+		encodedWeather, err := json.Marshal(weatherPayload)
+		if err != nil {
+			return fmt.Errorf("marshal weather response for %s: %w", name, err)
+		}
+		weatherResult := string(encodedWeather)
+		_, _ = fmt.Fprintf(c.out, "Tool response: %s\n", weatherResult)
+
+		messages = append(messages, llms.Message{
 			Role:       llms.RoleTool,
 			Content:    weatherResult,
-			ToolCallID: resp.ToolCalls[0].ID,
-			Name:       resp.ToolCalls[0].Function.Name,
-		},
-	)
+			ToolCallID: call.ID,
+			Name:       name,
+		})
+	}
+	_, _ = fmt.Fprintln(c.out)
 
 	// Second call - model should respond with the weather info.
 	resp, err = client.GenerateContent(

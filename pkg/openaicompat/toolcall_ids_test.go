@@ -84,6 +84,56 @@ func TestBaseProvider_ToolCallIDFormat(t *testing.T) {
 			t.Errorf("Adjustments = %v, want none", resp.Adjustments)
 		}
 	})
+
+	t.Run("every tool call in one message is rewritten", func(t *testing.T) {
+		msgs := []llms.Message{
+			{Role: llms.RoleUser, Content: "q"},
+			{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{
+				{ID: "toolu_01AAA", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "a", Arguments: "{}"}},
+				{ID: "toolu_01BBB", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "b", Arguments: "{}"}},
+				{ID: "toolu_01CCC", Type: llms.ToolTypeFunction, Function: &llms.FunctionCall{Name: "c", Arguments: "{}"}},
+			}},
+			{Role: llms.RoleTool, ToolCallID: "toolu_01AAA", Content: "a"},
+			{Role: llms.RoleTool, ToolCallID: "toolu_01BBB", Content: "b"},
+			{Role: llms.RoleTool, ToolCallID: "toolu_01CCC", Content: "c"},
+		}
+		resp, err := p.GenerateContent(context.Background(), msgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Adjustments) != 1 {
+			t.Fatalf("Adjustments = %v", resp.Adjustments)
+		}
+		body, _ := json.Marshal(server.LastRequest().Body)
+		var req struct {
+			Messages []struct {
+				ToolCalls []struct {
+					ID string `json:"id"`
+				} `json:"tool_calls"`
+				ToolCallID string `json:"tool_call_id"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatal(err)
+		}
+		calls := req.Messages[1].ToolCalls
+		if len(calls) != 3 {
+			t.Fatalf("got %d tool calls", len(calls))
+		}
+		for i, c := range calls {
+			if !nineChar.MatchString(c.ID) {
+				t.Errorf("tool call %d ID %q is not nine-char", i, c.ID)
+			}
+		}
+		if calls[0].ID == calls[1].ID || calls[1].ID == calls[2].ID {
+			t.Errorf("tool call IDs collided: %q %q %q", calls[0].ID, calls[1].ID, calls[2].ID)
+		}
+		for i := 0; i < 3; i++ {
+			if req.Messages[2+i].ToolCallID != calls[i].ID {
+				t.Errorf("result %d ID %q != call ID %q", i, req.Messages[2+i].ToolCallID, calls[i].ID)
+			}
+		}
+	})
 }
 
 func TestBaseProvider_ToolCallIDFormatStream(t *testing.T) {

@@ -171,7 +171,11 @@ var cachedModels = []llms.ModelInfo{
 // ListModels returns metadata for common RunPod-deployed models.
 // Note: Actual model availability depends on your deployed endpoint.
 func ListModels() []llms.ModelInfo {
-	return cachedModels
+	out := make([]llms.ModelInfo, len(cachedModels))
+	for i := range cachedModels {
+		out[i] = copyModelInfo(&cachedModels[i])
+	}
+	return out
 }
 
 // ModelInfo returns information about a specific model.
@@ -179,8 +183,21 @@ func ListModels() []llms.ModelInfo {
 func ModelInfo(modelID string) *llms.ModelInfo {
 	for _, m := range cachedModels {
 		if m.ID == modelID {
-			return &m
+			cp := copyModelInfo(&m)
+			return &cp
 		}
 	}
 	return nil
+}
+
+// copyModelInfo returns a copy whose reference fields (currently Types) are
+// independent of the cached entry, so a caller mutating the result cannot
+// corrupt the shared metadata or race another reader.
+func copyModelInfo(info *llms.ModelInfo) llms.ModelInfo {
+	result := *info
+	if len(info.Types) > 0 {
+		result.Types = make([]llms.ModelType, len(info.Types))
+		copy(result.Types, info.Types)
+	}
+	return result
 }

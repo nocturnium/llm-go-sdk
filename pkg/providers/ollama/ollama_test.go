@@ -156,3 +156,15 @@ func TestOllamaHostWithoutScheme(t *testing.T) {
 		t.Fatalf("BaseURL = %q", got)
 	}
 }
+
+// An explicit endpoint must not be redirected by the process-global OLLAMA_HOST.
+func TestWithBaseURLOverridesOllamaHost(t *testing.T) {
+	t.Setenv("OLLAMA_HOST", "http://env-host:11434")
+	c, err := New(WithBaseURL("http://pinned-host:11434/v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.options.BaseURL; got != "http://pinned-host:11434/v1" {
+		t.Fatalf("BaseURL = %q, want the explicit endpoint", got)
+	}
+}

@@ -112,15 +112,12 @@ func TestProcessResponsesStream_EOFWithoutCompleted(t *testing.T) {
 	body := sseBody([][2]string{
 		{"response.output_text.delta", `{"type":"response.output_text.delta","delta":"hi"}`},
 	})
-	text, _, final, err := drainResponsesStream(t, body)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	text, _, _, err := drainResponsesStream(t, body)
+	if err == nil || !strings.Contains(err.Error(), "before terminal event") {
+		t.Fatalf("error = %v, want truncated-stream error", err)
 	}
 	if text != "hi" {
 		t.Errorf("text = %q, want hi", text)
-	}
-	if final.FinishReason != llms.FinishReasonStop {
-		t.Errorf("finish = %q, want stop on clean EOF", final.FinishReason)
 	}
 }
 

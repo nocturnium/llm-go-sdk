@@ -88,6 +88,13 @@ func NewBaseProvider(client *Client, config ProviderConfig) BaseProvider {
 	// Copy the client so route overrides do not mutate another provider's client.
 	if client != nil {
 		copied := *client
+		// embedding is a pointer so the struct copy stays lock-free, but a
+		// shared pointer would let a later SetEmbeddingBaseURL on either client
+		// change the other's route. Give the copy its own route (not a copy of
+		// the mutex, which would be a lock copy).
+		if client.embedding != nil {
+			copied.embedding = &embeddingRoute{url: client.embedding.get(client.baseURL)}
+		}
 		paths := []*string{&copied.mediaPaths.ImagesPath, &copied.mediaPaths.ImageEditsPath, &copied.mediaPaths.SpeechPath, &copied.mediaPaths.TranscriptionsPath, &copied.mediaPaths.VideosPath}
 		overrides := []string{config.Media.ImagesPath, config.Media.ImageEditsPath, config.Media.SpeechPath, config.Media.TranscriptionsPath, config.Media.VideosPath}
 		for i, override := range overrides {
@@ -121,6 +128,9 @@ func (p *BaseProvider) Call(ctx context.Context, prompt string, options ...llms.
 
 // GenerateContent generates content with more control over messages.
 func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (*llms.Response, error) {
+	if p == nil {
+		return nil, WrapError(p.providerName(), "generate content", llms.ErrClientNotConfigured)
+	}
 	opts := llms.ApplyOptions(options...)
 
 	if err := opts.Validate(); err != nil {
@@ -140,6 +150,11 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 	}
 	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
 	prepared, adjustments := p.normalizeToolCallIDs(prepared)
+	// Validate before touching the HTTP client so a misconfigured provider still
+	// reports message problems, then fail cleanly instead of dereferencing nil.
+	if p.client == nil {
+		return nil, WrapError(p.config.Provider, "generate content", llms.ErrClientNotConfigured)
+	}
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -175,6 +190,9 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 
 // Stream generates content with streaming, returning chunks via channel.
 func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+	if p == nil {
+		return nil, WrapError(p.providerName(), "stream", llms.ErrClientNotConfigured)
+	}
 	opts := llms.ApplyOptions(options...)
 
 	if err := opts.Validate(); err != nil {
@@ -194,6 +212,9 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 	}
 	prepared = llms.DropForeignReplay(prepared, p.config.Provider)
 	prepared, adjustments := p.normalizeToolCallIDs(prepared)
+	if p.client == nil {
+		return nil, WrapError(p.config.Provider, "stream", llms.ErrClientNotConfigured)
+	}
 
 	model := effectiveModel(p.model, opts.Model)
 
@@ -236,6 +257,15 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 // Provider returns the provider type.
 func (p *BaseProvider) Provider() llms.Provider {
 	return p.config.Provider
+}
+
+// providerName returns the configured provider for error wrapping, falling back
+// to a stable label for a provider whose config was never populated.
+func (p *BaseProvider) providerName() llms.Provider {
+	if p != nil && p.config.Provider != "" {
+		return p.config.Provider
+	}
+	return "openaicompat"
 }
 
 // Model returns the model name.
@@ -282,16 +312,23 @@ func (p *BaseProvider) Capabilities() llms.Capabilities {
 	// (e.g. Azure, llama.cpp), so the declaration is honored as-is.
 	caps.Embeddings = static.Embeddings
 	caps.Batch = static.Batch
-	caps.ImageGeneration = p.config.Media.Images
-	caps.VideoGeneration = p.config.Media.Videos
-	caps.Speech = p.config.Media.Speech
-	caps.Transcription = p.config.Media.Transcription
+	// Media capabilities: an explicit static declaration wins, and the Media
+	// block can only turn a capability on. This keeps a provider that declares
+	// ImageGeneration:true without a Media.Images flag from being downgraded to
+	// unsupported.
+	caps.ImageGeneration = static.ImageGeneration || p.config.Media.Images
+	caps.VideoGeneration = static.VideoGeneration || p.config.Media.Videos
+	caps.Speech = static.Speech || p.config.Media.Speech
+	caps.Transcription = static.Transcription || p.config.Media.Transcription
 
 	return caps
 }
 
 // Embed generates embeddings for one or more texts.
 func (p *BaseProvider) Embed(ctx context.Context, texts []string, options ...llms.EmbedOption) (*llms.EmbeddingResponse, error) {
+	if p == nil || p.client == nil {
+		return nil, WrapError(p.providerName(), "embed", llms.ErrClientNotConfigured)
+	}
 	if err := llms.ValidateEmbedInput(texts); err != nil {
 		return nil, err
 	}

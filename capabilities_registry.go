@@ -60,12 +60,7 @@ func DefaultCapabilityRegistry() *CapabilityRegistry {
 func (r *CapabilityRegistry) Register(provider Provider, modelID string, caps ModelCapabilities) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.capabilities[r.makeKey(provider, modelID)] = caps
-	// Get falls back to a lowercase lookup, which only finds a mixed-case
-	// registration if it is indexed here too.
-	if lower := strings.ToLower(modelID); lower != modelID {
-		r.capabilities[r.makeKey(provider, lower)] = caps
-	}
+	r.capabilities[r.makeKey(provider, strings.ToLower(modelID))] = caps
 }
 
 // RegisterDefault sets the default capabilities for a provider.
@@ -83,15 +78,8 @@ func (r *CapabilityRegistry) Get(provider Provider, modelID string) ModelCapabil
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Try exact match first
-	key := r.makeKey(provider, modelID)
+	key := r.makeKey(provider, strings.ToLower(modelID))
 	if caps, ok := r.capabilities[key]; ok {
-		return caps
-	}
-
-	// Try case-insensitive match
-	keyLower := r.makeKey(provider, strings.ToLower(modelID))
-	if caps, ok := r.capabilities[keyLower]; ok {
 		return caps
 	}
 
@@ -102,7 +90,10 @@ func (r *CapabilityRegistry) Get(provider Provider, modelID string) ModelCapabil
 	return ModelCapabilities{}
 }
 
-// GetWithDefaults returns capabilities with explicit defaults applied.
+// GetWithDefaults returns capabilities with explicit defaults applied for the
+// two numeric fields (MaxContextTokens, MaxOutputTokens). Boolean capabilities
+// are left as-is: a false is indistinguishable from an unset value, so there is
+// no zero value to substitute without overriding a deliberate false.
 // This is useful for Capabilities() implementations.
 func (r *CapabilityRegistry) GetWithDefaults(provider Provider, modelID string, defaults ModelCapabilities) ModelCapabilities {
 	caps := r.Get(provider, modelID)
@@ -481,8 +472,9 @@ func (r *CapabilityRegistry) registerDefaults() {
 
 	// Infinity serves embeddings and reranking, not chat completions.
 	r.defaults[ProviderInfinity] = ModelCapabilities{
-		MaxContextTokens: 8192,
-		MaxOutputTokens:  0,
+		MaxContextTokens:   8192,
+		MaxOutputTokens:    0,
+		SupportsEmbeddings: true,
 	}
 
 	// Z.AI defaults cover GLM-4.x chat models; vision is model-dependent.
@@ -531,14 +523,14 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-	r.capabilities["synthetic:hf:Qwen/Qwen3-Coder-480B-A35B-Instruct"] = ModelCapabilities{
+	r.capabilities["synthetic:hf:qwen/qwen3-coder-480b-a35b-instruct"] = ModelCapabilities{
 		MaxContextTokens:  256000,
 		MaxOutputTokens:   8192,
 		SupportsTools:     true,
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-	r.capabilities["synthetic:hf:Qwen/Qwen3-VL-235B-A22B-Instruct"] = ModelCapabilities{
+	r.capabilities["synthetic:hf:qwen/qwen3-vl-235b-a22b-instruct"] = ModelCapabilities{
 		MaxContextTokens:  250000,
 		MaxOutputTokens:   8192,
 		SupportsVision:    true,

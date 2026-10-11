@@ -12,6 +12,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// maxInt returns the largest value an int can hold on this platform.
+func maxInt() int { return int(^uint(0) >> 1) }
+
 // Rate limiting errors. ErrRateLimitExceeded wraps the canonical
 // llms.ErrRateLimited so a local rate-limiter rejection satisfies
 // errors.Is(err, llms.ErrRateLimited) uniformly with a provider-reported 429,
@@ -33,6 +36,21 @@ type RateLimiter struct {
 	tokensPerMin  int
 	tokenBurst    int // Max tokens allowed to burst at once (0 = a full minute's budget)
 	tokenEstimate int // Estimated tokens per request when actual count unknown
+	// tokenCredit holds tokens refunded from an overestimate. The standard
+	// library limiter has no positive refund operation; a negative ReserveN is
+	// rejected as an oversized reservation, so later waits consume this credit
+	// separately from the bucket.
+	tokenCredit int
+	// tokenDebt is the portion of a provider-reported usage count that could not
+	// be charged in one RecordTokens call. A huge response leaves the limiter
+	// charged in bounded installments; the remainder stays here and is settled
+	// before later requests instead of being silently dropped.
+	tokenDebt int
+	// generation advances on every Reset. A Wait that started before a Reset
+	// holds the old limiters, so its late debt and credit adjustments carry the
+	// generation they were admitted under and are dropped when it no longer
+	// matches, instead of landing in the freshly reset state.
+	generation uint64
 
 	// Behavior
 	blocking    bool          // Wait for rate limit or return error immediately
@@ -80,16 +98,18 @@ const maxTokenInstallments = 64
 // tokens; callers who want tighter client-side pacing can lower it via
 // WithTokenBurst.
 //
-// NOTE: a per-request token count larger than this burst would make
-// golang.org/x/time/rate's WaitN/AllowN reject every call (n > burst is never
-// satisfiable). Rather than override an explicit WithTokenBurst here, the Wait
-// paths cap the requested token count to the burst (see WaitN/tryAcquire), which
-// preserves the caller's chosen burst while avoiding a self-inflicted outage.
+// The default is raised to at least the per-request estimate so a configured
+// budget below one request's estimate is still charged in full. Otherwise the
+// Wait paths clamp the charge to the burst, and a 500/min budget against the
+// default 1000-token estimate would bill only 500 tokens per call, letting
+// callers consume roughly twice the configured rate. An explicit WithTokenBurst
+// is honored as-is; the Wait paths cap the charge to it (n > burst is never
+// satisfiable in golang.org/x/time/rate), which is the caller's chosen pacing.
 func (rl *RateLimiter) tokenBucketBurst() int {
 	if rl.tokenBurst > 0 {
 		return rl.tokenBurst
 	}
-	return rl.tokensPerMin
+	return max(rl.tokensPerMin, rl.tokenEstimate)
 }
 
 // WithRequestsPerMinute sets the maximum requests per minute
@@ -177,6 +197,103 @@ func (rl *RateLimiter) tokenLim() *rate.Limiter {
 	return rl.tokenLimiter
 }
 
+// snapshotLimiters returns the current limiters and the generation they belong
+// to, read together under one lock so a concurrent Reset cannot split them.
+func (rl *RateLimiter) snapshotLimiters() (requestLimiter, tokenLimiter *rate.Limiter, gen uint64) {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+	return rl.requestLimiter, rl.tokenLimiter, rl.generation
+}
+
+// settleTokenDebt charges bounded installments of debt left by an earlier
+// provider-reported usage count. It returns the longest reservation delay and
+// any amount still owed. The reservations are not cancellable by the admitting
+// request: those tokens were already consumed by a previous response.
+//
+// ctx bounds the work so a caller cancellation is observed between installments.
+// A high token rate makes every installment zero-delay, so the loop below would
+// otherwise charge the whole (potentially huge) debt while ignoring the wait
+// deadline; an expired ctx stops it with the remainder still owed.
+func (rl *RateLimiter) settleTokenDebt(ctx context.Context, tokenLimiter *rate.Limiter, now time.Time) (delay time.Duration, remaining int) {
+	burst := tokenLimiter.Burst()
+	if burst <= 0 {
+		return 0, 0
+	}
+	for range maxTokenInstallments {
+		if ctx != nil && ctx.Err() != nil {
+			break
+		}
+		rl.mu.Lock()
+		debt := rl.tokenDebt
+		if debt <= 0 {
+			rl.mu.Unlock()
+			break
+		}
+		// A Reset replaced the limiter this call holds; the debt it saw was
+		// cleared with it, and charging the old bucket would be pointless.
+		if rl.tokenLimiter != tokenLimiter {
+			rl.mu.Unlock()
+			break
+		}
+		credit := min(debt, rl.tokenCredit)
+		if credit == debt {
+			rl.tokenCredit -= credit
+			rl.tokenDebt = 0
+			rl.mu.Unlock()
+			break
+		}
+		n := min(debt-credit, burst)
+		// Reserve while holding rl.mu so a concurrent refund in RecordTokens
+		// never observes the debt already deducted but not yet charged to the
+		// bucket, which would cancel it against less debt than is outstanding.
+		reservation := tokenLimiter.ReserveN(now, n)
+		if !reservation.OK() {
+			rl.mu.Unlock()
+			break
+		}
+		// Credit that offset part of the debt leaves the debt with it; only
+		// then is the reserved installment removed.
+		rl.tokenCredit -= credit
+		rl.tokenDebt -= credit + n
+		rl.mu.Unlock()
+		if d := reservation.DelayFrom(now); d > delay {
+			delay = d
+		}
+	}
+	rl.mu.RLock()
+	remaining = rl.tokenDebt
+	rl.mu.RUnlock()
+	return delay, remaining
+}
+
+// consumeTokenCredit applies refunded tokens against the next reservation.
+// The returned count is subtracted from the tokens to reserve and the credit is
+// decremented by exactly that amount so a concurrent caller cannot spend it
+// twice.
+func (rl *RateLimiter) consumeTokenCredit(tokens int) int {
+	if tokens <= 0 {
+		return 0
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	credit := min(tokens, rl.tokenCredit)
+	rl.tokenCredit -= credit
+	return credit
+}
+
+// restoreTokenCredit returns credit that was consumed for a reservation that
+// was then canceled or refused.
+func (rl *RateLimiter) restoreTokenCredit(credit int, gen uint64) {
+	if credit <= 0 {
+		return
+	}
+	rl.mu.Lock()
+	if gen == rl.generation {
+		rl.tokenCredit += credit
+	}
+	rl.mu.Unlock()
+}
+
 // Wait blocks until the rate limit allows a request or returns an error
 func (rl *RateLimiter) Wait(ctx context.Context) error {
 	return rl.WaitN(ctx, 1, rl.tokenEstimate)
@@ -184,8 +301,17 @@ func (rl *RateLimiter) Wait(ctx context.Context) error {
 
 // WaitN blocks until the rate limit allows n requests with estimated tokens
 func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
+	if requests <= 0 {
+		return fmt.Errorf("rate limit requests must be positive")
+	}
+	if tokens < 0 {
+		return fmt.Errorf("rate limit tokens must not be negative")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if !rl.blocking {
-		return rl.tryAcquire(requests, tokens)
+		return rl.tryAcquire(ctx, requests, tokens)
 	}
 
 	waitCtx, cancel := context.WithTimeout(ctx, rl.waitTimeout)
@@ -193,74 +319,246 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 
 	// Snapshot limiter pointers under the read lock so a concurrent Reset cannot
 	// be observed mid-reassignment.
-	requestLimiter := rl.requestLim()
-	tokenLimiter := rl.tokenLim()
-
-	// Never request more than the bucket can hold: WaitN rejects that outright
-	// with a permanent error, which the classification below would otherwise
-	// report as a timeout a caller could retry forever.
-	if b := requestLimiter.Burst(); b > 0 && requests > b {
-		requests = b
-	}
-	if err := requestLimiter.WaitN(waitCtx, requests); err != nil {
-		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
-			return failure
-		}
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-		// What is left is rate's own "would exceed context deadline", which is the
-		// wait running out of time rather than a permanent refusal.
-		return ErrRateLimitTimeout
-	}
-
-	if tokenLimiter != nil && tokens > 0 {
-		// Never request more than the bucket can hold, or WaitN rejects it forever.
-		if b := tokenLimiter.Burst(); tokens > b {
-			tokens = b
-		}
-		if err := tokenLimiter.WaitN(waitCtx, tokens); err != nil {
-			if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
-				return failure
+	requestLimiter, tokenLimiter, gen := rl.snapshotLimiters()
+	if tokenLimiter != nil {
+		for {
+			delay, remaining := rl.settleTokenDebt(waitCtx, tokenLimiter, time.Now())
+			if remaining == 0 && delay == 0 {
+				break
+			}
+			if err := waitCtx.Err(); err != nil {
+				if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
+					return failure
+				}
+				return ErrRateLimitTimeout
+			}
+			if delay > 0 {
+				timer := time.NewTimer(delay)
+				select {
+				case <-timer.C:
+				case <-waitCtx.Done():
+					timer.Stop()
+					if failure := rl.waitFailure(ctx, waitCtx, waitCtx.Err()); failure != nil {
+						return failure
+					}
+					return ErrRateLimitTimeout
+				}
 			}
 		}
 	}
 
-	return nil
-}
-
-// tryAcquire attempts to acquire rate limit tokens without waiting
-func (rl *RateLimiter) tryAcquire(requests, tokens int) error {
-	requestLimiter := rl.requestLim()
-	tokenLimiter := rl.tokenLim()
-
-	// Same clamp as the blocking path: AllowN refuses any count above the burst
-	// outright, which would turn every call into ErrRateLimitExceeded.
+	// A request count above the burst cannot be satisfied by waiting. Do not
+	// clamp it: admitting a multi-request call while charging the bucket for one
+	// lets callers bypass the configured request rate. Return a local rate-limit
+	// error rather than the permanent "exceeds burst" error from x/time/rate.
 	if b := requestLimiter.Burst(); b > 0 && requests > b {
-		requests = b
-	}
-	if !requestLimiter.AllowN(time.Now(), requests) {
 		return ErrRateLimitExceeded
 	}
 
+	// Reserve both buckets before waiting on either. Reserving the request
+	// bucket first and only then discovering the token bucket cannot be met
+	// would consume request capacity for a call that never starts, making the
+	// next request wait or fail. ReserveN takes the capacity immediately, so a
+	// failed or canceled wait must release every reservation it holds.
+	now := time.Now()
+	reqRes := requestLimiter.ReserveN(now, requests)
+	if !reqRes.OK() {
+		return ErrRateLimitTimeout
+	}
+	var tokRes *rate.Reservation
+	consumedCredit := 0
+	deferredTokens := 0
 	if tokenLimiter != nil && tokens > 0 {
+		// A refund is capacity already paid for by an earlier request, so it
+		// reduces the whole charge. Apply it before splitting burst and debt:
+		// offsetting only the burst portion while also carrying the credit into
+		// debt would double-count it and overcharge the request.
+		consumedCredit = rl.consumeTokenCredit(tokens)
+		tokens -= consumedCredit
+		// A charge above the burst cannot be satisfied by one reservation. Reserve
+		// the burst-sized part now and carry the remainder as debt so the budget is
+		// still enforced instead of treating the whole estimate as paid.
 		if b := tokenLimiter.Burst(); tokens > b {
+			deferredTokens = tokens - b
 			tokens = b
 		}
-		if !tokenLimiter.AllowN(time.Now(), tokens) {
+		if tokens == 0 {
+			goto reserved
+		}
+		tokRes = tokenLimiter.ReserveN(now, tokens)
+		if !tokRes.OK() {
+			rl.restoreTokenCredit(consumedCredit, gen)
+			reqRes.CancelAt(now)
+			return ErrRateLimitTimeout
+		}
+	}
+	// The debt is committed only after the request is admitted: a canceled wait
+	// never consumed the tokens, so it must not leave debt behind (and committing
+	// early would also let a concurrent waiter settle debt for a request that may
+	// yet be refused).
+
+reserved:
+	delay := reqRes.Delay()
+	if tokRes != nil && tokRes.Delay() > delay {
+		delay = tokRes.Delay()
+	}
+	if delay > 0 {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-waitCtx.Done():
+			reqRes.Cancel()
+			if tokRes != nil {
+				tokRes.Cancel()
+			}
+			rl.restoreTokenCredit(consumedCredit, gen)
+			if failure := rl.waitFailure(ctx, waitCtx, waitCtx.Err()); failure != nil {
+				return failure
+			}
+			return ErrRateLimitTimeout
+		}
+	}
+
+	// The deadline may have passed while delay was zero; release and report.
+	if err := waitCtx.Err(); err != nil {
+		reqRes.Cancel()
+		if tokRes != nil {
+			tokRes.Cancel()
+		}
+		rl.restoreTokenCredit(consumedCredit, gen)
+		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
+			return failure
+		}
+		return ErrRateLimitTimeout
+	}
+	if deferredTokens > 0 {
+		rl.addTokenDebt(deferredTokens, gen)
+	}
+
+	return nil
+}
+
+// addTokenDebt records the part of an admitted request's token charge that
+// could not be reserved in one burst-sized reservation. Later requests settle it
+// before they are admitted. Saturating keeps a pathological report from wrapping
+// the debt negative, which would make it look settled.
+func (rl *RateLimiter) addTokenDebt(n int, gen uint64) {
+	if n <= 0 {
+		return
+	}
+	rl.mu.Lock()
+	if gen == rl.generation {
+		rl.tokenDebt = saturatingAddInt(rl.tokenDebt, n)
+	}
+	rl.mu.Unlock()
+}
+
+// tryAcquire attempts to acquire rate limit tokens without waiting
+func (rl *RateLimiter) tryAcquire(ctx context.Context, requests, tokens int) error {
+	requestLimiter, tokenLimiter, gen := rl.snapshotLimiters()
+	if tokenLimiter != nil {
+		// The non-blocking path cannot wait, but debt settlement must still stop
+		// between installments when the caller's context is done rather than
+		// charging a huge debt in one call.
+		delay, remaining := rl.settleTokenDebt(ctx, tokenLimiter, time.Now())
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if remaining > 0 || delay > 0 {
 			return ErrRateLimitExceeded
 		}
 	}
 
+	// A request count above the burst cannot be admitted without undercharging
+	// the configured request rate. Refuse it instead of clamping to one.
+	if b := requestLimiter.Burst(); b > 0 && requests > b {
+		return ErrRateLimitExceeded
+	}
+	if tokenLimiter != nil && tokens > 0 {
+		// Apply any refund before the burst check: credit is capacity already
+		// paid for, so a charge whose effective size is within the burst must
+		// still be admitted.
+		credit := rl.consumeTokenCredit(tokens)
+		tokens -= credit
+		// A charge above the burst cannot be met by one reservation, and
+		// x/time/rate refuses any count above the burst outright. Charge the
+		// burst-sized part now and carry the remainder as debt, exactly like the
+		// blocking path. Refusing the call instead left a limiter with an explicit
+		// burst below the estimate rejecting every request forever.
+		deferredTokens := 0
+		if b := tokenLimiter.Burst(); b > 0 && tokens > b {
+			deferredTokens = tokens - b
+			tokens = b
+		}
+		if tokens == 0 {
+			now := time.Now()
+			reqRes := requestLimiter.ReserveN(now, requests)
+			if !reqRes.OK() || reqRes.Delay() > 0 {
+				reqRes.CancelAt(now)
+				rl.restoreTokenCredit(credit, gen)
+				return ErrRateLimitExceeded
+			}
+			rl.addTokenDebt(deferredTokens, gen)
+			return nil
+		}
+		now := time.Now()
+		reqRes := requestLimiter.ReserveN(now, requests)
+		if !reqRes.OK() || reqRes.Delay() > 0 {
+			reqRes.CancelAt(now)
+			rl.restoreTokenCredit(credit, gen)
+			return ErrRateLimitExceeded
+		}
+		tokRes := tokenLimiter.ReserveN(now, tokens)
+		if !tokRes.OK() || tokRes.Delay() > 0 {
+			tokRes.CancelAt(now)
+			rl.restoreTokenCredit(credit, gen)
+			reqRes.CancelAt(now)
+			return ErrRateLimitExceeded
+		}
+		rl.addTokenDebt(deferredTokens, gen)
+		return nil
+	}
+	// Reserve the request bucket, then the token bucket. If the token bucket is
+	// unavailable, release the request reservation so a call that never started
+	// does not consume request capacity.
+	now := time.Now()
+	reqRes := requestLimiter.ReserveN(now, requests)
+	if !reqRes.OK() || reqRes.Delay() > 0 {
+		reqRes.CancelAt(now)
+		return ErrRateLimitExceeded
+	}
+
 	return nil
 }
 
-// RecordTokens records actual token usage (for more accurate limiting)
-// This can be called after a request to adjust for the difference between
-// estimated and actual tokens
+// RecordTokens records actual token usage (for more accurate limiting).
+// It settles a request that was admitted with the configured token estimate
+// (Wait, or WaitN with tokens equal to the estimate) by charging or refunding
+// the difference between that estimate and actualTokens. A request admitted with
+// a different explicit count through WaitN must not be settled here, because the
+// limiter does not remember per-request charges and would refund tokens it never
+// charged.
 func (rl *RateLimiter) RecordTokens(actualTokens int) {
-	tokenLimiter := rl.tokenLim()
+	// Read the limiter and its generation together so a concurrent Reset is
+	// not observed as a fresh limiter with a stale generation. A report from a
+	// request admitted before a Reset must not settle against the new state:
+	// its extra reservations belong to the limiter that was replaced, and its
+	// debt or credit would otherwise throttle or loosen a limiter the caller
+	// just reset.
+	_, tokenLimiter, gen := rl.snapshotLimiters()
+	rl.recordTokens(actualTokens, tokenLimiter, gen)
+}
+
+// recordTokens settles a usage report against the limiter and generation it was
+// admitted under. Every debt or credit write is dropped when the generation no
+// longer matches, so a report that overlaps a Reset cannot land in the fresh
+// state.
+func (rl *RateLimiter) recordTokens(actualTokens int, tokenLimiter *rate.Limiter, gen uint64) {
 	if tokenLimiter == nil {
+		return
+	}
+	if actualTokens < 0 {
 		return
 	}
 
@@ -271,42 +569,78 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		// underestimate (a 200k-token request against a smaller burst) used to
 		// cost the limiter zero. Charge it in burst-sized installments instead,
 		// which is the same clamp the Wait paths document.
-		extra := actualTokens - rl.tokenEstimate
+		// Compute the overflow as an int64 so a provider-reported count near
+		// math.MaxInt cannot wrap negative and skip the charge entirely.
+		extra64 := int64(actualTokens) - int64(rl.tokenEstimate)
+		if extra64 <= 0 {
+			return
+		}
 		burst := rl.tokenBucketBurst()
 		if burst <= 0 {
 			return
 		}
+		// Clamp to the largest value int can represent on this platform; the
+		// result stays non-negative even for a report near math.MaxInt.
+		if extra64 > int64(maxInt()) {
+			extra64 = int64(maxInt())
+		}
+		extra := int(extra64)
 		// ReserveN refuses any count above the burst and charges nothing for
-		// it, so a large debt has to go in burst-sized installments. The count
-		// comes from the provider, so the installments are capped: past
-		// maxTokenInstallments the caller is already paced into the ground and
-		// the remainder buys nothing but CPU.
+		// it, so a large debt goes in burst-sized installments. Bound the number of
+		// calls so one untrusted usage report cannot spin forever, and keep the
+		// remainder as debt that later requests settle.
 		now := time.Now()
-		for range maxTokenInstallments {
-			if extra <= 0 {
-				break
-			}
+		remainingInstallments := maxTokenInstallments
+		for extra > 0 && remainingInstallments > 0 {
 			n := min(extra, burst)
 			tokenLimiter.ReserveN(now, n)
 			extra -= n
+			remainingInstallments--
+		}
+		if extra > 0 {
+			rl.addTokenDebt(extra, gen)
 		}
 	case actualTokens < rl.tokenEstimate:
-		// If we overestimated, refund unused tokens without exceeding burst.
-		// The wait path clamps its charge to the burst, so an estimate above
-		// the burst was never charged in full and must not be refunded in
-		// full: that would hand the limiter tokens nobody paid for.
-		charged := min(rl.tokenEstimate, rl.tokenBucketBurst())
-		refund := charged - actualTokens
-		if refund < 0 {
-			refund = 0
+		// If we overestimated, refund unused tokens. An estimate above the burst is
+		// charged as a burst-sized reservation plus debt for the remainder, so cancel
+		// outstanding debt first, then credit whatever is left against the bucket.
+		refund := rl.tokenEstimate - actualTokens
+		rl.mu.Lock()
+		if gen != rl.generation {
+			rl.mu.Unlock()
+			return
 		}
-		if remaining := rl.tokenBucketBurst() - int(tokenLimiter.Tokens()); refund > remaining {
-			refund = remaining
+		if cancel := min(refund, rl.tokenDebt); cancel > 0 {
+			rl.tokenDebt -= cancel
+			refund -= cancel
+		}
+		available := rl.tokenBucketBurst() - int(tokenLimiter.Tokens()) - rl.tokenCredit
+		if available < 0 {
+			available = 0
+		}
+		if refund > available {
+			refund = available
 		}
 		if refund > 0 {
-			tokenLimiter.ReserveN(time.Now(), -refund)
+			rl.tokenCredit += refund
 		}
+		rl.mu.Unlock()
 	}
+}
+
+// saturatingAddInt adds two non-negative ints, clamping at maxInt instead of
+// overflowing into a negative value that later requests would treat as settled.
+func saturatingAddInt(a, b int) int {
+	if a < 0 {
+		a = 0
+	}
+	if b < 0 {
+		b = 0
+	}
+	if a > maxInt()-b {
+		return maxInt()
+	}
+	return a + b
 }
 
 // waitFailure classifies a limiter wait failure.
@@ -357,7 +691,9 @@ func (rl *RateLimiter) TokensRemaining() int {
 	if tokenLimiter == nil {
 		return -1 // Not configured
 	}
-	tokens := tokenLimiter.Tokens()
+	rl.mu.RLock()
+	tokens := tokenLimiter.Tokens() + float64(rl.tokenCredit) - float64(rl.tokenDebt)
+	rl.mu.RUnlock()
 	if tokens < 0 {
 		return 0
 	}
@@ -377,6 +713,9 @@ func (rl *RateLimiter) Reset() {
 		tokenRate := rate.Limit(float64(rl.tokensPerMin) / 60.0)
 		rl.tokenLimiter = rate.NewLimiter(tokenRate, rl.tokenBucketBurst())
 	}
+	rl.tokenDebt = 0
+	rl.tokenCredit = 0
+	rl.generation++
 }
 
 // RateLimitedClient wraps an LLM with client-side rate limiting
@@ -444,7 +783,7 @@ func (rlc *RateLimitedClient) Stream(ctx context.Context, messages []llms.Messag
 
 	opts := llms.ApplyOptions(options...)
 	return llms.WrapStream(ctx, stream, opts, func(chunk llms.StreamChunk) llms.StreamChunk {
-		if chunk.Usage != nil {
+		if chunk.Usage != nil && chunk.Usage.TotalTokens > 0 {
 			rlc.limiter.RecordTokens(chunk.Usage.TotalTokens)
 		}
 		return chunk

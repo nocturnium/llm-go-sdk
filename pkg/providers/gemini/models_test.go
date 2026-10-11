@@ -425,7 +425,9 @@ func TestClientImplementsModelLister(_ *testing.T) {
 func TestModelInfo_ModelNotFoundUsesSentinel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/missing-model" {
-			t.Fatalf("unexpected path %q", r.URL.Path)
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -486,6 +488,15 @@ func TestInferGeminiModelTypes_VisionAcrossFamilies(t *testing.T) {
 	}
 	if types := inferGeminiModelTypes("gemini-1.0-pro", nil); containsModelType(types, llms.ModelTypeVision) {
 		t.Errorf("gemini-1.0-pro typed as vision: %v", types)
+	}
+}
+
+// TestInferGeminiModelTypes_UnknownMethodSetsAreNotChat pins the discovery
+// fallback: a model that explicitly advertises neither generation nor embedding
+// methods must not be presented as a chat model.
+func TestInferGeminiModelTypes_UnknownMethodSetsAreNotChat(t *testing.T) {
+	if types := inferGeminiModelTypes("gemini-tuning-001", []string{"countTokens"}); len(types) != 0 {
+		t.Errorf("tuning model inferred as %v, want no model types", types)
 	}
 }
 

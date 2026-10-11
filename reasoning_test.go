@@ -172,3 +172,110 @@ func assertReasoningConfig(t *testing.T, got *ReasoningConfig, want ReasoningCon
 func boolPtr(v bool) *bool {
 	return &v
 }
+
+// TestReasoningContentClone_IsolatesNestedMetadata guards the cache boundary: a
+// clone must not share the slice or map values carried in Metadata, or mutating
+// a cached response's reasoning would corrupt the stored copy (and vice versa).
+func TestReasoningContentClone_IsolatesNestedMetadata(t *testing.T) {
+	type item struct {
+		ID      string
+		Summary []string
+	}
+	original := &ReasoningContent{
+		Content: "thinking",
+		Metadata: map[string]any{
+			"items":   []item{{ID: "a", Summary: []string{"s1"}}},
+			"strings": []string{"x", "y"},
+			"byName":  map[string]string{"k": "v"},
+			"scalar":  7,
+		},
+	}
+	clone := original.Clone()
+
+	cloneItems := clone.Metadata["items"].([]item)
+	cloneItems[0].ID = "mutated"
+	cloneItems[0].Summary[0] = "mutated"
+	clone.Metadata["strings"].([]string)[0] = "mutated"
+	clone.Metadata["byName"].(map[string]string)["k"] = "mutated"
+
+	origItems := original.Metadata["items"].([]item)
+	if origItems[0].ID != "a" || origItems[0].Summary[0] != "s1" {
+		t.Errorf("clone mutation leaked into original items: %#v", origItems[0])
+	}
+	if original.Metadata["strings"].([]string)[0] != "x" {
+		t.Errorf("clone mutation leaked into original strings: %#v", original.Metadata["strings"])
+	}
+	if original.Metadata["byName"].(map[string]string)["k"] != "v" {
+		t.Errorf("clone mutation leaked into original map: %#v", original.Metadata["byName"])
+	}
+	if clone.Metadata["scalar"] != 7 {
+		t.Errorf("scalar metadata changed: %#v", clone.Metadata["scalar"])
+	}
+}
+
+// TestReasoningContentClone_DistinctEmptySliceTypes guards the clone memo key:
+// two zero-length slices can share a backing address but have different element
+// types, so keying only on pointer, length, and kind aliases one as the other.
+func TestReasoningContentClone_DistinctEmptySliceTypes(t *testing.T) {
+	original := &ReasoningContent{Metadata: map[string]any{
+		"ints":    []int{},
+		"strings": []string{},
+	}}
+
+	clone := original.Clone()
+	if _, ok := clone.Metadata["ints"].([]int); !ok {
+		t.Fatalf("ints cloned as %T, want []int", clone.Metadata["ints"])
+	}
+	if _, ok := clone.Metadata["strings"].([]string); !ok {
+		t.Fatalf("strings cloned as %T, want []string", clone.Metadata["strings"])
+	}
+}
+
+// TestReasoningContentClone_DistinctMapTypes pins the same memo-key rule for
+// maps: two named map types can share one underlying map, and keying only on
+// pointer and kind would clone one as the other's static type.
+func TestReasoningContentClone_DistinctMapTypes(t *testing.T) {
+	type intMap map[string]int
+	type stringMap map[string]string
+	sharedInt := intMap{"a": 1}
+	original := &ReasoningContent{Metadata: map[string]any{
+		"ints":    sharedInt,
+		"strings": stringMap(nil),
+	}}
+
+	clone := original.Clone()
+	if _, ok := clone.Metadata["ints"].(intMap); !ok {
+		t.Fatalf("ints cloned as %T, want intMap", clone.Metadata["ints"])
+	}
+	if _, ok := clone.Metadata["strings"].(stringMap); !ok {
+		t.Fatalf("strings cloned as %T, want stringMap", clone.Metadata["strings"])
+	}
+}
+
+// TestReasoningContentClone_SelfReferentialMetadata pins that a self-referential
+// metadata value clones to a self-referential copy rather than recursing until
+// the stack overflows.
+func TestReasoningContentClone_SelfReferentialMetadata(t *testing.T) {
+	m := map[string]any{}
+	m["self"] = m
+	original := &ReasoningContent{Metadata: map[string]any{"cycle": m}}
+
+	clone := original.Clone()
+	cloneCycle, ok := clone.Metadata["cycle"].(map[string]any)
+	if !ok {
+		t.Fatalf("clone cycle is %T, want map[string]any", clone.Metadata["cycle"])
+	}
+	if _, ok := cloneCycle["self"].(map[string]any); !ok {
+		t.Errorf("clone cycle self-reference is %T, want map[string]any", cloneCycle["self"])
+	}
+	// The clone's cycle must be a distinct map from the original's.
+	if _, same := cloneCycle["self"].(map[string]any); same {
+		if _, aliased := original.Metadata["cycle"].(map[string]any)["self"]; aliased {
+			// Mutating the clone must not be visible in the original.
+			cloneCycle["mutated"] = true
+			if _, leaked := m["mutated"]; leaked {
+				t.Error("clone mutation leaked into the original metadata map")
+			}
+		}
+	}
+}

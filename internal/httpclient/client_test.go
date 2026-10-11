@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -38,6 +39,24 @@ func TestNewClient_WithRetryPolicy(t *testing.T) {
 
 	if client.retryPolicy.MaxRetries != 0 {
 		t.Error("expected no retry policy to be applied")
+	}
+}
+
+func TestClient_LegacyDialTLSCannotBypassPrivateAddressCheck(t *testing.T) {
+	called := false
+	//lint:ignore SA1019 exercises the deprecated field the client still guards
+	transport := &http.Transport{DialTLS: func(_, _ string) (net.Conn, error) { //nolint:staticcheck // see above
+		called = true
+		return nil, errors.New("should not dial")
+	}}
+	client := NewClient(WithHTTPClient(&http.Client{Transport: transport}))
+	guarded := client.httpClient.Transport.(*http.Transport)
+	//lint:ignore SA1019 see above
+	if _, err := guarded.DialTLS("tcp", "127.0.0.1:443"); err == nil { //nolint:staticcheck // see above
+		t.Fatal("DialTLS allowed a loopback destination")
+	}
+	if called {
+		t.Fatal("legacy DialTLS was invoked for a blocked private address")
 	}
 }
 
@@ -500,10 +519,10 @@ func TestAPIError_Error(t *testing.T) {
 	}
 }
 
-// A 204, or a 200 with no payload, is a success: decoding it must leave the
-// target at its zero value instead of failing with EOF.
+// A 204 is a success and leaves the target at its zero value. A 200 with no
+// payload is malformed rather than an empty success.
 func TestDoJSON_EmptyBodyIsNotAnError(t *testing.T) {
-	for _, status := range []int{http.StatusOK, http.StatusNoContent} {
+	for _, status := range []int{http.StatusNoContent} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(status)
 		}))
@@ -518,5 +537,24 @@ func TestDoJSON_EmptyBodyIsNotAnError(t *testing.T) {
 			t.Errorf("status %d: target mutated: %+v", status, out)
 		}
 		server.Close()
+	}
+}
+
+func TestDoJSON_EmptyBodyWithOKStatusIsAnError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true))
+	var out struct {
+		Name string `json:"name"`
+	}
+	err := client.DoJSON(context.Background(), Request{Method: http.MethodGet, URL: server.URL}, &out)
+	if err == nil {
+		t.Fatal("expected an error for an empty 200 response")
+	}
+	if !strings.Contains(err.Error(), "expected JSON response body") {
+		t.Fatalf("error = %v, want missing-body error", err)
 	}
 }

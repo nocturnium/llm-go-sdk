@@ -113,7 +113,10 @@ func (c *Client) GenerateContent(ctx context.Context, messages []llms.Message, o
 		return nil, err
 	}
 
-	result := convertResponse(resp)
+	result, err := convertResponse(resp)
+	if err != nil {
+		return nil, err
+	}
 
 	// apply token estimation if enabled and usage is missing
 	if opts.EstimateTokens && result.Usage.TotalTokens == 0 {
@@ -350,12 +353,17 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 					// context (mirrors the non-streaming convertResponse path).
 					for _, part := range candidate.Content.Parts {
 						if part.FunctionCall != nil {
+							arguments, err := geminiapi.FunctionCallToJSON(part.FunctionCall)
+							if err != nil {
+								sender.SendFinal(llms.StreamChunk{Error: err})
+								return
+							}
 							tc := llms.ToolCall{
 								ID:   part.FunctionCall.ID,
 								Type: llms.ToolTypeFunction,
 								Function: &llms.FunctionCall{
 									Name:      part.FunctionCall.Name,
-									Arguments: geminiapi.FunctionCallToJSON(part.FunctionCall),
+									Arguments: arguments,
 								},
 								Signature: part.ThoughtSignature,
 							}

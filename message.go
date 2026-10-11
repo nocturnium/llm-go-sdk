@@ -81,9 +81,11 @@ func ValidateMessages(messages []Message) error {
 			})
 		}
 
-		// A tool message is a result for a prior assistant tool call, so it
-		// cannot be the first message in a conversation.
-		if i == 0 && msg.Role == RoleTool {
+		// A tool message is a result for a prior assistant tool call, so the
+		// first message that is not a system prompt cannot be a tool result.
+		// System messages may precede it; consolidation moves them to the front,
+		// so checking index 0 alone would miss an orphan tool message behind one.
+		if msg.Role == RoleTool && firstNonSystemMessage(messages) == i {
 			errs = append(errs, ValidationError{
 				Field:   "messages[" + strconv.Itoa(i) + "].role",
 				Value:   msg.Role,
@@ -96,6 +98,17 @@ func ValidateMessages(messages []Message) error {
 		return errs
 	}
 	return nil
+}
+
+// firstNonSystemMessage returns the index of the first message that is not a
+// system prompt, or -1 when every message is a system prompt.
+func firstNonSystemMessage(messages []Message) int {
+	for i, msg := range messages {
+		if msg.Role != RoleSystem {
+			return i
+		}
+	}
+	return -1
 }
 
 // ValidateToolCallIDs enforces provider opt-in tool result linkage by requiring
@@ -205,7 +218,7 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 			if current != nil {
 				result = append(result, *current)
 			}
-			msgCopy := msg
+			msgCopy := cloneMessageSlices(msg)
 			current = &msgCopy
 			continue
 		}
@@ -248,7 +261,7 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 			if current != nil {
 				result = append(result, *current)
 			}
-			msgCopy := msg
+			msgCopy := cloneMessageSlices(msg)
 			current = &msgCopy
 		}
 	}
@@ -261,6 +274,21 @@ func MergeConsecutiveMessages(messages []Message) []Message {
 	return result
 }
 
+// cloneMessageSlices copies the slice fields a merge can append to, so building
+// the merged message never writes into a slice the caller still owns. A plain
+// struct copy keeps the same backing arrays, and an append that has spare
+// capacity would write the merged parts into caller-visible storage.
+func cloneMessageSlices(msg Message) Message {
+	copyMsg := msg
+	if msg.Parts != nil {
+		copyMsg.Parts = append([]ContentPart(nil), msg.Parts...)
+	}
+	if msg.ToolCalls != nil {
+		copyMsg.ToolCalls = append([]ToolCall(nil), msg.ToolCalls...)
+	}
+	return copyMsg
+}
+
 // ConsolidateSystemMessages merges all system messages into a single system message
 // at the beginning of the conversation. This is required by many LLM APIs that only
 // allow one system message. Multiple system messages are concatenated with newlines.
@@ -269,7 +297,8 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 		return messages
 	}
 
-	var systemParts []string
+	var systemMessages []Message
+	systemCount := 0
 	var nonSystemMessages []Message
 	// A cache breakpoint on a system message survives consolidation: the merged
 	// message is the one a provider turns into its system block, so dropping it
@@ -279,11 +308,8 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 
 	for _, msg := range messages {
 		if msg.Role == RoleSystem {
-			// Use Text so a system message built from Parts (rather than
-			// the simple Content field) is not silently dropped.
-			if text := msg.Text(); text != "" {
-				systemParts = append(systemParts, text)
-			}
+			systemCount++
+			systemMessages = append(systemMessages, msg)
 			if systemCacheControl == nil {
 				systemCacheControl = msg.CacheControl
 			}
@@ -293,14 +319,16 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	}
 
 	// If no system messages, return original
-	if len(systemParts) == 0 {
+	if systemCount == 0 {
 		return messages
 	}
 
+	content, parts := mergeSystemContent(systemMessages)
 	result := make([]Message, 0, len(nonSystemMessages)+1)
 	result = append(result, Message{
 		Role:         RoleSystem,
-		Content:      joinStrings(systemParts, "\n\n"),
+		Content:      content,
+		Parts:        parts,
 		CacheControl: systemCacheControl,
 	})
 	result = append(result, nonSystemMessages...)
@@ -308,7 +336,41 @@ func ConsolidateSystemMessages(messages []Message) []Message {
 	return result
 }
 
-// joinStrings joins strings with a separator (avoids importing strings package)
+// mergeSystemContent flattens system messages into one system message while
+// preserving the sequence of parts. A message using the simple Content field
+// contributes one text part; a Parts-based message keeps each part in place, so
+// a system message of image, text, image stays in that order instead of being
+// regrouped into text, image, image. Pure text collapses back to Content.
+func mergeSystemContent(messages []Message) (string, []ContentPart) {
+	var parts []ContentPart
+	var texts []string
+	for _, msg := range messages {
+		if len(msg.Parts) == 0 {
+			if msg.Content != "" {
+				parts = append(parts, NewTextPart(msg.Content))
+				texts = append(texts, msg.Content)
+			}
+			continue
+		}
+		for _, part := range msg.Parts {
+			parts = append(parts, part)
+			if part.Type == PartTypeText {
+				texts = append(texts, part.Text)
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return "", nil
+	}
+	for _, part := range parts {
+		if part.Type != PartTypeText {
+			return "", parts
+		}
+	}
+	return joinStrings(texts, "\n\n"), nil
+}
+
 func joinStrings(parts []string, sep string) string {
 	if len(parts) == 0 {
 		return ""

@@ -285,7 +285,11 @@ dropped. Neither set -> `{"type":"object","properties":{}}`.
 
 genai carries `ThoughtSignature []byte` on parts and ADK persists it in sessions
 (including database sessions) and ships it to clients in its REST/SSE event stream. We
-store a versioned envelope there, not a bare signature:
+originally specified a versioned envelope in that field. **Superseded by section 14:**
+the envelope now lives in `Part.PartMetadata["llmgo.reasoning"]` because ADK sends
+`ThoughtSignature` to Gemini unchanged and Gemini rejects envelopes there. The format
+below is unchanged; only the carrier moved, and envelopes still found in
+`ThoughtSignature` are read for compatibility:
 
 ```
 "llmgo" 0x01 <JSON {"p":provider,"m":model,"c":content?,"s":signature,"md":metadata,"k":"thought"|"call"}>
@@ -577,4 +581,3 @@ live-gate failure (evidence: llmadk/testdata/live/2026-09-26.md):
   thought-only single call and envelope fuzzing are covered.
 - FallbackChain rows (10.6) were added after the first review round and pass
   live in both directions.
-

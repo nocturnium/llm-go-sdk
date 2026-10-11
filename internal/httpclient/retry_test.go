@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
 )
@@ -101,6 +102,22 @@ func TestRetryPolicy_GetDelay_NoMaxDelay(t *testing.T) {
 	}
 }
 
+// TestRetryPolicy_GetDelay_MaxDurationNoOverflow pins that a delay which rounds
+// to exactly 2^63 as a float does not convert to a negative time.Duration. A
+// negative delay would make a retry fire immediately instead of backing off.
+func TestRetryPolicy_GetDelay_MaxDurationNoOverflow(t *testing.T) {
+	policy := &RetryPolicy{
+		InitialDelay: time.Duration(math.MaxInt64),
+		MaxDelay:     time.Duration(math.MaxInt64),
+		Multiplier:   2.0,
+	}
+	for attempt := 1; attempt <= 8; attempt++ {
+		if got := policy.GetDelay(attempt); got < 0 {
+			t.Fatalf("GetDelay(%d) = %v, want non-negative", attempt, got)
+		}
+	}
+}
+
 func TestRetryPolicy_CustomCodes(t *testing.T) {
 	policy := &RetryPolicy{
 		RetryableStatusCodes: []int{418, 503}, // Custom codes
@@ -147,5 +164,12 @@ func TestIsRetryable(t *testing.T) {
 				t.Fatalf("IsRetryable(%d, %v) = %v, want %v", tc.statusCode, tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRetryPolicy_GetDelayNeverExceedsNearMaxMaxDelay(t *testing.T) {
+	p := &RetryPolicy{InitialDelay: time.Duration(math.MaxInt64), MaxDelay: time.Duration(math.MaxInt64 - 1), Multiplier: 2}
+	if got := p.GetDelay(1); got > p.MaxDelay {
+		t.Fatalf("GetDelay = %d exceeds MaxDelay %d", got, p.MaxDelay)
 	}
 }

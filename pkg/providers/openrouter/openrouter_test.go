@@ -108,6 +108,19 @@ func TestRegistry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// The generic constructor must forward the embedding model like the other
+	// model and client settings.
+	c, err := llms.New("openrouter", llms.Config{APIKey: "key", Extra: map[string]string{llms.ExtraEmbeddingModel: "openai/text-embedding-3-small"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, ok := c.(*Client)
+	if !ok {
+		t.Fatalf("got %T, want *openrouter.Client", c)
+	}
+	if got := client.options.EmbeddingModel; got != "openai/text-embedding-3-small" {
+		t.Errorf("EmbeddingModel = %q, want openai/text-embedding-3-small", got)
+	}
 }
 func TestClient_ChatAndHeaders(t *testing.T) {
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +274,30 @@ func TestClient_Transcribe(t *testing.T) {
 		if out.Text != "hello" || out.Usage.Cost == nil || *out.Usage.Cost != .012 || out.Usage.Quantity != 2 || out.DurationSeconds != 120 || out.Usage.Unit != llms.MediaUnitMinute {
 			t.Fatal(out)
 		}
+	}
+}
+
+// response_format is read from Extra to choose the wire format, so it must not
+// also be rejected as a reserved key. The typed WithTranscribeWordTimestamps
+// option sets verbose_json; Extra can select the supported json form explicitly.
+func TestClient_Transcribe_ResponseFormatExtra(t *testing.T) {
+	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1024); err != nil {
+			t.Error(err)
+			return
+		}
+		defer r.MultipartForm.RemoveAll()
+		if r.FormValue("response_format") != "json" {
+			t.Errorf("response_format = %q, want json", r.FormValue("response_format"))
+		}
+		fmt.Fprint(w, `{"text":"hello"}`)
+	})
+	out, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("ID3audio"), MIMEType: "audio/mpeg"}, llms.WithTranscribeExtra(map[string]any{"response_format": "json"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Text != "hello" {
+		t.Fatalf("got %+v", out)
 	}
 }
 func TestClient_VideoJob(t *testing.T) {

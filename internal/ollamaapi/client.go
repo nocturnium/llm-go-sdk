@@ -56,6 +56,13 @@ type ClientConfig struct {
 
 // NewClient creates a new Ollama native API client.
 func NewClient(config ClientConfig) *Client {
+	baseURL := strings.TrimSuffix(config.BaseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
+		config.AllowPrivateIPs = true
+		config.AllowHTTP = true
+	}
 	var hcOpts []httpclient.ClientOption
 	if config.HTTPClient != nil {
 		hcOpts = append(hcOpts, httpclient.WithHTTPClient(config.HTTPClient))
@@ -68,12 +75,6 @@ func NewClient(config ClientConfig) *Client {
 		httpclient.WithAllowHTTP(config.AllowHTTP),
 	)
 	httpClient := httpclient.NewClient(hcOpts...)
-
-	baseURL := strings.TrimSuffix(config.BaseURL, "/")
-	baseURL = strings.TrimSuffix(baseURL, "/v1")
-	if baseURL == "" {
-		baseURL = defaultBaseURL
-	}
 
 	return &Client{
 		httpClient: httpClient,
@@ -260,14 +261,18 @@ func (c *Client) GetVersion(ctx context.Context) (string, error) {
 
 // Generate sends a completion request to /api/generate.
 func (c *Client) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	req.Stream = false
+	if req == nil {
+		return nil, WrapError("generate", errors.New("request is required"))
+	}
+	request := *req
+	request.Stream = false
 
 	var response GenerateResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.baseURL + "/api/generate",
-		Body:    req,
+		Body:    &request,
 		Headers: c.headers(),
 	}, &response)
 
@@ -280,12 +285,16 @@ func (c *Client) Generate(ctx context.Context, req *GenerateRequest) (*GenerateR
 
 // GenerateStream sends a streaming completion request.
 func (c *Client) GenerateStream(ctx context.Context, req *GenerateRequest) (*StreamReader, error) {
-	req.Stream = true
+	if req == nil {
+		return nil, WrapError("generate stream", errors.New("request is required"))
+	}
+	request := *req
+	request.Stream = true
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.baseURL + "/api/generate",
-		Body:    req,
+		Body:    &request,
 		Headers: c.headers(),
 	})
 
@@ -301,14 +310,18 @@ func (c *Client) GenerateStream(ctx context.Context, req *GenerateRequest) (*Str
 
 // Chat sends a chat request to /api/chat.
 func (c *Client) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
-	req.Stream = false
+	if req == nil {
+		return nil, WrapError("chat", errors.New("request is required"))
+	}
+	request := *req
+	request.Stream = false
 
 	var response ChatResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.baseURL + "/api/chat",
-		Body:    req,
+		Body:    &request,
 		Headers: c.headers(),
 	}, &response)
 
@@ -321,12 +334,16 @@ func (c *Client) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, err
 
 // ChatStream sends a streaming chat request.
 func (c *Client) ChatStream(ctx context.Context, req *ChatRequest) (*ChatStreamReader, error) {
-	req.Stream = true
+	if req == nil {
+		return nil, WrapError("chat stream", errors.New("request is required"))
+	}
+	request := *req
+	request.Stream = true
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.baseURL + "/api/chat",
-		Body:    req,
+		Body:    &request,
 		Headers: c.headers(),
 	})
 

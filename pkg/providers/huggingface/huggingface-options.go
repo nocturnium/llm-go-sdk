@@ -85,6 +85,9 @@ func WithAllowHTTP(allow bool) Option {
 func apply(opts ...Option) *options {
 	o := defaultOptions()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(o)
 	}
 	return o

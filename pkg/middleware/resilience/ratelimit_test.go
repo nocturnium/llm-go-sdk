@@ -3,6 +3,7 @@ package resilience
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -200,6 +201,43 @@ func TestRateLimiter_RecordTokensRefundsOverEstimate(t *testing.T) {
 	}
 	if afterRefund < 650 {
 		t.Fatalf("tokens remaining = %d, want refund close to 700", afterRefund)
+	}
+}
+
+func TestRateLimiter_RefundIsConsumedByNextRequest(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(100),
+		WithRequestBurst(100),
+		WithTokensPerMinute(300),
+		WithTokenEstimate(200),
+		WithBlocking(false),
+	)
+
+	if err := rl.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rl.RecordTokens(100)
+	if got := rl.TokensRemaining(); got < 200 {
+		t.Fatalf("tokens remaining after refund = %d, want at least one request estimate", got)
+	}
+
+	// The first request was refunded 100 tokens even though the bucket is not
+	// rebuilt; a 200-token second request should fit because the refund offsets
+	// half of it. The third then has no credit and must wait.
+	if err := rl.Wait(context.Background()); err != nil {
+		t.Fatalf("second request should consume the refund: %v", err)
+	}
+	if err := rl.Wait(context.Background()); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("third request = %v, want ErrRateLimitExceeded", err)
+	}
+}
+
+func TestRateLimiter_RecordTokensIgnoresNegativeUsage(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(600), WithTokenEstimate(200))
+	before := rl.TokensRemaining()
+	rl.RecordTokens(-5)
+	if got := rl.TokensRemaining(); got != before {
+		t.Fatalf("TokensRemaining = %d after negative usage, want %d", got, before)
 	}
 }
 
@@ -630,21 +668,208 @@ func TestRateLimiter_TokenBurst(t *testing.T) {
 	}
 }
 
-// A request count above the limiter's burst is refused outright by rate.WaitN,
-// a condition waiting can never clear. Clamping to the burst keeps the wait
-// meaningful instead of reporting a retryable timeout for a permanent refusal.
-func TestRateLimiter_WaitN_ClampsRequestsToBurst(t *testing.T) {
+// A request count above the limiter's burst is a permanent refusal. Clamping it
+// to one would admit a call that asked for two or more while charging one,
+// bypassing the configured request rate.
+func TestRateLimiter_WaitN_RejectsRequestsAboveBurst(t *testing.T) {
 	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithRequestBurst(2), WithBlocking(true), WithWaitTimeout(time.Second))
-	if err := rl.WaitN(context.Background(), 5, 0); err != nil {
-		t.Fatalf("WaitN with requests above the burst: %v", err)
+	if err := rl.WaitN(context.Background(), 5, 0); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("WaitN with requests above the burst = %v, want ErrRateLimitExceeded", err)
 	}
 }
 
-// AllowN refuses any count above the burst outright, so the non-blocking path
-// clamps it the way the blocking path does rather than refusing every call.
-func TestRateLimiter_TryAcquire_ClampsRequestsToBurst(t *testing.T) {
+// The non-blocking path must not clamp an oversized request count either: doing
+// so would admit the call while charging less than the caller asked for.
+func TestRateLimiter_TryAcquire_RejectsRequestsAboveBurst(t *testing.T) {
 	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithRequestBurst(2), WithBlocking(false))
-	if err := rl.WaitN(context.Background(), 5, 0); err != nil {
-		t.Fatalf("tryAcquire with requests above the burst: %v", err)
+	if err := rl.WaitN(context.Background(), 5, 0); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("tryAcquire with requests above the burst = %v, want ErrRateLimitExceeded", err)
+	}
+}
+
+// An oversized token charge on the non-blocking path must be financed like the
+// blocking path: reserve the burst-sized part and carry the remainder as debt.
+// Rejecting outright made a limiter whose burst sits below the estimate refuse
+// every request forever, and clamping silently charged less than the caller
+// asked for. The debt must show up as a later rejection once the burst refills.
+func TestRateLimiter_TryAcquire_FinancesTokensAboveBurst(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithTokensPerMinute(600),
+		WithTokenBurst(10),
+		WithBlocking(false),
+	)
+	if err := rl.WaitN(context.Background(), 1, 1000); err != nil {
+		t.Fatalf("tryAcquire with tokens above the burst = %v, want success with debt", err)
+	}
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt != 990 {
+		t.Fatalf("tokenDebt after an oversized charge = %d, want 990", debt)
+	}
+	// The debt is settled before admission, so the very next call fails even
+	// though the burst was only just drained.
+	if err := rl.WaitN(context.Background(), 1, 1); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("tryAcquire with outstanding debt = %v, want ErrRateLimitExceeded", err)
+	}
+}
+
+// TestRateLimiter_TokenBurstCoversEstimate pins that a token budget smaller
+// than the per-request estimate is still charged in full. Clamping the charge
+// to a burst below the estimate let a 500/min limiter bill only 500 tokens per
+// 1000-token request, doubling the effective rate.
+func TestRateLimiter_TokenBurstCoversEstimate(t *testing.T) {
+	rl := NewRateLimiter(
+		WithTokensPerMinute(500),
+		WithTokenEstimate(1000),
+	)
+	if got := rl.tokenBucketBurst(); got < 1000 {
+		t.Fatalf("tokenBucketBurst() = %d, want at least the 1000-token estimate", got)
+	}
+}
+
+// A request whose token wait fails must not consume request capacity. The
+// blocking path used to spend a request token before discovering the token
+// bucket could not be met, so a call that never started pushed the next request
+// over the request limit.
+func TestRateLimiter_TokenWaitFailureRefundsRequestCapacity(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithRequestBurst(2),
+		WithTokensPerMinute(600),
+		WithTokenEstimate(1000),
+		WithBlocking(true),
+		WithWaitTimeout(20*time.Millisecond),
+	)
+
+	// Exhaust the token bucket so the next token wait must block past the wait
+	// timeout. The request bucket still has capacity.
+	if err := rl.WaitN(context.Background(), 1, 600); err != nil {
+		t.Fatalf("initial WaitN failed: %v", err)
+	}
+	if err := rl.WaitN(context.Background(), 1, 600); !errors.Is(err, ErrRateLimitTimeout) {
+		t.Fatalf("second WaitN = %v, want ErrRateLimitTimeout", err)
+	}
+
+	// The failed call must not have spent request capacity: one request should
+	// still be immediately available.
+	if err := rl.WaitN(context.Background(), 1, 0); err != nil {
+		t.Fatalf("request capacity was consumed by the failed token wait: %v", err)
+	}
+}
+
+// The non-blocking path must not spend request capacity when the token bucket
+// is exhausted.
+func TestRateLimiter_TryAcquire_TokenFailureRefundsRequestCapacity(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithRequestBurst(2),
+		WithTokensPerMinute(600),
+		WithTokenEstimate(1000),
+		WithBlocking(false),
+	)
+	if err := rl.WaitN(context.Background(), 1, 600); err != nil {
+		t.Fatalf("initial WaitN failed: %v", err)
+	}
+	if err := rl.WaitN(context.Background(), 1, 600); !errors.Is(err, ErrRateLimitExceeded) {
+		t.Fatalf("second WaitN = %v, want ErrRateLimitExceeded", err)
+	}
+	if err := rl.WaitN(context.Background(), 1, 0); err != nil {
+		t.Fatalf("request capacity was consumed by the failed token acquire: %v", err)
+	}
+}
+
+// A negative token count must be rejected, not treated as "no token charge"
+// that silently bypasses the configured token rate.
+func TestRateLimiter_WaitN_RejectsNegativeTokens(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(600))
+	if err := rl.WaitN(context.Background(), 1, -1); err == nil {
+		t.Fatal("WaitN with negative tokens succeeded, want error")
+	}
+}
+
+func TestRateLimiter_WaitN_NonBlockingRejectsCanceledContext(t *testing.T) {
+	rl := NewRateLimiter(WithRequestsPerMinute(6000), WithBlocking(false))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := rl.WaitN(ctx, 1, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("WaitN = %v, want context.Canceled", err)
+	}
+}
+
+// The non-blocking path must apply token credit before the burst check: 1000
+// credits make a 1500-token request effectively 500, which fits a 1000 burst.
+func TestRateLimiter_TryAcquire_AppliesCreditBeforeBurstCheck(t *testing.T) {
+	rl := NewRateLimiter(
+		WithRequestsPerMinute(6000),
+		WithRequestBurst(2),
+		WithTokensPerMinute(60000),
+		WithTokenBurst(1000),
+		WithBlocking(false),
+	)
+	rl.mu.Lock()
+	rl.tokenCredit = 1000
+	rl.mu.Unlock()
+
+	if err := rl.WaitN(context.Background(), 1, 1500); err != nil {
+		t.Fatalf("WaitN with credit applied = %v, want success", err)
+	}
+}
+
+// A reported usage near math.MaxInt must not overflow the overflow calculation
+// and skip accounting entirely.
+func TestRateLimiter_RecordTokens_LargeUsageDoesNotWrap(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(1))
+	rl.RecordTokens(math.MaxInt)
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt <= 0 {
+		t.Fatalf("tokenDebt after a MaxInt usage report = %d, want a positive debt", debt)
+	}
+}
+
+// Repeated large usage reports must saturate debt instead of wrapping negative,
+// which would make later requests look settled and bypass the limiter.
+func TestRateLimiter_RecordTokens_DebtSaturates(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(0))
+	rl.tokenDebt = maxInt() - 1
+	rl.RecordTokens(math.MaxInt)
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt < 0 {
+		t.Fatalf("tokenDebt overflowed to %d, want a non-negative saturated debt", debt)
+	}
+	if debt != maxInt() {
+		t.Fatalf("tokenDebt = %d, want saturation at %d", debt, maxInt())
+	}
+}
+
+// A usage report whose read of the limiter overlapped a Reset must not settle
+// against the freshly reset state: its debt or credit belongs to the replaced
+// bucket, and Reset is the operator's way to start clean.
+func TestRateLimiter_RecordTokensDiscardsStaleGeneration(t *testing.T) {
+	rl := NewRateLimiter(
+		WithTokensPerMinute(600),
+		WithTokenBurst(100),
+		WithTokenEstimate(100),
+	)
+	_, staleLimiter, staleGen := rl.snapshotLimiters()
+
+	rl.Reset()
+
+	// An over-estimate overflow from before the Reset.
+	rl.recordTokens(1_000_000, staleLimiter, staleGen)
+	// A refund from before the Reset.
+	rl.recordTokens(10, staleLimiter, staleGen)
+
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	credit := rl.tokenCredit
+	rl.mu.RUnlock()
+	if debt != 0 || credit != 0 {
+		t.Fatalf("stale usage adjustments leaked past Reset: debt=%d credit=%d, want 0 and 0", debt, credit)
 	}
 }

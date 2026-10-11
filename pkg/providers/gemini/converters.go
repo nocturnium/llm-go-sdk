@@ -13,7 +13,10 @@ const (
 )
 
 // convertResponse converts a Gemini API response to an llms.Response.
-func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
+func convertResponse(resp *geminiapi.GenerateContentResponse) (*llms.Response, error) {
+	if resp == nil {
+		return nil, nil
+	}
 	if len(resp.Candidates) == 0 {
 		// A prompt blocked by input filtering comes back with HTTP 200, no
 		// candidates, promptFeedback.blockReason and usage for the prompt
@@ -27,7 +30,7 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 		if resp.UsageMetadata != nil {
 			response.Usage = convertUsageMetadata(resp.UsageMetadata)
 		}
-		return response
+		return response, nil
 	}
 
 	candidate := resp.Candidates[0]
@@ -50,12 +53,16 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 		// so it can be echoed back on the next turn (see convertMessages).
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil {
+				arguments, err := geminiapi.FunctionCallToJSON(part.FunctionCall)
+				if err != nil {
+					return nil, err
+				}
 				tc := llms.ToolCall{
 					ID:   part.FunctionCall.ID,
 					Type: llms.ToolTypeFunction,
 					Function: &llms.FunctionCall{
 						Name:      part.FunctionCall.Name,
-						Arguments: geminiapi.FunctionCallToJSON(part.FunctionCall),
+						Arguments: arguments,
 					},
 					Signature: part.ThoughtSignature,
 				}
@@ -83,7 +90,7 @@ func convertResponse(resp *geminiapi.GenerateContentResponse) *llms.Response {
 		}
 	}
 
-	return response
+	return response, nil
 }
 
 // blockedPrompt returns a ModerationError when Gemini filtered the prompt

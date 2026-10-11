@@ -233,6 +233,25 @@ func TestRepairToolResults(t *testing.T) {
 	}
 }
 
+func TestRepairToolResults_InterveningMessage(t *testing.T) {
+	got, dropped := repairToolResults([]llms.Message{
+		{Role: llms.RoleAssistant, ToolCalls: []llms.ToolCall{toolCall("open", "job", "{}")}},
+		{Role: llms.RoleUser, Content: "next"},
+	})
+	if dropped != 0 {
+		t.Errorf("dropped = %d, want 0", dropped)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d messages: %+v", len(got), got)
+	}
+	if got[1].Role != llms.RoleTool || got[1].ToolCallID != "open" || got[1].Content != pendingResult {
+		t.Errorf("intervening result = %+v, want a pending placeholder for the open call", got[1])
+	}
+	if got[2].Role != llms.RoleUser || got[2].Content != "next" {
+		t.Errorf("user message = %+v, want it preserved after the placeholder", got[2])
+	}
+}
+
 func TestTranslate_Config(t *testing.T) {
 	contents := []*genai.Content{user(text("q"))}
 	f32 := func(v float32) *float32 { return &v }
@@ -275,15 +294,20 @@ func TestTranslate_Config(t *testing.T) {
 		})
 	}
 
-	hard := map[string]*genai.GenerateContentConfig{
-		"CandidateCount":     {CandidateCount: 2},
-		"ResponseModalities": {ResponseModalities: []string{"AUDIO"}},
-		"ResponseMIMEType":   {ResponseMIMEType: "text/x.enum"},
+	hard := []struct {
+		name  string
+		field Field
+		cfg   *genai.GenerateContentConfig
+	}{
+		{"CandidateCount", "GenerateContentConfig.CandidateCount", &genai.GenerateContentConfig{CandidateCount: 2}},
+		{"NegativeCandidateCount", "GenerateContentConfig.CandidateCount", &genai.GenerateContentConfig{CandidateCount: -1}},
+		{"ResponseModalities", "GenerateContentConfig.ResponseModalities", &genai.GenerateContentConfig{ResponseModalities: []string{"AUDIO"}}},
+		{"ResponseMIMEType", "GenerateContentConfig.ResponseMIMEType", &genai.GenerateContentConfig{ResponseMIMEType: "text/x.enum"}},
 	}
-	for name, cfg := range hard {
-		t.Run("hard "+name, func(t *testing.T) {
-			m := newTestModel(t, WithIgnore(Field("GenerateContentConfig."+name)))
-			if _, err := m.translate(&model.LLMRequest{Contents: contents, Config: cfg}); !errors.Is(err, ErrUnsupportedConfigField) {
+	for _, tc := range hard {
+		t.Run("hard "+tc.name, func(t *testing.T) {
+			m := newTestModel(t, WithIgnore(tc.field))
+			if _, err := m.translate(&model.LLMRequest{Contents: contents, Config: tc.cfg}); !errors.Is(err, ErrUnsupportedConfigField) {
 				t.Errorf("err = %v, want a rejection WithIgnore cannot lift", err)
 			}
 		})
@@ -320,6 +344,9 @@ func TestTranslate_Thinking(t *testing.T) {
 		{"level beats budget", &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelLow, ThinkingBudget: i32(9000)}, &llms.ReasoningConfig{Effort: llms.ReasoningEffortLow}, true},
 		{"unspecified defers to budget", &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelUnspecified, ThinkingBudget: i32(2048)}, &llms.ReasoningConfig{BudgetTokens: 2048}, true},
 		{"unspecified alone is medium", &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevelUnspecified}, &llms.ReasoningConfig{Effort: llms.ReasoningEffortMedium}, true},
+		// A zero-value level means "leave reasoning unset", not the explicit
+		// UNSPECIFIED constant, so it must not synthesize a medium effort.
+		{"zero-value level alone leaves reasoning unset", &genai.ThinkingConfig{}, nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -379,7 +406,7 @@ func TestTranslate_Tools(t *testing.T) {
 		{"auto with allow list filters", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAuto, AllowedFunctionNames: []string{"b"}}, []string{"b"}, "", ""},
 		{"none", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeNone}, []string{"a", "b", "c"}, llms.ToolChoiceNone, ""},
 		{"any", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny}, []string{"a", "b", "c"}, llms.ToolChoiceRequired, ""},
-		{"any one", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny, AllowedFunctionNames: []string{"c"}}, []string{"a", "b", "c"}, llms.ToolChoiceTool, "c"},
+		{"any one", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny, AllowedFunctionNames: []string{"c"}}, []string{"c"}, llms.ToolChoiceTool, "c"},
 		{"any several", &genai.FunctionCallingConfig{Mode: genai.FunctionCallingConfigModeAny, AllowedFunctionNames: []string{"a", "c"}}, []string{"a", "c"}, llms.ToolChoiceRequired, ""},
 	}
 	for _, tt := range modes {

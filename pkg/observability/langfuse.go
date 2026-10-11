@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 	"time"
+	"unicode/utf8"
 )
 
 // Langfuse-compatible context key type
@@ -185,7 +186,7 @@ func WithMetadata(key, value string) TraceContextOption {
 		if !IsValidMetadataKey(key) {
 			return
 		}
-		if len(value) > MaxMetadataValueLength {
+		if utf8.RuneCountInString(value) > MaxMetadataValueLength {
 			return
 		}
 		if tc.Metadata == nil {
@@ -204,7 +205,7 @@ func WithMetadataMap(metadata map[string]string) TraceContextOption {
 			tc.Metadata = make(map[string]string)
 		}
 		for k, v := range metadata {
-			if IsValidMetadataKey(k) && len(v) <= MaxMetadataValueLength {
+			if IsValidMetadataKey(k) && utf8.RuneCountInString(v) <= MaxMetadataValueLength {
 				tc.Metadata[k] = v
 			}
 		}
@@ -220,7 +221,7 @@ func IsValidMetadataKey(key string) bool {
 // ValidateMetadataValue checks if a value is valid for Langfuse propagated metadata.
 // Values must be at most 200 characters per Langfuse constraints.
 func ValidateMetadataValue(value string) bool {
-	return len(value) <= MaxMetadataValueLength
+	return utf8.RuneCountInString(value) <= MaxMetadataValueLength
 }
 
 // NewTraceContext creates a new TraceContext with the given options

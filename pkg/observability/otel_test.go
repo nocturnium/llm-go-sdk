@@ -68,6 +68,35 @@ func (m *mockOTelLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.Call
 func (m *mockOTelLLM) Provider() llms.Provider { return m.provider }
 func (m *mockOTelLLM) Model() string           { return m.model }
 
+// drainTrackingLLM streams an error chunk and then one more chunk. The final
+// send blocks until the consumer reads it, so a wrapper that returns on the
+// error chunk without draining leaks this goroutine. drained is closed once the
+// trailing chunk is consumed.
+type drainTrackingLLM struct {
+	drained chan struct{}
+	started chan struct{}
+}
+
+func (m *drainTrackingLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+	ch := make(chan llms.StreamChunk)
+	go func() {
+		defer close(ch)
+		ch <- llms.StreamChunk{Error: errors.New("stream failed")}
+		close(m.started)
+		// Blocks until the consumer reads (or drains) it.
+		ch <- llms.StreamChunk{Content: "trailing"}
+		close(m.drained)
+	}()
+	return ch, nil
+}
+
+func (m *drainTrackingLLM) GenerateContent(context.Context, []llms.Message, ...llms.CallOption) (*llms.Response, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *drainTrackingLLM) Provider() llms.Provider { return llms.ProviderOpenAI }
+func (m *drainTrackingLLM) Model() string           { return "drain-test" }
+
 func TestNewOTelMiddleware(t *testing.T) {
 	llm := &mockOTelLLM{provider: llms.ProviderOpenAI, model: "gpt-4"}
 
@@ -542,5 +571,31 @@ func TestNormalizeErrorType(t *testing.T) {
 		if got := normalizeErrorType(tc.err); got != tc.want {
 			t.Errorf("%s: normalizeErrorType = %q, want %q", name, got, tc.want)
 		}
+	}
+}
+
+// The wrapper returns on an error chunk, but the provider may keep producing.
+// It must drain the source rather than abandoning it, or the provider's send
+// (and its HTTP body) stays parked forever.
+func TestOTelMiddleware_Stream_DrainsAfterErrorChunk(t *testing.T) {
+	llm := &drainTrackingLLM{drained: make(chan struct{}), started: make(chan struct{})}
+	middleware, err := NewOTelMiddleware(llm)
+	if err != nil {
+		t.Fatalf("NewOTelMiddleware: %v", err)
+	}
+
+	stream, err := middleware.Stream(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+
+	// Read the error chunk; the wrapper then returns and must drain the source.
+	if chunk := <-stream; chunk.Error == nil {
+		t.Fatalf("first chunk error = nil, want a stream error")
+	}
+	select {
+	case <-llm.drained:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider stream was not drained after the error chunk")
 	}
 }

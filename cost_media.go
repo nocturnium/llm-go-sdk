@@ -15,7 +15,8 @@ type MediaRate struct {
 // by the provider converter, including separate audio/text input rates.
 // gpt-4o-mini-tts is priced only with StreamSpeech SSE done usage; Synthesize
 // has no usage and remains unpriced (CreateSpeechStream exposes the usage).
-// gpt-transcribe is intentionally absent because its price is unverified.
+// gpt-transcribe's per-minute rate is published on the pricing page read
+// 2026-10-09; the other new OpenAI duration cards come from the same page.
 var MediaPricing = map[string]MediaRate{
 	// https://www.together.ai/pricing, supplied first-party verification 2026-09-05; not live-tested.
 	// Speech enum: https://docs.together.ai/reference/audio-speech (cartesia/sonic).
@@ -67,17 +68,26 @@ var MediaPricing = map[string]MediaRate{
 	"gemini:gemini-2.5-pro-preview-tts":    {Unit: MediaUnitMTokenOut, USD: 20},
 
 	// ElevenLabs API pricing, https://elevenlabs.io/pricing/api (2026-09-05).
-	"elevenlabs:eleven_v3":                {Unit: MediaUnitKChar, USD: 0.10},
-	"elevenlabs:eleven_multilingual_v2":   {Unit: MediaUnitKChar, USD: 0.10},
-	"elevenlabs:eleven_v3_conversational": {Unit: MediaUnitKChar, USD: 0.05},
-	"elevenlabs:eleven_flash_v2_5":        {Unit: MediaUnitKChar, USD: 0.05},
-	"elevenlabs:eleven_turbo_v2_5":        {Unit: MediaUnitKChar, USD: 0.05},
-	"elevenlabs:eleven_turbo_v2":          {Unit: MediaUnitKChar, USD: 0.05},
-	"elevenlabs:eleven_flash_v2":          {Unit: MediaUnitKChar, USD: 0.05},
+	"elevenlabs:eleven_v3": {Unit: MediaUnitKChar, USD: 0.08},
+	// eleven_v4 carries a promotional card through October 12, 2026; the
+	// standard rate is recorded, matching the policy for other promotions.
+	"elevenlabs:eleven_v4":                {Unit: MediaUnitKChar, USD: 0.08},
+	"elevenlabs:eleven_v4_turbo":          {Unit: MediaUnitKChar, USD: 0.04},
+	"elevenlabs:eleven_multilingual_v2":   {Unit: MediaUnitKChar, USD: 0.08},
+	"elevenlabs:eleven_v3_conversational": {Unit: MediaUnitKChar, USD: 0.04},
+	"elevenlabs:eleven_flash_v2_5":        {Unit: MediaUnitKChar, USD: 0.04},
+	"elevenlabs:eleven_turbo_v2_5":        {Unit: MediaUnitKChar, USD: 0.04},
+	"elevenlabs:eleven_turbo_v2":          {Unit: MediaUnitKChar, USD: 0.04},
+	"elevenlabs:eleven_flash_v2":          {Unit: MediaUnitKChar, USD: 0.04},
+	"elevenlabs:scribe_v2_medical":        {Unit: MediaUnitMinute, USD: 0.0036667},
+	"elevenlabs:scribe_v2_realtime":       {Unit: MediaUnitMinute, USD: 0.0065},
 	"elevenlabs:scribe_v2":                {Unit: MediaUnitMinute, USD: 0.0036667},
 	"elevenlabs:eleven_text_to_sound_v2":  {Unit: MediaUnitMinute, USD: 0.12},
 	"elevenlabs:music_v2":                 {Unit: MediaUnitMinute, USD: 0.15},
+	"elevenlabs:music_v2_5":               {Unit: MediaUnitMinute, USD: 0.15},
 	"openai:gpt-image-2":                  {Unit: MediaUnitMTokenOut, USD: 30},
+	"openai:gpt-image-2.5-sunburst":       {Unit: MediaUnitMTokenOut, USD: 30},
+	"openai:gpt-image-2.5-flare":          {Unit: MediaUnitMTokenOut, USD: 30},
 	"openai:gpt-image-1.5":                {Unit: MediaUnitMTokenOut, USD: 32},
 	"openai:gpt-image-1":                  {Unit: MediaUnitMTokenOut, USD: 40},
 	"openai:gpt-image-1-mini":             {Unit: MediaUnitMTokenOut, USD: 8},
@@ -85,8 +95,16 @@ var MediaPricing = map[string]MediaRate{
 	"openai:tts-1":                        {Unit: MediaUnitKChar, USD: 0.015},
 	"openai:tts-1-hd":                     {Unit: MediaUnitKChar, USD: 0.030},
 	"openai:whisper-1":                    {Unit: MediaUnitMinute, USD: 0.006},
-	"openai:sora-2":                       {Unit: MediaUnitSecond, USD: 0.10},
-	"openai:sora-2-pro":                   {Unit: MediaUnitSecond, USD: 0.30},
+	// Duration cards from developers.openai.com/api/docs/pricing (read
+	// 2026-10-09). OpenAI labels several transcription amounts as estimates;
+	// these are the published per-minute rates, not invoice guarantees.
+	"openai:gpt-live-1":             {Unit: MediaUnitMinute, USD: 0.05},
+	"openai:gpt-live-transcribe":    {Unit: MediaUnitMinute, USD: 0.017},
+	"openai:gpt-realtime-whisper":   {Unit: MediaUnitMinute, USD: 0.017},
+	"openai:gpt-realtime-translate": {Unit: MediaUnitMinute, USD: 0.034},
+	"openai:gpt-transcribe":         {Unit: MediaUnitMinute, USD: 0.0045},
+	"openai:sora-2":                 {Unit: MediaUnitSecond, USD: 0.10},
+	"openai:sora-2-pro":             {Unit: MediaUnitSecond, USD: 0.30},
 }
 
 // GetMediaRate returns the rate for provider/model and whether it is known.
@@ -104,6 +122,9 @@ func MediaCost(provider, model string, u MediaUsage) (cost float64, ok bool) {
 	rate, found := GetMediaRate(provider, model)
 	if !found || rate.Unit != u.Unit {
 		return 0, false
+	}
+	if rate.Unit == "" {
+		return rate.USD, true
 	}
 	return u.Quantity * rate.USD, true
 }

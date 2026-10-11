@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"strings"
 	"sync"
 	"testing"
 )
@@ -98,6 +99,32 @@ func TestMediaPricing_GeminiReconciliation(t *testing.T) {
 
 // Thin media models are an explicit reconciliation allowlist: these rates use
 // media units, and need not appear in the token-priced chat capability registry.
+func TestMediaPricing_OpenAIDurationAndImageCards(t *testing.T) {
+	expected := map[string]struct {
+		provider string
+		rate     MediaRate
+	}{
+		"openai:gpt-image-2.5-sunburst": {"openai", MediaRate{Unit: MediaUnitMTokenOut, USD: 30}},
+		"openai:gpt-image-2.5-flare":    {"openai", MediaRate{Unit: MediaUnitMTokenOut, USD: 30}},
+		"openai:gpt-live-1":             {"openai", MediaRate{Unit: MediaUnitMinute, USD: 0.05}},
+		"openai:gpt-live-transcribe":    {"openai", MediaRate{Unit: MediaUnitMinute, USD: 0.017}},
+		"openai:gpt-realtime-whisper":   {"openai", MediaRate{Unit: MediaUnitMinute, USD: 0.017}},
+		"openai:gpt-realtime-translate": {"openai", MediaRate{Unit: MediaUnitMinute, USD: 0.034}},
+		"openai:gpt-transcribe":         {"openai", MediaRate{Unit: MediaUnitMinute, USD: 0.0045}},
+		"elevenlabs:eleven_v4":          {"elevenlabs", MediaRate{Unit: MediaUnitKChar, USD: 0.08}},
+		"elevenlabs:eleven_v4_turbo":    {"elevenlabs", MediaRate{Unit: MediaUnitKChar, USD: 0.04}},
+	}
+	for key, want := range expected {
+		t.Run(key, func(t *testing.T) {
+			_, model, _ := strings.Cut(key, ":")
+			got, ok := GetMediaRate(want.provider, model)
+			if !ok || got != want.rate {
+				t.Fatalf("rate = %+v, %t; want %+v", got, ok, want.rate)
+			}
+		})
+	}
+}
+
 func TestMediaPricing_ThinProviderReconciliation(t *testing.T) {
 	expected := map[string]MediaRate{
 		"togetherai:cartesia/sonic":                   {Unit: MediaUnitKChar, USD: 0.065},

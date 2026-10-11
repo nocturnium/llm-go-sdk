@@ -47,7 +47,7 @@ func TestBuildResponsesRequest_ToolCallRoundTrip(t *testing.T) {
 		t.Fatalf("got %d input items, want 4: %+v", len(req.Input), req.Input)
 	}
 	if req.Input[1].Type != "message" || req.Input[1].Role != "assistant" ||
-		req.Input[1].Content[0].Type != "output_text" {
+		req.Input[1].Content[0].Type != "input_text" {
 		t.Errorf("assistant message item = %+v", req.Input[1])
 	}
 	fc := req.Input[2]

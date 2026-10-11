@@ -321,6 +321,9 @@ func compactToolCalls(calls []llms.ToolCall) []llms.ToolCall {
 
 // ConvertResponse converts an OpenAI-compatible response to llms.Response.
 func ConvertResponse(resp *ChatCompletionResponse) *llms.Response {
+	if resp == nil {
+		return &llms.Response{}
+	}
 	if len(resp.Choices) == 0 {
 		return &llms.Response{ID: resp.ID, ServiceTier: resp.ServiceTier, ModelVersion: resp.Model}
 	}
@@ -378,6 +381,9 @@ func convertUsage(u *Usage) llms.Usage {
 
 // ConvertEmbeddingResponse converts an OpenAI-compatible embedding response to llms.EmbeddingResponse.
 func ConvertEmbeddingResponse(resp *EmbeddingResponse) *llms.EmbeddingResponse {
+	if resp == nil {
+		return nil
+	}
 	embeddings := make([]llms.Embedding, len(resp.Data))
 	for i, data := range resp.Data {
 		embeddings[i] = llms.Embedding{
@@ -390,15 +396,25 @@ func ConvertEmbeddingResponse(resp *EmbeddingResponse) *llms.EmbeddingResponse {
 	return &llms.EmbeddingResponse{
 		Embeddings: embeddings,
 		Model:      resp.Model,
-		Usage: llms.EmbeddingUsage{
-			PromptTokens: resp.Usage.PromptTokens,
-			TotalTokens:  resp.Usage.TotalTokens,
-		},
+		Usage:      convertEmbeddingUsage(&resp.Usage),
+	}
+}
+
+func convertEmbeddingUsage(usage *EmbeddingUsage) llms.EmbeddingUsage {
+	if usage == nil {
+		return llms.EmbeddingUsage{}
+	}
+	return llms.EmbeddingUsage{
+		PromptTokens: usage.PromptTokens,
+		TotalTokens:  usage.TotalTokens,
 	}
 }
 
 // BuildChatRequest builds a ChatCompletionRequest from llms types.
 func BuildChatRequest(model string, messages []llms.Message, opts *llms.CallOptions, stream bool) *ChatCompletionRequest {
+	if opts == nil {
+		opts = &llms.CallOptions{}
+	}
 	req := &ChatCompletionRequest{
 		Model:            model,
 		Messages:         ConvertMessages(messages),
@@ -533,7 +549,13 @@ func ProcessStream(
 	provider string,
 	config *StreamConfig,
 ) {
-	defer close(chunks)
+	// A nil channel is a programming error, but closing it would panic inside a
+	// deferred call that the panic-recovery defer below cannot catch (recover
+	// only handles panics raised in the same goroutine after it is deferred, and
+	// this defer runs first). Guard it so a nil channel fails cleanly instead.
+	if chunks != nil {
+		defer close(chunks)
+	}
 
 	// Validate required parameters to prevent nil pointer panics.
 	// These checks catch programming errors early with clear error messages.
@@ -547,6 +569,16 @@ func ProcessStream(
 	}
 	if sender == nil {
 		// Can't report error without sender, just close stream and return
+		_ = stream.Close()
+		return
+	}
+	if ctx == nil {
+		// A nil context would panic in the goroutine below, outside the parent
+		// recovery defer, and crash the process. Surface it as a terminal error
+		// instead.
+		sender.DeliverTerminal(llms.StreamChunk{
+			Error: fmt.Errorf("%s: context is nil", provider),
+		})
 		_ = stream.Close()
 		return
 	}

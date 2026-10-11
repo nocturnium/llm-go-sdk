@@ -256,6 +256,24 @@ func TestMessage_Images(t *testing.T) {
 	}
 }
 
+func TestValidateImageContent_ExactSizeBound(t *testing.T) {
+	// DecodedLen rounds up: a payload decoding to MaxImageSize+1 bytes had an
+	// estimated length that passed the pre-check, and the decoder must still
+	// refuse it. Exactly MaxImageSize must be accepted.
+	atLimit := base64.StdEncoding.EncodeToString(make([]byte, MaxImageSize))
+	if err := ValidateImageContent(&ImageContent{
+		Source: ImageSourceBase64, MediaType: MediaTypePNG, Data: atLimit,
+	}); err != nil {
+		t.Fatalf("image of exactly MaxImageSize bytes refused: %v", err)
+	}
+	overLimit := base64.StdEncoding.EncodeToString(make([]byte, MaxImageSize+1))
+	if err := ValidateImageContent(&ImageContent{
+		Source: ImageSourceBase64, MediaType: MediaTypePNG, Data: overLimit,
+	}); err == nil {
+		t.Fatal("image of MaxImageSize+1 bytes accepted")
+	}
+}
+
 func TestValidateImageContent(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -285,6 +303,16 @@ func TestValidateImageContent(t *testing.T) {
 		{
 			name:    "invalid url",
 			img:     &ImageContent{Source: testImageSource, Data: "not-a-url"},
+			wantErr: true,
+		},
+		{
+			name:    "url without host",
+			img:     &ImageContent{Source: testImageSource, Data: "https://"},
+			wantErr: true,
+		},
+		{
+			name:    "url with empty host",
+			img:     &ImageContent{Source: testImageSource, Data: "http://?x"},
 			wantErr: true,
 		},
 		{

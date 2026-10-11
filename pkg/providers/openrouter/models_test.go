@@ -44,6 +44,31 @@ func TestListModels(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A catalog entry that lists both the "audio" and "speech" output modalities
+// must not report ModelTypeAudio twice.
+func TestListModels_DeduplicatesAudioTypes(t *testing.T) {
+	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":[{"id":"m","architecture":{"output_modalities":["audio","speech","text","text"]}}]}`)
+	})
+	out, err := c.ListModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var audio, chat int
+	for _, typ := range out.Models[0].Types {
+		switch typ {
+		case llms.ModelTypeAudio:
+			audio++
+		case llms.ModelTypeChat:
+			chat++
+		default: // other model types are covered by their own discovery tests
+		}
+	}
+	if audio != 1 || chat != 1 {
+		t.Fatalf("types = %v, want one audio and one chat", out.Models[0].Types)
+	}
+}
 func TestMediaDiscovery(t *testing.T) {
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

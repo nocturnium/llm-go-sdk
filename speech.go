@@ -32,6 +32,9 @@ type SpeechOption func(*SpeechOptions)
 func ApplySpeechOptions(options ...SpeechOption) *SpeechOptions {
 	opts := &SpeechOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts
@@ -96,6 +99,9 @@ type TranscribeOption func(*TranscribeOptions)
 func ApplyTranscribeOptions(options ...TranscribeOption) *TranscribeOptions {
 	opts := &TranscribeOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts

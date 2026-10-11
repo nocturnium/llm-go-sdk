@@ -7,8 +7,12 @@
 package anthropicapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 )
 
 // MessagesRequest represents a request to the Anthropic Messages API.
@@ -44,22 +48,59 @@ func (r MessagesRequest) MarshalJSON() ([]byte, error) {
 	if len(r.ExtraBody) == 0 {
 		return base, nil
 	}
+	var std map[string]json.RawMessage
+	if err := json.Unmarshal(base, &std); err != nil {
+		return nil, err
+	}
+	// A standard field wins even when it was omitted as a zero value (e.g. a
+	// false Stream or an empty ToolChoice), so gate on every standard JSON name,
+	// not only the ones present in the serialized map.
+	known := standardJSONFields(reflect.TypeOf(plain(r)))
 	m := make(map[string]json.RawMessage, len(r.ExtraBody)+16)
 	for k, v := range r.ExtraBody {
+		// Skip marshaling the ExtraBody value entirely: marshaling an
+		// unmarshalable value under a key a standard field owns would fail the
+		// whole request for a value that never reaches the wire.
+		if known[k] {
+			continue
+		}
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return nil, fmt.Errorf("anthropic: marshal extra body field %q: %w", k, err)
 		}
 		m[k] = raw
 	}
-	var std map[string]json.RawMessage
-	if err := json.Unmarshal(base, &std); err != nil {
-		return nil, err
-	}
 	for k, v := range std {
 		m[k] = v
 	}
 	return json.Marshal(m)
+}
+
+// standardJSONFields caches the set of top-level JSON names the request struct
+// declares. It lets MarshalJSON honor the documented precedence without
+// inspecting the serialized map, which omitempty shrinks to non-zero fields.
+var standardFields sync.Map // map[reflect.Type]map[string]bool
+
+func standardJSONFields(typ reflect.Type) map[string]bool {
+	if fields, ok := standardFields.Load(typ); ok {
+		if known, ok := fields.(map[string]bool); ok {
+			return known
+		}
+	}
+	fields := make(map[string]bool, typ.NumField())
+	for i := 0; i < typ.NumField(); i++ {
+		name := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
+		if name == "" || name == "-" {
+			continue
+		}
+		fields[name] = true
+	}
+	actual, _ := standardFields.LoadOrStore(typ, fields)
+	known, ok := actual.(map[string]bool)
+	if !ok {
+		return fields
+	}
+	return known
 }
 
 // ThinkingConfig configures Anthropic extended thinking. Type is one of
@@ -95,9 +136,9 @@ type ContentPart struct {
 	Input json.RawMessage `json:"input,omitempty"`
 
 	// For tool_result content
-	ToolUseID string `json:"tool_use_id,omitempty"`
-	Content   string `json:"content,omitempty"`
-	IsError   bool   `json:"is_error,omitempty"`
+	ToolUseID string             `json:"tool_use_id,omitempty"`
+	Content   *ToolResultContent `json:"content,omitempty"`
+	IsError   bool               `json:"is_error,omitempty"`
 
 	// For thinking content (extended thinking). Signature authenticates the
 	// thinking block and must be echoed back on a follow-up turn. Data carries an
@@ -108,6 +149,50 @@ type ContentPart struct {
 
 	// CacheControl marks this block as a prompt-caching breakpoint.
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
+}
+
+// ToolResultContent is the content of a tool_result block. Anthropic accepts
+// either a plain string or an array of content blocks; the string form is the
+// common case and array blocks are decoded so callers can inspect or forward
+// them.
+type ToolResultContent struct {
+	Text     string
+	Array    []ContentPart
+	useArray bool
+}
+
+// MarshalJSON writes the string form when only Text is set, otherwise the array
+// form.
+func (c ToolResultContent) MarshalJSON() ([]byte, error) {
+	// A non-nil Array is an explicit array form, including an empty one: a caller
+	// that sets Array to an empty slice wants `[]`, not the empty string.
+	if c.useArray || c.Array != nil {
+		return json.Marshal(c.Array)
+	}
+	return json.Marshal(c.Text)
+}
+
+// UnmarshalJSON accepts the string and array forms Anthropic may return.
+func (c *ToolResultContent) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		*c = ToolResultContent{}
+		return nil
+	}
+	if data[0] == '"' {
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return err
+		}
+		*c = ToolResultContent{Text: text}
+		return nil
+	}
+	var parts []ContentPart
+	if err := json.Unmarshal(data, &parts); err != nil {
+		return err
+	}
+	*c = ToolResultContent{Array: parts, useArray: true}
+	return nil
 }
 
 // ImageSource represents the source of an image for Anthropic's vision API.
@@ -249,6 +334,11 @@ func (e *StreamEvent) UnmarshalJSON(data []byte) error {
 	}
 
 	*e = StreamEvent(alias)
+	// MessageDelta is tagged `json:"-"`, so the alias unmarshal above never
+	// clears it. A caller that reuses one StreamEvent across events would
+	// otherwise see a stale stop-reason delta on a later non-message_delta
+	// event.
+	e.MessageDelta = nil
 
 	// For message_delta events, the "delta" field contains MessageDelta data
 	if e.Type == "message_delta" {
@@ -264,6 +354,11 @@ func (e *StreamEvent) UnmarshalJSON(data []byte) error {
 				return err
 			}
 			e.MessageDelta = &msgDelta
+			// The alias unmarshal above also decoded this same "delta" object
+			// into the content-delta field. Clear it so a message_delta event
+			// does not present an empty content delta alongside the message
+			// metadata; MessageDelta is the only delta this event carries.
+			e.Delta = nil
 		}
 	}
 

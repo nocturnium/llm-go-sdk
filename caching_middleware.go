@@ -140,13 +140,19 @@ type cacheKeyShape struct {
 	DisableMessageMerging bool
 	ExtraBody             map[string]any
 	WebSearch             *WebSearchConfig
+	// Cache is the prompt-cache directive. It changes the provider's reported
+	// CacheReadTokens / CacheCreationTokens, and therefore the usage and cost
+	// metadata a cached response carries, so a call with and without caching
+	// must not share an entry.
+	Cache *CacheConfig
 }
 
 // defaultCacheKey hashes the output-affecting parts of a request, including
 // provider-specific ExtraBody (e.g. a LoRAX adapter_id) and WebSearch grounding,
-// both of which change the model output. Fields that leave the output alone
-// (prompt-cache directives, token estimation, stream buffer sizing, and trace
-// context) are intentionally excluded. A request whose key fails to marshal
+// both of which change the model output, and the Cache directive, which changes
+// the usage and cost metadata the cached response reports. Fields that leave the
+// response alone (token estimation, stream buffer sizing, and trace context) are
+// intentionally excluded. A request whose key fails to marshal
 // (e.g. an ExtraBody holding an unmarshalable value) gets a key unique to that
 // call, so it stores an entry no later request can read.
 func defaultCacheKey(provider Provider, model string, messages []Message, opts *CallOptions) string {
@@ -169,6 +175,7 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 		k.DisableMessageMerging = opts.DisableMessageMerging
 		k.ExtraBody = opts.ExtraBody
 		k.WebSearch = opts.WebSearch
+		k.Cache = opts.Cache
 	}
 	data, err := json.Marshal(k)
 	if err != nil {
@@ -187,14 +194,18 @@ func defaultCacheKey(provider Provider, model string, messages []Message, opts *
 // ToolCalls, SearchResults, or Reasoning can neither poison the cached entry nor
 // race another concurrent cache hit. Returns nil for a nil input.
 //
-// Reasoning.Metadata is copied one level deep, sufficient because providers
-// populate it with scalar values; nested reference values inside Metadata are
-// not independently cloned.
+// Reasoning is cloned through Reasoning.Clone, which deep-copies the metadata
+// map and the slice, map, pointer, and struct values inside it, so nested
+// reference values are isolated from the cached entry as well.
 func cloneResponse(resp *Response) *Response {
 	if resp == nil {
 		return nil
 	}
 	cp := *resp // value fields (ID, Content, FinishReason, Usage) copy directly
+	if resp.Usage.Cost != nil {
+		cost := *resp.Usage.Cost
+		cp.Usage.Cost = &cost
+	}
 
 	if resp.ToolCalls != nil {
 		cp.ToolCalls = make([]ToolCall, len(resp.ToolCalls))
@@ -272,7 +283,10 @@ func (m *MemoryResponseCache) Get(_ context.Context, key string) (*Response, boo
 	if !ok {
 		return nil, false
 	}
-	if !entry.expires.IsZero() && m.now().After(entry.expires) {
+	// The expiry instant itself is already past the entry's advertised
+	// lifetime, so equality must miss; only After would serve it for one
+	// instant beyond the TTL.
+	if !entry.expires.IsZero() && !m.now().Before(entry.expires) {
 		delete(m.entries, key)
 		return nil, false
 	}

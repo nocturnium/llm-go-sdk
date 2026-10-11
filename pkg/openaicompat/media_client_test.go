@@ -472,6 +472,24 @@ func TestMediaRouteOverrideIsolation(t *testing.T) {
 	}
 }
 
+// The embedding route is held behind a pointer; NewBaseProvider must give the
+// copy its own, or a later SetEmbeddingBaseURL on either client changes the
+// other's embedding endpoint.
+func TestEmbeddingRouteOverrideIsolation(t *testing.T) {
+	client := NewClient(ClientConfig{BaseURL: "https://chat.example", APIKey: "k"})
+	p := NewBaseProvider(client, ProviderConfig{Provider: llms.ProviderOpenAI})
+
+	client.SetEmbeddingBaseURL("https://embed.example")
+	if got := p.client.embedding.get(p.client.baseURL); got == "https://embed.example" {
+		t.Fatalf("provider embedding route = %q, aliased to the original client", got)
+	}
+
+	p.client.SetEmbeddingBaseURL("https://provider-embed.example")
+	if got := client.embedding.get(client.baseURL); got == "https://provider-embed.example" {
+		t.Fatalf("original embedding route = %q, aliased to the provider copy", got)
+	}
+}
+
 func TestMediaStreamCancellation(t *testing.T) {
 	client, server := mediaTestClient(t, testutil.WithSpeechStreamResponse(map[string]any{"type": "speech.audio.delta", "audio": "aGk="}), testutil.WithStreamHeldOpenAfterChunks())
 	ctx, cancel := context.WithCancel(context.Background())

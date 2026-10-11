@@ -26,21 +26,24 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	if audio.FileID != "" || len(audio.Data) > 25*1024*1024 {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
 	}
+	if audio.URL != "" {
+		// Groq's transcription and translation routes accept audio only in the
+		// multipart file field; they have no url field. Sending one is rejected by
+		// the provider, so fail locally with a clear error rather than emitting an
+		// unsupported form field.
+		return nil, c.mediaError(fmt.Errorf("URL audio inputs are not supported: %w", llms.ErrInvalidParameters))
+	}
 	model := o.Model
 	if model == "" {
 		model = providerConfig.DefaultTranscriptionModel
 	}
 	fields := map[string]string{"model": model}
 	files := []httpclient.MultipartFile{}
-	if audio.URL != "" {
-		fields["url"] = audio.URL
-	} else {
-		extensions := map[string]string{"audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/mp4": ".m4a", "audio/flac": ".flac", "audio/ogg": ".ogg", "audio/webm": ".webm"}
-		if extensions[audio.MIMEType] == "" {
-			return nil, c.mediaError(fmt.Errorf("unsupported audio MIME type: %w", llms.ErrInvalidParameters))
-		}
-		files = append(files, httpclient.MultipartFile{Field: "file", Filename: "audio" + extensions[audio.MIMEType], ContentType: audio.MIMEType, Data: audio.Data})
+	extensions := map[string]string{"audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/mp4": ".m4a", "audio/flac": ".flac", "audio/ogg": ".ogg", "audio/webm": ".webm"}
+	if extensions[audio.MIMEType] == "" {
+		return nil, c.mediaError(fmt.Errorf("unsupported audio MIME type: %w", llms.ErrInvalidParameters))
 	}
+	files = append(files, httpclient.MultipartFile{Field: "file", Filename: "audio" + extensions[audio.MIMEType], ContentType: audio.MIMEType, Data: audio.Data})
 	if o.Language != "" {
 		fields["language"] = o.Language
 	}
@@ -50,7 +53,7 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	format := "verbose_json"
 	if o.WordTimestamps {
 		format = "verbose_json"
-		files = append(files, httpclient.MultipartFile{Field: "timestamp_granularities[]", Data: []byte("word")})
+		fields["timestamp_granularities[]"] = "word"
 	}
 	if o.Diarize || len(o.Keyterms) > 0 {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
@@ -67,6 +70,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	}
 	if fields["stream"] == "true" || (format != "json" && format != "verbose_json" && format != "text") {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
+	}
+	// Groq honors timestamp granularities only with verbose_json; with json or
+	// text it rejects the request, so refuse the combination locally.
+	if _, ok := fields["timestamp_granularities[]"]; ok && format != "verbose_json" {
+		return nil, c.mediaError(fmt.Errorf("word timestamps require response_format verbose_json: %w", llms.ErrInvalidParameters))
 	}
 	fields["response_format"] = format
 	var raw []byte
@@ -101,7 +109,15 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	for _, w := range wire.Words {
 		speaker := w.Speaker
 		if speaker == "" && len(w.SpeakerID) > 0 && string(w.SpeakerID) != "null" {
-			speaker = strings.Trim(string(w.SpeakerID), "\"")
+			// speaker_id is a JSON value (normally a string), so decode it
+			// rather than stripping quotes by hand: a speaker label containing
+			// an escaped quote or backslash would otherwise come through raw.
+			var id string
+			if err := json.Unmarshal(w.SpeakerID, &id); err == nil {
+				speaker = id
+			} else {
+				speaker = strings.Trim(string(w.SpeakerID), "\"")
+			}
 		}
 		out.Words = append(out.Words, llms.TranscriptWord{Word: w.Word, Start: w.Start, End: w.End, Speaker: speaker})
 	}

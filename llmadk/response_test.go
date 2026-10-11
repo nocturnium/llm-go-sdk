@@ -346,4 +346,8 @@ func TestOptions(t *testing.T) {
 	if _, err := NewModel(nil); err == nil {
 		t.Error("NewModel(nil) succeeded")
 	}
+	var typedNil *fakeLLM
+	if _, err := NewModel(typedNil); err == nil {
+		t.Error("NewModel(typed nil) succeeded")
+	}
 }

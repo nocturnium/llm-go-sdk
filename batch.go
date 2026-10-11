@@ -104,6 +104,9 @@ func ApplyBatchOptions(opts ...BatchOption) *BatchOptions {
 		ContinueOnError: true,
 	}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options
@@ -190,6 +193,8 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	results := make(map[string]*BatchResult)
 	var resultsMu sync.Mutex
 	var totalUsage Usage
+	var totalCost float64
+	allCostsReported := true
 	var successCount, failureCount int
 
 	// Create semaphore for concurrency control. A non-positive MaxConcurrency
@@ -199,8 +204,8 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	if concurrency <= 0 {
 		concurrency = defaultBatchConcurrency
 	}
-	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
+	var cancelBatch context.CancelFunc
 
 	completed := 0
 	var completedMu sync.Mutex
@@ -212,8 +217,12 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 		completed++
 		currentCompleted := completed
 		completedMu.Unlock()
-		// Call callback outside lock to prevent deadlock.
-		opts.ProgressCallback(currentCompleted, len(requests))
+		// Call callback outside lock to prevent deadlock. A progress callback is
+		// observational; it must not be able to terminate a worker goroutine.
+		func() {
+			defer func() { _ = recover() }()
+			opts.ProgressCallback(currentCompleted, len(requests))
+		}()
 	}
 	recordFailure := func(id string, duration time.Duration, err error) {
 		resultsMu.Lock()
@@ -232,6 +241,9 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 	recordSuccess := func(id string, duration time.Duration, resp *Response) {
 		if resp == nil {
 			recordFailure(id, duration, fmt.Errorf("%w: provider returned no response and no error", ErrIncompleteResponse))
+			if !opts.ContinueOnError {
+				cancelBatch()
+			}
 			return
 		}
 		resultsMu.Lock()
@@ -245,95 +257,101 @@ func (b *ConcurrentBatcher) ProcessBatch(ctx context.Context, requests []BatchRe
 		totalUsage.PromptTokens += resp.Usage.PromptTokens
 		totalUsage.CompletionTokens += resp.Usage.CompletionTokens
 		totalUsage.TotalTokens += resp.Usage.TotalTokens
+		totalUsage.CacheReadTokens += resp.Usage.CacheReadTokens
+		totalUsage.CacheCreationTokens += resp.Usage.CacheCreationTokens
+		totalUsage.ReasoningTokens += resp.Usage.ReasoningTokens
+		if resp.Usage.Cost == nil {
+			allCostsReported = false
+		} else {
+			totalCost += *resp.Usage.Cost
+		}
 	}
 
 	// Create a cancellable context for stopping all goroutines when ContinueOnError=false
-	batchCtx, cancelBatch := context.WithCancel(ctx)
+	batchCtx, cancel := context.WithCancel(ctx)
+	cancelBatch = cancel
 	defer cancelBatch()
 
-	for _, req := range requests {
-		wg.Add(1)
-		go func(r BatchRequest) {
-			reqStart := time.Now()
-			progressReported := false
-			resultRecorded := false
-			defer wg.Done()
-			defer func() {
-				if recovered := recover(); recovered != nil {
-					if !resultRecorded {
-						recordFailure(r.ID, time.Since(reqStart), fmt.Errorf("panic: %v", recovered))
-					}
-					if !opts.ContinueOnError {
-						cancelBatch()
-					}
-					if !progressReported {
-						reportProgress()
-					}
+	// A fixed worker pool keeps the number of live goroutines bounded by
+	// MaxConcurrency instead of one blocked goroutine per request. requests is
+	// caller-supplied and can be arbitrarily large.
+	jobs := make(chan BatchRequest)
+	processOne := func(r BatchRequest) {
+		reqStart := time.Now()
+		progressReported := false
+		resultRecorded := false
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				if !resultRecorded {
+					recordFailure(r.ID, time.Since(reqStart), fmt.Errorf("panic: %v", recovered))
 				}
-			}()
-
-			// Check if batch has been canceled (due to error with ContinueOnError=false)
-			select {
-			case <-batchCtx.Done():
-				// Don't record canceled requests - they weren't started
-				return
-			default:
-			}
-
-			// Acquire semaphore
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-batchCtx.Done():
-				// Context canceled while waiting for semaphore
-				return
-			}
-
-			// Double-check context after acquiring semaphore
-			select {
-			case <-batchCtx.Done():
-				return
-			default:
-			}
-
-			// Create request-specific context with timeout
-			reqCtx := batchCtx
-			if opts.RequestTimeout > 0 {
-				var cancel context.CancelFunc
-				reqCtx, cancel = context.WithTimeout(batchCtx, opts.RequestTimeout)
-				defer cancel()
-			}
-
-			// Final context check before expensive LLM call to avoid wasted work
-			select {
-			case <-batchCtx.Done():
-				return
-			default:
-			}
-
-			resp, err := b.llm.GenerateContent(reqCtx, r.Messages, r.Options...)
-			duration := time.Since(reqStart)
-
-			if err != nil {
-				recordFailure(r.ID, duration, err)
-				resultRecorded = true
-
 				if !opts.ContinueOnError {
-					// Cancel all pending requests
 					cancelBatch()
-					return
 				}
-			} else {
-				recordSuccess(r.ID, duration, resp)
-				resultRecorded = true
+				if !progressReported {
+					reportProgress()
+				}
 			}
+		}()
 
-			progressReported = true
-			reportProgress()
-		}(req)
+		// Don't record canceled requests - they weren't started.
+		select {
+		case <-batchCtx.Done():
+			return
+		default:
+		}
+
+		// Create request-specific context with timeout
+		reqCtx := batchCtx
+		if opts.RequestTimeout > 0 {
+			var cancel context.CancelFunc
+			reqCtx, cancel = context.WithTimeout(batchCtx, opts.RequestTimeout)
+			defer cancel()
+		}
+
+		resp, err := b.llm.GenerateContent(reqCtx, r.Messages, r.Options...)
+		duration := time.Since(reqStart)
+
+		if err != nil {
+			recordFailure(r.ID, duration, err)
+			resultRecorded = true
+
+			if !opts.ContinueOnError {
+				// Cancel all pending requests
+				cancelBatch()
+			}
+		} else {
+			recordSuccess(r.ID, duration, resp)
+			resultRecorded = true
+		}
+
+		progressReported = true
+		reportProgress()
 	}
-
+	worker := func() {
+		defer wg.Done()
+		for r := range jobs {
+			processOne(r)
+		}
+	}
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go worker()
+	}
+feed:
+	for _, req := range requests {
+		select {
+		case jobs <- req:
+		case <-batchCtx.Done():
+			break feed
+		}
+	}
+	close(jobs)
 	wg.Wait()
+
+	if allCostsReported && successCount > 0 {
+		totalUsage.Cost = &totalCost
+	}
 
 	response := &BatchResponse{
 		Results:      results,
@@ -463,7 +481,11 @@ func (b *BatchBuilder) Requests() []BatchRequest {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	result := make([]BatchRequest, len(b.requests))
-	copy(result, b.requests)
+	for i, request := range b.requests {
+		result[i] = request
+		result[i].Messages = append([]Message(nil), request.Messages...)
+		result[i].Options = append([]CallOption(nil), request.Options...)
+	}
 	return result
 }
 

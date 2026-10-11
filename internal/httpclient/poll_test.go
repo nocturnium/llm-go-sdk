@@ -37,6 +37,19 @@ func TestPoll_Cancellation(t *testing.T) {
 	}
 }
 
+// TestPoll_LateSuccessAfterCancel pins that caller cancellation wins over a
+// callback that ignored its context and reported success. The late success must
+// not make an abandoned operation look complete.
+func TestPoll_LateSuccessAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := Poll(ctx, PollPolicy{}, func(context.Context) (bool, error) {
+		return true, nil // ignores ctx entirely
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Poll = %v, want context.Canceled", err)
+	}
+}
+
 func TestPoll_Timeout(t *testing.T) {
 	for _, callbackWait := range []bool{false, true} {
 		err := Poll(context.Background(), PollPolicy{Timeout: time.Millisecond}, func(ctx context.Context) (bool, error) {
@@ -102,5 +115,46 @@ func TestPoll_DoneOnDeadlinePoll(t *testing.T) {
 	})
 	if err != nil || calls != 1 {
 		t.Fatalf("completed deadline poll: calls=%d error=%v", calls, err)
+	}
+}
+
+// A callback error is the operation's cause, not the policy timeout that
+// happened to expire while the callback was running.
+func TestPoll_CallbackErrorAfterTimeout(t *testing.T) {
+	cause := errors.New("backend failed")
+	err := Poll(context.Background(), PollPolicy{Timeout: time.Millisecond}, func(ctx context.Context) (bool, error) {
+		<-ctx.Done()
+		return false, cause
+	})
+	if !errors.Is(err, cause) {
+		t.Fatalf("Poll = %v, want callback error %v", err, cause)
+	}
+}
+
+// A callback that returns context.Canceled on an active context is reporting a
+// real operation failure, not asking Poll to keep retrying.
+func TestPoll_CallbackContextErrorIsReturned(t *testing.T) {
+	err := Poll(context.Background(), PollPolicy{Timeout: time.Hour}, func(context.Context) (bool, error) {
+		return false, context.Canceled
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Poll = %v, want context.Canceled", err)
+	}
+}
+
+// A policy whose Max sits near time.Duration's upper limit must not overflow
+// the growth multiplication to a negative duration, which would make the timer
+// fire immediately and let polling spin.
+func TestPoll_GrowDelaySaturatesAtMax(t *testing.T) {
+	for _, limit := range []time.Duration{time.Duration(math.MaxInt64), time.Duration(math.MaxInt64 - 1), time.Hour} {
+		got := growDelay(time.Duration(math.MaxInt64/2), 2, limit)
+		if got <= 0 || got > limit {
+			t.Fatalf("growDelay limit %v = %v, want a positive duration at or below the limit", limit, got)
+		}
+	}
+	// A policy Max above time.Duration's range (as float64 would round) is still
+	// clamped to a non-negative duration.
+	if got := growDelay(time.Second, 1e30, time.Duration(math.MaxInt64)); got <= 0 {
+		t.Fatalf("growDelay with a huge multiplier = %v, want a positive saturated duration", got)
 	}
 }

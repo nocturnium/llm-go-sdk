@@ -58,6 +58,33 @@ var crossHostRedirectCredentialHeaders = []string{
 	"Proxy-Authorization",
 }
 
+// crossHostRedirectSafeHeaders survive a cross-origin redirect. They carry
+// content negotiation and framing rather than credentials; everything else is
+// dropped, because a caller cannot know which custom header holds a secret and
+// the destination is chosen by the redirecting server.
+var crossHostRedirectSafeHeaders = map[string]bool{
+	"Accept":          true,
+	"Accept-Encoding": true,
+	"Accept-Language": true,
+	"Content-Type":    true,
+	"User-Agent":      true,
+}
+
+// stripCrossHostCredentials removes request headers before a cross-origin
+// redirect is followed. Beyond the fixed provider credential list, every header
+// that is not in the safe allowlist is dropped, so a secret in a caller-supplied
+// custom header cannot leak to the redirect target.
+func stripCrossHostCredentials(req *http.Request) {
+	for _, header := range crossHostRedirectCredentialHeaders {
+		req.Header.Del(header)
+	}
+	for name := range req.Header {
+		if !crossHostRedirectSafeHeaders[http.CanonicalHeaderKey(name)] {
+			req.Header.Del(name)
+		}
+	}
+}
+
 // Client is an HTTP client with retry support.
 type Client struct {
 	httpClient  *http.Client
@@ -170,6 +197,27 @@ func (c *Client) installSSRFDialer() {
 			return conn, nil
 		}
 	}
+	// DialTLS is deprecated but still supported and takes precedence over
+	// DialContext for HTTPS. It has no context argument, so it needs its own
+	// wrapper rather than relying on the DialTLSContext guard above.
+	//lint:ignore SA1019 the deprecated field is still honored by net/http and must stay guarded
+	if originalDialTLS := tr.DialTLS; originalDialTLS != nil { //nolint:staticcheck // deprecated field still honored by net/http; must stay guarded
+		//lint:ignore SA1019 see above
+		tr.DialTLS = func(network, address string) (net.Conn, error) { //nolint:staticcheck // see above
+			if err := validateNotPrivateHostFromAddress(address); err != nil {
+				return nil, err
+			}
+			conn, err := originalDialTLS(network, address)
+			if err != nil {
+				return nil, err
+			}
+			if err := validateConnRemoteAddr(conn); err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			return conn, nil
+		}
+	}
 
 	if callerProvidedTransport && originalDialContext != nil {
 		tr.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -235,12 +283,32 @@ func (c *Client) installRedirectPolicy() {
 			return fmt.Errorf("redirect blocked: %w", err)
 		}
 		if len(via) > 0 && !sameRedirectOrigin(req, via[0]) {
-			for _, header := range crossHostRedirectCredentialHeaders {
-				req.Header.Del(header)
+			// A 307/308 keeps the request body, so following a cross-origin
+			// redirect would replay the caller's payload (prompts, user content,
+			// possibly credentials) to an origin the redirecting host chose.
+			// Refuse rather than silently hand the body to a third party.
+			if requestHasBody(req) {
+				return errors.New("redirect blocked: cross-origin redirect would forward the request body")
 			}
+			stripCrossHostCredentials(req)
 		}
 		return nil
 	}
+}
+
+// requestHasBody reports whether req carries a payload that net/http would
+// replay on a redirect. ContentLength is the reliable signal: http.NewRequest
+// normalizes an absent body to a non-nil http.NoBody with length 0, while a
+// real payload from the DoJSON/DoRaw path is a bytes.Reader with a positive
+// length.
+func requestHasBody(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	if req.ContentLength > 0 {
+		return true
+	}
+	return req.Body != nil && req.Body != http.NoBody
 }
 
 // sameRedirectOrigin reports whether a redirect stayed on the same origin.
@@ -347,6 +415,9 @@ func sanitizeLogValue(s string) string {
 // WithTimeout sets the HTTP client timeout.
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
+		if c.httpClient == nil {
+			c.httpClient = &http.Client{}
+		}
 		c.httpClient.Timeout = timeout
 	}
 }
@@ -357,7 +428,9 @@ func WithTimeout(timeout time.Duration) ClientOption {
 // with resilience.NewResilientClient instead, so retries have a single authority.
 func WithRetryPolicy(policy *RetryPolicy) ClientOption {
 	return func(c *Client) {
-		c.retryPolicy = policy
+		if policy != nil {
+			c.retryPolicy = policy
+		}
 	}
 }
 
@@ -435,10 +508,8 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	}
 
 	// Set GetBody to enable retries - the body bytes are captured in the closure
-	if len(bodyBytes) > 0 {
-		httpReq.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
-		}
+	httpReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(bodyBytes)), nil
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -457,14 +528,25 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	}
 
 	if response != nil {
-		// Bound the body so a hostile server can't exhaust memory.
-		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(response); err != nil {
-			// A 204, or a 200 with no payload, leaves the target at its zero
-			// value rather than failing: the request succeeded and the endpoint
-			// returned no payload.
-			if errors.Is(err, io.EOF) {
+		// Read one byte beyond the limit so a valid JSON prefix cannot hide an
+		// oversized response after Decoder.Decode stops at the first value.
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
+		if err != nil {
+			return fmt.Errorf("failed to read response: %w", err)
+		}
+		if int64(len(body)) > maxResponseSize {
+			return fmt.Errorf("response exceeds maximum size of %d bytes", maxResponseSize)
+		}
+		if len(body) == 0 {
+			// A 204 has no representation by definition. A 200 that declares a
+			// required JSON body but sends none is a malformed response and should
+			// not be mistaken for a successful empty result.
+			if resp.StatusCode == http.StatusNoContent {
 				return nil
 			}
+			return fmt.Errorf("expected JSON response body from status %d", resp.StatusCode)
+		}
+		if err := json.Unmarshal(body, response); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
 	}

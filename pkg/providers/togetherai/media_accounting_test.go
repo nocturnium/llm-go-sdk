@@ -51,6 +51,9 @@ func TestVideo_FlatCost(t *testing.T) {
 func TestSpeech_Extras(t *testing.T) {
 	c := mediaTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		b := mediaJSON(t, r)
+		// Synthesize is the non-streaming call, so it forces stream=false even
+		// when the caller passes a contradictory extra; StreamSpeech is the path
+		// that sets stream=true.
 		if b["voice"] != "voice-id" || b["sample_rate"] != float64(24000) || b["response_encoding"] != "pcm_s16le" || b["stream"] != false {
 			t.Error(b)
 		}

@@ -67,7 +67,14 @@ func WithMaxRetries(n int) ResilienceOption {
 	return func(rc *ResilientClient) {
 		if n >= 0 {
 			rc.retry = copyRetryConfig(rc.retry)
-			rc.retry.MaxAttempts = n + 1 // +1 because MaxAttempts includes first try
+			// +1 because MaxAttempts includes the first try; saturate so a huge
+			// n does not overflow into a negative attempt count that execute
+			// clamps back to a single try.
+			if n == maxInt() {
+				rc.retry.MaxAttempts = maxInt()
+			} else {
+				rc.retry.MaxAttempts = n + 1
+			}
 		}
 	}
 }
@@ -112,23 +119,83 @@ func (rc *ResilientClient) GenerateContent(ctx context.Context, messages []llms.
 
 // Stream wraps the LLM's Stream method with resilience.
 //
-// Streaming failures surface as a terminal error chunk on the returned channel
-// rather than as the synchronous return value, so the circuit breaker is updated
-// from the stream's actual outcome (success/failure) once it completes. Mid-stream
-// retry is not possible once chunks have been emitted; only the initial connect
-// error is handled synchronously.
+// A transient failure opening the stream (429/5xx or a transport error) is
+// retried like GenerateContent, since no chunks have been emitted yet and the
+// caller has not seen a partial response. Once the stream is established its
+// outcome drives the circuit breaker: a terminal error chunk counts as a
+// provider failure, a clean finish as a success. Mid-stream retry is not
+// possible once chunks have been emitted.
 func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, options ...llms.CallOption) (<-chan llms.StreamChunk, error) {
-	if !rc.breaker.Allow() {
-		return nil, ErrCircuitOpen
+	var lastErr error
+	delay := rc.retry.InitialDelay
+	maxAttempts := rc.retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
 	}
-	src, err := rc.llm.Stream(ctx, messages, options...)
-	if err != nil {
-		if isProviderUnhealthy(err) {
-			rc.breaker.RecordFailure()
-		} else {
-			rc.breaker.release()
+
+	var (
+		src <-chan llms.StreamChunk
+		p   permit
+	)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		admitted, perm := rc.breaker.acquire()
+		if !admitted {
+			if lastErr != nil {
+				return nil, fmt.Errorf("%w: %w", ErrCircuitOpen, lastErr)
+			}
+			return nil, ErrCircuitOpen
 		}
-		return nil, err
+
+		s, err := rc.llm.Stream(ctx, messages, options...)
+		if err == nil {
+			src, p = s, perm
+			break
+		}
+		lastErr = err
+
+		// Same classification as execute: only retryable upstream failures
+		// count against the breaker; a bad request or cancellation leaves it
+		// closed.
+		providerUnhealthy := isProviderUnhealthy(err)
+		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) || attempt >= maxAttempts-1 {
+			if providerUnhealthy {
+				rc.breaker.recordFailure(perm)
+			} else {
+				rc.breaker.releasePermit(perm)
+			}
+			return nil, err
+		}
+
+		// The next attempt obtains its own grant; this attempt's retryable
+		// error is not terminal provider-health evidence, so release its probe.
+		rc.breaker.releasePermit(perm)
+
+		jitteredDelay := calculateDelay(delay, rc.retry.Jitter)
+		retryDelay := retryDelayForError(err, jitteredDelay, rc.retry.MaxDelay)
+		if rc.onRetry != nil {
+			rc.onRetry(attempt+1, err, retryDelay)
+		}
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+
+		delay = time.Duration(float64(delay) * rc.retry.BackoffFactor)
+		if delay > rc.retry.MaxDelay {
+			delay = rc.retry.MaxDelay
+		}
+	}
+	if src == nil {
+		return nil, lastErr
 	}
 
 	opts := llms.ApplyOptions(options...)
@@ -143,11 +210,11 @@ func (rc *ResilientClient) Stream(ctx context.Context, messages []llms.Message, 
 		func() {
 			switch {
 			case termErr == nil:
-				rc.breaker.RecordSuccess()
+				rc.breaker.recordSuccess(p)
 			case isProviderUnhealthy(termErr):
-				rc.breaker.RecordFailure()
+				rc.breaker.recordFailure(p)
 			default:
-				rc.breaker.release()
+				rc.breaker.releasePermit(p)
 			}
 		},
 	), nil
@@ -163,7 +230,8 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Check circuit breaker
-		if !rc.breaker.Allow() {
+		admitted, p := rc.breaker.acquire()
+		if !admitted {
 			if lastErr != nil {
 				return fmt.Errorf("%w: %w", ErrCircuitOpen, lastErr)
 			}
@@ -173,7 +241,7 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		// Execute the function
 		err := fn()
 		if err == nil {
-			rc.breaker.RecordSuccess()
+			rc.breaker.recordSuccess(p)
 			return nil
 		}
 
@@ -191,9 +259,9 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 		if rc.retry.ShouldRetry == nil || !rc.retry.ShouldRetry(err) {
 			if providerUnhealthy {
-				rc.breaker.RecordFailure()
+				rc.breaker.recordFailure(p)
 			} else {
-				rc.breaker.release()
+				rc.breaker.releasePermit(p)
 			}
 			return err
 		}
@@ -201,9 +269,9 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		// Don't retry if this was the last attempt
 		if attempt >= maxAttempts-1 {
 			if providerUnhealthy {
-				rc.breaker.RecordFailure()
+				rc.breaker.recordFailure(p)
 			} else {
-				rc.breaker.release()
+				rc.breaker.releasePermit(p)
 			}
 			break
 		}
@@ -218,7 +286,7 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 
 		// The next retry obtains its own grant. This attempt's retryable error is
 		// not terminal provider-health evidence, so release its probe permit.
-		rc.breaker.release()
+		rc.breaker.releasePermit(p)
 
 		// Wait before retrying with proper timer cleanup.
 		// Using time.NewTimer instead of time.After to prevent goroutine leaks
@@ -227,7 +295,14 @@ func (rc *ResilientClient) execute(ctx context.Context, fn func() error) error {
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
-				<-timer.C // Drain the channel if timer already fired
+				// The timer already fired, but the value may have been delivered
+				// and consumed, or not yet delivered on an unbuffered channel.
+				// A blocking receive here would hang the canceled request, so
+				// drain non-blockingly.
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
 			return ctx.Err()
 		case <-timer.C:

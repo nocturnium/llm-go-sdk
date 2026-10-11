@@ -11,8 +11,9 @@ import (
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
 )
 
-// ListModels retrieves available deployments from Azure OpenAI.
-// Note: Azure OpenAI may not support the standard models endpoint.
+// ListModels retrieves the models available to the Azure OpenAI resource from
+// the account-level /openai/models route. If the resource does not serve that
+// route (404), it reports the configured deployment as the only model.
 func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) (*llms.ListModelsResult, error) {
 	select {
 	case <-ctx.Done():
@@ -22,7 +23,7 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	resp, err := c.Client().ListModels(ctx)
+	resp, err := c.models.ListModels(ctx)
 	if err != nil {
 		// A deployment that does not serve /models answers 404; that is the only
 		// case worth substituting the configured deployment for. Credential,
@@ -45,13 +46,15 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 		models = llms.FilterModelsByType(models, options.Types...)
 	}
 
+	hasMore := false
 	if options.Limit > 0 && len(models) > options.Limit {
 		models = models[:options.Limit]
+		hasMore = true
 	}
 
 	return &llms.ListModelsResult{
 		Models:  models,
-		HasMore: false,
+		HasMore: hasMore,
 	}, nil
 }
 

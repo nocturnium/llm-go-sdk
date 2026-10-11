@@ -169,7 +169,10 @@ func FuzzConvertResponse(f *testing.F) {
 		}
 
 		// Should not panic
-		result := convertResponse(resp)
+		result, err := convertResponse(resp)
+		if err != nil {
+			t.Fatalf("convertResponse returned error: %v", err)
+		}
 
 		if result == nil {
 			t.Error("expected non-nil result")
@@ -194,7 +197,10 @@ func FuzzConvertResponse_Empty(f *testing.F) {
 		}
 
 		// Should not panic
-		result := convertResponse(resp)
+		result, err := convertResponse(resp)
+		if err != nil {
+			t.Fatalf("convertResponse returned error: %v", err)
+		}
 
 		if result == nil {
 			t.Error("expected non-nil result even for empty response")

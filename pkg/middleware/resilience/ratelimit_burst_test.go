@@ -3,16 +3,16 @@ package resilience
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // TestRateLimiter_TokenEstimateExceedingBurstDoesNotWedge covers the self-
 // inflicted-outage bug: golang.org/x/time/rate rejects any WaitN/AllowN where n
 // exceeds the bucket burst, so a per-request token estimate larger than the burst
 // (e.g. WithTokensPerMinute(500) or WithTokenBurst(<1000) against the default
-// 1000-token estimate) made every call fail immediately. The Wait paths now cap
-// the requested token count to the bucket burst so it throttles instead of
-// failing forever; the burst itself is untouched, respecting an explicit
-// WithTokenBurst.
+// 1000-token estimate) made every call fail immediately. The Wait paths now
+// reserve the burst-sized portion and carry the remainder as debt, so calls
+// throttle instead of failing forever while the whole estimate is still owed.
 func TestRateLimiter_TokenEstimateExceedingBurstDoesNotWedge(t *testing.T) {
 	cases := []struct {
 		name string
@@ -30,10 +30,136 @@ func TestRateLimiter_TokenEstimateExceedingBurstDoesNotWedge(t *testing.T) {
 		})
 	}
 
-	// An oversized single-call token count is capped to the burst instead of
-	// failing permanently.
+	// An oversized single-call token count is admitted, but the part above the
+	// burst remains debt rather than disappearing.
 	big := NewRateLimiter(WithTokensPerMinute(60000))
 	if err := big.WaitN(context.Background(), 1, 10_000_000); err != nil {
-		t.Errorf("oversized per-call token request not capped to burst: %v", err)
+		t.Errorf("oversized per-call token request should be debt-financed: %v", err)
+	}
+	if got := big.tokenDebt; got == 0 {
+		t.Fatal("oversized token charge left no debt, so the estimate was treated as fully paid")
+	}
+}
+
+// A wait that is canceled before admission must leave no debt behind: the
+// request never consumed the tokens, and a later caller should not pay for it.
+func TestRateLimiter_CanceledOversizedWaitLeavesNoDebt(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithRequestBurst(1))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := rl.WaitN(ctx, 1, 10_000_000); err == nil {
+		t.Fatal("WaitN with a canceled context succeeded")
+	}
+	if got := rl.tokenDebt; got != 0 {
+		t.Fatalf("canceled wait left tokenDebt=%d, want 0", got)
+	}
+}
+
+// Debt settlement charges installments in a loop. With a high token rate every
+// installment is zero-delay, so a huge debt used to be charged in one
+// uninterruptible burst before the wait deadline was even consulted. Settlement
+// now stops between installments once the context is done and leaves the
+// remainder owed.
+func TestRateLimiter_DebtSettlementHonorsContext(t *testing.T) {
+	rl := NewRateLimiter(
+		WithTokensPerMinute(600_000_000_000),
+		WithTokenBurst(1),
+		WithBlocking(true),
+		WithWaitTimeout(5*time.Second),
+	)
+	rl.mu.Lock()
+	rl.tokenDebt = 1_000_000_000
+	rl.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	err := rl.WaitN(ctx, 1, 1)
+	if err == nil {
+		t.Fatal("WaitN with a canceled context succeeded, want an error")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("WaitN took %v to observe cancellation; settlement is not bounded by the context", elapsed)
+	}
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debt <= 0 {
+		t.Fatalf("tokenDebt = %d after the interrupted settlement, want the remainder still owed", debt)
+	}
+}
+
+// When actual usage is lower than the estimated burst-plus-debt charge, the
+// refund must cancel outstanding debt before adding bucket credit. Otherwise a
+// later request still pays for tokens this response never used.
+func TestRateLimiter_RecordTokensRefundsOverflowDebt(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(10_000))
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_ = rl.WaitN(ctx, 1, 10_000)
+
+	rl.mu.RLock()
+	debtBefore := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debtBefore == 0 {
+		t.Fatal("setup did not create overflow debt")
+	}
+
+	rl.RecordTokens(1_000)
+	rl.mu.RLock()
+	debtAfter := rl.tokenDebt
+	rl.mu.RUnlock()
+	if debtAfter != 0 {
+		t.Fatalf("tokenDebt after a full refund = %d, want 0", debtAfter)
+	}
+}
+
+// A partial credit must reduce the whole charge before the burst/debt split.
+// With burst 1000, credit 500, and a 2000-token request, an implementation that
+// carried the consumed credit into debt as well would charge 2500 tokens.
+func TestRateLimiter_PartialCreditDoesNotOverchargeOversizedRequest(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(1000), WithTokenEstimate(10_000))
+	rl.mu.Lock()
+	rl.tokenCredit = 500
+	rl.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := rl.WaitN(ctx, 1, 2000); err != nil {
+		t.Fatalf("WaitN failed: %v", err)
+	}
+
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	credit := rl.tokenCredit
+	rl.mu.RUnlock()
+	if credit != 0 {
+		t.Errorf("credit after waiting = %d, want 0", credit)
+	}
+	if debt != 500 {
+		t.Errorf("debt after a 2000-token request with 500 credit = %d, want 500", debt)
+	}
+}
+
+// Credit that offsets part of the debt must leave the debt with it. With 100
+// owed, 50 credit, and a 50-token burst, only the 50 uncovered tokens are
+// charged; leaving the credited half on the books would bill it a second time.
+func TestRateLimiter_SettleTokenDebtRemovesPartialCredit(t *testing.T) {
+	rl := NewRateLimiter(WithTokensPerMinute(60000), WithTokenBurst(50), WithTokenEstimate(10))
+	rl.mu.Lock()
+	rl.tokenDebt = 100
+	rl.tokenCredit = 50
+	rl.mu.Unlock()
+
+	rl.settleTokenDebt(context.Background(), rl.tokenLim(), time.Now())
+
+	rl.mu.RLock()
+	debt, credit := rl.tokenDebt, rl.tokenCredit
+	rl.mu.RUnlock()
+	if debt != 0 || credit != 0 {
+		t.Fatalf("after settling: debt=%d credit=%d, want both 0", debt, credit)
 	}
 }

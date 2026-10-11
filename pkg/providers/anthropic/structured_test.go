@@ -4,22 +4,33 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 func TestClient_GenerateContent_NormalToolCallsLeaveContentEmpty(t *testing.T) {
+	var handlerErr error
+	var handlerMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
+			handlerMu.Lock()
+			handlerErr = fmt.Errorf("decode request: %w", err)
+			handlerMu.Unlock()
+			return
 		}
 		if _, ok := req["tool_choice"]; ok {
-			t.Fatal("normal tool call request unexpectedly forced tool_choice")
+			handlerMu.Lock()
+			handlerErr = errors.New("normal tool call request unexpectedly forced tool_choice")
+			handlerMu.Unlock()
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -74,6 +85,12 @@ func TestClient_GenerateContent_NormalToolCallsLeaveContentEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateContent failed: %v", err)
 	}
+	handlerMu.Lock()
+	gotHandlerErr := handlerErr
+	handlerMu.Unlock()
+	if gotHandlerErr != nil {
+		t.Fatal(gotHandlerErr)
+	}
 
 	if resp.Content != "" {
 		t.Fatalf("normal tool calls should leave Content empty, got %q", resp.Content)
@@ -89,34 +106,46 @@ func TestClient_GenerateContent_JSONSchemaForcesAnthropicToolAndReturnsInputAsCo
 	schema := json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"}},"required":["name","age"],"additionalProperties":false}`)
 	wantInput := `{"name":"Ada","age":37}`
 
+	var handlerErr error
+	var handlerMu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
+			notifyHandlerError(&handlerMu, &handlerErr, fmt.Errorf("decode request: %w", err))
+			return
 		}
 
 		tools, ok := req["tools"].([]any)
 		if !ok {
-			t.Fatal("expected tools array")
+			notifyHandlerError(&handlerMu, &handlerErr, errors.New("expected tools array"))
+			return
 		}
 		if len(tools) != 1 {
-			t.Fatalf("expected exactly 1 structured-output tool, got %d", len(tools))
+			notifyHandlerError(&handlerMu, &handlerErr, fmt.Errorf("expected exactly 1 structured-output tool, got %d", len(tools)))
+			return
 		}
 		tool, ok := tools[0].(map[string]any)
 		if !ok {
-			t.Fatalf("tool is %T, want map[string]any", tools[0])
+			notifyHandlerError(&handlerMu, &handlerErr, fmt.Errorf("tool is %T, want map[string]any", tools[0]))
+			return
 		}
 		if tool["name"] != "person" {
-			t.Fatalf("tool name = %v, want person", tool["name"])
+			notifyHandlerError(&handlerMu, &handlerErr, fmt.Errorf("tool name = %v, want person", tool["name"]))
+			return
 		}
-		assertJSONValueEqual(t, tool["input_schema"], schema)
+		if err := jsonValueEqual(tool["input_schema"], schema); err != nil {
+			notifyHandlerError(&handlerMu, &handlerErr, err)
+			return
+		}
 
 		toolChoice, ok := req["tool_choice"].(map[string]any)
 		if !ok {
-			t.Fatal("expected tool_choice object")
+			notifyHandlerError(&handlerMu, &handlerErr, errors.New("expected tool_choice object"))
+			return
 		}
 		if toolChoice["type"] != "tool" || toolChoice["name"] != "person" {
-			t.Fatalf("tool_choice = %#v, want forced person tool", toolChoice)
+			notifyHandlerError(&handlerMu, &handlerErr, fmt.Errorf("tool_choice = %#v, want forced person tool", toolChoice))
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -155,6 +184,12 @@ func TestClient_GenerateContent_JSONSchemaForcesAnthropicToolAndReturnsInputAsCo
 	if err != nil {
 		t.Fatalf("GenerateContent failed: %v", err)
 	}
+	handlerMu.Lock()
+	gotHandlerErr := handlerErr
+	handlerMu.Unlock()
+	if gotHandlerErr != nil {
+		t.Fatal(gotHandlerErr)
+	}
 
 	if resp.Content != wantInput {
 		t.Fatalf("structured-output Content = %q, want %q", resp.Content, wantInput)
@@ -182,14 +217,23 @@ func assertToolCall(t *testing.T, got llms.ToolCall, wantID, wantName, wantArgs 
 	}
 }
 
-func assertJSONValueEqual(t *testing.T, got any, want json.RawMessage) {
-	t.Helper()
+// notifyHandlerError records the first failure a test HTTP handler observes;
+// handlers run on their own goroutine, where t.Fatal is invalid.
+func notifyHandlerError(mu *sync.Mutex, dst *error, err error) {
+	mu.Lock()
+	if *dst == nil {
+		*dst = err
+	}
+	mu.Unlock()
+}
 
+func jsonValueEqual(got any, want json.RawMessage) error {
 	var wantValue any
 	if err := json.NewDecoder(bytes.NewReader(want)).Decode(&wantValue); err != nil {
-		t.Fatalf("decode expected JSON: %v", err)
+		return fmt.Errorf("decode expected JSON: %w", err)
 	}
 	if !reflect.DeepEqual(got, wantValue) {
-		t.Fatalf("JSON value = %#v, want %#v", got, wantValue)
+		return fmt.Errorf("JSON value = %#v, want %#v", got, wantValue)
 	}
+	return nil
 }

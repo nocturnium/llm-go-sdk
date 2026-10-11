@@ -361,7 +361,8 @@ func TestClient_Stream_ContextCancellation(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			t.Fatal("ResponseWriter does not implement http.Flusher")
+			t.Error("ResponseWriter does not implement http.Flusher")
+			return
 		}
 
 		// Send chunks slowly
@@ -520,7 +521,8 @@ func TestClient_Call_Convenience(t *testing.T) {
 
 		msg, ok := messages[0].(map[string]any)
 		if !ok {
-			t.Fatal("message is not a map[string]any")
+			t.Errorf("message is %T, want map[string]any", messages[0])
+			return
 		}
 		if msg["role"] != "user" {
 			t.Errorf("expected role=user, got %v", msg["role"])

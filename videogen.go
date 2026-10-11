@@ -43,6 +43,9 @@ type VideoOption func(*VideoOptions)
 func ApplyVideoOptions(options ...VideoOption) *VideoOptions {
 	opts := &VideoOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts
@@ -226,6 +229,13 @@ func (j *PollingVideoJob) Wait(ctx context.Context) (*VideoResponse, error) {
 	case JobSucceeded:
 		if j.ResultFn == nil {
 			return nil, fmt.Errorf("missing job result callback: %w", ErrInvalidParameters)
+		}
+		// Polling can return in the same instant the caller cancels: re-check
+		// before running ResultFn so a canceled call never triggers provider
+		// work, matching the documented guarantee that cancellation propagates
+		// without invoking ResultFn.
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		return j.ResultFn(ctx)
 	case JobFailed:

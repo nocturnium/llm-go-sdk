@@ -291,6 +291,14 @@ func (m *OTelMiddleware) GenerateContent(ctx context.Context, messages []llms.Me
 		m.recordError(ctx, span, err, attrs)
 		return nil, err
 	}
+	// An LLM implementation may return a nil response with a nil error; the
+	// declared return type permits it. Report it as an incomplete response
+	// rather than panicking on the usage dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", m.llm.Provider(), llms.ErrIncompleteResponse)
+		m.recordError(ctx, span, err, attrs)
+		return nil, err
+	}
 
 	m.promptTokens.Add(ctx, int64(resp.Usage.PromptTokens), metric.WithAttributes(attrs...))
 	m.completionTokens.Add(ctx, int64(resp.Usage.CompletionTokens), metric.WithAttributes(attrs...))
@@ -345,6 +353,16 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 		span.End()
 		return nil, err
 	}
+	// A nil stream with a nil error would block the processing goroutine's
+	// range forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", provider, llms.ErrIncompleteResponse)
+		duration := time.Since(start).Seconds()
+		m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+		m.recordError(ctx, span, err, attrs)
+		span.End()
+		return nil, err
+	}
 
 	// Apply options to get buffer size and timeout for backpressure handling
 	opts := llms.ApplyOptions(options...)
@@ -367,6 +385,7 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 		var finishReason string
 		var toolCallCount int
 		var hadError bool
+		var completed bool
 
 		// Pre-allocate some capacity to reduce allocations
 		contentBuilder.Grow(1024)
@@ -416,7 +435,10 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			}
 
 			if !hadError {
-				if err := ctx.Err(); err != nil {
+				// A stream that delivered its terminal chunk is a success even if
+				// the caller cancels while this deferred block runs; the request
+				// already finished, so a late cancellation must not mark it failed.
+				if err := ctx.Err(); err != nil && !completed {
 					hadError = true
 					m.recordError(ctx, span, err, attrs)
 				}
@@ -444,6 +466,10 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			}
 
 			if chunk.Error != nil {
+				// The provider may keep producing after an error chunk (or park on
+				// its send). Drain the remainder so its goroutine and HTTP body are
+				// released instead of leaking when this wrapper returns.
+				llms.DrainStream(stream)
 				hadError = true
 				m.recordError(ctx, span, chunk.Error, attrs)
 				return
@@ -467,6 +493,9 @@ func (m *OTelMiddleware) Stream(ctx context.Context, messages []llms.Message, op
 			}
 			if chunk.FinishReason != "" {
 				finishReason = string(chunk.FinishReason)
+			}
+			if chunk.Done {
+				completed = true
 			}
 			if len(chunk.ToolCalls) > 0 {
 				toolCallCount = len(chunk.ToolCalls)

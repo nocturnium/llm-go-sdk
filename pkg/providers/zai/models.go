@@ -116,7 +116,12 @@ var cachedModels = []llms.ModelInfo{
 
 // ListModels returns metadata for Z.AI GLM models (package-level convenience function).
 func ListModels() []llms.ModelInfo {
-	return cachedModels
+	models := make([]llms.ModelInfo, len(cachedModels))
+	for i, model := range cachedModels {
+		models[i] = model
+		models[i].Types = append([]llms.ModelType(nil), model.Types...)
+	}
+	return models
 }
 
 // ModelInfo returns information about a specific model (package-level convenience function).
@@ -124,6 +129,7 @@ func ListModels() []llms.ModelInfo {
 func ModelInfo(modelID string) *llms.ModelInfo {
 	for _, m := range cachedModels {
 		if m.ID == modelID {
+			m.Types = append([]llms.ModelType(nil), m.Types...)
 			return &m
 		}
 	}
@@ -142,8 +148,7 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	models := make([]llms.ModelInfo, len(cachedModels))
-	copy(models, cachedModels)
+	models := ListModels()
 
 	// apply type filter if specified
 	if len(options.Types) > 0 {
@@ -167,6 +172,7 @@ func (c *Client) ModelInfo(ctx context.Context, modelID string) (*llms.ModelInfo
 	for _, m := range cachedModels {
 		if m.ID == modelID || strings.EqualFold(m.ID, modelID) {
 			info := m
+			info.Types = append([]llms.ModelType(nil), m.Types...)
 			return &info, nil
 		}
 	}

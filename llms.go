@@ -4,6 +4,7 @@ package llms
 
 import (
 	"context"
+	"reflect"
 )
 
 // Provider represents an LLM provider type
@@ -59,6 +60,9 @@ func Call(ctx context.Context, llm LLM, prompt string, options ...CallOption) (s
 	if err != nil {
 		return "", err
 	}
+	if resp == nil {
+		return "", ErrIncompleteResponse
+	}
 	return resp.Content, nil
 }
 
@@ -70,15 +74,108 @@ type Wrapper interface {
 	Unwrap() LLM
 }
 
+// maxUnwrapDepth bounds unwrapping when a Wrapper cycle cannot be identified.
+// Wrappers implemented by a non-comparable value whose identity cannot be read
+// (a struct with a slice field, for example) would otherwise loop forever.
+const maxUnwrapDepth = 10000
+
+// llmIdentity returns a comparable identity for an LLM that is not itself
+// comparable, keyed on the underlying pointer of its map, slice, func, channel,
+// or pointer value. The boolean is false when no such identity exists.
+func llmIdentity(llm LLM) (any, bool) {
+	v := reflect.ValueOf(llm)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Map, reflect.Pointer, reflect.UnsafePointer:
+		if v.IsNil() {
+			return nil, false
+		}
+		return struct {
+			kind reflect.Kind
+			typ  reflect.Type
+			ptr  uintptr
+		}{kind: v.Kind(), typ: v.Type(), ptr: v.Pointer()}, true
+	default:
+		return nil, false
+	}
+}
+
+// isNilLLM reports whether a non-nil LLM interface holds a nil pointer. A
+// typed-nil wrapper is non-nil as an interface and would otherwise reach
+// Unwrap, where a value-receiver implementation can panic instead of returning
+// safely.
+func isNilLLM(llm LLM) bool {
+	v := reflect.ValueOf(llm)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
+}
+
+// isNilInterface reports whether v is nil or an interface holding a typed-nil
+// pointer. A typed-nil assigned to an interface makes the interface itself
+// non-nil, so a plain `v == nil` check misses it and a method call dereferences
+// the nil receiver.
+func isNilInterface(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
+// seenKey returns the map key used for cycle detection, and whether one exists.
+// Comparable LLM values are their own key; non-comparable ones fall back to
+// their underlying pointer. A struct whose type is comparable can still hold an
+// interface field with an uncomparable dynamic value (a slice), so the value is
+// only usable as a map key when a trial comparison does not panic.
+func seenKey(llm LLM) (any, bool) {
+	if reflect.TypeOf(llm).Comparable() && comparableValue(llm) {
+		return llm, true
+	}
+	return llmIdentity(llm)
+}
+
+// comparableValue reports whether llm can be used as a map key without
+// panicking. A comparable interface's dynamic value can itself be uncomparable,
+// so a comparison is the only reliable test.
+func comparableValue(llm LLM) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	var probe any = llm
+	_ = probe == probe
+	return true
+}
+
 // UnwrapAll recursively unwraps all middleware to get the base LLM implementation.
 func UnwrapAll(llm LLM) LLM {
-	for {
+	seen := make(map[any]struct{})
+	for depth := 0; depth < maxUnwrapDepth; depth++ {
+		if llm == nil || isNilLLM(llm) {
+			return nil
+		}
+		if key, ok := seenKey(llm); ok {
+			if _, ok := seen[key]; ok {
+				return llm
+			}
+			seen[key] = struct{}{}
+		}
 		wrapper, ok := llm.(Wrapper)
 		if !ok {
 			return llm
 		}
 		llm = wrapper.Unwrap()
 	}
+	return llm
 }
 
 // GetMiddleware extracts all middleware wrappers from the LLM chain.
@@ -86,7 +183,17 @@ func UnwrapAll(llm LLM) LLM {
 func GetMiddleware(llm LLM) []Wrapper {
 	var middleware []Wrapper
 	current := llm
-	for {
+	seen := make(map[any]struct{})
+	for depth := 0; depth < maxUnwrapDepth; depth++ {
+		if current == nil || isNilLLM(current) {
+			break
+		}
+		if key, ok := seenKey(current); ok {
+			if _, ok := seen[key]; ok {
+				break
+			}
+			seen[key] = struct{}{}
+		}
 		wrapper, ok := current.(Wrapper)
 		if !ok {
 			break

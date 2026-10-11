@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -106,10 +107,13 @@ func TestSuspendedRequestKeepsSettings(t *testing.T) {
 }
 
 func TestGenerateContent_ReportsThinkingSuspension(t *testing.T) {
+	var mu sync.Mutex
 	var body string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		body = string(b)
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"m","type":"message","role":"assistant","model":"claude-opus-4-5","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
 	}))
@@ -127,8 +131,11 @@ func TestGenerateContent_ReportsThinkingSuspension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(body, `"thinking"`) {
-		t.Errorf("request still asks for thinking: %s", body)
+	mu.Lock()
+	gotBody := body
+	mu.Unlock()
+	if strings.Contains(gotBody, `"thinking"`) {
+		t.Errorf("request still asks for thinking: %s", gotBody)
 	}
 	if len(resp.Adjustments) != 1 || resp.Adjustments[0] != adjustmentThinkingSuspended {
 		t.Errorf("Adjustments = %v, want [%s]", resp.Adjustments, adjustmentThinkingSuspended)

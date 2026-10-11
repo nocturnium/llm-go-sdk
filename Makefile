@@ -25,6 +25,7 @@ build:
 # Build for all platforms
 build-all:
 	@echo "Building for all platforms..."
+	mkdir -p dist
 	GOOS=linux GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-amd64 ./cmd
 	GOOS=linux GOARCH=arm64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-linux-arm64 ./cmd
 	GOOS=darwin GOARCH=amd64 GOWORK=off go build -trimpath -ldflags "$(LDFLAGS)" -o dist/llms-cli-darwin-amd64 ./cmd
@@ -84,9 +85,9 @@ vulncheck:
 # Format code
 fmt:
 	@echo "Formatting code..."
-	gofmt -w .
+	@find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -w
 	@if command -v goimports >/dev/null 2>&1; then \
-		goimports -w -local github.com/nocturnium/llm-go-sdk/v6 .; \
+		find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 goimports -w -local github.com/nocturnium/llm-go-sdk/v6; \
 	fi
 
 # Check formatting
@@ -133,7 +134,7 @@ install-tools:
 	GOWORK=off go install golang.org/x/tools/cmd/goimports@latest
 	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
 	GOWORK=off go install honnef.co/go/tools/cmd/staticcheck@latest
-	GOWORK=off go install golang.org/x/exp/cmd/apidiff@latest
+	GOWORK=off go install golang.org/x/exp/cmd/apidiff@v0.0.0-20261011100332-faecfb24eb49
 	GOWORK=off go install github.com/goreleaser/goreleaser/v2@latest
 	GOWORK=off go install github.com/orhun/git-cliff/git-cliff@latest || echo "git-cliff install failed (optional)"
 	@echo "Tools installed successfully"
@@ -155,7 +156,12 @@ apidiff:
 		echo "Baseline $(API_BASELINE) missing. Run 'make apidiff-baseline'."; \
 		exit 1; \
 	fi
-	@out="$$(GOWORK=off apidiff -m $(API_BASELINE) $(MODULE) 2>&1 | grep -v '^Ignoring internal package' || true)"; \
+	@out="$$(GOWORK=off apidiff -m $(API_BASELINE) $(MODULE) 2>&1)"; status=$$?; \
+	out="$$(printf '%s\n' "$$out" | grep -v '^Ignoring internal package' || true)"; \
+	if [ $$status -ne 0 ] && [ -z "$$out" ]; then \
+		echo "apidiff failed to run (exit $$status)."; \
+		exit 1; \
+	fi; \
 	if [ -n "$$out" ]; then \
 		echo "Public API changed since baseline:"; \
 		echo "$$out"; \

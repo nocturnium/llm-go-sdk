@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
@@ -91,7 +92,9 @@ func TestVideoResultErrors(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := job.(*llms.PollingVideoJob).ResultFn(context.Background()); err == nil {
+			resultCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if _, err := job.(*llms.PollingVideoJob).ResultFn(resultCtx); err == nil {
 				t.Fatal("expected result error")
 			}
 		})

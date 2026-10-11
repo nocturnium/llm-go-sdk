@@ -287,6 +287,45 @@ func TestJSONLogger_LogError(t *testing.T) {
 	}
 }
 
+// A nil error must not panic the process; the logger reports it explicitly.
+func TestLogError_NilErrorDoesNotPanic(t *testing.T) {
+	var buf bytes.Buffer
+	jsonLogger := NewJSONLogger(func(b []byte) error { buf.Write(b); return nil })
+	jsonLogger.LogError(context.Background(), &LogEntry{RequestID: "nil-error"}, nil)
+	if !strings.Contains(buf.String(), `\u003cnil\u003e`) {
+		t.Errorf("JSON logger output = %q, want a nil error marker", buf.String())
+	}
+
+	var slogBuf bytes.Buffer
+	slogLogger := NewSlogLogger(slog.New(slog.NewJSONHandler(&slogBuf, nil)))
+	slogLogger.LogError(context.Background(), &LogEntry{RequestID: "nil-error"}, nil)
+	if !strings.Contains(slogBuf.String(), "<nil>") {
+		t.Errorf("slog logger output = %q, want a nil error marker", slogBuf.String())
+	}
+}
+
+// The logging methods are exported and take a *LogEntry. A nil entry must be
+// reported through the sink, not dereferenced into a panic in the caller.
+func TestLoggers_NilEntryDoesNotPanic(t *testing.T) {
+	var reported error
+	jsonLogger := NewJSONLogger(func([]byte) error { return nil }, WithJSONWriteError(func(err error) { reported = err }))
+	jsonLogger.LogRequest(context.Background(), nil)
+	jsonLogger.LogResponse(context.Background(), nil)
+	jsonLogger.LogError(context.Background(), nil, errors.New("boom"))
+	if !errors.Is(reported, errNilLogEntry) {
+		t.Errorf("JSON logger reported %v, want errNilLogEntry", reported)
+	}
+
+	var slogBuf bytes.Buffer
+	slogLogger := NewSlogLogger(slog.New(slog.NewJSONHandler(&slogBuf, nil)))
+	slogLogger.LogRequest(context.Background(), nil)
+	slogLogger.LogResponse(context.Background(), nil)
+	slogLogger.LogError(context.Background(), nil, errors.New("boom"))
+	if !strings.Contains(slogBuf.String(), errNilLogEntry.Error()) {
+		t.Errorf("slog logger output = %q, want the nil-entry report", slogBuf.String())
+	}
+}
+
 // mockLLM is a mock LLM for testing
 type mockLLM struct {
 	callFn   func(ctx context.Context, prompt string, options ...llms.CallOption) (string, error)
@@ -877,5 +916,72 @@ func TestJSONLoggerReportsWriteFailures(t *testing.T) {
 
 	if len(got) != 1 || !errors.Is(got[0], sinkErr) {
 		t.Fatalf("callback received %v, want the sink error", got)
+	}
+}
+
+// Request parameters and trace overrides passed as call options must reach the
+// logged entry for every operation, on the request and the response.
+func TestLoggingMiddleware_LogsCallOptions(t *testing.T) {
+	var requests, responses []*LogEntry
+	logger := &testLogger{
+		onRequest:  func(e *LogEntry) { requests = append(requests, e) },
+		onResponse: func(e *LogEntry) { responses = append(responses, e) },
+	}
+	llm := &mockLLM{
+		provider: llms.ProviderAnthropic,
+		model:    "claude-3",
+		genFn: func(context.Context, []llms.Message, ...llms.CallOption) (*llms.Response, error) {
+			return &llms.Response{Content: "ok"}, nil
+		},
+	}
+	mw := NewLoggingMiddleware(llm, logger)
+	msgs := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+
+	if _, err := mw.GenerateContent(context.Background(), msgs, llms.WithMaxTokens(77)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mw.Call(context.Background(), "hi", llms.WithMaxTokens(77)); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 2 || len(responses) != 2 {
+		t.Fatalf("got %d requests and %d responses, want 2 each", len(requests), len(responses))
+	}
+	for _, e := range append(requests, responses...) {
+		if got := e.RequestParameters["max_tokens"]; got != 77 {
+			t.Errorf("%s entry max_tokens = %v, want 77", e.Operation, got)
+		}
+	}
+}
+
+// A provider that returns (nil, nil) from Stream must fail the call rather than
+// hand back a channel that never closes.
+func TestStreamWrappers_NilStreamIsAnError(t *testing.T) {
+	nilStream := func(context.Context, []llms.Message, ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+		return nil, nil
+	}
+	msgs := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+
+	wrappers := map[string]func() (llms.LLM, error){
+		"logging": func() (llms.LLM, error) {
+			return NewLoggingMiddleware(&mockLLM{provider: llms.ProviderOpenAI, model: "m", streamFn: nilStream}, &testLogger{}), nil
+		},
+		"metrics": func() (llms.LLM, error) {
+			return NewMetricsMiddleware(&mockLLM{provider: llms.ProviderOpenAI, model: "m", streamFn: nilStream})
+		},
+		"langfuse": func() (llms.LLM, error) {
+			return NewLangfuseOTelMiddleware(&mockLLM{provider: llms.ProviderOpenAI, model: "m", streamFn: nilStream})
+		},
+	}
+	for name, build := range wrappers {
+		t.Run(name, func(t *testing.T) {
+			w, err := build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream, err := w.Stream(context.Background(), msgs)
+			if !errors.Is(err, llms.ErrIncompleteResponse) || stream != nil {
+				t.Fatalf("Stream = %v, %v; want nil stream and ErrIncompleteResponse", stream, err)
+			}
+		})
 	}
 }

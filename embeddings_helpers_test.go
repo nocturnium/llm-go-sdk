@@ -42,10 +42,11 @@ func TestEmbedQuery(t *testing.T) {
 		t.Errorf("embedder received %v, want [hello]", e.gotTexts)
 	}
 
-	// An empty response gives ErrEmptyInput.
+	// An empty response for a nonempty query is a provider failure, not caller
+	// validation, so it reports ErrIncompleteResponse rather than ErrEmptyInput.
 	empty := &stubEmbedder{resp: &EmbeddingResponse{}}
-	if _, err := EmbedQuery(ctx, empty, "x"); !errors.Is(err, ErrEmptyInput) {
-		t.Errorf("empty response error = %v, want ErrEmptyInput", err)
+	if _, err := EmbedQuery(ctx, empty, "x"); !errors.Is(err, ErrIncompleteResponse) {
+		t.Errorf("empty response error = %v, want ErrIncompleteResponse", err)
 	}
 
 	// Underlying error is propagated.
@@ -73,6 +74,13 @@ func TestEmbedDocuments(t *testing.T) {
 	boom := errors.New("boom")
 	if _, err := EmbedDocuments(ctx, &stubEmbedder{err: boom}, []string{"a"}); !errors.Is(err, boom) {
 		t.Errorf("error = %v, want boom", err)
+	}
+
+	// A provider that silently omits a vector must fail rather than returning a
+	// shortened result whose positions no longer match the input texts.
+	short := &stubEmbedder{resp: &EmbeddingResponse{Embeddings: []Embedding{{Vector: []float32{1}}}}}
+	if _, err := EmbedDocuments(ctx, short, []string{"a", "b"}); !errors.Is(err, ErrIncompleteResponse) {
+		t.Errorf("short response error = %v, want ErrIncompleteResponse", err)
 	}
 }
 

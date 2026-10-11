@@ -381,7 +381,13 @@ func (c *Client) initialize(ctx context.Context) error {
 	if len(result.Capabilities) > 0 {
 		// Capabilities are advisory; a malformed map should not fail the handshake,
 		// so an unmarshal error leaves the typed view zero-valued.
-		_ = json.Unmarshal(result.Capabilities, &c.serverCaps)
+		// Decode into a scratch value: json.Unmarshal can fill fields before it
+		// reports a syntax or type error, and a malformed map must not leave a
+		// half-populated view that callers then act on.
+		var caps ServerCapabilities
+		if err := json.Unmarshal(result.Capabilities, &caps); err == nil {
+			c.serverCaps = caps
+		}
 	}
 
 	note, err := encodeNotification(methodInitialized, nil)
@@ -412,6 +418,9 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 	// by a server whose cursor does not advance. Dropping the repeat keeps
 	// duplicates out of the registry and out of the tool list sent to a provider.
 	seen := map[string]struct{}{}
+	// Cursors are tracked separately from names: a server can cycle through
+	// cursors while returning distinct pages, which would otherwise page forever.
+	seenCursors := map[string]struct{}{}
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -427,11 +436,15 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 			seen[tool.Name] = struct{}{}
 			all = append(all, tool)
 		}
-		if res.NextCursor == "" || res.NextCursor == cursor {
-			// A server that returns the same non-empty cursor forever would loop
-			// until ctx cancellation; stop when the cursor fails to advance.
+		if res.NextCursor == "" {
 			break
 		}
+		if _, ok := seenCursors[res.NextCursor]; ok {
+			// A cycle that never returns to empty would page forever. Stop with
+			// what has been collected.
+			break
+		}
+		seenCursors[res.NextCursor] = struct{}{}
 		cursor = res.NextCursor
 	}
 	return all, nil

@@ -115,6 +115,24 @@ func TestCachedClient_ReturnsCopy(t *testing.T) {
 	}
 }
 
+func TestCachedClient_ReturnsIndependentUsageCost(t *testing.T) {
+	cost := 1.0
+	client := NewCachedClient(NewMockLLM(WithMockGenerateResponse(&Response{Content: "ok", Usage: Usage{Cost: &cost}})))
+	msgs := []Message{{Role: RoleUser, Content: "hi"}}
+	first, err := client.GenerateContent(context.Background(), msgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*first.Usage.Cost = 999
+	hit, err := client.GenerateContent(context.Background(), msgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hit.Usage.Cost == nil || *hit.Usage.Cost != 1 {
+		t.Fatalf("cached cost = %v, want 1", hit.Usage.Cost)
+	}
+}
+
 // TestCachedClient_ConcurrentHitsIsolated exercises the -race detector: many
 // goroutines take the same cache hit and mutate their returned copy's reference
 // fields. If Get handed back aliased slices/maps, these mutations would race.
@@ -158,7 +176,6 @@ func TestDefaultCacheKey_CoversAllOutputAffectingOptions(t *testing.T) {
 	// CallOptions fields intentionally excluded from the key: they change cost,
 	// latency, transport, or observability, never the model's output.
 	excluded := map[string]bool{
-		"Cache":             true, // prompt-cache directive: same output, cheaper/faster
 		"EstimateTokens":    true, // post-hoc token counting
 		"StreamBufferSize":  true, // streaming transport (Stream is not cached)
 		"StreamSendTimeout": true, // streaming transport
@@ -223,6 +240,21 @@ func TestMemoryResponseCache_TTLExpiry(t *testing.T) {
 	}
 	if cache.Len() != 0 {
 		t.Errorf("expired entry not evicted on Get: Len=%d", cache.Len())
+	}
+}
+
+// The expiry instant is already outside the entry's lifetime, so a Get exactly
+// at it must miss rather than serve a response one instant past its TTL.
+func TestMemoryResponseCache_ExpiryInstantIsAMiss(t *testing.T) {
+	cache := NewMemoryResponseCache(time.Minute, 0)
+	base := time.Unix(0, 0)
+	cache.now = func() time.Time { return base }
+	ctx := context.Background()
+	cache.Set(ctx, "k", &Response{Content: "v"})
+
+	cache.now = func() time.Time { return base.Add(time.Minute) }
+	if _, ok := cache.Get(ctx, "k"); ok {
+		t.Error("expected miss exactly at the expiry instant")
 	}
 }
 

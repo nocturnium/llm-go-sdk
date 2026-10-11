@@ -80,7 +80,7 @@ func (a *MediaAsset) Fetch(ctx context.Context, c *http.Client) ([]byte, error) 
 // FetchWithOptions is Fetch with explicit HTTP and private-IP opt-outs.
 // The supplied client is copied before installing SDK security policies.
 func (a *MediaAsset) FetchWithOptions(ctx context.Context, c *http.Client, opts MediaFetchOptions) ([]byte, error) {
-	if len(a.Data) > 0 {
+	if a.Data != nil {
 		return a.Data, nil
 	}
 	if !a.ExpiresAt.IsZero() && !a.ExpiresAt.After(time.Now()) {

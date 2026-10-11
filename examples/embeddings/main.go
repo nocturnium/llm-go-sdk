@@ -12,6 +12,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -41,8 +42,7 @@ func main() {
 
 	fmt.Printf("Query: %q\n", query)
 	fmt.Printf("Vector dimensions: %d\n", len(vector))
-	fmt.Printf("First 5 values: [%.4f, %.4f, %.4f, %.4f, %.4f...]\n\n",
-		vector[0], vector[1], vector[2], vector[3], vector[4])
+	printFirstValues(vector)
 
 	// Example 2: Embed multiple documents
 	fmt.Println("=== Document Embeddings ===")
@@ -87,7 +87,11 @@ func main() {
 		// Some models don't support dimension reduction
 		fmt.Printf("Note: Dimension reduction may not be supported: %v\n", err)
 	} else {
-		fmt.Printf("Embedding dimensions: %d\n", len(resp.Embeddings[0].Vector))
+		if len(resp.Embeddings) > 0 {
+			fmt.Printf("Embedding dimensions: %d\n", len(resp.Embeddings[0].Vector))
+		} else {
+			fmt.Println("Embedding response contained no vectors")
+		}
 		fmt.Printf("Tokens used: %d\n", resp.Usage.PromptTokens)
 	}
 
@@ -110,6 +114,20 @@ func main() {
 	for _, emb := range resp.Embeddings {
 		fmt.Printf("  Index %d: %d dimensions\n", emb.Index, len(emb.Vector))
 	}
+}
+
+// printFirstValues prints up to the first five components of a vector. A
+// provider can return fewer than five dimensions, so the slice must be bounded.
+func printFirstValues(vector []float32) {
+	n := len(vector)
+	if n > 5 {
+		n = 5
+	}
+	values := make([]string, 0, n)
+	for _, v := range vector[:n] {
+		values = append(values, fmt.Sprintf("%.4f", v))
+	}
+	fmt.Printf("First %d values: [%s]\n\n", n, strings.Join(values, ", "))
 }
 
 // cosineSimilarity calculates the cosine similarity between two vectors.

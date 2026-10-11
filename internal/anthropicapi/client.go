@@ -82,7 +82,7 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("create message", err)
 	}
 
 	return &response, nil
@@ -90,18 +90,22 @@ func (c *Client) CreateMessage(ctx context.Context, req *MessagesRequest) (*Mess
 
 // CreateMessageStream sends a streaming message request.
 func (c *Client) CreateMessageStream(ctx context.Context, req *MessagesRequest) (*StreamReader, error) {
-	req.Stream = true
+	if req == nil {
+		return nil, WrapError("create message stream", errors.New("request is required"))
+	}
+	request := *req
+	request.Stream = true
 	headers := c.getHeaders()
 
 	body, err := c.httpClient.DoStream(ctx, httpclient.Request{
 		Method:  http.MethodPost,
 		URL:     c.baseURL + "/messages",
 		Headers: headers,
-		Body:    req,
+		Body:    &request,
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("create message stream", err)
 	}
 
 	return &StreamReader{
@@ -266,7 +270,7 @@ func BuildToolResultMessage(toolUseID, content string, isError bool) Message {
 			{
 				Type:      "tool_result",
 				ToolUseID: toolUseID,
-				Content:   content,
+				Content:   &ToolResultContent{Text: content},
 				IsError:   isError,
 			},
 		},
@@ -286,7 +290,7 @@ func ExtractTextContent(content []ContentPart) string {
 
 // IsEndOfStream checks if an event signals end of stream.
 func IsEndOfStream(event *StreamEvent) bool {
-	return event.Type == eventMessageStop
+	return event != nil && event.Type == eventMessageStop
 }
 
 // IsStreamError checks if there was a streaming error.
@@ -326,7 +330,7 @@ func (c *Client) ListModels(ctx context.Context, params *ModelsListParams) (*Mod
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("list models", err)
 	}
 
 	return &response, nil
@@ -346,7 +350,7 @@ func (c *Client) GetModel(ctx context.Context, modelID string) (*ModelInfo, erro
 	}, &response)
 
 	if err != nil {
-		return nil, err
+		return nil, WrapError("get model", err)
 	}
 
 	return &response, nil

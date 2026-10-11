@@ -362,6 +362,16 @@ func copyModelInfo(info *llms.ModelInfo) *llms.ModelInfo {
 		result.Types = make([]llms.ModelType, len(info.Types))
 		copy(result.Types, info.Types)
 	}
+	// Pricing is a pointer into the shared model index; a shallow copy would let
+	// one caller's mutation change what every later ModelInfo call reports.
+	if info.Pricing != nil {
+		pricing := *info.Pricing
+		if len(info.Pricing.Tiers) > 0 {
+			pricing.Tiers = make([]llms.PricingTier, len(info.Pricing.Tiers))
+			copy(pricing.Tiers, info.Pricing.Tiers)
+		}
+		result.Pricing = &pricing
+	}
 	return &result
 }
 

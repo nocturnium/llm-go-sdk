@@ -8,7 +8,6 @@ import (
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -140,11 +139,9 @@ func TestNewLangfuseOTelMiddleware_WithOptions(t *testing.T) {
 
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	reader := metric.NewManualReader()
 	meterProvider := metric.NewMeterProvider(metric.WithReader(reader))
-	otel.SetMeterProvider(meterProvider)
 
 	costTracker := llms.NewCostTracker()
 
@@ -182,7 +179,6 @@ func TestNewLangfuseOTelMiddleware_WithOptions(t *testing.T) {
 func TestLangfuseOTelMiddleware_Call(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -220,7 +216,6 @@ func TestLangfuseOTelMiddleware_Call(t *testing.T) {
 func TestLangfuseOTelMiddleware_Call_Error(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	expectedErr := errors.New("call failed")
 	mock := &mockLangfuseLLM{
@@ -249,7 +244,6 @@ func TestLangfuseOTelMiddleware_Call_Error(t *testing.T) {
 func TestLangfuseOTelMiddleware_GenerateContent(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -296,7 +290,7 @@ func TestLangfuseOTelMiddleware_GenerateContent(t *testing.T) {
 func TestLangfuseOTelMiddleware_GenerateContent_WithTraceContext(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -306,7 +300,7 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithTraceContext(t *testing.T) {
 		},
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock, WithLangfuseTracer(tracer))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -365,7 +359,7 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithTraceContext(t *testing.T) {
 func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -375,7 +369,7 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 		},
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock, WithLangfuseTracer(tracer))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -447,7 +441,7 @@ func TestLangfuseOTelMiddleware_GenerateContent_WithCallOptions(t *testing.T) {
 func TestLangfuseOTelMiddleware_GenerateContent_Error(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
 	expectedErr := errors.New("generation failed")
 	mock := &mockLangfuseLLM{
@@ -456,7 +450,7 @@ func TestLangfuseOTelMiddleware_GenerateContent_Error(t *testing.T) {
 		genErr:   expectedErr,
 	}
 
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock, WithLangfuseTracer(tracer))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -475,7 +469,6 @@ func TestLangfuseOTelMiddleware_GenerateContent_Error(t *testing.T) {
 func TestLangfuseOTelMiddleware_Stream(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -546,7 +539,6 @@ func TestLangfuseOTelMiddleware_Stream(t *testing.T) {
 func TestLangfuseOTelMiddleware_Stream_Error(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	expectedErr := errors.New("stream failed")
 	mock := &mockLangfuseLLM{
@@ -578,7 +570,6 @@ func TestLangfuseOTelMiddleware_Stream_Error(t *testing.T) {
 func TestLangfuseOTelMiddleware_Stream_WithToolCalls(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -642,7 +633,6 @@ func TestLangfuseOTelMiddleware_Stream_WithToolCalls(t *testing.T) {
 func TestLangfuseOTelMiddleware_Stream_ChunkError(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -765,7 +755,7 @@ func TestLangfuseOTelMiddleware_Unwrap(t *testing.T) {
 func TestLangfuseOTelMiddleware_WithCostTracker(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -783,6 +773,7 @@ func TestLangfuseOTelMiddleware_WithCostTracker(t *testing.T) {
 	costTracker := llms.NewCostTracker()
 
 	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracer),
 		WithLangfuseCostTracker(costTracker),
 	)
 	if err != nil {
@@ -851,7 +842,7 @@ func TestLangfuseOTelMiddleware_CostUsesTrackerPricingWithCacheTokens(t *testing
 func TestLangfuseOTelMiddleware_DisabledCapture(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
+	tracer := tracerProvider.Tracer(LangfuseInstrumentationName)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
@@ -860,6 +851,7 @@ func TestLangfuseOTelMiddleware_DisabledCapture(t *testing.T) {
 	}
 
 	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracer),
 		WithLangfuseInputCapture(false, 0),
 		WithLangfuseOutputCapture(false, 0),
 	)
@@ -910,14 +902,15 @@ func TestLangfuseOTelMiddleware_CaptureOffByDefault(t *testing.T) {
 func TestLangfuseOTelMiddleware_ResponseModelFollowsOverride(t *testing.T) {
 	spanRecorder := tracetest.NewSpanRecorder()
 	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
-	otel.SetTracerProvider(tracerProvider)
 
 	mock := &mockLangfuseLLM{
 		provider: llms.ProviderOpenAI,
 		model:    "gpt-4",
 		genResp:  &llms.Response{Content: "ok"},
 	}
-	middleware, err := NewLangfuseOTelMiddleware(mock)
+	middleware, err := NewLangfuseOTelMiddleware(mock,
+		WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)),
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -944,5 +937,40 @@ func TestLangfuseOTelMiddleware_ResponseModelFollowsOverride(t *testing.T) {
 	}
 	if request != "gpt-4o-mini" || response != "gpt-4o-mini" {
 		t.Errorf("request model = %q, response model = %q, want both %q", request, response, "gpt-4o-mini")
+	}
+}
+
+// Some providers report prompt and completion tokens but leave the total at
+// zero; the usage attributes must still be recorded.
+func TestLangfuseOTelMiddleware_UsageWithoutTotalIsRecorded(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	mock := &mockLangfuseLLM{
+		provider: llms.ProviderOpenAI,
+		model:    "gpt-4o",
+		genResp:  &llms.Response{Content: "ok", Usage: llms.Usage{PromptTokens: 12, CompletionTokens: 5}},
+	}
+	middleware, err := NewLangfuseOTelMiddleware(mock, WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}}); err != nil {
+		t.Fatal(err)
+	}
+	spans := spanRecorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+	var prompt, completion int64 = -1, -1
+	for _, a := range spans[0].Attributes() {
+		switch string(a.Key) {
+		case string(keyGenAIUsagePromptTokens):
+			prompt = a.Value.AsInt64()
+		case string(keyGenAIUsageCompletionTokens):
+			completion = a.Value.AsInt64()
+		}
+	}
+	if prompt != 12 || completion != 5 {
+		t.Errorf("usage attributes prompt=%d completion=%d, want 12 and 5", prompt, completion)
 	}
 }

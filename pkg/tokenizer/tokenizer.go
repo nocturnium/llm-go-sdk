@@ -28,8 +28,11 @@ import (
 )
 
 // offlineOnce installs the embedded (offline) BPE loader exactly once. tiktoken's
-// loader is process-global, so we set it lazily on first use rather than in an
-// init() to avoid clobbering a loader a caller may have set deliberately.
+// loader is process-global and has no getter, so this package cannot tell a
+// caller-installed loader apart from the default; installing the offline loader
+// here is what makes the documented no-network guarantee true. It is set lazily
+// on first use rather than in init() so a program that never touches this package
+// keeps whatever loader it configured.
 var offlineOnce sync.Once
 
 func useOfflineLoader() {

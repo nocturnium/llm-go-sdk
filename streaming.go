@@ -115,6 +115,9 @@ func (s *StreamSender) Send(chunk StreamChunk) SendResult {
 		return SendTimeout
 	}
 	chunk = s.stamp(chunk)
+	if err := s.ctx.Err(); err != nil {
+		return SendContextCanceled
+	}
 
 	// Fast path: buffered stream channels almost always have room, so avoid
 	// allocating a timer unless the send would block.
@@ -310,7 +313,11 @@ func (s *StreamSender) DeliverTerminal(chunk StreamChunk) {
 	select {
 	case s.chunks <- chunk:
 	case <-timer.C:
-		// Consumer has stopped reading entirely; abandon to avoid a leak.
+		// Consumer has stopped reading entirely; abandon to avoid a leak. Re-arm
+		// the guard so a later EnsureTerminal/DeliverTerminal call can still try:
+		// the chunk was not delivered, so recording it as sent would silently
+		// drop the terminal signal the consumer is promised.
+		s.terminalSent.Store(false)
 	}
 }
 
@@ -322,6 +329,9 @@ func (s *StreamSender) TimedOut() bool {
 // GetBufferSize returns the appropriate buffer size based on options.
 // Returns the default (100) if the configured value is 0 or negative.
 func GetBufferSize(opts *CallOptions) int {
+	if opts == nil {
+		return 100 // default
+	}
 	if opts.StreamBufferSize > 0 {
 		return opts.StreamBufferSize
 	}
@@ -333,6 +343,9 @@ func GetBufferSize(opts *CallOptions) int {
 // 0 or negative. This aligns with NewStreamSender's behavior which always uses a
 // minimum timeout.
 func GetSendTimeout(opts *CallOptions) time.Duration {
+	if opts == nil {
+		return DefaultStreamSendTimeout
+	}
 	if opts.StreamSendTimeout > 0 {
 		return opts.StreamSendTimeout
 	}
@@ -469,7 +482,7 @@ func StreamText(stream <-chan StreamChunk) (string, error) {
 func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOptions, processor StreamProcessor) <-chan StreamChunk {
 	bufferSize := GetBufferSize(opts)
 	wrapped := make(chan StreamChunk, bufferSize)
-	sender := NewStreamSender(ctx, wrapped, opts.StreamSendTimeout)
+	sender := NewStreamSender(ctx, wrapped, GetSendTimeout(opts))
 
 	go func() {
 		defer close(wrapped)
@@ -477,7 +490,18 @@ func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOption
 		// consumer observed a terminal chunk rather than a silent close. The
 		// processor sees the synthesized chunk too.
 		defer func() { ensureTerminalThroughProcessor(sender, processor) }()
-		for chunk := range source {
+		for {
+			chunk, ok, canceled := receiveStreamChunk(ctx, source)
+			if canceled {
+				// Drain the still-open source so its producer is released, then
+				// return; the deferred terminal helper reports the cancellation
+				// through the processor so finalizers observe it.
+				DrainStream(source)
+				return
+			}
+			if !ok {
+				return
+			}
 			// Apply processor if provided
 			if processor != nil {
 				chunk = processor(chunk)
@@ -495,6 +519,31 @@ func WrapStream(ctx context.Context, source <-chan StreamChunk, opts *CallOption
 	}()
 
 	return wrapped
+}
+
+// receiveStreamChunk receives one chunk from source, returning ok=false when
+// the source is closed and canceled=true when ctx ended first. A ready chunk is
+// preferred over cancellation so a stream that completed concurrently with the
+// deadline still delivers its final usage rather than losing it.
+func receiveStreamChunk(ctx context.Context, source <-chan StreamChunk) (chunk StreamChunk, ok bool, canceled bool) {
+	select {
+	case chunk, ok = <-source:
+		return chunk, ok, false
+	default:
+	}
+	select {
+	case chunk, ok = <-source:
+		return chunk, ok, false
+	case <-ctx.Done():
+		// Re-check the source so a chunk that became ready at the same moment as
+		// cancellation is not dropped.
+		select {
+		case chunk, ok = <-source:
+			return chunk, ok, false
+		default:
+			return StreamChunk{}, false, true
+		}
+	}
 }
 
 // deliverTerminalForContext forwards a terminal chunk derived from the context's
@@ -536,7 +585,7 @@ func deliverTerminalForContext(ctx context.Context, sender *StreamSender) {
 func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opts *CallOptions, processor StreamProcessor, finalizer func()) <-chan StreamChunk {
 	bufferSize := GetBufferSize(opts)
 	wrapped := make(chan StreamChunk, bufferSize)
-	sender := NewStreamSender(ctx, wrapped, opts.StreamSendTimeout)
+	sender := NewStreamSender(ctx, wrapped, GetSendTimeout(opts))
 
 	go func() {
 		defer close(wrapped)
@@ -552,7 +601,15 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 		// stream as the failure it is rather than as a clean finish.
 		defer func() { ensureTerminalThroughProcessor(sender, processor) }()
 
-		for chunk := range source {
+		for {
+			chunk, ok, canceled := receiveStreamChunk(ctx, source)
+			if canceled {
+				DrainStream(source)
+				return
+			}
+			if !ok {
+				return
+			}
 			// Apply processor if provided
 			if processor != nil {
 				chunk = processor(chunk)

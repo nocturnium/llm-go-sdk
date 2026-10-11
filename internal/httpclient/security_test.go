@@ -216,6 +216,18 @@ func TestValidateURL_ObfuscatedIPv4Literals(t *testing.T) {
 	}
 }
 
+// TestValidateURL_TrailingDotHost pins that the DNS root label cannot smuggle a
+// blocked hostname past the suffix comparisons: "localhost." resolves exactly
+// like "localhost".
+func TestValidateURL_TrailingDotHost(t *testing.T) {
+	opts := DefaultURLValidationOptions()
+	for _, host := range []string{"localhost.", "metadata.google.internal.", "127.0.0.1."} {
+		if err := ValidateURL("https://"+host+"/api", opts); err == nil {
+			t.Errorf("expected %q to be blocked", host)
+		}
+	}
+}
+
 func TestValidateNotPrivateIP_NAT64EmbeddedPrivateIPv4(t *testing.T) {
 	tests := []struct {
 		name string
@@ -240,6 +252,23 @@ func TestValidateNotPrivateIP_NAT64EmbeddedPrivateIPv4(t *testing.T) {
 
 	if err := validateNotPrivateIP(net.ParseIP("64:ff9b::808:808")); err != nil {
 		t.Fatalf("expected NAT64-embedded public IPv4 to be allowed, got %v", err)
+	}
+}
+
+func TestValidateNotPrivateIP_IPv4MappedMetadata(t *testing.T) {
+	for _, ip := range []string{
+		"::ffff:169.254.169.254",
+		"::ffff:127.0.0.1",
+		"::ffff:10.0.0.1",
+		"::ffff:0.0.0.0",
+	} {
+		if err := validateNotPrivateIP(net.ParseIP(ip)); err == nil {
+			t.Errorf("expected IPv4-mapped address %s to be blocked", ip)
+		}
+	}
+
+	if err := validateNotPrivateIP(net.ParseIP("::ffff:8.8.8.8")); err != nil {
+		t.Fatalf("expected IPv4-mapped public address to be allowed, got %v", err)
 	}
 }
 

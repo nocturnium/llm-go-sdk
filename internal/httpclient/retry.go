@@ -89,6 +89,21 @@ func (p *RetryPolicy) GetDelay(attempt int) time.Duration {
 	if delay < 0 {
 		delay = 0
 	}
+	// A delay within (MaxInt64, 2^63] rounds up to exactly 2^63 as a float and
+	// would convert to a negative time.Duration. Clamp against the largest
+	// representable positive duration before converting.
+	if delay >= float64(math.MaxInt64) {
+		// float64 cannot represent MaxInt64 exactly, so the rounded value can sit
+		// one nanosecond above a MaxDelay that is itself near the limit.
+		if p.MaxDelay > 0 && p.MaxDelay < time.Duration(math.MaxInt64) {
+			return p.MaxDelay
+		}
+		return time.Duration(math.MaxInt64)
+	}
 
-	return time.Duration(delay)
+	d := time.Duration(delay)
+	if p.MaxDelay > 0 && d > p.MaxDelay {
+		d = p.MaxDelay
+	}
+	return d
 }

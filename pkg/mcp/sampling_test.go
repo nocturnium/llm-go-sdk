@@ -263,6 +263,33 @@ func TestSamplingHostOptionsOverrideTheServer(t *testing.T) {
 	}
 }
 
+// TestSamplingApproverCapBeatsHostOptions pins that an approver's explicit cap
+// is reapplied after host call options. Otherwise a host WithMaxTokens would be
+// the arithmetic bypass the approval was supposed to prevent.
+func TestSamplingApproverCapBeatsHostOptions(t *testing.T) {
+	m := newMockTransport()
+	stub := &samplingStubLLM{t: t}
+
+	_ = mustClient(t, m,
+		WithSamplingLLM(stub, llms.WithMaxTokens(4000)),
+		WithSamplingApprover(func(context.Context, SamplingRequest) SamplingApproval {
+			return SamplingApproval{Approved: true, MaxTokens: 25}
+		}),
+	)
+
+	params := validSamplingParams()
+	params["maxTokens"] = 100
+	m.emitRequest(requestFrame("1", methodSamplingCreateMessage, params))
+	awaitResponses(t, m, 1)
+
+	if stub.gotOptions == nil || stub.gotOptions.MaxTokens == nil {
+		t.Fatal("the LLM was never called with a token budget")
+	}
+	if got := *stub.gotOptions.MaxTokens; got != 25 {
+		t.Errorf("MaxTokens = %d, want 25 (the approver cap must win)", got)
+	}
+}
+
 // TestSamplingIgnoresModelPreferences pins that the server's model hints are not
 // honored. Model choice belongs to the party paying for the tokens.
 func TestSamplingIgnoresModelPreferences(t *testing.T) {

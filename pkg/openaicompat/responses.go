@@ -72,7 +72,7 @@ func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	for k, v := range r.extraBody {
-		if consumedExtraBodyKeys[k] {
+		if consumedExtraBodyKeys[k] || responsesTypedFieldKeys[k] {
 			continue
 		}
 		if _, exists := m[k]; exists {
@@ -82,6 +82,8 @@ func (r *ResponsesRequest) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(m)
 }
+
+var responsesTypedFieldKeys = map[string]bool{"stream": true, "model": true, "input": true, "instructions": true, "tools": true, "tool_choice": true, "temperature": true, "top_p": true, "max_output_tokens": true}
 
 // ResponsesInputItem is one item in the Responses `input` array. A single struct
 // represents all input item kinds (message, function_call, function_call_output);
@@ -373,7 +375,10 @@ func convertMessagesToResponsesInput(messages []llms.Message) ([]ResponsesInputI
 			// Reasoning items must precede the item they belong to, and the API
 			// rejects an orphaned one. Only replay them when this turn also emits a
 			// following item (non-empty message content or at least one tool call).
-			parts := responsesMessageContent(msg, "output_text")
+			// Assistant history is message *input*, so its text parts use the
+			// input content type. "output_text" is only valid on response output;
+			// the API rejects a replayed assistant turn that sends it.
+			parts := responsesMessageContent(msg, "input_text")
 			if len(parts) > 0 || len(msg.ToolCalls) > 0 {
 				items = append(items, reasoningInputItems(msg)...)
 			}
@@ -611,6 +616,10 @@ func responsesFinishReason(resp *ResponsesResponse, hasToolCalls bool) llms.Fini
 	if resp.Status == "incomplete" && resp.IncompleteDetails != nil &&
 		resp.IncompleteDetails.Reason == "max_output_tokens" {
 		return llms.FinishReasonLength
+	}
+	if resp.Status == "incomplete" && resp.IncompleteDetails != nil &&
+		resp.IncompleteDetails.Reason == "content_filter" {
+		return llms.FinishReasonContentFilter
 	}
 	return llms.FinishReasonStop
 }

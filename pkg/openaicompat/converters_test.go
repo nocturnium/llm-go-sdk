@@ -965,6 +965,16 @@ func TestConvertEmbeddingResponse(t *testing.T) {
 	}
 }
 
+func TestConvertEmbeddingResponse_ZeroUsage(t *testing.T) {
+	resp := &EmbeddingResponse{
+		Data: []EmbeddingData{{Index: 0, Embedding: []float32{0.1}, Object: "embedding"}},
+	}
+	result := ConvertEmbeddingResponse(resp)
+	if result.Usage.PromptTokens != 0 || result.Usage.TotalTokens != 0 {
+		t.Fatalf("usage = %+v, want zero", result.Usage)
+	}
+}
+
 func TestBuildChatRequest(t *testing.T) {
 	messages := []llms.Message{
 		{Role: llms.RoleUser, Content: "Hello"},
@@ -1105,6 +1115,26 @@ func TestProcessStream_ContextCancelUnblocksRead(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("ProcessStream did not exit after context cancellation")
+	}
+}
+
+// A nil context must not reach the reader-unblock goroutine: ctx.Done() on a
+// nil interface panics there, where the parent recovery defer cannot catch it.
+func TestProcessStream_NilContextReturnsTerminalError(t *testing.T) {
+	stream := testSSEStream(t, StreamChunk{Choices: []Choice{{Delta: &ChatMessage{ContentValue: "hi"}}}})
+	chunks := make(chan llms.StreamChunk, 2)
+	sender := llms.NewStreamSender(context.Background(), chunks, time.Second)
+
+	//lint:ignore SA1012 the test deliberately passes a nil context
+	ProcessStream(nil, stream, chunks, sender, "test", nil) //nolint:staticcheck // exercises nil-context handling
+
+	select {
+	case chunk := <-chunks:
+		if chunk.Error == nil {
+			t.Fatalf("nil context produced %+v, want a terminal error", chunk)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ProcessStream with nil context produced no terminal chunk")
 	}
 }
 

@@ -130,6 +130,21 @@ func TestMediaTranscription(t *testing.T) {
 	}
 }
 
+// speaker_id is JSON, so an escaped character in the label must survive. A
+// naive quote trim would leave the backslash escape in place.
+func TestMediaTranscription_SpeakerIDEscapes(t *testing.T) {
+	c := mediaTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"text":"hi","duration":1,"words":[{"word":"hi","start":0,"end":1,"speaker_id":"A\"1"}]}`)
+	})
+	out, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("RIFF"), MIMEType: "audio/wav"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Words) != 1 || out.Words[0].Speaker != `A"1` {
+		t.Fatalf("speaker = %q, want %q", out.Words[0].Speaker, `A"1`)
+	}
+}
+
 func TestMediaTranscription_Validation(t *testing.T) {
 	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP") })
 	for _, input := range []llms.MediaInput{{}, {FileID: "id"}, {Data: []byte("x"), MIMEType: "bad"}} {

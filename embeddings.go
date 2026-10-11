@@ -1,8 +1,14 @@
 package llms
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 )
 
 // Common embeddings errors.
@@ -35,8 +41,8 @@ func EmbedQuery(ctx context.Context, e Embedder, text string, options ...EmbedOp
 	if err != nil {
 		return nil, err
 	}
-	if len(resp.Embeddings) == 0 {
-		return nil, ErrEmptyInput
+	if resp == nil || len(resp.Embeddings) == 0 {
+		return nil, fmt.Errorf("embed query: %w", ErrIncompleteResponse)
 	}
 	return resp.Embeddings[0].Vector, nil
 }
@@ -49,6 +55,12 @@ func EmbedDocuments(ctx context.Context, e Embedder, texts []string, options ...
 		return nil, err
 	}
 
+	if resp == nil {
+		return nil, fmt.Errorf("embed documents: %w", ErrIncompleteResponse)
+	}
+	if len(resp.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("embed documents: got %d embeddings for %d inputs: %w", len(resp.Embeddings), len(texts), ErrIncompleteResponse)
+	}
 	result := make([][]float32, len(resp.Embeddings))
 	for i, emb := range resp.Embeddings {
 		result[i] = emb.Vector
@@ -83,6 +95,30 @@ type EmbeddingResponse struct {
 	Usage EmbeddingUsage `json:"usage"`
 }
 
+// UnmarshalJSON accepts both the OpenAI-compatible `data` array and the
+// `embeddings` key. The standard wire form uses `data`, but some providers and
+// hand-written fixtures use `embeddings`; decoding only one would silently
+// leave Embeddings empty for the other.
+func (r *EmbeddingResponse) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Data       []Embedding    `json:"data"`
+		Embeddings []Embedding    `json:"embeddings"`
+		Model      string         `json:"model"`
+		Usage      EmbeddingUsage `json:"usage"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Model = raw.Model
+	r.Usage = raw.Usage
+	if raw.Data != nil {
+		r.Embeddings = raw.Data
+	} else {
+		r.Embeddings = raw.Embeddings
+	}
+	return nil
+}
+
 // Embedding represents a single embedding vector.
 type Embedding struct {
 	// Index is the index of the input text this embedding corresponds to
@@ -93,6 +129,62 @@ type Embedding struct {
 
 	// Object type (usually "embedding")
 	Object string `json:"object,omitempty"`
+}
+
+// UnmarshalJSON accepts both the default float-array form and the base64 string
+// form that WithEncodingFormat("base64") requests. The base64 payload is the
+// little-endian IEEE-754 float32 sequence OpenAI documents, so decoding only the
+// array form would fail every response for a caller who asked for base64.
+func (e *Embedding) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Index     int             `json:"index"`
+		Embedding json.RawMessage `json:"embedding"`
+		Object    string          `json:"object"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	vector, err := DecodeEmbeddingVector(raw.Embedding)
+	if err != nil {
+		return err
+	}
+	e.Index = raw.Index
+	e.Vector = vector
+	e.Object = raw.Object
+	return nil
+}
+
+// DecodeEmbeddingVector decodes an embedding value that may be either a JSON
+// array of floats or a base64 string of little-endian float32s. It is exported
+// so OpenAI-compatible provider wire types can share the same tolerant decode.
+func DecodeEmbeddingVector(raw json.RawMessage) ([]float32, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return nil, nil
+	}
+	if trimmed[0] != '"' {
+		var vector []float32
+		if err := json.Unmarshal(trimmed, &vector); err != nil {
+			return nil, fmt.Errorf("embedding: decode float array: %w", err)
+		}
+		return vector, nil
+	}
+	var encoded string
+	if err := json.Unmarshal(trimmed, &encoded); err != nil {
+		return nil, fmt.Errorf("embedding: decode base64 string: %w", err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("embedding: decode base64 payload: %w", err)
+	}
+	if len(decoded)%4 != 0 {
+		return nil, fmt.Errorf("embedding: base64 payload length %d is not a multiple of 4", len(decoded))
+	}
+	vector := make([]float32, len(decoded)/4)
+	for i := range vector {
+		vector[i] = math.Float32frombits(binary.LittleEndian.Uint32(decoded[i*4:]))
+	}
+	return vector, nil
 }
 
 // EmbeddingUsage contains token usage for embeddings.
@@ -132,6 +224,9 @@ type EmbedOption func(*EmbedOptions)
 func ApplyEmbedOptions(options ...EmbedOption) *EmbedOptions {
 	opts := &EmbedOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts
@@ -273,6 +368,9 @@ type RerankOption func(*RerankOptions)
 func ApplyRerankOptions(options ...RerankOption) *RerankOptions {
 	opts := &RerankOptions{}
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		opt(opts)
 	}
 	return opts

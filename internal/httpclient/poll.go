@@ -33,8 +33,10 @@ var ErrPollTimeout = errors.New("poll timeout")
 // Poll calls fn immediately, then with bounded exponential backoff until done.
 // Callback errors are returned unchanged. Cancellation returns the caller's
 // context error; expiry of Policy.Timeout returns ErrPollTimeout. The callback
-// must honor its context. Successful completion takes precedence over a deadline
-// reached during that callback. A zero policy uses DefaultPollPolicy.
+// must honor its context. Successful completion takes precedence over
+// Policy.Timeout expiring during that callback; the caller's own cancellation or
+// deadline does not, so an abandoned operation never reports success. A zero
+// policy uses DefaultPollPolicy.
 func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done bool, err error)) error {
 	p = normalizePollPolicy(p)
 	parent := ctx
@@ -45,18 +47,31 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 	}
 	delay := p.Initial
 	for {
-		if err := pollContextError(parent, ctx); err != nil {
+		if err := parent.Err(); err != nil {
 			return err
 		}
 		done, err := fn(ctx)
 		if done && err == nil {
-			return nil
+			// A callback that ignores its context can report success after the
+			// caller canceled. Caller cancellation wins: an abandoned operation
+			// must not look successful just because a late callback returned.
+			return parent.Err()
+		}
+		if err != nil {
+			// A callback that returns the context error it observed is reporting
+			// the policy deadline when that context actually expired; preserve
+			// ErrPollTimeout for that case. Otherwise the callback error is the
+			// operation's real cause and is returned unchanged, even when it is
+			// context.Canceled or context.DeadlineExceeded.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				if ctxErr := pollContextError(parent, ctx); ctxErr != nil {
+					return ctxErr
+				}
+			}
+			return err
 		}
 		if ctxErr := pollContextError(parent, ctx); ctxErr != nil {
 			return ctxErr
-		}
-		if err != nil {
-			return err
 		}
 		timer := time.NewTimer(pollDelay(delay, p))
 		select {
@@ -65,8 +80,36 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 			return pollContextError(parent, ctx)
 		case <-timer.C:
 		}
-		delay = time.Duration(math.Min(float64(p.Max), float64(delay)*p.Multiplier))
+		delay = growDelay(delay, p.Multiplier, p.Max)
 	}
+}
+
+// maxBackoffDuration is the largest duration a backoff computation may return.
+// A float64 conversion of a value at or above 2^63 wraps to a negative
+// time.Duration, which would make the timer fire immediately and let polling
+// spin instead of respecting the configured maximum. Clamping below 2^63 keeps
+// the conversion well-defined.
+const maxBackoffDuration = time.Duration(math.MaxInt64)
+
+// growDelay multiplies delay by multiplier, saturating at limit. The float
+// product is clamped before the duration conversion so a policy whose Max (or a
+// runaway multiplier) would exceed time.Duration's range cannot overflow to a
+// negative duration.
+func growDelay(delay time.Duration, multiplier float64, limit time.Duration) time.Duration {
+	if limit <= 0 {
+		limit = maxBackoffDuration
+	}
+	if limit > maxBackoffDuration {
+		limit = maxBackoffDuration
+	}
+	next := float64(delay) * multiplier
+	if math.IsNaN(next) || next <= 0 {
+		return delay
+	}
+	if next >= float64(limit) {
+		return limit
+	}
+	return time.Duration(next)
 }
 
 func pollContextError(parent, ctx context.Context) error {
@@ -108,5 +151,13 @@ func pollDelay(delay time.Duration, p PollPolicy) time.Duration {
 	if p.Jitter > 0 {
 		factor += (2*rand.Float64() - 1) * p.Jitter // #nosec G404 -- scheduling jitter, not cryptography
 	}
-	return time.Duration(math.Min(float64(p.Max), float64(delay)*factor))
+	limit := p.Max
+	if limit <= 0 || limit > maxBackoffDuration {
+		limit = maxBackoffDuration
+	}
+	next := float64(delay) * factor
+	if next >= float64(limit) {
+		return limit
+	}
+	return time.Duration(next)
 }

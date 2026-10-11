@@ -24,6 +24,9 @@ const (
 // BuildImageRequest converts image options using model as the default model.
 // The OpenAI wire ignores Seed, AspectRatio, NegativePrompt, and SafetyTolerance.
 func BuildImageRequest(model, prompt string, opts *llms.ImageOptions) *ImageGenerationRequest {
+	if opts == nil {
+		opts = &llms.ImageOptions{}
+	}
 	return &ImageGenerationRequest{Model: effectiveModel(model, opts.Model), Prompt: prompt, N: opts.N, Size: opts.Size, Quality: opts.Quality, OutputFormat: opts.OutputFormat, ExtraBody: opts.Extra}
 }
 
@@ -68,6 +71,9 @@ func tokenMediaUsage(usage *ImageUsage) llms.MediaUsage {
 
 // BuildSpeechRequest converts options with an mp3 container and alloy voice by default.
 func BuildSpeechRequest(model, input string, opts *llms.SpeechOptions) *SpeechRequest {
+	if opts == nil {
+		opts = &llms.SpeechOptions{}
+	}
 	format := opts.Format.Container
 	if format == "" {
 		format = "mp3"
@@ -76,7 +82,7 @@ func BuildSpeechRequest(model, input string, opts *llms.SpeechOptions) *SpeechRe
 	if voice == "" {
 		voice = "alloy"
 	}
-	return &SpeechRequest{Model: effectiveModel(model, opts.Model), Input: input, Voice: voice, Instructions: opts.Instructions, Speed: opts.Speed, ResponseFormat: format}
+	return &SpeechRequest{ExtraBody: opts.Extra, Model: effectiveModel(model, opts.Model), Input: input, Voice: voice, Instructions: opts.Instructions, Speed: opts.Speed, ResponseFormat: format}
 }
 
 // ConvertSpeechResponse attaches format and usage to binary audio. Token usage wins
@@ -118,6 +124,9 @@ func convertSpeechEvent(event SpeechStreamEvent) llms.AudioChunk {
 // BuildTranscriptionRequest converts transcription options; diarization takes
 // precedence over word timestamps when both are requested.
 func BuildTranscriptionRequest(model string, audio llms.MediaInput, opts *llms.TranscribeOptions) *TranscriptionRequest {
+	if opts == nil {
+		opts = &llms.TranscribeOptions{}
+	}
 	req := &TranscriptionRequest{Model: effectiveModel(model, opts.Model), File: audio, Language: opts.Language, Prompt: opts.Prompt, ResponseFormat: "json", ExtraBody: opts.Extra}
 	if opts.Diarize {
 		req.ResponseFormat = transcriptionFormatDiarizedJSON
@@ -168,6 +177,9 @@ func ConvertTranscriptionResponse(resp *TranscriptionResponse, model string) *ll
 // FirstFrame is sent as a URL, data URL, or provider file identifier.
 // The OpenAI wire ignores Audio, LastFrame, ReferenceImages, Seed, and NegativePrompt.
 func BuildVideoRequest(model, prompt string, opts *llms.VideoOptions) *VideoCreateRequest {
+	if opts == nil {
+		opts = &llms.VideoOptions{}
+	}
 	req := &VideoCreateRequest{Model: effectiveModel(model, opts.Model), Prompt: prompt, Size: videoSize(opts.Resolution, opts.AspectRatio)}
 	if opts.DurationSeconds != 0 {
 		req.Seconds = strconv.Itoa(opts.DurationSeconds)
@@ -267,11 +279,14 @@ func videoUsage(secondsText, size string) llms.MediaUsage {
 	if err != nil || seconds <= 0 || math.IsNaN(seconds) || math.IsInf(seconds, 0) {
 		return llms.MediaUsage{}
 	}
-	usage := llms.MediaUsage{Quantity: seconds}
-	if size == videoSize720pLandscape || size == videoSize720pPortrait {
-		usage.Unit = llms.MediaUnitSecond
+	// Only the 720p sizes have a published per-second rate; higher-resolution
+	// results are unpriced. Reporting a quantity with an empty unit would look
+	// like valid billable usage to a caller that inspects Quantity or serializes
+	// the usage, so leave both fields zero when the size has no unit.
+	if size != videoSize720pLandscape && size != videoSize720pPortrait {
+		return llms.MediaUsage{}
 	}
-	return usage
+	return llms.MediaUsage{Unit: llms.MediaUnitSecond, Quantity: seconds}
 }
 
 // ApplyMultipartExtra merges a caller's Extra map into a multipart transcription
@@ -298,6 +313,11 @@ func ApplyMultipartExtra(fields map[string]string, extra map[string]any, reserve
 		}
 		switch typed := value.(type) {
 		case string, bool, int, float64:
+			// A scalar becomes a form field. Writing to a nil map panics, so a
+			// caller passing nil must supply at least an empty map for those.
+			if fields == nil {
+				return nil, fmt.Errorf("multipart extra %q requires a non-nil fields map: %w", key, llms.ErrInvalidParameters)
+			}
 			fields[key] = fmt.Sprint(typed)
 		case []string:
 			for _, item := range typed {

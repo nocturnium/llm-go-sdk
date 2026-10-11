@@ -82,7 +82,8 @@ gitServer.Register(registry)  // mcp.WithNamePrefix("git_")
 You can also discover and call tools without the agent loop:
 
 ```go
-tools, err := server.ListTools(ctx)
+discovered, err := server.ListTools(ctx)
+_ = discovered
 result, err := server.CallTool(ctx, "read_file", json.RawMessage(`{"path":"/data/readme.md"}`))
 fmt.Println(result.Text())
 ```

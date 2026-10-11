@@ -4,6 +4,7 @@ package runpod
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -42,16 +43,18 @@ type Client struct {
 // The endpoint ID is required and can be set via WithEndpointID.
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
+	if options.EndpointID == "" {
+		return nil, ErrMissingEndpointID
+	}
+	if strings.ContainsAny(options.EndpointID, "/?#") {
+		return nil, fmt.Errorf("runpod: invalid endpoint ID %q", options.EndpointID)
+	}
 
 	apiKey, err := llms.RequireAPIKey("runpod", options.APIKey, llms.EnvRunPodAPIKey)
 	if err != nil {
 		return nil, err
 	}
 	options.APIKey = apiKey
-
-	if options.EndpointID == "" {
-		return nil, ErrMissingEndpointID
-	}
 
 	// Build the base URL for OpenAI-compatible API
 	// Format: https://api.runpod.ai/v2/<ENDPOINT_ID>/openai/v1

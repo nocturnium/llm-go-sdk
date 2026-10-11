@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 )
 
@@ -17,6 +18,7 @@ func intPtr(v int) *int { return &v }
 
 // MockLLM is a test double that implements the LLM interface
 type MockLLM struct {
+	mu           sync.RWMutex
 	provider     Provider
 	model        string
 	callResponse string
@@ -114,43 +116,51 @@ func WithMockCapabilities(caps Capabilities) MockLLMOption {
 }
 
 func (m *MockLLM) Call(_ context.Context, prompt string, options ...CallOption) (string, error) {
-	m.callCount++
-	m.lastMessages = []Message{{Role: RoleUser, Content: prompt}}
-	m.lastOptions = ApplyOptions(options...)
-	if m.callError != nil {
-		return "", m.callError
+	m.mu.Lock()
+	m.recordCallLocked([]Message{{Role: RoleUser, Content: prompt}}, options)
+	err := m.callError
+	resp := m.callResponse
+	m.mu.Unlock()
+	if err != nil {
+		return "", err
 	}
-	return m.callResponse, nil
+	return resp, nil
 }
 
 func (m *MockLLM) GenerateContent(_ context.Context, messages []Message, options ...CallOption) (*Response, error) {
-	m.callCount++
-	m.lastMessages = messages
-	m.lastOptions = ApplyOptions(options...)
-	if m.genError != nil {
-		return nil, m.genError
+	m.mu.Lock()
+	m.recordCallLocked(messages, options)
+	genErr := m.genError
+	callErr := m.callError
+	genResponse := m.genResponse
+	callResponse := m.callResponse
+	m.mu.Unlock()
+	if genErr != nil {
+		return nil, genErr
 	}
-	if m.callError != nil {
-		return nil, m.callError
+	if callErr != nil {
+		return nil, callErr
 	}
-	if m.genResponse != nil {
-		return m.genResponse, nil
+	if genResponse != nil {
+		return genResponse, nil
 	}
-	return &Response{Content: m.callResponse}, nil
+	return &Response{Content: callResponse}, nil
 }
 
 func (m *MockLLM) Stream(ctx context.Context, messages []Message, options ...CallOption) (<-chan StreamChunk, error) {
-	m.callCount++
-	m.lastMessages = messages
-	m.lastOptions = ApplyOptions(options...)
-	if m.streamError != nil {
-		return nil, m.streamError
+	m.mu.Lock()
+	m.recordCallLocked(messages, options)
+	err := m.streamError
+	chunks := append([]StreamChunk(nil), m.streamChunks...)
+	m.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
 
-	ch := make(chan StreamChunk, len(m.streamChunks)+1)
+	ch := make(chan StreamChunk, len(chunks)+1)
 	go func() {
 		defer close(ch)
-		for _, chunk := range m.streamChunks {
+		for _, chunk := range chunks {
 			select {
 			case <-ctx.Done():
 				return
@@ -162,37 +172,62 @@ func (m *MockLLM) Stream(ctx context.Context, messages []Message, options ...Cal
 }
 
 func (m *MockLLM) Provider() Provider {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.provider
 }
 
 func (m *MockLLM) Model() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.model
 }
 
 func (m *MockLLM) Capabilities() Capabilities {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.capabilities
 }
 
 // CallCount returns the number of times any method was called
 func (m *MockLLM) CallCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.callCount
 }
 
 // LastMessages returns the last messages passed to any method
 func (m *MockLLM) LastMessages() []Message {
-	return m.lastMessages
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return append([]Message(nil), m.lastMessages...)
 }
 
 // LastOptions returns the last options passed to any method
 func (m *MockLLM) LastOptions() *CallOptions {
-	return m.lastOptions
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.lastOptions == nil {
+		return nil
+	}
+	cloned := *m.lastOptions
+	return &cloned
 }
 
 // Reset resets the call count and last messages
 func (m *MockLLM) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.callCount = 0
 	m.lastMessages = nil
 	m.lastOptions = nil
+}
+
+// recordCallLocked updates call state; the caller must hold m.mu for writing.
+func (m *MockLLM) recordCallLocked(messages []Message, options []CallOption) {
+	m.callCount++
+	m.lastMessages = append([]Message(nil), messages...)
+	m.lastOptions = ApplyOptions(options...)
 }
 
 // Ensure MockLLM implements LLM and CapableProvider

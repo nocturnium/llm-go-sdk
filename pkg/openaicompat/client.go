@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	llms "github.com/nocturnium/llm-go-sdk/v6"
@@ -23,10 +24,36 @@ type Client struct {
 	mediaPaths   MediaCapabilities
 	httpClient   *httpclient.Client
 	baseURL      string
+	embedding    *embeddingRoute
 	apiKey       string
 	headers      map[string]string
 	azureAPIKey  bool   // Use api-key header instead of Authorization
 	azureVersion string // Azure API version (appended to URLs)
+}
+
+// embeddingRoute holds the embedding base URL behind a pointer so copying a
+// Client for per-provider route overrides does not copy a lock.
+type embeddingRoute struct {
+	mu  sync.RWMutex
+	url string
+}
+
+func (r *embeddingRoute) get(fallback string) string {
+	if r == nil {
+		return fallback
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.url == "" {
+		return fallback
+	}
+	return r.url
+}
+
+func (r *embeddingRoute) set(url string) {
+	r.mu.Lock()
+	r.url = url
+	r.mu.Unlock()
 }
 
 // ClientConfig configures the client
@@ -66,6 +93,7 @@ func NewClient(config ClientConfig) *Client {
 		httpClient:   httpClient,
 		mediaPaths:   MediaCapabilities{ImagesPath: config.ImagesPath, ImageEditsPath: config.ImageEditsPath, SpeechPath: config.SpeechPath, TranscriptionsPath: config.TranscriptionsPath, VideosPath: config.VideosPath},
 		baseURL:      config.BaseURL,
+		embedding:    &embeddingRoute{url: config.BaseURL},
 		apiKey:       config.APIKey,
 		headers:      maps.Clone(config.Headers),
 		azureAPIKey:  config.AzureAPIKey,
@@ -138,9 +166,15 @@ func (c *Client) getHeaders() map[string]string {
 
 // buildURL constructs the full URL, appending Azure API version if needed.
 func (c *Client) buildURL(path string) string {
-	fullURL, err := appendPath(c.baseURL, path)
+	return c.buildURLFrom(c.baseURL, path)
+}
+
+// buildURLFrom constructs the full URL from baseURL, appending Azure API
+// version if needed.
+func (c *Client) buildURLFrom(baseURL, path string) string {
+	fullURL, err := appendPath(baseURL, path)
 	if err != nil {
-		fullURL = strings.TrimRight(c.baseURL, "/") + "/" + strings.TrimLeft(path, "/")
+		fullURL = strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(path, "/")
 	}
 	if c.azureVersion == "" {
 		return fullURL
@@ -210,12 +244,13 @@ func (r *StreamReader) Close() error {
 
 // CreateEmbedding sends an embedding request
 func (c *Client) CreateEmbedding(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	baseURL := c.embedding.get(c.baseURL)
 	headers := c.getHeaders()
 	var response EmbeddingResponse
 
 	err := c.httpClient.DoJSON(ctx, httpclient.Request{
 		Method:  http.MethodPost,
-		URL:     c.buildURL("/embeddings"),
+		URL:     c.buildURLFrom(baseURL, "/embeddings"),
 		Headers: headers,
 		Body:    req,
 	}, &response)
@@ -225,6 +260,16 @@ func (c *Client) CreateEmbedding(ctx context.Context, req *EmbeddingRequest) (*E
 	}
 
 	return &response, nil
+}
+
+// SetEmbeddingBaseURL overrides the base URL used for embedding requests. Azure
+// routes embeddings by deployment, so a client may need a different route for
+// embeddings than for chat. Passing an empty value restores the chat base URL.
+func (c *Client) SetEmbeddingBaseURL(baseURL string) {
+	if baseURL == "" {
+		baseURL = c.baseURL
+	}
+	c.embedding.set(baseURL)
 }
 
 // ListModels retrieves the list of available models.
@@ -491,15 +536,17 @@ func (c *Client) CreateTranscription(ctx context.Context, req *TranscriptionRequ
 	var out TranscriptionResponse
 	var raw []byte
 	var target any = &out
+	rawResponse := false
 	switch fields["response_format"] {
 	case contentTypeText, "srt", "vtt":
+		rawResponse = true
 		target = &raw
 	}
 	err = c.httpClient.DoMultipart(ctx, http.MethodPost, c.mediaURL(c.mediaPaths.TranscriptionsPath, "/audio/transcriptions"), fields, files, c.getHeaders(), target)
 	if err != nil {
 		return nil, err
 	}
-	if target == &raw {
+	if rawResponse {
 		out.Text = string(raw)
 	}
 	return &out, nil

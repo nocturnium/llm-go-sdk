@@ -5,6 +5,7 @@ package openaicompat
 // documentation lives in doc.go.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -291,7 +292,7 @@ func (p *StreamErrorPayload) Err() error {
 		return nil
 	}
 	message := p.Message
-	if message == "" && p.Type == "" {
+	if message == "" && p.Type == "" && p.Code == nil {
 		return nil
 	}
 	if message == "" {
@@ -354,6 +355,9 @@ func (m *ChatMessage) RawContent() string {
 // Falls back to reasoning content if Content is empty (Z.AI GLM / Synthetic Thinking models).
 // Returns empty string if no content is available.
 func (m *ChatMessage) Content() string {
+	if m == nil {
+		return ""
+	}
 	result := m.RawContent()
 
 	// Fall back to reasoning content if Content is empty
@@ -391,6 +395,27 @@ type EmbeddingData struct {
 	Index     int       `json:"index"`
 }
 
+// UnmarshalJSON decodes an embedding that may arrive as a float array or as the
+// base64 string form requested by EncodingFormat "base64".
+func (e *EmbeddingData) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Object    string          `json:"object"`
+		Embedding json.RawMessage `json:"embedding"`
+		Index     int             `json:"index"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	vector, err := llms.DecodeEmbeddingVector(raw.Embedding)
+	if err != nil {
+		return err
+	}
+	e.Object = raw.Object
+	e.Embedding = vector
+	e.Index = raw.Index
+	return nil
+}
+
 // EmbeddingUsage represents token usage for embeddings
 type EmbeddingUsage struct {
 	PromptTokens int `json:"prompt_tokens"`
@@ -417,8 +442,10 @@ type Pricing = llms.Pricing
 
 // ModelsListResponse represents the response from the models list API
 type ModelsListResponse struct {
-	Object string          `json:"object"` // "list"
-	Data   []ModelResponse `json:"data"`
+	Object  string          `json:"object"` // "list"
+	Data    []ModelResponse `json:"data"`
+	HasMore bool            `json:"has_more,omitempty"`
+	LastID  string          `json:"last_id,omitempty"`
 }
 
 // ImageGenerationRequest is the JSON image generation request. ExtraBody overrides standard fields.
@@ -450,8 +477,13 @@ func marshalMediaExtra(value any, extra map[string]any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decode numbers as json.Number rather than float64. Re-marshaling a
+	// float64 rounds integers above 2^53, silently changing provider-specific
+	// IDs or seed values that happen to be large.
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
 	var fields map[string]any
-	if err := json.Unmarshal(data, &fields); err != nil {
+	if err := decoder.Decode(&fields); err != nil {
 		return nil, err
 	}
 	for key, value := range extra {

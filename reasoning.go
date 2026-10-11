@@ -1,5 +1,7 @@
 package llms
 
+import "reflect"
+
 // This file defines the cross-provider reasoning ("thinking") surface: the
 // effort/budget controls a caller sets on a request and the ReasoningContent a
 // model returns. Providers map ReasoningConfig onto their own knobs, OpenAI's
@@ -92,10 +94,10 @@ func (r *ReasoningContent) ReplayableBy(p Provider) bool {
 	return r != nil && (r.Provider == "" || r.Provider == p)
 }
 
-// Clone returns a copy of r with its own Metadata map. The map is copied one
-// level deep, so slice or map values inside it (Anthropic's redacted_thinking
-// blocks, the Responses reasoning items) are shared with r. It returns nil for a
-// nil r.
+// Clone returns a copy of r with its own Metadata map. Slice and map values
+// inside Metadata (Anthropic's redacted_thinking blocks, the Responses
+// reasoning items) are copied too, so a caller mutating them cannot corrupt r or
+// another clone. It returns nil for a nil r.
 func (r *ReasoningContent) Clone() *ReasoningContent {
 	if r == nil {
 		return nil
@@ -104,10 +106,112 @@ func (r *ReasoningContent) Clone() *ReasoningContent {
 	if r.Metadata != nil {
 		c.Metadata = make(map[string]any, len(r.Metadata))
 		for k, v := range r.Metadata {
-			c.Metadata[k] = v
+			c.Metadata[k] = cloneMetadataValue(v)
 		}
 	}
 	return &c
+}
+
+// cloneMetadataValue deep-copies the reference-typed values that Metadata
+// carries: slices, arrays, maps, pointers, and structs reachable through them.
+// Scalars and opaque types are returned as-is. Reference values already copied
+// on the current path are reused rather than copied again, so a self-referential
+// value (m["self"] = m) clones to a self-referential copy instead of recursing
+// forever.
+func cloneMetadataValue(v any) any {
+	if v == nil {
+		return nil
+	}
+	return deepCopyValue(reflect.ValueOf(v), make(map[cloneKey]reflect.Value)).Interface()
+}
+
+// cloneKey identifies a reference value for the deep-copy memo. The length is
+// part of the key so two slices that share a starting address but differ in
+// length (overlapping subslices) are treated as distinct values rather than one
+// returning the other's clone.
+type cloneKey struct {
+	ptr  uintptr
+	len  int
+	kind reflect.Kind
+	typ  reflect.Type
+}
+
+func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		return deepCopyValue(v.Elem(), seen)
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), typ: v.Type()}
+		if cp, ok := seen[key]; ok {
+			return cp
+		}
+		cp := reflect.New(v.Type().Elem())
+		seen[key] = cp
+		cp.Elem().Set(deepCopyValue(v.Elem(), seen))
+		return cp
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		key := cloneKey{ptr: v.Pointer(), len: v.Len(), kind: v.Kind(), typ: v.Type()}
+		if cp, ok := seen[key]; ok {
+			return cp
+		}
+		cp := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		seen[key] = cp
+		for i := 0; i < v.Len(); i++ {
+			cp.Index(i).Set(deepCopyValue(v.Index(i), seen))
+		}
+		return cp
+	case reflect.Array:
+		cp := reflect.New(v.Type()).Elem()
+		for i := 0; i < v.Len(); i++ {
+			cp.Index(i).Set(deepCopyValue(v.Index(i), seen))
+		}
+		return cp
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		// The map type belongs in the key: two named map types can share the same
+		// underlying map, and reusing a clone of the wrong static type would
+		// either mis-assign or panic when the value is placed in a typed field.
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), typ: v.Type()}
+		if cp, ok := seen[key]; ok {
+			return cp
+		}
+		cp := reflect.MakeMapWithSize(v.Type(), v.Len())
+		seen[key] = cp
+		iter := v.MapRange()
+		for iter.Next() {
+			cp.SetMapIndex(deepCopyValue(iter.Key(), seen), deepCopyValue(iter.Value(), seen))
+		}
+		return cp
+	case reflect.Struct:
+		cp := reflect.New(v.Type()).Elem()
+		// Copy the whole struct first so unexported fields keep their values;
+		// only the exported, settable reference fields can be deep-copied.
+		cp.Set(v)
+		for i := 0; i < v.NumField(); i++ {
+			if !cp.Field(i).CanSet() {
+				continue
+			}
+			switch v.Field(i).Kind() {
+			case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
+				cp.Field(i).Set(deepCopyValue(v.Field(i), seen))
+			default: // scalars are copied by the whole-struct Set above
+			}
+		}
+		return cp
+	default:
+		return v
+	}
 }
 
 // ReasoningBudgetForEffort maps a qualitative ReasoningEffort to a default

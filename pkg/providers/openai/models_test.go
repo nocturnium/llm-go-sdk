@@ -208,10 +208,83 @@ func TestListModels(t *testing.T) {
 	if gpt4o.Pricing == nil {
 		t.Error("expected pricing to be set for known model")
 	}
+	// Mutating one result must not change the shared metadata used by later
+	// results or race with concurrent listing.
+	if len(gpt4o.Types) == 0 || gpt4o.Pricing == nil {
+		t.Fatal("expected non-empty types and pricing to test isolation")
+	}
+	gpt4o.Types[0] = llms.ModelTypeImage
+	gpt4o.Pricing.Input = 999
+	again, err := client.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("second ListModels failed: %v", err)
+	}
+	for _, m := range again.Models {
+		if m.ID != "gpt-4o" {
+			continue
+		}
+		if m.Pricing != nil && m.Pricing.Input == 999 {
+			t.Error("model pricing aliases the shared metadata table")
+		}
+		for _, typ := range m.Types {
+			if typ == llms.ModelTypeImage && !gpt4o.HasType(typ) {
+				t.Error("model types alias the shared metadata table")
+			}
+		}
+	}
 
 	// Verify HasMore is false
 	if result.HasMore {
 		t.Error("expected HasMore to be false")
+	}
+}
+
+// The models endpoint reports has_more and last_id when a page is truncated.
+// The method must pass the cursor through and surface the server's pagination
+// state instead of unconditionally claiming there is no next page.
+func TestListModels_PreservesPagination(t *testing.T) {
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("after"); got != "model-page-1" {
+			t.Errorf("after = %q, want model-page-1", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-4o","object":"model"}],"has_more":true,"last_id":"model-page-2"}`))
+	})
+
+	result, err := client.ListModels(context.Background(), llms.WithModelCursor("model-page-1"))
+	if err != nil {
+		t.Fatalf("ListModels failed: %v", err)
+	}
+	if !result.HasMore {
+		t.Error("HasMore = false, want true")
+	}
+	if result.NextCursor != "model-page-2" {
+		t.Errorf("NextCursor = %q, want model-page-2", result.NextCursor)
+	}
+}
+
+// ModelInfo must search later pages rather than stopping at the first. A model
+// on page two would otherwise be reported as not found even though the server
+// returned HasMore=true.
+func TestModelInfo_SearchesLaterPages(t *testing.T) {
+	client := setupMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("after") {
+		case "":
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-4o","object":"model"}],"has_more":true,"last_id":"page-2"}`))
+		case "page-2":
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"gpt-5.4","object":"model"}],"has_more":false}`))
+		default:
+			t.Errorf("unexpected after=%q", r.URL.Query().Get("after"))
+		}
+	})
+
+	info, err := client.ModelInfo(context.Background(), "gpt-5.4")
+	if err != nil {
+		t.Fatalf("ModelInfo failed: %v", err)
+	}
+	if info == nil || info.ID != "gpt-5.4" {
+		t.Fatalf("ModelInfo = %+v, want gpt-5.4 from the second page", info)
 	}
 }
 
@@ -288,6 +361,12 @@ func TestListModels_WithLimit(t *testing.T) {
 
 	if len(result.Models) != 3 {
 		t.Errorf("expected 3 models (limited), got %d", len(result.Models))
+	}
+	if !result.HasMore {
+		t.Error("HasMore = false, want true when the local limit truncates the page")
+	}
+	if result.NextCursor != result.Models[len(result.Models)-1].ID {
+		t.Errorf("NextCursor = %q, want the last returned model %q so no models are skipped", result.NextCursor, result.Models[len(result.Models)-1].ID)
 	}
 }
 
@@ -367,11 +446,15 @@ func TestInferModelTypes(t *testing.T) {
 	}{
 		{"gpt-4o", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
 		{"gpt-4o-mini", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
+		{"gpt-4.1-2025-04-14", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
+		{"gpt-4.1-mini-2025-04-14", []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision}},
 		{"gpt-4-turbo", []llms.ModelType{llms.ModelTypeChat}},
 		{"gpt-4", []llms.ModelType{llms.ModelTypeChat}},
 		{"gpt-3.5-turbo", []llms.ModelType{llms.ModelTypeChat}},
 		{"o1-preview", []llms.ModelType{llms.ModelTypeChat}},
 		{"o1-mini", []llms.ModelType{llms.ModelTypeChat}},
+		{"o3-2025-04-16", []llms.ModelType{llms.ModelTypeChat}},
+		{"gpt-5-2025-08-07", []llms.ModelType{llms.ModelTypeChat}},
 		{"text-embedding-3-small", []llms.ModelType{llms.ModelTypeEmbedding}},
 		{"text-embedding-ada-002", []llms.ModelType{llms.ModelTypeEmbedding}},
 		{"dall-e-3", []llms.ModelType{llms.ModelTypeImage}},

@@ -80,6 +80,9 @@ func buildRootsHandler(cfg config) (requestHandler, error) {
 				// than publishing a malformed or ambiguous path.
 				return nil, &RPCError{Code: CodeInternalError, Message: err.Error()}
 			}
+			if roots == nil {
+				roots = []Root{}
+			}
 			return rootsListResult{Roots: roots}, nil
 		}, nil
 	}
@@ -94,6 +97,9 @@ func buildRootsHandler(cfg config) (requestHandler, error) {
 	}
 	roots := append([]Root(nil), cfg.roots...)
 	return func(context.Context, json.RawMessage) (any, error) {
+		if roots == nil {
+			roots = []Root{}
+		}
 		return rootsListResult{Roots: roots}, nil
 	}, nil
 }
@@ -132,7 +138,7 @@ func validateRootURI(raw string) error {
 	// does not have. It is also what a caller writing "file://relative/path"
 	// accidentally produces: the first segment becomes the authority, so the URI
 	// silently means something other than what they wrote.
-	if u.Host != "" && u.Host != "localhost" {
+	if u.Host != "" && !strings.EqualFold(u.Host, "localhost") {
 		return fmt.Errorf("mcp: root URI %q must have no authority (got host %q); "+
 			"a local path needs three slashes, e.g. file:///path", raw, u.Host)
 	}
@@ -144,7 +150,11 @@ func validateRootURI(raw string) error {
 	}
 	// Reject traversal rather than cleaning it: silently rewriting a caller's
 	// path would publish a location they did not write.
-	if u.Path != filepath.ToSlash(filepath.Clean(u.Path)) {
+	cleanPath := filepath.ToSlash(filepath.Clean(u.Path))
+	if strings.HasSuffix(u.Path, "/") && cleanPath != "/" {
+		cleanPath += "/"
+	}
+	if u.Path != cleanPath {
 		return fmt.Errorf("mcp: root URI %q must be a clean absolute path (no . or .. segments)", raw)
 	}
 	return nil

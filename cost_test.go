@@ -3,6 +3,8 @@ package llms
 import (
 	"context"
 	"errors"
+	"math"
+	"sync"
 	"testing"
 	"time"
 )
@@ -31,7 +33,6 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 		{ProviderFireworks, "accounts/fireworks/models/llama-v3p1-70b-instruct"},
 		{ProviderPerplexity, "sonar"},
 		{ProviderZAI, "glm-4.7"},
-		{ProviderZAI, "glm-4.7-Flash"},
 	}
 	u := Usage{PromptTokens: 1000, CompletionTokens: 1000}
 	for _, c := range cases {
@@ -42,6 +43,13 @@ func TestEstimateCost_DefaultModelsPriced(t *testing.T) {
 		if got <= 0 {
 			t.Errorf("%s:%s estimated at $%v, expected > 0", c.provider, c.model, got)
 		}
+	}
+}
+
+func TestEstimateCost_KnownFreeModel(t *testing.T) {
+	cost, known := EstimateCost(ProviderZAI, "glm-4.7-Flash", Usage{PromptTokens: 1000, CompletionTokens: 1000})
+	if !known || cost != 0 {
+		t.Fatalf("known free model = (%v, %v), want (0, true)", cost, known)
 	}
 }
 
@@ -60,6 +68,33 @@ func TestPricing_DefaultPricing(t *testing.T) {
 		"perplexity:sonar",
 		"zai:glm-4.7",
 		"zai:glm-4.7-Flash",
+		// Exact OpenAI IDs added in the 2026-10-09 rate refresh.
+		"openai:gpt-5.2-pro",
+		"openai:gpt-5-pro",
+		"openai:o1-pro",
+		"openai:o3-pro",
+		"openai:chat-latest",
+		"openai:gpt-4o-2024-05-13",
+		"openai:gpt-4-turbo-2024-04-09",
+		"openai:gpt-4-0613",
+		"openai:gpt-3.5-turbo-0125",
+		"openai:gpt-3.5-turbo-1106",
+		"openai:gpt-3.5-turbo-instruct",
+		"openai:davinci-002",
+		"openai:babbage-002",
+		"openai:gpt-rosalind-research",
+		"openai:gpt-5.6-cyber",
+		"togetherai:thinkingmachines/Inkling",
+		"togetherai:Qwen/Qwen3.7-Max",
+		"togetherai:moonshotai/Kimi-K3",
+		"zai:glm-5.3",
+		"zai:glm-5.3-flash",
+		"groq:openai/gpt-oss-120b",
+		"mistral:mistral-large-4",
+		"mistral:codestral",
+		"deepseek:deepseek-v4-pro",
+		"fireworks:accounts/fireworks/models/ember-1",
+		"fireworks:accounts/fireworks/models/glm-5p3",
 	}
 
 	for _, model := range expectedModels {
@@ -95,6 +130,29 @@ func TestModelTokenPricing(t *testing.T) {
 	}
 	if unknownPricing != nil {
 		t.Errorf("unknown pricing = %+v, want nil", unknownPricing)
+	}
+}
+
+// TestModelTokenPricing_RetainsCacheAndTiers pins that the helper returns the
+// whole published card. Returning only Input/Output would silently drop the
+// cache rates and long-context tier, making ModelTokenPricing disagree with
+// EstimateCost for the same model and usage.
+func TestModelTokenPricing_RetainsCacheAndTiers(t *testing.T) {
+	pricing, ok := ModelTokenPricing(ProviderOpenAI, "gpt-5.6-sol")
+	if !ok {
+		t.Fatal("expected pricing for openai:gpt-5.6-sol")
+	}
+	if pricing.CacheRead == 0 || pricing.CacheWrite == 0 {
+		t.Errorf("cache rates dropped: %+v", pricing)
+	}
+	if len(pricing.Tiers) == 0 {
+		t.Fatalf("long-context tiers dropped: %+v", pricing)
+	}
+	// The returned tier slice must not alias the global table.
+	pricing.Tiers[0].Input = 999
+	second, _ := ModelTokenPricing(ProviderOpenAI, "gpt-5.6-sol")
+	if second.Tiers[0].Input == 999 {
+		t.Error("returned tier aliases the global pricing table")
 	}
 }
 
@@ -436,6 +494,7 @@ func TestCostMiddleware_Call(t *testing.T) {
 	llm := &mockCostLLM{
 		provider: ProviderOpenAI,
 		model:    "gpt-4o",
+		callResp: testCostHelloResponse,
 		genResp: &Response{
 			Content: testCostHelloResponse,
 			Usage:   Usage{PromptTokens: 10, CompletionTokens: 5},
@@ -488,6 +547,49 @@ func TestCostMiddleware_GenerateContent(t *testing.T) {
 	usage := tracker.GetUsage(ProviderAnthropic, "claude-3-opus-20240229")
 	if usage.CompletionTokens != 50 {
 		t.Errorf("CompletionTokens = %d, want 50", usage.CompletionTokens)
+	}
+}
+
+func TestCostMiddleware_GenerateContent_UsesServedModel(t *testing.T) {
+	llm := &mockCostLLM{provider: ProviderOpenAI, model: "gpt-4o-mini", genResp: &Response{
+		Provider: ProviderOpenAI,
+		Model:    "gpt-4o",
+		Usage:    Usage{PromptTokens: 1_000_000},
+	}}
+	tracker := NewCostTracker()
+	_, err := NewCostMiddleware(llm, tracker).GenerateContent(context.Background(), []Message{{Role: RoleUser, Content: "Hi"}}, WithModel("gpt-4o"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tracker.GetUsage(ProviderOpenAI, "gpt-4o"); got == nil || got.EstimatedCost != 2.50 {
+		t.Fatalf("served gpt-4o usage = %#v, want $2.50", got)
+	}
+	if got := tracker.GetUsage(ProviderOpenAI, "gpt-4o-mini"); got != nil {
+		t.Fatalf("configured model unexpectedly charged: %#v", got)
+	}
+}
+
+func TestCostTracker_GetPricingReturnsIndependentTiers(t *testing.T) {
+	tracker := NewCostTracker()
+	p, ok := tracker.GetPricing(ProviderOpenAI, "gpt-5.6-luna")
+	if !ok || len(p.Tiers) == 0 {
+		t.Fatal("expected tiered pricing")
+	}
+	p.Tiers[0].Input = 999
+	again, _ := tracker.GetPricing(ProviderOpenAI, "gpt-5.6-luna")
+	if again.Tiers[0].Input == 999 {
+		t.Fatal("mutating returned tiers changed tracker pricing")
+	}
+}
+
+func TestCostTracker_UnknownPricingIsReported(t *testing.T) {
+	tracker := NewCostTracker()
+	if _, known := tracker.Record(ProviderOpenAI, "unpriced-future-model", Usage{PromptTokens: 1}); known {
+		t.Fatal("unknown model reported as priced")
+	}
+	u := tracker.GetUsage(ProviderOpenAI, "unpriced-future-model")
+	if u == nil || u.UnpricedRequests != 1 || u.EstimatedCost != 0 {
+		t.Fatalf("unknown pricing usage = %#v", u)
 	}
 }
 
@@ -641,6 +743,50 @@ func TestEstimateCost_UnknownPricing(t *testing.T) {
 	}
 }
 
+// A malformed negative report must not refund spend or reduce a recorded cost.
+func TestEstimateCost_NegativeUsageIsClamped(t *testing.T) {
+	positive, _ := EstimateCost(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: 1000, CompletionTokens: 500})
+	negative, _ := EstimateCost(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: -1000, CompletionTokens: -500})
+	if negative < 0 || negative != 0 {
+		t.Fatalf("negative cost = %f, want 0", negative)
+	}
+	if positive <= 0 {
+		t.Fatalf("positive control = %f, want > 0", positive)
+	}
+
+	tracker := NewCostTracker()
+	if got, _ := tracker.Record(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: 1000, CompletionTokens: 500}); got <= 0 {
+		t.Fatalf("recorded positive cost = %f", got)
+	}
+	if got, _ := tracker.Record(ProviderOpenAI, "gpt-4o", Usage{PromptTokens: -1_000_000, CompletionTokens: -1_000_000}); got != 0 {
+		t.Fatalf("recorded negative-usage cost = %f, want 0", got)
+	}
+	if total := tracker.GetTotalCost(); total <= 0 {
+		t.Fatalf("total cost = %f, negative usage reduced it", total)
+	}
+}
+
+// A non-finite provider-reported charge must not poison totals.
+func TestEstimateCost_NonFiniteReportedCostIsZero(t *testing.T) {
+	for name, value := range map[string]float64{
+		"+Inf": math.Inf(1),
+		"-Inf": math.Inf(-1),
+		"NaN":  math.NaN(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := value
+			tracker := NewCostTracker()
+			cost, _ := tracker.Record(ProviderOpenAI, "gpt-4o", Usage{Cost: &bad})
+			if math.IsNaN(cost) || math.IsInf(cost, 0) || cost != 0 {
+				t.Fatalf("recorded cost = %v, want 0", cost)
+			}
+			if total := tracker.GetTotalCost(); math.IsNaN(total) || math.IsInf(total, 0) {
+				t.Fatalf("total cost = %v, want finite", total)
+			}
+		})
+	}
+}
+
 func TestEstimateCost_LocalProvidersIntentionallyUnpriced(t *testing.T) {
 	tests := []struct {
 		provider Provider
@@ -728,6 +874,43 @@ func TestCostTrackerResetClearsModeCosts(t *testing.T) {
 // TestGemini38FlashRateChange fails from 2027-01-01, when Google doubles Gemini
 // 3.8 Flash's rates to Input 1.50, Output 7.50 and CacheRead 0.15 per 1M
 // tokens. Update the entry in DefaultPricing, then delete this test.
+// A RecordMode that interleaves with Reset must not repopulate the tracker after
+// the reset returns. The cost used to be computed under a read lock and applied
+// under a separately acquired write lock, leaving that window open.
+func TestCostTrackerRecordModeResetIsAtomic(t *testing.T) {
+	tracker := NewCostTracker()
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				tracker.RecordMode(ProviderOpenAI, "gpt-5.6-sol", Usage{PromptTokens: 10}, PricingModeBatch)
+			}
+		}()
+	}
+	for i := 0; i < 200; i++ {
+		tracker.Reset()
+	}
+	close(stop)
+	wg.Wait()
+
+	// After the final Reset and the writers draining, one more Reset must leave
+	// the tracker empty.
+	tracker.Reset()
+	if modes := tracker.GetModeCosts(); len(modes) != 0 {
+		t.Fatalf("GetModeCosts after Reset = %v, want empty", modes)
+	}
+	if total := tracker.GetTotalCost(); total != 0 {
+		t.Fatalf("GetTotalCost after Reset = %v, want 0", total)
+	}
+}
 func TestGemini38FlashRateChange(t *testing.T) {
 	if !time.Now().Before(time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatal("Gemini 3.8 Flash's introductory rates ended on 2026-12-31; update gemini:gemini-3.8-flash in DefaultPricing to 1.50/7.50/0.15")

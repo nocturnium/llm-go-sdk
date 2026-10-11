@@ -14,6 +14,7 @@ type options struct {
 	Model          string
 	EmbeddingModel string
 	BaseURL        string
+	baseURLSet     bool // explicit WithBaseURL takes precedence over OLLAMA_HOST
 	HTTPClient     *http.Client
 	Timeout        time.Duration
 	// AllowPrivateIPs allows requests to private/loopback IPs.
@@ -54,6 +55,7 @@ func WithModel(model string) Option {
 func WithBaseURL(url string) Option {
 	return func(o *options) {
 		o.BaseURL = url
+		o.baseURLSet = true
 	}
 }
 
@@ -92,10 +94,29 @@ func WithAllowHTTP() Option {
 	}
 }
 
+// WithDisallowPrivateIPs clears the Ollama default that permits private and
+// loopback addresses. Use it for a remote endpoint whose URL must still be
+// subject to the shared SSRF check.
+func WithDisallowPrivateIPs() Option {
+	return func(o *options) {
+		o.AllowPrivateIPs = false
+	}
+}
+
+// WithDisallowHTTP clears the Ollama default that permits plain-HTTP URLs.
+func WithDisallowHTTP() Option {
+	return func(o *options) {
+		o.AllowHTTP = false
+	}
+}
+
 // apply applies the options to the default options.
 func apply(opts ...Option) *options {
 	options := defaultOptions()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

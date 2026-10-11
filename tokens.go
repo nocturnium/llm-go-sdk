@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"math"
 	"unicode"
 )
 
@@ -54,13 +55,21 @@ func (e *TokenEstimator) EstimateTokens(text string) int {
 	}
 
 	// Exact path: use the configured tokenizer when present.
-	if e.Tokenizer != nil {
+	if !isNilInterface(e.Tokenizer) {
 		return e.Tokenizer.CountTokens(text)
 	}
 
 	charsPerToken := e.CharsPerToken
-	if charsPerToken <= 0 {
+	if charsPerToken <= 0 || math.IsNaN(charsPerToken) || math.IsInf(charsPerToken, 0) {
 		charsPerToken = 4.0
+	}
+	// A positive but denormal-small ratio would overflow charCount/charsPerToken
+	// to +Inf, whose int conversion is implementation-defined and typically
+	// clamps to 1, underestimating even a one-character input. Clamp the divisor
+	// to a sane floor so the estimate stays finite and monotonic.
+	const minCharsPerToken = 1e-6
+	if charsPerToken < minCharsPerToken {
+		charsPerToken = minCharsPerToken
 	}
 
 	// Count characters (excluding whitespace for more accurate estimation)
@@ -101,7 +110,7 @@ func (e *TokenEstimator) EstimateTokens(text string) int {
 	estimate := charBasedEstimate + float64(punctCount)*0.8 + float64(wordCount)*0.1
 
 	// Round up to be conservative (better to overestimate than underestimate)
-	result := int(estimate + 0.5)
+	result := int(math.Ceil(estimate))
 	if result < 1 && len(text) > 0 {
 		result = 1
 	}

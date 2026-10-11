@@ -117,9 +117,10 @@ func newModelsServer(t *testing.T) *httptest.Server {
 					"owned_by": "Meta",
 				},
 				{
-					"id":      "whisper-large-v3",
-					"object":  "model",
-					"created": int64(1700000001),
+					"id":       "whisper-large-v3",
+					"object":   "model",
+					"created":  int64(1700000001),
+					"owned_by": "OpenAI",
 				},
 				{
 					"id":      "llama-3.2-90b-vision-preview",
@@ -322,5 +323,25 @@ func TestRegistryFactory(t *testing.T) {
 	}
 	if !client.options.AllowHTTP {
 		t.Error("expected AllowHTTP to be enabled alongside AllowPrivateIPs via factory")
+	}
+}
+
+// TestRegistryFactoryEmbeddingModelExtra pins that the registry factory forwards
+// llms.Config's embedding model into the provider's own option; without it the
+// client silently fell back to Groq's default embedding model.
+func TestRegistryFactoryEmbeddingModelExtra(t *testing.T) {
+	llm, err := llms.New("groq", llms.Config{
+		APIKey: "test-key",
+		Extra:  map[string]string{llms.ExtraEmbeddingModel: "nomic-embed-text-v1.5"},
+	})
+	if err != nil {
+		t.Fatalf("llms.New(groq) failed: %v", err)
+	}
+	client, ok := llm.(*Client)
+	if !ok {
+		t.Fatalf("expected *Client, got %T", llm)
+	}
+	if got := client.options.EmbeddingModel; got != "nomic-embed-text-v1.5" {
+		t.Errorf("EmbeddingModel = %q, want nomic-embed-text-v1.5", got)
 	}
 }

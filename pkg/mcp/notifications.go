@@ -28,7 +28,13 @@ func (n *notifier) run() {
 	for {
 		select {
 		case fn := <-n.queue:
-			fn()
+			// A panic in a caller-supplied handler must not kill the pump: every
+			// later notification would then be dropped even though the client is
+			// still connected.
+			func() {
+				defer func() { _ = recover() }()
+				fn()
+			}()
 		case <-n.done:
 			return
 		}

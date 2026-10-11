@@ -45,7 +45,7 @@ func TestTranscription_FormatsAndTranslation(t *testing.T) {
 			if translate {
 				path = "/audio/translations"
 			}
-			if r.URL.Path != path || r.FormValue("model") != "whisper-large-v3" || r.FormValue("url") != "https://example.com/audio.wav" {
+			if r.URL.Path != path || r.FormValue("model") != "whisper-large-v3" || r.FormValue("url") != "" {
 				t.Error(r.URL.Path, r.MultipartForm.Value)
 			}
 			fmt.Fprint(w, "translated")
@@ -54,10 +54,23 @@ func TestTranscription_FormatsAndTranslation(t *testing.T) {
 		if translate {
 			call = c.Translate
 		}
-		out, err := call(context.Background(), llms.MediaInput{URL: "https://example.com/audio.wav"}, llms.WithTranscribeModel("whisper-large-v3"), llms.WithTranscribeLanguage("en"), llms.WithTranscribeWordTimestamps(true), llms.WithTranscribeExtra(map[string]any{"response_format": "text", "timestamp_granularities[]": []string{"word"}}))
+		out, err := call(context.Background(), llms.MediaInput{Data: []byte("wav bytes"), MIMEType: "audio/wav"}, llms.WithTranscribeModel("whisper-large-v3"), llms.WithTranscribeLanguage("en"), llms.WithTranscribeExtra(map[string]any{"response_format": "text"}))
 		if err != nil || out.Text != "translated" {
 			t.Fatalf("%+v %v", out, err)
 		}
+	}
+}
+
+// Groq has no url field on its transcription routes, so a URL-only input must
+// fail locally instead of sending an unsupported multipart field that the
+// provider rejects.
+func TestTranscribe_RejectsURLInput(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP request for rejected URL input") })
+	if _, err := c.Transcribe(context.Background(), llms.MediaInput{URL: "https://example.com/audio.wav"}); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("Transcribe(url) = %v, want ErrInvalidParameters", err)
+	}
+	if _, err := c.Translate(context.Background(), llms.MediaInput{URL: "https://example.com/audio.wav"}); !errors.Is(err, llms.ErrInvalidParameters) {
+		t.Fatalf("Translate(url) = %v, want ErrInvalidParameters", err)
 	}
 }
 
@@ -85,6 +98,18 @@ func TestSynthesize_RejectsUnsupportedTypedOptions(t *testing.T) {
 	} {
 		if _, err := c.Synthesize(context.Background(), "hi", llms.WithSpeechVoice("autumn"), opt); !errors.Is(err, llms.ErrInvalidParameters) {
 			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+// Word timestamps are valid only with verbose_json; text or json would be
+// rejected by Groq, so the request must fail locally.
+func TestTranscribe_WordTimestampsRequireVerboseJSON(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP request for a rejected format") })
+	for _, format := range []string{"text", "json"} {
+		_, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("wav bytes"), MIMEType: "audio/wav"}, llms.WithTranscribeWordTimestamps(true), llms.WithTranscribeExtra(map[string]any{"response_format": format}))
+		if !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Errorf("format %q: err = %v, want ErrInvalidParameters", format, err)
 		}
 	}
 }

@@ -40,8 +40,10 @@ type Client struct {
 func New(opts ...Option) (*Client, error) {
 	options := apply(opts...)
 
-	// Check for OLLAMA_HOST environment variable
-	if options.BaseURL == "http://localhost:11434/v1" {
+	// Check for OLLAMA_HOST environment variable. An explicit WithBaseURL wins:
+	// the environment is process-global, so it must not redirect a caller that
+	// pinned an endpoint.
+	if !options.baseURLSet {
 		if host := os.Getenv("OLLAMA_HOST"); host != "" {
 			// OLLAMA_HOST is commonly set as host:port; without a scheme the
 			// result is not a URL the transport can dial.
@@ -49,8 +51,9 @@ func New(opts ...Option) (*Client, error) {
 				host = "http://" + host
 			}
 			// Ensure the URL ends with /v1 for OpenAI compatibility
+			host = strings.TrimSuffix(host, "/")
 			if !strings.HasSuffix(host, "/v1") {
-				host = strings.TrimSuffix(host, "/") + "/v1"
+				host += "/v1"
 			}
 			options.BaseURL = host
 		}

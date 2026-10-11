@@ -79,3 +79,14 @@ func TestClient_ServerCapabilitiesEmpty(t *testing.T) {
 	}
 	_ = context.Background()
 }
+
+// A capabilities map with a wrong-typed member must leave the typed view empty
+// rather than half-populated: json.Unmarshal fills "tools" before it reports the
+// error for "resources".
+func TestClient_ServerCapabilitiesMalformedLeavesNoPartialState(t *testing.T) {
+	c := mustClient(t, newMockTransportWithCaps(t, `{"tools":{},"resources":"bad"}`))
+
+	if sc := c.ServerCapabilities(); sc.Tools != nil || sc.Resources != nil {
+		t.Errorf("ServerCapabilities = %+v, want zero value for a malformed map", sc)
+	}
+}

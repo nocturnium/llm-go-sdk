@@ -56,6 +56,11 @@ func TestExtractJSON(t *testing.T) {
 		{"escaped quote in string", `{"k":"a\"} still in"}`, `{"k":"a\"} still in"}`, true},
 		{"no json", `just some prose`, "", false},
 		{"unbalanced", `{"k": "v"`, "", false},
+		// A balanced but non-JSON bracket group (prose in brackets) must not stop
+		// the scan before the real object later in the string.
+		{"prose bracket before object", `Here is [the JSON] {"name":"Ada"}`, `{"name":"Ada"}`, true},
+		{"prose brace before array", `note {see below} [1,2]`, `[1,2]`, true},
+		{"only prose brackets", `Here is [the JSON]`, "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,6 +69,62 @@ func TestExtractJSON(t *testing.T) {
 				t.Errorf("extractJSON(%q) = (%q, %v), want (%q, %v)", tc.in, got, ok, tc.want, tc.ok)
 			}
 		})
+	}
+}
+
+// A valid but unrelated JSON value before the real object must not stop the
+// parser: GenerateTyped needs the candidate that matches its schema.
+func TestGenerateTyped_SkipsUnrelatedJSONValue(t *testing.T) {
+	llm := &repairScriptLLM{responses: []string{`prefix [1] then {"name":"Ada","age":36}`}}
+	got, _, err := GenerateTyped[person](context.Background(), llm, []Message{{Role: RoleUser, Content: "x"}})
+	if err != nil {
+		t.Fatalf("GenerateTyped: %v", err)
+	}
+	if got.Name != "Ada" || got.Age != 36 {
+		t.Errorf("got %+v, want {Ada 36}", got)
+	}
+}
+
+// An unrelated object must not satisfy a struct with its zero value; the later
+// object that actually names the struct's fields wins.
+func TestGenerateTyped_SkipsUnrelatedObject(t *testing.T) {
+	llm := &repairScriptLLM{responses: []string{`prefix {"noise":1} then {"name":"Ada","age":36}`}}
+	got, _, err := GenerateTyped[person](context.Background(), llm, []Message{{Role: RoleUser, Content: "x"}})
+	if err != nil {
+		t.Fatalf("GenerateTyped: %v", err)
+	}
+	if got.Name != "Ada" || got.Age != 36 {
+		t.Errorf("got %+v, want {Ada 36}", got)
+	}
+}
+
+// A direct object that names none of the struct's exported JSON fields is not a
+// valid structured response, even though json.Unmarshal would leave the struct
+// at its zero value.
+func TestParseTyped_DirectObjectWithoutTargetFields(t *testing.T) {
+	for _, content := range []string{`{"noise":1}`, `{}`} {
+		if _, err := parseTyped[person](content); err == nil {
+			t.Errorf("parseTyped(%s) succeeded, want an error", content)
+		}
+	}
+}
+
+// Unexported fields are invisible to encoding/json, so an object naming only
+// one of them does not match the schema.
+func TestParseTyped_UnexportedFieldDoesNotMatch(t *testing.T) {
+	type hidden struct {
+		//lint:ignore U1000 the field must stay unexported to exercise schema matching
+		secret struct{ Value int }
+	}
+	if _, err := parseTyped[hidden](`{"Value":1}`); err == nil {
+		t.Fatal("parseTyped matched an unexported-only field, want an error")
+	}
+}
+
+// An unbalanced object must not yield one of its keys as a string result.
+func TestParseTyped_UnbalancedObjectDoesNotYieldKey(t *testing.T) {
+	if got, err := parseTyped[string](`{"name":"Ada"`); err == nil {
+		t.Fatalf("parseTyped returned %q, want an error for malformed JSON", got)
 	}
 }
 
