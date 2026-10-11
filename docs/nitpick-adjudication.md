@@ -805,3 +805,14 @@ did), instead of returning a channel that never closes.
 | `.github/workflows/codeql.yml:45` unpublished action majors | Recurring false positive (rounds 50–72); `checkout@v7`, `setup-go@v7` and `codeql-action@v4` are published. |
 | `pkg/middleware/resilience/ratelimit_refund_test.go:23` test never records the charge | The test passes. Draining the bucket with `ReserveN` is deliberate: it leaves the bucket empty, so the refund clamp under test is the charged-amount clamp, not the full-bucket clamp (the comment says so). |
 | `structured.go:450`, `featherless.go:71` and similar | Recurring false positives listed in earlier rounds. |
+
+Round 76 (2026-10-10) reported 6 errors, all false positives; no code change.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `options.go:439` mismatched types compared with `ToolTypeFunction` | Recurring (rounds 72, 74); the package builds and its tests pass. |
+| `pkg/middleware/resilience/ratelimit.go:561` `RecordTokens` ignores a refused `ReserveN` | `ReserveN` waits without a horizon (`InfDuration`), so it refuses only a count above the burst, and every installment is `min(extra, burst)`. There is no delay-based refusal to lose debt to. |
+| `pkg/observability/logging.go:579` incomplete stream logged as a response | `EnsureTerminal` delivers a clean `Done` to the consumer for a source that closes without a terminal chunk, so the consumer sees success and the log matches it. The OTel, metrics and Langfuse wrappers do the same. |
+| `featherless-options.go:107` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (round 72); `TestGenerateVideo` in `media_review_test.go` covers the `/v1` suffix and expects `/v2/videos`. |
+| `structured.go:450` pointer fields accept null | By design (round 53). |
