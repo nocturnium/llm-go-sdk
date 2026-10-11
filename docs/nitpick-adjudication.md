@@ -898,3 +898,15 @@ Round 83 (2026-10-10) reported 5 errors, all false positives; no code change.
 | `pkg/providers/featherless/featherless-options.go:107` handler never attached | Recurring; `speech.go` calls it on the terminal event. |
 | `pkg/providers/featherless/speech.go:79` truncated stream ends cleanly | `TestStreamSpeech_Truncated` passes: the SSE layer emits the interruption error event, which the loop forwards as an error chunk. |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
+
+Round 84 (2026-10-10) reported 4 errors. Fixed: `DoMultipart` reads a JSON
+response through the same bounded reader as the raw and binary paths, so a valid
+JSON value followed by more bytes than the 100 MB limit is rejected instead of
+being accepted when the decoder stops after the first value. An empty or
+whitespace-only 2xx body still leaves the target untouched.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82); `video.go` strips the `/v1` suffix before joining, and the video proxy-prefix test passes. |
+| `scripts/release-decide.sh:74` undefined jq variable | Recurring (rounds 71, 72); the jq program is in double quotes, so the shell substitutes `$1` first. |
+| `structured.go:450` nested pointers accept null | By design (round 53). |

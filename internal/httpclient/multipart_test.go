@@ -308,3 +308,46 @@ func TestMultipartRejectsHeaderInjection(t *testing.T) {
 		}
 	}
 }
+
+func TestClient_DoMultipart_JSONResponseEdges(t *testing.T) {
+	type payload struct {
+		OK bool `json:"ok"`
+	}
+	for name, tc := range map[string]struct {
+		body    string
+		length  string
+		want    bool
+		wantErr string
+	}{
+		"valid":            {body: `{"ok":true}`, want: true},
+		"empty body":       {body: ""},
+		"whitespace only":  {body: "  \n"},
+		"malformed":        {body: `{"ok":`, wantErr: "decode multipart response"},
+		"declared too big": {body: `{"ok":true}`, length: "104857601", wantErr: "maximum size"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tc.length != "" {
+					w.Header().Set("Content-Length", tc.length)
+				}
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer server.Close()
+			client := NewClient(WithAllowHTTP(true), WithAllowPrivateIPs(true))
+			var out payload
+			err := client.DoMultipart(context.Background(), http.MethodPost, server.URL, nil, nil, nil, &out)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out.OK != tc.want {
+				t.Fatalf("OK = %v, want %v", out.OK, tc.want)
+			}
+		})
+	}
+}
