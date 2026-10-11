@@ -1035,3 +1035,13 @@ comparing the target against `&raw`; behavior is unchanged.
 | `.github/workflows/ci.yml:26` unavailable action versions | Recurring (rounds 48, 50, 54–58, 64, 79, 84, 87, 89, 90, 92); `checkout`, `setup-go`, `upload-artifact` and `codecov-action` all publish `v7`. |
 | `pkg/openaicompat/client.go:547` text transcription leaves the result empty | `&raw` is the address of the same local variable on both sides, so the comparison is not "a newly allocated pointer"; `TestTranscriptionCompatibility` decodes non-empty `text`, `srt` and `vtt` bodies. The reviewer's premise about `&` in Go is wrong. |
 | `pkg/providers/featherless/featherless-options.go:107` callback not connected | Recurring (rounds 89–92): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
+
+Round 94 (2026-10-10) reported 5 errors, all false positives.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/testdata/fixtures/zai/tool_loop.json:4` declared model mismatch | `fixture.model` is the model the harness *requests*, not the recorded response's `model` field, which is the served version and lands on `Response.ModelVersion`. The Anthropic fixtures show the same split (`claude-haiku-4-5` requested, `claude-haiku-4-5-20251001` in the body), and `TestFixtures` passes. |
+| `pkg/observability/logging_test.go:457` wrong usage type | The literal at 457 is `llms.Response.Usage`, a value field; the pointer `LogEntry.Usage` is assigned at lines 59 and 601. `go vet ./pkg/observability` and the observability tests pass. |
+| `pkg/providers/featherless/featherless-options.go:107` handler unused | Recurring (rounds 89–93): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/mistral/transcription.go:52` typed response format ignored | `llms.TranscribeOptions` has no `ResponseFormat` field; a `response_format` in `Extra` is read, and any value other than `json` is rejected as documented. |
+| `structured.go:450` nested pointers accept null | Recurring (rounds 53, 55, 56, 61, 62, 65, 68, 89, 90): a nil pointer is the field's natural zero, and the generated schema advertises the pointee because OpenAI strict mode rejects nullable unions. |
