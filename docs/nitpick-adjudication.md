@@ -927,3 +927,23 @@ which would have left the client blocked.
 | `pkg/providers/featherless/featherless.go:71` speech usage handler never wired | Recurring; `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event. |
 | `scripts/release-decide.sh:74` undefined jq variable | Recurring (rounds 71, 72, 84); the jq program is in double quotes, so the shell substitutes `$1` first. |
 | `structured.go:459` pointer fields accept null | By design (round 53). |
+
+Round 86 (2026-10-10) reported 10 errors. Fixed: `RateLimiter.RecordTokens`
+snapshots the limiter and its generation together and drops every debt or credit
+write whose generation no longer matches, so a usage report that overlaps a
+`Reset` cannot settle against the fresh limiter; `WithMaxRetries(math.MaxInt)`
+saturates instead of overflowing `n+1` into a negative attempt count; the
+`TestStreamWrappers_DrainAfterErrorChunk` fixture now signals when its provider
+goroutine finishes its blocked trailing send, so the test fails if a wrapper
+leaves the provider parked; and `ollamaapi.PullRequest` serializes `stream`
+unconditionally, so an explicit `false` is not replaced by Ollama's streaming
+default.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/config.go:182` omitted thinking level should default to medium | Recurring (round 62); a zero-value `ThinkingConfig` leaves reasoning unset by design, and a level of `THINKING_LEVEL_UNSPECIFIED` (which only appears explicitly) maps to medium. `TestTranslate_Thinking` pins both. |
+| `llmadk/fields.go:163` VALIDATED classified as translated | Recurring (rounds 62, 71); `Mode` is translated and `config.go` rejects VALIDATED through `FieldValidatedFunctionCalling`, which the field-table coverage test and `TestTranslateFunctionCalling` pin. |
+| `pkg/observability/metrics_test.go:44` `Call` reads `callResp` while fixtures set `genResp` | Recurring (rounds 61, 63); `MetricsMiddleware.Call` delegates to `GenerateContent`, which returns `genResp`, so the fixtures are correct and the tests pass. |
+| `pkg/providers/featherless/featherless.go:44` handler not wired | Recurring; `speech.go` reads `c.options.SpeechUsageHandler` on the terminal event. |
+| `structured.go:450` nested pointers accept null | By design (round 53). |
+| `testutil_test.go:135` `GenerateContent` inherits `callError` | The fallback is deliberate (round 33): a mock configured only through `WithMockCallError` must still fail `GenerateContent`, and `genError` takes precedence when both are set. No test sets both to model a succeeding `GenerateContent` alongside a failing `Call`. |

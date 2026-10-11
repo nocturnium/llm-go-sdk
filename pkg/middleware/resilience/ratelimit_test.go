@@ -846,3 +846,30 @@ func TestRateLimiter_RecordTokens_DebtSaturates(t *testing.T) {
 		t.Fatalf("tokenDebt = %d, want saturation at %d", debt, maxInt())
 	}
 }
+
+// A usage report whose read of the limiter overlapped a Reset must not settle
+// against the freshly reset state: its debt or credit belongs to the replaced
+// bucket, and Reset is the operator's way to start clean.
+func TestRateLimiter_RecordTokensDiscardsStaleGeneration(t *testing.T) {
+	rl := NewRateLimiter(
+		WithTokensPerMinute(600),
+		WithTokenBurst(100),
+		WithTokenEstimate(100),
+	)
+	_, staleLimiter, staleGen := rl.snapshotLimiters()
+
+	rl.Reset()
+
+	// An over-estimate overflow from before the Reset.
+	rl.recordTokens(1_000_000, staleLimiter, staleGen)
+	// A refund from before the Reset.
+	rl.recordTokens(10, staleLimiter, staleGen)
+
+	rl.mu.RLock()
+	debt := rl.tokenDebt
+	credit := rl.tokenCredit
+	rl.mu.RUnlock()
+	if debt != 0 || credit != 0 {
+		t.Fatalf("stale usage adjustments leaked past Reset: debt=%d credit=%d, want 0 and 0", debt, credit)
+	}
+}

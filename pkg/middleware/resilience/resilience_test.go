@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net/url"
 	"runtime"
 	"sync"
@@ -1191,6 +1192,15 @@ func TestResilientClient_WithMaxRetries(t *testing.T) {
 	}
 	if llm.CallCount() != 3 {
 		t.Errorf("call count = %d, want 3", llm.CallCount())
+	}
+}
+
+// WithMaxRetries(math.MaxInt) must not overflow n+1 into a negative attempt
+// count, which execute would clamp back to a single try.
+func TestResilientClient_WithMaxRetriesSaturates(t *testing.T) {
+	client := NewResilientClient(&mockResilientLLM{}, WithMaxRetries(math.MaxInt))
+	if client.retry.MaxAttempts < 1 {
+		t.Fatalf("MaxAttempts = %d, want a positive value", client.retry.MaxAttempts)
 	}
 }
 

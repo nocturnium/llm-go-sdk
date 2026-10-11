@@ -67,7 +67,14 @@ func WithMaxRetries(n int) ResilienceOption {
 	return func(rc *ResilientClient) {
 		if n >= 0 {
 			rc.retry = copyRetryConfig(rc.retry)
-			rc.retry.MaxAttempts = n + 1 // +1 because MaxAttempts includes first try
+			// +1 because MaxAttempts includes the first try; saturate so a huge
+			// n does not overflow into a negative attempt count that execute
+			// clamps back to a single try.
+			if n == maxInt() {
+				rc.retry.MaxAttempts = maxInt()
+			} else {
+				rc.retry.MaxAttempts = n + 1
+			}
 		}
 	}
 }

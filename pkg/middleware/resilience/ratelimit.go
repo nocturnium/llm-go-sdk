@@ -540,7 +540,21 @@ func (rl *RateLimiter) tryAcquire(ctx context.Context, requests, tokens int) err
 // limiter does not remember per-request charges and would refund tokens it never
 // charged.
 func (rl *RateLimiter) RecordTokens(actualTokens int) {
-	tokenLimiter := rl.tokenLim()
+	// Read the limiter and its generation together so a concurrent Reset is
+	// not observed as a fresh limiter with a stale generation. A report from a
+	// request admitted before a Reset must not settle against the new state:
+	// its extra reservations belong to the limiter that was replaced, and its
+	// debt or credit would otherwise throttle or loosen a limiter the caller
+	// just reset.
+	_, tokenLimiter, gen := rl.snapshotLimiters()
+	rl.recordTokens(actualTokens, tokenLimiter, gen)
+}
+
+// recordTokens settles a usage report against the limiter and generation it was
+// admitted under. Every debt or credit write is dropped when the generation no
+// longer matches, so a report that overlaps a Reset cannot land in the fresh
+// state.
+func (rl *RateLimiter) recordTokens(actualTokens int, tokenLimiter *rate.Limiter, gen uint64) {
 	if tokenLimiter == nil {
 		return
 	}
@@ -584,9 +598,7 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 			remainingInstallments--
 		}
 		if extra > 0 {
-			rl.mu.Lock()
-			rl.tokenDebt = saturatingAddInt(rl.tokenDebt, extra)
-			rl.mu.Unlock()
+			rl.addTokenDebt(extra, gen)
 		}
 	case actualTokens < rl.tokenEstimate:
 		// If we overestimated, refund unused tokens. An estimate above the burst is
@@ -594,6 +606,10 @@ func (rl *RateLimiter) RecordTokens(actualTokens int) {
 		// outstanding debt first, then credit whatever is left against the bucket.
 		refund := rl.tokenEstimate - actualTokens
 		rl.mu.Lock()
+		if gen != rl.generation {
+			rl.mu.Unlock()
+			return
+		}
 		if cancel := min(refund, rl.tokenDebt); cancel > 0 {
 			rl.tokenDebt -= cancel
 			refund -= cancel

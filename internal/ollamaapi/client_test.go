@@ -655,3 +655,24 @@ func TestEmbed_SendsTruncateFalse(t *testing.T) {
 		t.Errorf("truncate = %v, want false", got)
 	}
 }
+
+// PullRequest.Stream must serialize an explicit false. Ollama's pull default is
+// streaming, so omitting the field would stream when the caller asked for one
+// response.
+func TestPullRequest_SendsExplicitFalseStream(t *testing.T) {
+	body, err := json.Marshal(PullRequest{Name: "llama3.2", Stream: false})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	stream, ok := got["stream"]
+	if !ok {
+		t.Fatal("request body omitted stream; the server would default it to true")
+	}
+	if stream != false {
+		t.Errorf("stream = %v, want false", stream)
+	}
+}

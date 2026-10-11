@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,14 +25,20 @@ func (l *terminalTestLLM) Stream(ctx context.Context, _ []llms.Message, _ ...llm
 
 // errorThenTrailingLLM streams an error chunk and then one more chunk whose send
 // blocks until the consumer reads it. A wrapper that returns on the error chunk
-// without draining leaks this producer; drained is closed once the trailing
-// chunk is consumed.
-type errorThenTrailingLLM struct{ mockLangfuseLLM }
+// without draining leaves this producer goroutine parked on its send; drained
+// is closed once the trailing chunk has been consumed.
+type errorThenTrailingLLM struct {
+	mockLangfuseLLM
+	drained chan struct{}
+}
 
 func (l *errorThenTrailingLLM) Stream(_ context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
 	out := make(chan llms.StreamChunk)
+	l.drained = make(chan struct{})
+	drained := l.drained
 	go func() {
 		defer close(out)
+		defer close(drained)
 		out <- llms.StreamChunk{Error: context.DeadlineExceeded}
 		// Blocks until the consumer reads (or drains) it. Only a wrapper that
 		// drains its source lets this send complete.
@@ -75,17 +82,22 @@ func TestStreamWrappers_DrainAfterErrorChunk(t *testing.T) {
 		if chunk := <-stream; chunk.Error == nil {
 			t.Fatalf("%s: first chunk error = nil, want a stream error", name)
 		}
-		done := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for range stream {
 			}
-			close(done)
 		}()
+		// The wrapper closing its output only proves the consumer finished; the
+		// provider goroutine is the thing a missed drain leaks, so wait on the
+		// channel it closes after its blocked trailing send completes.
 		select {
-		case <-done:
+		case <-base.drained:
 		case <-time.After(2 * time.Second):
-			t.Errorf("%s: producer stayed blocked after the error chunk; the source was not drained", name)
+			t.Errorf("%s: provider stayed blocked after the error chunk; the source was not drained", name)
 		}
+		wg.Wait()
 	}
 }
 

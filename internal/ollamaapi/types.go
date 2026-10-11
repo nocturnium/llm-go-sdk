@@ -52,7 +52,10 @@ type ModelInfo map[string]any
 type PullRequest struct {
 	Name     string `json:"name"`
 	Insecure bool   `json:"insecure,omitempty"`
-	Stream   bool   `json:"stream,omitempty"`
+	// Stream is sent unconditionally, like GenerateRequest and ChatRequest:
+	// Ollama's pull default is true, so an omitted false would stream when the
+	// caller asked for a single response.
+	Stream bool `json:"stream"`
 }
 
 // PullResponse is a streaming response from /api/pull.
