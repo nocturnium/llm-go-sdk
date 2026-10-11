@@ -167,6 +167,12 @@ func executeTool(name, arguments string) string {
 		if unit == "" {
 			unit = "celsius"
 		}
+		// The schema enumerates celsius and fahrenheit; a model that sends
+		// anything else is asking for a reading this tool cannot produce, so
+		// reject it rather than labeling a Celsius value with an arbitrary unit.
+		if unit != "celsius" && unit != "fahrenheit" {
+			return fmt.Sprintf(`{"error": %q}`, "unsupported unit: "+unit)
+		}
 
 		// Simulated weather data
 		temp := 22

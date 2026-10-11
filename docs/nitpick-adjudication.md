@@ -1075,3 +1075,16 @@ a nil `Option`, so `New(nil, ...)` constructs rather than panics.
 | `pkg/providers/featherless/featherless-options.go:107` handler unused | Recurring (rounds 89–95): `speech.go` invokes the handler on the terminal event, covered by `media_review_test.go`. |
 | `pkg/providers/mistral/transcription.go:74` typed streaming/format options ignored | `llms.TranscribeOptions` has no streaming or response-format field; `response_format` and `stream` are read from `Extra`, and unsupported values are rejected. |
 | `structured.go:519` first quoted word returned for a string target | Known heuristic limit: a bare-string target picks the first JSON string candidate, as `parseTyped` documents. Preferring a later quote would break the existing "first candidate" tests; callers needing disambiguation use a struct target. |
+
+Round 97 (2026-10-10) reported 8 errors. Fixed: the tools example rejects a
+weather unit outside the schema enum.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:26` action majors unpublished | Recurring (rounds 48, 50, 54–58, 64, 79, 84, 87, 89, 90, 92, 96); `checkout`, `setup-go` and `upload-artifact` all publish `v7`. |
+| `cost.go:1012` `EstimateCostMode` returns a negative reported cost | Probed: `EstimateCostMode` prices from the rate card via `Pricing.cost`, which clamps negative counts; it does not return `Usage.Cost` (only `CostTracker.costFor` banks a reported charge, and that goes through `nonNegative`). Negative `Cost` still yields the card price. |
+| `llmadk/config.go:94` labels silently dropped | Recurring (rounds 23, 62): `GenerateContentConfig.Labels` is classified `ignored` in `fields.go` on purpose as Google billing metadata ADK sets per agent; rejecting it would break ADK callers. |
+| `llmadk/config.go:182` empty `ThinkingConfig` should default to medium | Recurring (rounds 62, 86, 96): only an explicit `THINKING_LEVEL_UNSPECIFIED` maps to medium; a zero-value config leaves reasoning unset. |
+| `pkg/providers/featherless/featherless-options.go:110` handler unused | Recurring (rounds 89–96): `speech.go` invokes the handler on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/groq/options_coverage_test.go:333` missing API key | The test passes `APIKey: "test-key"` in `llms.Config`; with `GROQ_API_KEY` and `LLM_API_KEY` unset the test still passes. |
+| `structured.go:459` nested pointers accept null | Recurring (rounds 53, 55, 56, 61, 62, 65, 68, 89, 90, 94): a nil pointer is the field's natural zero, and the schema advertises the pointee because strict mode rejects nullable unions. |
