@@ -159,6 +159,9 @@ func executeTool(name, arguments string) string {
 		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 			return fmt.Sprintf(`{"error": %q}`, "could not parse arguments: "+err.Error())
 		}
+		if args.Location == "" {
+			return `{"error": "location is required"}`
+		}
 
 		unit := args.Unit
 		if unit == "" {
@@ -175,27 +178,33 @@ func executeTool(name, arguments string) string {
 
 	case "calculator":
 		var args struct {
-			Operation string  `json:"operation"`
-			A         float64 `json:"a"`
-			B         float64 `json:"b"`
+			Operation string   `json:"operation"`
+			A         *float64 `json:"a"`
+			B         *float64 `json:"b"`
 		}
 		if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 			return fmt.Sprintf(`{"error": %q}`, "could not parse arguments: "+err.Error())
 		}
+		// A missing operand would otherwise read as a zero value and return a
+		// fabricated result; require both operands explicitly.
+		if args.A == nil || args.B == nil {
+			return `{"error": "operands a and b are required"}`
+		}
+		a, b := *args.A, *args.B
 
 		var result float64
 		switch args.Operation {
 		case "add":
-			result = args.A + args.B
+			result = a + b
 		case "subtract":
-			result = args.A - args.B
+			result = a - b
 		case "multiply":
-			result = args.A * args.B
+			result = a * b
 		case "divide":
-			if args.B == 0 {
+			if b == 0 {
 				return `{"error": "division by zero"}`
 			}
-			result = args.A / args.B
+			result = a / b
 		default:
 			return `{"error": "unknown operation"}`
 		}

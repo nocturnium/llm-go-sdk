@@ -962,3 +962,19 @@ instead of being read as an unchanged API.
 | `pkg/providers/featherless/featherless-options.go:107` handler not applied | Recurring; `speech.go` reads `c.options.SpeechUsageHandler` on the terminal event. |
 | `structured.go:450` nested pointers accept null | By design (round 53). |
 | `pkg/middleware/resilience/ratelimit.go:566` `RecordTokens` mis-settles an explicit `WaitN` | Documented contract: `RecordTokens` settles only the estimate-sized `Wait`/`WaitN` charge and is not a per-request settlement for a different explicit count, as the method comment states (rounds 62, 63). |
+
+Round 88 (2026-10-10) reported 11 errors. Fixed: OpenRouter model discovery
+de-duplicates output modalities, so a catalog entry listing both `audio` and
+`speech` no longer yields `ModelTypeAudio` twice; the two `examples/` programs
+now send the marked caching breakpoint and reject a missing weather `location`
+or calculator operand; and the `multipart_test.go` request counter and the
+`mistral/media_review_test.go` handler error are synchronized for the race
+detector.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/release.yml:22` unavailable action majors | Recurring (rounds 48, 50, 55, 64, 79, 84, 87); `v7` is published for checkout, setup-go, goreleaser-action and upload-artifact, and `v8` for download-artifact. |
+| `scripts/release-decide.sh:74` undefined jq variable | Recurring (rounds 71, 72, 84, 85); the jq program is in double quotes, so the shell substitutes `$1` first. |
+| `structured.go:688` nested JSON is cut at the first inner brace | Probed: `balancedJSONAt` counts the opening bracket type, so `{"a":{"b":1}}`, `[{"a":1}]` and deeper nests all extract whole; the extraction tests pass. |
+| `testutil_test.go:135` `GenerateContent` inherits `callError` | The fallback is deliberate (round 33): a mock configured only through `WithMockCallError` must still fail `GenerateContent`, and `genError` takes precedence when both are set. |
+| `pkg/providers/elevenlabs/transcribe.go:119` non-finite timings accepted | JSON has no `NaN`/`±Inf` literal, and an overflowing number such as `1e400` is rejected by `encoding/json` before the timing checks. The existing negative-duration test passes. |

@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestClient_DoMultipart_Retry(t *testing.T) {
-	calls := 0
+	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
+		n := calls.Add(1)
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			t.Error("missing Authorization header")
 		}
@@ -41,7 +42,7 @@ func TestClient_DoMultipart_Retry(t *testing.T) {
 		if err != nil || string(data) != "complete audio" || header.Filename != "sample.wav" || header.Header.Get("Content-Type") != "audio/wav" {
 			t.Errorf("bad file: %q %v", data, err)
 		}
-		if calls == 1 {
+		if n == 1 {
 			w.WriteHeader(503)
 			return
 		}
@@ -53,8 +54,8 @@ func TestClient_DoMultipart_Retry(t *testing.T) {
 	client := NewClient(WithAllowPrivateIPs(true), WithAllowHTTP(true), WithRetryPolicy(policy))
 	var out struct{ OK bool }
 	err := client.DoMultipart(context.Background(), http.MethodPost, server.URL, map[string]string{"model": "test-model"}, []MultipartFile{{Field: "audio", Filename: "sample.wav", ContentType: "audio/wav", Data: []byte("complete audio")}}, map[string]string{"Authorization": "Bearer test-token"}, &out)
-	if err != nil || !out.OK || calls != 2 {
-		t.Fatalf("err=%v out=%+v calls=%d", err, out, calls)
+	if err != nil || !out.OK || calls.Load() != 2 {
+		t.Fatalf("err=%v out=%+v calls=%d", err, out, calls.Load())
 	}
 }
 

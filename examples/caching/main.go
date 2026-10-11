@@ -61,8 +61,9 @@ func main() {
 	fmt.Printf("\nestimated total cost: %s\n", llms.FormatCost(tracker.GetTotalCost()))
 
 	// Explicit per-message breakpoints give finer control (Anthropic): cache the
-	// prefix up to and including a marked message.
-	_ = []llms.Message{
+	// prefix up to and including a marked message. This third call sends the
+	// marked messages so the breakpoint is actually exercised.
+	marked := []llms.Message{
 		{Role: llms.RoleSystem, Content: systemPrompt},
 		{
 			Role:         llms.RoleUser,
@@ -71,6 +72,12 @@ func main() {
 		},
 		{Role: llms.RoleUser, Content: "Summarize it."},
 	}
+	third, err := client.GenerateContent(ctx, marked)
+	if err != nil {
+		log.Fatalf("third call: %v", err)
+	}
+	tracker.Record(client.Provider(), client.Model(), third.Usage)
+	printUsage("call 3", third.Usage)
 }
 
 func printUsage(label string, u llms.Usage) {
