@@ -699,3 +699,15 @@ request) to the innermost cause instead of reporting the wrapper itself.
 | `modes.go:144` batch cache rates should be derived from input ratios | Halving the published standard cache rate is the documented stacking of the batch discount on the cache price; cards whose cache rates differ from the 0.1x and 1.25x defaults (for example `claude-fable-5-1`) keep their own published multipliers. |
 | `videogen.go:237` cancellation can land between the check and `ResultFn` | Any check-then-call has that window; the guarantee is that a call already canceled when `Wait` returns does not invoke `ResultFn`. |
 | `featherless-options.go:107`, `structured.go:323`, `structured.go:450`, `tokens.go:58` | Recurring false positives: handler is wired in `speech.go`; case-insensitive and null-pointer matching mirror `encoding/json`; `isNilInterface` is defined in `llms.go`. |
+
+Round 68 (2026-10-10) reported 7 errors. Fixed (documentation): `CostTracker`
+states that it must be built with `NewCostTracker`, and `RecordTokens` states
+that it settles requests admitted with the configured estimate, since the limiter
+keeps no per-request charge for a `WaitN` call with a different explicit count.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `turn.go:20` returns the system message index for [user, assistant, system] | The loop stops at the system message with `i == 3`, so the function returns 3 (`len(messages)`), as documented. |
+| `llmadk/testdata/fixtures/zai/tool_loop.json:4` fixture model disagrees with responses | The field is the model the scenario requested (`glm-4.7`, as in the live-gate record); the provider answered with `glm-5.3-flash`. The harness does not key anything off the response model. |
+| `llmadk/config.go:94` labels silently discarded | Deliberate and listed as `ignored` in the field table (round 64). |
+| `featherless-options.go:107`, `structured.go:450` | Recurring false positives (handler wired in `speech.go`; null pointers mirror `encoding/json`, round 53). |

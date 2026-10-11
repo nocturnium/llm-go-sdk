@@ -550,6 +550,9 @@ type ModelUsage struct {
 
 // CostTracker tracks token usage and estimated costs across providers/models.
 //
+// Create one with [NewCostTracker]; the zero value has no pricing or usage maps
+// and is not usable.
+//
 // Thread-safety: All methods are safe for concurrent use. The tracker uses
 // an RWMutex internally to allow concurrent reads (GetUsage, GetTotalCost,
 // GetAllUsage) while serializing writes (Record, RecordEmbedding).

@@ -511,9 +511,13 @@ func (rl *RateLimiter) tryAcquire(ctx context.Context, requests, tokens int) err
 	return nil
 }
 
-// RecordTokens records actual token usage (for more accurate limiting)
-// This can be called after a request to adjust for the difference between
-// estimated and actual tokens
+// RecordTokens records actual token usage (for more accurate limiting).
+// It settles a request that was admitted with the configured token estimate
+// (Wait, or WaitN with tokens equal to the estimate) by charging or refunding
+// the difference between that estimate and actualTokens. A request admitted with
+// a different explicit count through WaitN must not be settled here, because the
+// limiter does not remember per-request charges and would refund tokens it never
+// charged.
 func (rl *RateLimiter) RecordTokens(actualTokens int) {
 	tokenLimiter := rl.tokenLim()
 	if tokenLimiter == nil {
