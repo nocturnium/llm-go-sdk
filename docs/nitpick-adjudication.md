@@ -894,7 +894,7 @@ Round 83 (2026-10-10) reported 5 errors, all false positives; no code change.
 | Finding | Why it does not stand |
 | --- | --- |
 | `.github/workflows/ci.yml:26` unpublished `@v7` action majors | Recurring false positive; those majors are published. |
-| `pkg/providers/elevenlabs/flows.go:229` negative video duration bypasses validation | `-1` is nonzero, so it is written to `duration_secs`, and `validateVideoBody` rejects a value `<= 0` with `ErrInvalidParameters`; the `WithVideoDuration(-1)` case in `TestFlows_VideoValidation` covers it and passes. |
+| `pkg/providers/elevenlabs/flows.go:229` negative video duration bypasses validation | `-1` is nonzero, so it is written to `duration_secs`, and `validateVideoBody` rejects a value `<= 0` with `ErrInvalidParameters`; the `WithVideoDuration(-1)` case in `TestFlows_Validation` covers it and passes. |
 | `pkg/providers/featherless/featherless-options.go:107` handler never attached | Recurring; `speech.go` calls it on the terminal event. |
 | `pkg/providers/featherless/speech.go:79` truncated stream ends cleanly | `TestStreamSpeech_Truncated` passes: the SSE layer emits the interruption error event, which the loop forwards as an error chunk. |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
