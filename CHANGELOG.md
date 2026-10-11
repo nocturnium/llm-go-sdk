@@ -42,6 +42,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Multipart uploads reject a JSON response that is followed by more data than the response size limit, as the raw and binary paths already did.
+- An MCP parse-error reply now includes `"id": null` when the request id could not be recovered, so peers that validate JSON-RPC response shape accept it.
 - The Synthetic provider now defaults its embedding model to `hf:nomic-ai/nomic-embed-text-v1.5`, so an embedding call without an explicit model no longer fails with `ErrEmbeddingModelRequired` after the provider started advertising embedding support.
 - The Langfuse OTel middleware records token usage when a provider reports prompt or completion tokens without a total.
 - `RateLimiter.Reset` is no longer undone by a `Wait` that was already in flight: its late token debt and credit are discarded rather than applied to the freshly reset limiter.

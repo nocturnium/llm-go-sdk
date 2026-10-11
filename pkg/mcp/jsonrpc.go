@@ -306,6 +306,12 @@ func encodeResponse(id json.RawMessage, result any) ([]byte, error) {
 // encodeErrorResponse marshals a JSON-RPC error response echoing the request's
 // raw id verbatim.
 func encodeErrorResponse(id json.RawMessage, code int, message string) ([]byte, error) {
+	// JSON-RPC requires an error response whose request id cannot be determined
+	// to carry an explicit null id. rpcResponse.ID is omitempty so a successful
+	// request with an empty id would otherwise marshal no id field at all.
+	if len(id) == 0 {
+		id = json.RawMessage("null")
+	}
 	return json.Marshal(rpcResponse{
 		JSONRPC: jsonRPCVersion,
 		ID:      id,

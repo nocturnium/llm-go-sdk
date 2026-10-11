@@ -978,3 +978,14 @@ detector.
 | `structured.go:688` nested JSON is cut at the first inner brace | Probed: `balancedJSONAt` counts the opening bracket type, so `{"a":{"b":1}}`, `[{"a":1}]` and deeper nests all extract whole; the extraction tests pass. |
 | `testutil_test.go:135` `GenerateContent` inherits `callError` | The fallback is deliberate (round 33): a mock configured only through `WithMockCallError` must still fail `GenerateContent`, and `genError` takes precedence when both are set. |
 | `pkg/providers/elevenlabs/transcribe.go:119` non-finite timings accepted | JSON has no `NaN`/`±Inf` literal, and an overflowing number such as `1e400` is rejected by `encoding/json` before the timing checks. The existing negative-duration test passes. |
+
+Round 89 (2026-10-10) reported 6 errors. Fixed: a JSON-RPC parse-error reply
+now carries an explicit `"id": null` when no request id could be recovered,
+as the protocol requires.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/openaicompat/client.go:547` text/srt/vtt transcription leaves the result empty | The comparison is `target == &raw`, where both sides are the same local `raw` variable, so it is true after `target` is assigned `&raw`; the multipart suite decodes `text`, `srt` and `vtt` bodies. |
+| `pkg/openaicompat/client.go:554` array extras are rejected before repeated-field handling | The repeated path handles typed slice fields such as `TimestampGranularities`; `ExtraBody` is deliberately scalar-only, and `TestMultipartExtrasRejectNonScalars` pins that contract. |
+| `structured.go:322`, `structured.go:450` case-insensitive matching and null pointers | Recurring (rounds 53, 55, 56, 61, 62, 65, 68): matching mirrors `encoding/json`, and a nil pointer is the natural zero for a pointer field. |
+| `pkg/providers/featherless/featherless.go:71` `SpeechUsageHandler` is never wired | The handler is threaded through the speech stream path and covered by the Featherless media tests. |
