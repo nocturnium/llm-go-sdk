@@ -834,3 +834,15 @@ Round 78 (2026-10-10) reported 3 errors, all false positives; no code change.
 | `featherless-options.go:107` handler never invoked | Recurring; `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event (`TestStreamSpeech_ReportedCharacters`). |
 | `reasoning.go:185` `reflect.Value.Pointer` panics on a map | `Pointer` supports `Map` kinds. Probed: `cloneMetadataValue` clones nested `map[string]any`, a named map type and a map inside a slice without panicking. |
 | `structured.go:771` `SchemaFrom[Node]` with `Next *Node` recurses forever | Probed: it returns `{"next":{},"v":{"type":"string"}}`. The pointer-field path goes through `schemaForType`, which sets `seen` and degrades the cycle to an unconstrained `{}`. |
+
+Round 79 (2026-10-10) reported 7 errors, all false positives; no code change.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/llmadk.yml:121` passes a file to `apidiff` as a package | `apidiff` takes a baseline export file as its first argument as well as a package path, and `api.txt` is that export; `make -C llmadk apidiff` prints "Public API matches api.txt". |
+| `llmadk/request_test.go:176` synthesized IDs are random | `synthesizeID` hashes a seed of message index, part index and name through `NineCharToolCallID`, so re-translating the same history gives the same IDs (the function's comment says so). `NewToolCallID` is only used for responses. |
+| `llmadk/testdata/fixtures/zai/tool_loop.json:4` fixture model differs | Recurring (round 68); the field is the requested model, not the one the provider answered with. |
+| `llms_test.go:396` `toolTypeFunction` undeclared | Recurring (rounds 72, 74, 76); the package builds and its tests pass. |
+| `resilience_circuit_breaker.go:506` Reset leaves stale public permits | Documented FIFO contract for the token-less `Allow()`/`Record*` pair (rounds 52, 61, 64). |
+| `featherless.go:62` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
+| `pkg/providers/togetherai/image.go:67` fields untagged | Recurring (round 72); the fields are tagged and the image tests pass. |
