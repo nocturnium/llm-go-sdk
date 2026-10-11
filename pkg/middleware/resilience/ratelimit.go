@@ -46,6 +46,11 @@ type RateLimiter struct {
 	// charged in bounded installments; the remainder stays here and is settled
 	// before later requests instead of being silently dropped.
 	tokenDebt int
+	// generation advances on every Reset. A Wait that started before a Reset
+	// holds the old limiters, so its late debt and credit adjustments carry the
+	// generation they were admitted under and are dropped when it no longer
+	// matches, instead of landing in the freshly reset state.
+	generation uint64
 
 	// Behavior
 	blocking    bool          // Wait for rate limit or return error immediately
@@ -192,6 +197,14 @@ func (rl *RateLimiter) tokenLim() *rate.Limiter {
 	return rl.tokenLimiter
 }
 
+// snapshotLimiters returns the current limiters and the generation they belong
+// to, read together under one lock so a concurrent Reset cannot split them.
+func (rl *RateLimiter) snapshotLimiters() (requestLimiter, tokenLimiter *rate.Limiter, gen uint64) {
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+	return rl.requestLimiter, rl.tokenLimiter, rl.generation
+}
+
 // settleTokenDebt charges bounded installments of debt left by an earlier
 // provider-reported usage count. It returns the longest reservation delay and
 // any amount still owed. The reservations are not cancellable by the admitting
@@ -213,6 +226,12 @@ func (rl *RateLimiter) settleTokenDebt(ctx context.Context, tokenLimiter *rate.L
 		rl.mu.Lock()
 		debt := rl.tokenDebt
 		if debt <= 0 {
+			rl.mu.Unlock()
+			break
+		}
+		// A Reset replaced the limiter this call holds; the debt it saw was
+		// cleared with it, and charging the old bucket would be pointless.
+		if rl.tokenLimiter != tokenLimiter {
 			rl.mu.Unlock()
 			break
 		}
@@ -264,12 +283,14 @@ func (rl *RateLimiter) consumeTokenCredit(tokens int) int {
 
 // restoreTokenCredit returns credit that was consumed for a reservation that
 // was then canceled or refused.
-func (rl *RateLimiter) restoreTokenCredit(credit int) {
+func (rl *RateLimiter) restoreTokenCredit(credit int, gen uint64) {
 	if credit <= 0 {
 		return
 	}
 	rl.mu.Lock()
-	rl.tokenCredit += credit
+	if gen == rl.generation {
+		rl.tokenCredit += credit
+	}
 	rl.mu.Unlock()
 }
 
@@ -298,8 +319,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 
 	// Snapshot limiter pointers under the read lock so a concurrent Reset cannot
 	// be observed mid-reassignment.
-	requestLimiter := rl.requestLim()
-	tokenLimiter := rl.tokenLim()
+	requestLimiter, tokenLimiter, gen := rl.snapshotLimiters()
 	if tokenLimiter != nil {
 		for {
 			delay, remaining := rl.settleTokenDebt(waitCtx, tokenLimiter, time.Now())
@@ -367,7 +387,7 @@ func (rl *RateLimiter) WaitN(ctx context.Context, requests, tokens int) error {
 		}
 		tokRes = tokenLimiter.ReserveN(now, tokens)
 		if !tokRes.OK() {
-			rl.restoreTokenCredit(consumedCredit)
+			rl.restoreTokenCredit(consumedCredit, gen)
 			reqRes.CancelAt(now)
 			return ErrRateLimitTimeout
 		}
@@ -392,7 +412,7 @@ reserved:
 			if tokRes != nil {
 				tokRes.Cancel()
 			}
-			rl.restoreTokenCredit(consumedCredit)
+			rl.restoreTokenCredit(consumedCredit, gen)
 			if failure := rl.waitFailure(ctx, waitCtx, waitCtx.Err()); failure != nil {
 				return failure
 			}
@@ -406,14 +426,14 @@ reserved:
 		if tokRes != nil {
 			tokRes.Cancel()
 		}
-		rl.restoreTokenCredit(consumedCredit)
+		rl.restoreTokenCredit(consumedCredit, gen)
 		if failure := rl.waitFailure(ctx, waitCtx, err); failure != nil {
 			return failure
 		}
 		return ErrRateLimitTimeout
 	}
 	if deferredTokens > 0 {
-		rl.addTokenDebt(deferredTokens)
+		rl.addTokenDebt(deferredTokens, gen)
 	}
 
 	return nil
@@ -423,19 +443,20 @@ reserved:
 // could not be reserved in one burst-sized reservation. Later requests settle it
 // before they are admitted. Saturating keeps a pathological report from wrapping
 // the debt negative, which would make it look settled.
-func (rl *RateLimiter) addTokenDebt(n int) {
+func (rl *RateLimiter) addTokenDebt(n int, gen uint64) {
 	if n <= 0 {
 		return
 	}
 	rl.mu.Lock()
-	rl.tokenDebt = saturatingAddInt(rl.tokenDebt, n)
+	if gen == rl.generation {
+		rl.tokenDebt = saturatingAddInt(rl.tokenDebt, n)
+	}
 	rl.mu.Unlock()
 }
 
 // tryAcquire attempts to acquire rate limit tokens without waiting
 func (rl *RateLimiter) tryAcquire(ctx context.Context, requests, tokens int) error {
-	requestLimiter := rl.requestLim()
-	tokenLimiter := rl.tokenLim()
+	requestLimiter, tokenLimiter, gen := rl.snapshotLimiters()
 	if tokenLimiter != nil {
 		// The non-blocking path cannot wait, but debt settlement must still stop
 		// between installments when the caller's context is done rather than
@@ -475,27 +496,27 @@ func (rl *RateLimiter) tryAcquire(ctx context.Context, requests, tokens int) err
 			reqRes := requestLimiter.ReserveN(now, requests)
 			if !reqRes.OK() || reqRes.Delay() > 0 {
 				reqRes.CancelAt(now)
-				rl.restoreTokenCredit(credit)
+				rl.restoreTokenCredit(credit, gen)
 				return ErrRateLimitExceeded
 			}
-			rl.addTokenDebt(deferredTokens)
+			rl.addTokenDebt(deferredTokens, gen)
 			return nil
 		}
 		now := time.Now()
 		reqRes := requestLimiter.ReserveN(now, requests)
 		if !reqRes.OK() || reqRes.Delay() > 0 {
 			reqRes.CancelAt(now)
-			rl.restoreTokenCredit(credit)
+			rl.restoreTokenCredit(credit, gen)
 			return ErrRateLimitExceeded
 		}
 		tokRes := tokenLimiter.ReserveN(now, tokens)
 		if !tokRes.OK() || tokRes.Delay() > 0 {
 			tokRes.CancelAt(now)
-			rl.restoreTokenCredit(credit)
+			rl.restoreTokenCredit(credit, gen)
 			reqRes.CancelAt(now)
 			return ErrRateLimitExceeded
 		}
-		rl.addTokenDebt(deferredTokens)
+		rl.addTokenDebt(deferredTokens, gen)
 		return nil
 	}
 	// Reserve the request bucket, then the token bucket. If the token bucket is
@@ -678,6 +699,7 @@ func (rl *RateLimiter) Reset() {
 	}
 	rl.tokenDebt = 0
 	rl.tokenCredit = 0
+	rl.generation++
 }
 
 // RateLimitedClient wraps an LLM with client-side rate limiting

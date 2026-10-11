@@ -858,3 +858,14 @@ such as `data: `, so a payload of exactly 4 MiB does not fit.
 | `structured.go:868` tagged unexported embedded struct advertised but never decoded | Probed: `encoding/json` populates `struct{ inner \`json:"in"\` }` from `{"in":{"a":"x"}}`, so the schema matches the decoder. |
 | `featherless-options.go:107` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
+
+Round 81 (2026-10-10) reported 5 errors. Fixed: `RateLimiter.Reset` now advances
+a generation, and a `Wait` admitted before the reset drops its late debt and
+credit adjustments instead of writing them into the fresh state;
+`settleTokenDebt` stops when the limiter it holds has been replaced.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `internal/httpclient/security.go:267` IPv4-mapped multicast bypasses the block | Probed: `::ffff:224.0.0.1` is rejected as link-local, `::ffff:239.255.255.250` as multicast; `net.IP.IsMulticast` unwraps mapped addresses. |
+| `pkg/middleware/resilience/ratelimit.go:658` lock ordering in `TokensRemaining` | The order is always `rl.mu` then the limiter's own lock, and the limiter never calls back into `rl.mu`, so the two cannot deadlock. |
+| `featherless-options.go:107`, `structured.go:450` | Recurring false positives (handler wired in `speech.go`; null pointers by design, round 53). |

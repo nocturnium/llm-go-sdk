@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `RateLimiter.Reset` is no longer undone by a `Wait` that was already in flight: its late token debt and credit are discarded rather than applied to the freshly reset limiter.
 - The logging, metrics and Langfuse OTel middlewares return `ErrIncompleteResponse` when a wrapped provider's `Stream` returns a nil channel with no error, instead of handing the caller a channel that never closes.
 - The logging middleware records call options (trace overrides, `max_tokens`, `temperature` and the other explicit request parameters) on every log entry for `Call`, `GenerateContent` and `Stream`; they were previously missing.
 - Releasing a half-open circuit-breaker probe that was admitted before `Reset` no longer shrinks the new window's probe count. `RetryPolicy.GetDelay` never exceeds a `MaxDelay` close to the maximum duration. `RunTools` returns an error for a nil `LLM`.
