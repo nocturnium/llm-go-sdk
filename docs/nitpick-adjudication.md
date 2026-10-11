@@ -1012,3 +1012,16 @@ extractors that returned only the first embedded candidate are removed.
 | `pkg/providers/featherless/featherless-options.go:107` callback not wired | Recurring (rounds 89, 90): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
 | `pkg/providers/mistral/transcription.go:52` typed response format ignored | `llms.TranscribeOptions` has no `ResponseFormat` field, so there is no typed option to ignore; the response format is an explicit `Extra` key. |
 | `structured.go:181` scalar extraction returns the first quoted string | `parseTyped` iterates every candidate from `extractScalarJSONCandidates`; the two first-only helpers were unused and have been deleted. |
+
+Round 92 (2026-10-10) reported 9 errors. Fixed: a cache entry at its exact
+expiry instant is a miss, the retry-replay test's attempt counter is atomic, and
+the llmadk bridge rejects a negative `CandidateCount`.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:14` Go 1.26 unavailable | The module and CI intentionally moved to Go 1.26 alongside `golang.org/x/time` 0.16.0; `setup-go` resolves `1.26.x`. |
+| `.github/workflows/ci.yml:26` unpublished action versions | Recurring (rounds 48, 50, 54–58, 64, 79, 84, 87, 89, 90); `v7` and `v8` are published and resolve. |
+| `docs/configuration.md:227` DNS-based SSRF unprotected | The dialer's `Control` hook checks every resolved peer address before connect, so a hostname that resolves to a private address is refused; only pre-flight literal/suffix checks are documented as DNS-free. |
+| `internal/httpclient/poll.go:49` policy timeout bypassed | By design: `TestPoll_DoneOnDeadlinePoll` pins that a callback completing during the policy deadline is a success, and a callback error is the operation's cause. |
+| `pkg/providers/featherless/featherless-options.go:107` callback not wired | Recurring (rounds 89–91): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82, 89, 90); `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |

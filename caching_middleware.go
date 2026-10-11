@@ -283,7 +283,10 @@ func (m *MemoryResponseCache) Get(_ context.Context, key string) (*Response, boo
 	if !ok {
 		return nil, false
 	}
-	if !entry.expires.IsZero() && m.now().After(entry.expires) {
+	// The expiry instant itself is already past the entry's advertised
+	// lifetime, so equality must miss; only After would serve it for one
+	// instant beyond the TTL.
+	if !entry.expires.IsZero() && !m.now().Before(entry.expires) {
 		delete(m.entries, key)
 		return nil, false
 	}

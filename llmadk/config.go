@@ -49,7 +49,7 @@ func (t *translator) config(cfg *genai.GenerateContentConfig) error {
 	if cfg.FrequencyPenalty != nil {
 		add(llms.WithFrequencyPenalty(float64(*cfg.FrequencyPenalty)))
 	}
-	if cfg.CandidateCount > 1 {
+	if cfg.CandidateCount > 1 || cfg.CandidateCount < 0 {
 		return t.reject("GenerateContentConfig.CandidateCount", true, fmt.Sprintf("%d candidates", cfg.CandidateCount))
 	}
 	if len(cfg.ResponseModalities) > 0 {

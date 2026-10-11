@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- A cache entry at its exact expiry instant is a miss rather than a hit, and the llmadk bridge rejects a negative `CandidateCount` instead of dropping it.
 - `IsTemporary` and `APIError.IsRetryable` treat a typed-nil `*APIError` as non-retryable instead of panicking. The unused scalar extractors that returned only the first embedded candidate are gone.
 - `ProviderFromError` returns an empty provider for a typed-nil `*ProviderError` or `*APIError` instead of panicking in the unwrap chain. An explicit `ollama.WithBaseURL` is no longer redirected by `OLLAMA_HOST`, so a caller can pin the endpoint regardless of process environment. Dated GPT-4.1 snapshot IDs are classified as vision-capable in `openai.ListModels`, matching the undated aliases.
 - Multipart uploads reject a JSON response that is followed by more data than the response size limit, as the raw and binary paths already did.

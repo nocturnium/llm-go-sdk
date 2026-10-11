@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -113,9 +114,9 @@ func TestDoWithRetry_ReplaysBodyWithoutMutatingCallerRequest(t *testing.T) {
 }
 
 func TestDoWithRetry_DoesNotRetryBodyWithoutGetBody(t *testing.T) {
-	var attempts int
+	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attempts++
+		attempts.Add(1)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("try again"))
 	}))
@@ -145,8 +146,8 @@ func TestDoWithRetry_DoesNotRetryBodyWithoutGetBody(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if attempts != 1 {
-		t.Fatalf("attempts = %d, want 1", attempts)
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("attempts = %d, want 1", got)
 	}
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status code = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)

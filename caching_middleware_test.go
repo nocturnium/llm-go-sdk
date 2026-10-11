@@ -243,6 +243,21 @@ func TestMemoryResponseCache_TTLExpiry(t *testing.T) {
 	}
 }
 
+// The expiry instant is already outside the entry's lifetime, so a Get exactly
+// at it must miss rather than serve a response one instant past its TTL.
+func TestMemoryResponseCache_ExpiryInstantIsAMiss(t *testing.T) {
+	cache := NewMemoryResponseCache(time.Minute, 0)
+	base := time.Unix(0, 0)
+	cache.now = func() time.Time { return base }
+	ctx := context.Background()
+	cache.Set(ctx, "k", &Response{Content: "v"})
+
+	cache.now = func() time.Time { return base.Add(time.Minute) }
+	if _, ok := cache.Get(ctx, "k"); ok {
+		t.Error("expected miss exactly at the expiry instant")
+	}
+}
+
 func TestMemoryResponseCache_NoExpiryWhenTTLZero(t *testing.T) {
 	cache := NewMemoryResponseCache(0, 0)
 	now := time.Unix(0, 0)

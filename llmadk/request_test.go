@@ -294,15 +294,20 @@ func TestTranslate_Config(t *testing.T) {
 		})
 	}
 
-	hard := map[string]*genai.GenerateContentConfig{
-		"CandidateCount":     {CandidateCount: 2},
-		"ResponseModalities": {ResponseModalities: []string{"AUDIO"}},
-		"ResponseMIMEType":   {ResponseMIMEType: "text/x.enum"},
+	hard := []struct {
+		name  string
+		field Field
+		cfg   *genai.GenerateContentConfig
+	}{
+		{"CandidateCount", "GenerateContentConfig.CandidateCount", &genai.GenerateContentConfig{CandidateCount: 2}},
+		{"NegativeCandidateCount", "GenerateContentConfig.CandidateCount", &genai.GenerateContentConfig{CandidateCount: -1}},
+		{"ResponseModalities", "GenerateContentConfig.ResponseModalities", &genai.GenerateContentConfig{ResponseModalities: []string{"AUDIO"}}},
+		{"ResponseMIMEType", "GenerateContentConfig.ResponseMIMEType", &genai.GenerateContentConfig{ResponseMIMEType: "text/x.enum"}},
 	}
-	for name, cfg := range hard {
-		t.Run("hard "+name, func(t *testing.T) {
-			m := newTestModel(t, WithIgnore(Field("GenerateContentConfig."+name)))
-			if _, err := m.translate(&model.LLMRequest{Contents: contents, Config: cfg}); !errors.Is(err, ErrUnsupportedConfigField) {
+	for _, tc := range hard {
+		t.Run("hard "+tc.name, func(t *testing.T) {
+			m := newTestModel(t, WithIgnore(tc.field))
+			if _, err := m.translate(&model.LLMRequest{Contents: contents, Config: tc.cfg}); !errors.Is(err, ErrUnsupportedConfigField) {
 				t.Errorf("err = %v, want a rejection WithIgnore cannot lift", err)
 			}
 		})
