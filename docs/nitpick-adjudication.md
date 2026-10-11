@@ -767,3 +767,15 @@ panicking on `resp.Content`.
 | `pkg/providers/togetherai/media_transport.go:32` produces `/v1/v2/videos` | `video.go` strips the trailing `/v1` segment from the base path before joining `/v2/videos`; the proxy-prefix video test covers it. |
 | `scripts/release-decide.sh:74` uninterpolated `$1` | Recurring (round 71); the jq program is double-quoted, so the shell expands `$1`. |
 | `structured.go:450` nested pointers accept null | By design (round 53). |
+
+Round 73 (2026-10-10) reported 6 errors. Fixed: `releasePermit` ignores a
+half-open probe from before a `Reset` instead of decrementing the new
+generation's probe count; `RetryPolicy.GetDelay` clamps to `MaxDelay` after the
+float conversion, so a `MaxDelay` just below `MaxInt64` is never exceeded by
+rounding; and `RunTools` returns an error for a nil `LLM`.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/providers/synthetic/models_test.go:153` catalog has eight code models, test wants nine | `TestListModels` passes; the catalog has ten `ModelTypeCode` entries. |
+| `structured.go:171` scalar extraction returns the first quoted prose value | Inherently ambiguous with several quoted strings (round 59 entry); no rule can know which is intended. |
+| `featherless-options.go:107` never invokes the handler | Recurring; `speech.go` calls it on the terminal event. |

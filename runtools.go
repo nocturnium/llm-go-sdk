@@ -113,6 +113,9 @@ func RunTools(ctx context.Context, llm LLM, messages []Message, registry *ToolRe
 	if registry == nil {
 		return nil, append([]Message(nil), messages...), errors.New("llms: RunTools requires a non-nil ToolRegistry")
 	}
+	if isNilInterface(llm) {
+		return nil, append([]Message(nil), messages...), errors.New("llms: RunTools requires a non-nil LLM")
+	}
 	cfg := applyRunToolsOptions(opts...)
 	transcript := append([]Message(nil), messages...)
 	var lastResp *Response

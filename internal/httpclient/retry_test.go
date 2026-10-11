@@ -166,3 +166,10 @@ func TestIsRetryable(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryPolicy_GetDelayNeverExceedsNearMaxMaxDelay(t *testing.T) {
+	p := &RetryPolicy{InitialDelay: time.Duration(math.MaxInt64), MaxDelay: time.Duration(math.MaxInt64 - 1), Multiplier: 2}
+	if got := p.GetDelay(1); got > p.MaxDelay {
+		t.Fatalf("GetDelay = %d exceeds MaxDelay %d", got, p.MaxDelay)
+	}
+}

@@ -475,13 +475,15 @@ func (cb *CircuitBreaker) releasePermit(p permit) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	if p.halfOpen && cb.state == CircuitHalfOpen && cb.halfOpenCount > 0 {
-		cb.halfOpenCount--
+	if p.halfOpen {
+		// A probe admitted before a Reset holds no slot in the fresh window;
+		// releasing it must not shrink the new generation's probe count.
+		if cb.state == CircuitHalfOpen && p.generation == cb.generation && cb.halfOpenCount > 0 {
+			cb.halfOpenCount--
+		}
 		return
 	}
-	if !p.halfOpen {
-		cb.retireInflightClosedLocked(p.generation)
-	}
+	cb.retireInflightClosedLocked(p.generation)
 }
 
 // Reset returns the circuit breaker to the closed state with a clean slate.

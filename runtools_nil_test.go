@@ -22,3 +22,9 @@ func TestRunTools_NilProviderResponseReturnsError(t *testing.T) {
 		t.Fatal("a (nil, nil) provider result must be an error, not a panic")
 	}
 }
+
+func TestRunTools_NilLLMReturnsError(t *testing.T) {
+	if _, _, err := RunTools(context.Background(), nil, []Message{{Role: RoleUser, Content: "hi"}}, NewToolRegistry()); err == nil {
+		t.Fatal("RunTools with a nil LLM must return an error")
+	}
+}

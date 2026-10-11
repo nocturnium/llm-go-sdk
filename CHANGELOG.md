@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Releasing a half-open circuit-breaker probe that was admitted before `Reset` no longer shrinks the new window's probe count. `RetryPolicy.GetDelay` never exceeds a `MaxDelay` close to the maximum duration. `RunTools` returns an error for a nil `LLM`.
 - Groq transcription rejects word timestamps requested with a `text` or `json` response format locally, instead of sending a request Groq refuses. `RunTools` returns an error rather than panicking when a provider returns a nil response with no error.
 - `ProviderFromError` finds the provider in any branch of a multi-wrapped error. `GenerateTyped` no longer accepts a bare scalar that is only a fragment of a longer word, so a reply such as `falsehood` is repaired or rejected instead of parsing as `false`. The auto-release workflow reports a failed cleanup of a release tag instead of ignoring it.
 - `GetErrorDetails` reports the innermost cause for errors that wrap several errors (`fmt.Errorf("%w: %w", ...)`, `errors.Join`), instead of the outer wrapper.
