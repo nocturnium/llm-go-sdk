@@ -132,6 +132,9 @@ func RunTools(ctx context.Context, llm LLM, messages []Message, registry *ToolRe
 			return lastResp, transcript, err
 		}
 		lastResp = resp
+		if resp == nil {
+			return lastResp, transcript, errors.New("llms: RunTools: provider returned a nil response")
+		}
 
 		if cfg.onStep != nil {
 			cfg.onStep(iteration, resp)

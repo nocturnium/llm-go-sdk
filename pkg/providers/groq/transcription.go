@@ -71,6 +71,11 @@ func (c *Client) transcribe(ctx context.Context, route string, audio llms.MediaI
 	if fields["stream"] == "true" || (format != "json" && format != "verbose_json" && format != "text") {
 		return nil, c.mediaError(llms.ErrInvalidParameters)
 	}
+	// Groq honors timestamp granularities only with verbose_json; with json or
+	// text it rejects the request, so refuse the combination locally.
+	if _, ok := fields["timestamp_granularities[]"]; ok && format != "verbose_json" {
+		return nil, c.mediaError(fmt.Errorf("word timestamps require response_format verbose_json: %w", llms.ErrInvalidParameters))
+	}
 	fields["response_format"] = format
 	var raw []byte
 	err = c.mediaHTTP.DoMultipart(ctx, http.MethodPost, c.mediaEndpoint(route), fields, files, c.mediaHeaders(), &raw)

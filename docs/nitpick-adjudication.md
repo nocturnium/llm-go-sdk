@@ -750,3 +750,20 @@ Round 71 (2026-10-10) reported 6 errors, all false positives; no code change.
 | `scripts/release-decide.sh:74` jq program contains an uninterpolated `$1` | The program is in double quotes, so the shell substitutes `$1` before jq runs; the single-quoted strings are the arguments to `count`. |
 | `structured.go:181` returns the first quoted prose value | Inherently ambiguous with several quoted strings (round 59 entry). |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
+
+Round 72 (2026-10-10) reported 10 errors. Fixed: Groq transcription refuses
+word timestamps combined with `response_format` `text` or `json` (Groq only
+honors timestamp granularities with `verbose_json`), and `RunTools` returns an
+error when a provider returns a nil response with no error, instead of
+panicking on `resp.Content`.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:14` Go 1.26 is not an available toolchain | `go.mod` requires go 1.26.6; the module builds and tests with it locally. |
+| `.github/workflows/ci.yml:26` action majors unpublished | Recurring false positive; the `@v7` majors are published. |
+| `llmadk/config.go:94` labels silently dropped | Deliberate and listed as `ignored` in the field table (rounds 64, 68). |
+| `options.go:439` mismatched `toolTypeFunction` comparison does not compile | The package builds and its tests pass; the comparison is between values of the same type. |
+| `pkg/providers/togetherai/image.go:81` `ResponseFormat` never decoded | The field is tagged `json:"response_format"`, and the image tests pass with the default `base64`. |
+| `pkg/providers/togetherai/media_transport.go:32` produces `/v1/v2/videos` | `video.go` strips the trailing `/v1` segment from the base path before joining `/v2/videos`; the proxy-prefix video test covers it. |
+| `scripts/release-decide.sh:74` uninterpolated `$1` | Recurring (round 71); the jq program is double-quoted, so the shell expands `$1`. |
+| `structured.go:450` nested pointers accept null | By design (round 53). |

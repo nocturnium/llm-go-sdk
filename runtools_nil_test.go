@@ -15,3 +15,10 @@ func TestRunTools_NilRegistryReturnsError(t *testing.T) {
 		t.Errorf("resp=%v transcript=%v, want nil response and the input transcript", resp, transcript)
 	}
 }
+
+func TestRunTools_NilProviderResponseReturnsError(t *testing.T) {
+	_, _, err := RunTools(context.Background(), &nilResponseLLM{}, []Message{{Role: RoleUser, Content: "hi"}}, NewToolRegistry())
+	if err == nil {
+		t.Fatal("a (nil, nil) provider result must be an error, not a panic")
+	}
+}

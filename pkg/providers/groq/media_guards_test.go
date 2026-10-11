@@ -54,7 +54,7 @@ func TestTranscription_FormatsAndTranslation(t *testing.T) {
 		if translate {
 			call = c.Translate
 		}
-		out, err := call(context.Background(), llms.MediaInput{Data: []byte("wav bytes"), MIMEType: "audio/wav"}, llms.WithTranscribeModel("whisper-large-v3"), llms.WithTranscribeLanguage("en"), llms.WithTranscribeWordTimestamps(true), llms.WithTranscribeExtra(map[string]any{"response_format": "text", "timestamp_granularities[]": []string{"word"}}))
+		out, err := call(context.Background(), llms.MediaInput{Data: []byte("wav bytes"), MIMEType: "audio/wav"}, llms.WithTranscribeModel("whisper-large-v3"), llms.WithTranscribeLanguage("en"), llms.WithTranscribeExtra(map[string]any{"response_format": "text"}))
 		if err != nil || out.Text != "translated" {
 			t.Fatalf("%+v %v", out, err)
 		}
@@ -98,6 +98,18 @@ func TestSynthesize_RejectsUnsupportedTypedOptions(t *testing.T) {
 	} {
 		if _, err := c.Synthesize(context.Background(), "hi", llms.WithSpeechVoice("autumn"), opt); !errors.Is(err, llms.ErrInvalidParameters) {
 			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+// Word timestamps are valid only with verbose_json; text or json would be
+// rejected by Groq, so the request must fail locally.
+func TestTranscribe_WordTimestampsRequireVerboseJSON(t *testing.T) {
+	c := mediaTestClient(t, func(http.ResponseWriter, *http.Request) { t.Error("unexpected HTTP request for a rejected format") })
+	for _, format := range []string{"text", "json"} {
+		_, err := c.Transcribe(context.Background(), llms.MediaInput{Data: []byte("wav bytes"), MIMEType: "audio/wav"}, llms.WithTranscribeWordTimestamps(true), llms.WithTranscribeExtra(map[string]any{"response_format": format}))
+		if !errors.Is(err, llms.ErrInvalidParameters) {
+			t.Errorf("format %q: err = %v, want ErrInvalidParameters", format, err)
 		}
 	}
 }
