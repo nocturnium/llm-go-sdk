@@ -549,21 +549,7 @@ func GetErrorDetails(err error) ErrorDetails {
 
 	details := ErrorDetails{
 		IsRetryable: IsTemporary(err),
-		RootCause:   errors.Unwrap(err),
-	}
-
-	// If no wrapped error, root cause is the error itself
-	if details.RootCause == nil {
-		details.RootCause = err
-	} else {
-		// Keep unwrapping to find the root
-		for {
-			next := errors.Unwrap(details.RootCause)
-			if next == nil {
-				break
-			}
-			details.RootCause = next
-		}
+		RootCause:   rootCause(err),
 	}
 
 	details.Provider = ProviderFromError(err)
@@ -722,3 +708,28 @@ func (e *ModerationError) Error() string {
 
 // Unwrap returns ErrContentFiltered for errors.Is compatibility.
 func (e *ModerationError) Unwrap() error { return ErrContentFiltered }
+
+// rootCause follows Unwrap chains to the innermost error. For an error that
+// wraps several (fmt.Errorf with multiple %w, errors.Join) it follows the first
+// non-nil child, so the %w: %w wrapper WrapHTTPError builds for a canceled
+// request still reports its cause rather than the wrapper itself.
+func rootCause(err error) error {
+	for {
+		var next error
+		switch u := err.(type) {
+		case interface{ Unwrap() error }:
+			next = u.Unwrap()
+		case interface{ Unwrap() []error }:
+			for _, child := range u.Unwrap() {
+				if child != nil {
+					next = child
+					break
+				}
+			}
+		}
+		if next == nil {
+			return err
+		}
+		err = next
+	}
+}

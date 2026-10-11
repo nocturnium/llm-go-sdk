@@ -685,3 +685,17 @@ test's failure message names the model it actually compares against.
 | `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64); a zero-value config leaves reasoning unset by design. |
 | `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring false positive; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
 | `structured.go:330` case-insensitive property match | Mirrors `json.Unmarshal` by design (rounds 55, 56, 61, 62, 65). |
+
+Round 67 (2026-10-10) reported 11 errors. Fixed: `GetErrorDetails` follows
+`Unwrap() []error` (the `%w: %w` wrapper `WrapHTTPError` builds for a canceled
+request) to the innermost cause instead of reporting the wrapper itself.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:26` action majors unpublished | Recurring false positive; `checkout@v7`, `setup-go@v7` and `upload-artifact@v7` are published. |
+| `internal/httpclient/poll.go:56` success loses to cancellation | The documented precedence covers the policy's own deadline. Caller cancellation winning over a late success is deliberate, as the comment in the code says. |
+| `internal/httpclient/security.go:181` hostnames resolving to private IPs accepted | `ValidateURL` is the literal-host layer; the transport's dial `Control` hook rejects private addresses at connect time,, which avoids the DNS rebinding gap. |
+| `llms_test.go:679` capability test always fails | The final check calls the `Supports*` helpers, which test interface implementation, not the flag; the test passes. |
+| `modes.go:144` batch cache rates should be derived from input ratios | Halving the published standard cache rate is the documented stacking of the batch discount on the cache price; cards whose cache rates differ from the 0.1x and 1.25x defaults (for example `claude-fable-5-1`) keep their own published multipliers. |
+| `videogen.go:237` cancellation can land between the check and `ResultFn` | Any check-then-call has that window; the guarantee is that a call already canceled when `Wait` returns does not invoke `ResultFn`. |
+| `featherless-options.go:107`, `structured.go:323`, `structured.go:450`, `tokens.go:58` | Recurring false positives: handler is wired in `speech.go`; case-insensitive and null-pointer matching mirror `encoding/json`; `isNilInterface` is defined in `llms.go`. |
