@@ -738,3 +738,15 @@ fails the job visibly.
 | `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64, 66, 69); a zero-value config leaves reasoning unset by design. |
 | `pkg/providers/groq/options_coverage_test.go:334` lacks an API key | The test passes `APIKey` in `llms.Config`; it passes with no Groq key in the environment. |
 | `featherless-options.go:107`, `structured.go:450` | Recurring false positives (handler wired in `speech.go`; null pointers mirror `encoding/json`). |
+
+Round 71 (2026-10-10) reported 6 errors, all false positives; no code change.
+`TestClient_Transcribe_NonStringResponseFormatRejected` pins the OpenRouter case.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/fields.go:163` VALIDATED function calling classified as supported | Recurring (round 62): `Mode` is translated, and `config.go` rejects VALIDATED through `FieldValidatedFunctionCalling`. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring; `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event. |
+| `pkg/providers/openrouter/transcription.go:49` non-string `response_format` bypasses validation | `format, _ = value.(string)` yields `""` for a non-string value, and `""` is neither `json` nor `verbose_json`, so the request returns `ErrInvalidParameters` before any field is serialized. |
+| `scripts/release-decide.sh:74` jq program contains an uninterpolated `$1` | The program is in double quotes, so the shell substitutes `$1` before jq runs; the single-quoted strings are the arguments to `count`. |
+| `structured.go:181` returns the first quoted prose value | Inherently ambiguous with several quoted strings (round 59 entry). |
+| `structured.go:450` pointer fields accept null | By design (round 53). |
