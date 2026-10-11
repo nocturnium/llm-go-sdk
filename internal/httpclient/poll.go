@@ -33,8 +33,10 @@ var ErrPollTimeout = errors.New("poll timeout")
 // Poll calls fn immediately, then with bounded exponential backoff until done.
 // Callback errors are returned unchanged. Cancellation returns the caller's
 // context error; expiry of Policy.Timeout returns ErrPollTimeout. The callback
-// must honor its context. Successful completion takes precedence over a deadline
-// reached during that callback. A zero policy uses DefaultPollPolicy.
+// must honor its context. Successful completion takes precedence over
+// Policy.Timeout expiring during that callback; the caller's own cancellation or
+// deadline does not, so an abandoned operation never reports success. A zero
+// policy uses DefaultPollPolicy.
 func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done bool, err error)) error {
 	p = normalizePollPolicy(p)
 	parent := ctx

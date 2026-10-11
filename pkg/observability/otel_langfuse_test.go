@@ -939,3 +939,38 @@ func TestLangfuseOTelMiddleware_ResponseModelFollowsOverride(t *testing.T) {
 		t.Errorf("request model = %q, response model = %q, want both %q", request, response, "gpt-4o-mini")
 	}
 }
+
+// Some providers report prompt and completion tokens but leave the total at
+// zero; the usage attributes must still be recorded.
+func TestLangfuseOTelMiddleware_UsageWithoutTotalIsRecorded(t *testing.T) {
+	spanRecorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	mock := &mockLangfuseLLM{
+		provider: llms.ProviderOpenAI,
+		model:    "gpt-4o",
+		genResp:  &llms.Response{Content: "ok", Usage: llms.Usage{PromptTokens: 12, CompletionTokens: 5}},
+	}
+	middleware, err := NewLangfuseOTelMiddleware(mock, WithLangfuseTracer(tracerProvider.Tracer(LangfuseInstrumentationName)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := middleware.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}}); err != nil {
+		t.Fatal(err)
+	}
+	spans := spanRecorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+	var prompt, completion int64 = -1, -1
+	for _, a := range spans[0].Attributes() {
+		switch string(a.Key) {
+		case string(keyGenAIUsagePromptTokens):
+			prompt = a.Value.AsInt64()
+		case string(keyGenAIUsageCompletionTokens):
+			completion = a.Value.AsInt64()
+		}
+	}
+	if prompt != 12 || completion != 5 {
+		t.Errorf("usage attributes prompt=%d completion=%d, want 12 and 5", prompt, completion)
+	}
+}

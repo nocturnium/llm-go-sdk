@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- The Langfuse OTel middleware records token usage when a provider reports prompt or completion tokens without a total.
 - `RateLimiter.Reset` is no longer undone by a `Wait` that was already in flight: its late token debt and credit are discarded rather than applied to the freshly reset limiter.
 - The logging, metrics and Langfuse OTel middlewares return `ErrIncompleteResponse` when a wrapped provider's `Stream` returns a nil channel with no error, instead of handing the caller a channel that never closes.
 - The logging middleware records call options (trace overrides, `max_tokens`, `temperature` and the other explicit request parameters) on every log entry for `Call`, `GenerateContent` and `Stream`; they were previously missing.

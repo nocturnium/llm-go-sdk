@@ -869,3 +869,22 @@ credit adjustments instead of writing them into the fresh state;
 | `internal/httpclient/security.go:267` IPv4-mapped multicast bypasses the block | Probed: `::ffff:224.0.0.1` is rejected as link-local, `::ffff:239.255.255.250` as multicast; `net.IP.IsMulticast` unwraps mapped addresses. |
 | `pkg/middleware/resilience/ratelimit.go:658` lock ordering in `TokensRemaining` | The order is always `rl.mu` then the limiter's own lock, and the limiter never calls back into `rl.mu`, so the two cannot deadlock. |
 | `featherless-options.go:107`, `structured.go:450` | Recurring false positives (handler wired in `speech.go`; null pointers by design, round 53). |
+
+Round 82 (2026-10-10) reported 10 errors. Fixed: the Langfuse OTel middleware
+records token metrics and span attributes when a provider reports prompt or
+completion tokens but leaves `TotalTokens` at zero (it gated on the total
+alone); and the `httpclient.Poll` doc comment now says what the code does, that
+the policy timeout loses to a successful callback but the caller's own
+cancellation does not.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/codeql.yml:45` unpublished action majors | Recurring false positive; the `@v7` and `@v4` majors are published. |
+| `docs/design/llmadk.md:254` `WithWebSearch` permits unsupported search | Deliberate and documented in that row: the option is the caller's statement that the provider searches, and rejection without it is the default (10x-7). |
+| `internal/httpclient/poll.go:56` success rejected after the caller's deadline | Deliberate: the code comment says an abandoned operation must not look successful. Only the policy timeout yields to a late success, which the doc now states. |
+| `llmadk/testdata/fixtures/anthropic/fallback_into_openai.json:12` holds only an Anthropic exchange | The scenario runs the Anthropic leg of a fallback and the OpenAI leg comes from the `openai-responses` fixture; `scenarios_test.go` lists both families. |
+| `pkg/providers/mistral/transcription.go:63` keyterms sent as file parts | A `MultipartFile` with no `Filename` is emitted as a plain form field (`multipart.go`: "empty emits a plain form field"); `media_review_test.go` asserts `context_bias[]` arrives as repeated values. |
+| `pkg/providers/runpod/models.go:113` Qwen 2.5 7B context 131072 | Qwen's model card lists 131,072 tokens for Qwen2.5-7B-Instruct (YaRN-scaled, 32,768 by default). The catalog records the model's maximum; whether a given RunPod worker enables YaRN is not something this table can know, and the entry's description says 131K. |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77); `video.go` strips the `/v1` suffix. |
+| `reasoning.go:201` cyclic struct clone recurses forever | Probed: cloning `n := &node{}; n.Next = n` returns; the pointer is memoized before its target is copied. |
+| `structured.go:450` nested pointers accept null | By design (round 53). |

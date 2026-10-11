@@ -304,7 +304,7 @@ func (m *LangfuseOTelMiddleware) GenerateContent(ctx context.Context, messages [
 	m.setGenAIResponseAttributes(span, m.resolveModel(opts), resp, duration)
 
 	// Record token metrics
-	if resp.Usage.TotalTokens > 0 {
+	if usageReported(resp.Usage) {
 		m.promptTokens.Add(ctx, int64(resp.Usage.PromptTokens), metric.WithAttributes(attrs...))
 		m.completionTokens.Add(ctx, int64(resp.Usage.CompletionTokens), metric.WithAttributes(attrs...))
 	}
@@ -676,7 +676,7 @@ func (m *LangfuseOTelMiddleware) setGenAIResponseAttributes(span trace.Span, mod
 		keyGenAIResponseFinishReason.String(string(resp.FinishReason)),
 	)
 
-	if resp.Usage.TotalTokens > 0 {
+	if usageReported(resp.Usage) {
 		span.SetAttributes(
 			keyGenAIUsagePromptTokens.Int(resp.Usage.PromptTokens),
 			keyGenAIUsageCompletionTokens.Int(resp.Usage.CompletionTokens),
@@ -719,3 +719,10 @@ var (
 	_ llms.LLM     = (*LangfuseOTelMiddleware)(nil)
 	_ llms.Wrapper = (*LangfuseOTelMiddleware)(nil)
 )
+
+// usageReported reports whether the provider returned any token counts. Some
+// providers omit the total while still reporting prompt and completion tokens,
+// so the total alone is not a reliable signal.
+func usageReported(u llms.Usage) bool {
+	return u.TotalTokens > 0 || u.PromptTokens > 0 || u.CompletionTokens > 0
+}
