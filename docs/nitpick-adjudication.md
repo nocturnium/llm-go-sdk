@@ -816,3 +816,13 @@ Round 76 (2026-10-10) reported 6 errors, all false positives; no code change.
 | `featherless-options.go:107` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
 | `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (round 72); `TestGenerateVideo` in `media_review_test.go` covers the `/v1` suffix and expects `/v2/videos`. |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
+
+Round 77 (2026-10-10) reported 5 errors, all false positives; no code change.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64, 66, 69, 70); a zero-value config leaves reasoning unset by design. |
+| `featherless-options.go:107` handler never wired | Recurring; `speech.go` calls it on the terminal event. |
+| `pkg/providers/openrouter/video.go:222` `input_references` never serialized | The typed `InputReferences` field is tagged `json:"input_references,omitempty"`; the reserved-key switch only stops `ExtraBody` from overriding it. The video test asserts the field reaches the wire. |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/...` | Recurring (rounds 72, 76); `video.go` strips the `/v1` suffix before joining the v2 route. |
+| `scripts/release-decide.sh:69` range parsed as an unexpected argument | In git-cliff `--context` takes no value and the range is a positional argument, so the call is valid. Not run locally: `git-cliff` is not installed in this environment, and CI installs it. |
