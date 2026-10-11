@@ -21,6 +21,14 @@ func TestDefaultOptions(t *testing.T) {
 	}
 }
 
+// A nil option in the public variadic is skipped rather than dereferenced.
+func TestApplySkipsNilOption(t *testing.T) {
+	opts := apply(nil, WithModel("glm-5.3-flash"))
+	if opts.Model != "glm-5.3-flash" {
+		t.Fatalf("Model = %q", opts.Model)
+	}
+}
+
 func TestWithAPIKey(t *testing.T) {
 	opts := apply(WithAPIKey("test-key"))
 	if opts.APIKey != "test-key" {

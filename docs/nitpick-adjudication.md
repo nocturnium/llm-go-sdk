@@ -1061,3 +1061,17 @@ handler instead of calling `t.Fatal` off the test goroutine.
 | `structured.go:330` case-insensitive property match | Recurring (rounds 53, 55, 56, 61, 62, 65, 68, 89, 90, 94): matching mirrors `encoding/json`'s field lookup. |
 | `structured.go:450` pointer fields accept null | Recurring: a nil pointer is the field's natural zero. |
 | `structured_repair_test.go:153` `repairScriptLLM` missing `Call` | `TestGenerateTypedWithRepair` compiles and passes; the root `go test`/`go vet` gates are green, so the full LLM interface is satisfied. |
+
+Round 96 (2026-10-10) reported 9 errors. Fixed: every provider's `apply` skips
+a nil `Option`, so `New(nil, ...)` constructs rather than panics.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/codeql.yml:45` `checkout@v7` unpublished | Recurring (rounds 48, 50, 54–58, 64, 79, 84, 87, 89, 90, 92): `actions/checkout@v7` is published and resolves. |
+| `llmadk/config.go:182` empty level should default to medium | Recurring (rounds 62, 86): a zero-value `ThinkingConfig` leaves reasoning unset by design; only an explicit `THINKING_LEVEL_UNSPECIFIED` maps to medium. |
+| `llms_test.go:679` capability test rejects what it enabled | `Supports*` asserts an interface implementation while `Has*` reads a `Capabilities` flag; the test sets the flag and asserts the interface helpers are false. `TestHasMediaCapabilities` passes. |
+| `pkg/middleware/resilience/ratelimit.go:549` `RecordTokens` applies stale reports after `Reset` | Fixed in round 86: `RecordTokens` snapshots the limiter and generation together and drops debt or credit whose generation changed. `TestRecordTokens_StaleAfterReset` covers it. |
+| `pkg/openaicompat/toolcall_ids.go:87` multiple rewrites keep only the last | `TestEnsureToolCallIDs` case "every tool call in one message is rewritten" covers three calls and three results in one message, and it passes. |
+| `pkg/providers/featherless/featherless-options.go:107` handler unused | Recurring (rounds 89–95): `speech.go` invokes the handler on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/mistral/transcription.go:74` typed streaming/format options ignored | `llms.TranscribeOptions` has no streaming or response-format field; `response_format` and `stream` are read from `Extra`, and unsupported values are rejected. |
+| `structured.go:519` first quoted word returned for a string target | Known heuristic limit: a bare-string target picks the first JSON string candidate, as `parseTyped` documents. Preferring a later quote would break the existing "first candidate" tests; callers needing disambiguation use a struct target. |

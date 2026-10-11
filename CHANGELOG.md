@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Every provider's option-apply loop skips a nil `Option`, so `New(nil, ...)` no longer panics while constructing a client.
 - Cost estimation clamps negative token counts and a negative provider-reported charge to zero, so malformed usage cannot refund tracked spend. The tools example JSON-encodes the model-supplied weather unit instead of splicing it into a string.
 - A cache entry at its exact expiry instant is a miss rather than a hit, and the llmadk bridge rejects a negative `CandidateCount` instead of dropping it.
 - `IsTemporary` and `APIError.IsRetryable` treat a typed-nil `*APIError` as non-retryable instead of panicking. The unused scalar extractors that returned only the first embedded candidate are gone.

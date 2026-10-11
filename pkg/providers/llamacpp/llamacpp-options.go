@@ -111,6 +111,9 @@ func WithDisallowHTTP() Option {
 func apply(opts ...Option) *options {
 	options := defaultOptions()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(options)
 	}
 	return options

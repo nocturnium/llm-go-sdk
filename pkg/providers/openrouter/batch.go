@@ -412,6 +412,9 @@ func WithPollCallback(fn func(*Batch)) WaitOption {
 func (c *Client) WaitBatch(ctx context.Context, batchID string, opts ...WaitOption) (*Batch, error) {
 	options := WaitOptions{PollInterval: defaultBatchPollInterval}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(&options)
 	}
 	interval := options.PollInterval
