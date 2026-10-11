@@ -672,3 +672,16 @@ instead of panicking.
 | `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring false positive; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
 | `structured.go:323` case-variant properties | Mirrors `json.Unmarshal` by design (rounds 55, 56, 61, 62). |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
+
+Round 66 (2026-10-10) reported 6 errors. Fixed: the CodeQL, gosec and trivy
+jobs skip fork pull requests, whose read-only token cannot upload SARIF;
+`MetricsMiddleware.Call` and `GenerateContent` return `ErrIncompleteResponse`
+for a `(nil, nil)` provider result instead of panicking; and the Anthropic HTTP
+test's failure message names the model it actually compares against.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/providers/anthropic/client_http_test.go:41` asserts the wrong model | The assertion compares against `testClaudeSonnet` itself, so the test passed; only the message text was stale. |
+| `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64); a zero-value config leaves reasoning unset by design. |
+| `pkg/providers/featherless/featherless-options.go:107` never invokes the handler | Recurring false positive; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
+| `structured.go:330` case-insensitive property match | Mirrors `json.Unmarshal` by design (rounds 55, 56, 61, 62, 65). |

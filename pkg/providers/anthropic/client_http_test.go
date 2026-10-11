@@ -38,7 +38,7 @@ func TestClient_GenerateContent_Integration(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		if req["model"] != testClaudeSonnet {
-			t.Errorf("expected model=claude-sonnet-4-20250514, got %v", req["model"])
+			t.Errorf("expected model=%s, got %v", testClaudeSonnet, req["model"])
 		}
 		if _, ok := req["system"]; ok {
 			t.Error("system should be omitted when no system message is provided")

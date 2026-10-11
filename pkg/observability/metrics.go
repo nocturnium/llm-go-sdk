@@ -172,6 +172,14 @@ func (m *MetricsMiddleware) Call(ctx context.Context, prompt string, options ...
 		m.successRateWindow.Record(false)
 		return "", err
 	}
+	// An LLM implementation may return (nil, nil); report it as an incomplete
+	// response instead of panicking on the dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", provider, llms.ErrIncompleteResponse)
+		m.recordError(ctx, span, err, attrs)
+		m.successRateWindow.Record(false)
+		return "", err
+	}
 
 	m.successRateWindow.Record(true)
 	m.recordUsage(ctx, span, provider, model, resp.Usage, duration, attrs)
@@ -222,6 +230,14 @@ func (m *MetricsMiddleware) GenerateContent(ctx context.Context, messages []llms
 	m.requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 
 	if err != nil {
+		m.recordError(ctx, span, err, attrs)
+		m.successRateWindow.Record(false)
+		return nil, err
+	}
+	// An LLM implementation may return (nil, nil); report it as an incomplete
+	// response instead of panicking on the dereference below.
+	if resp == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil response: %w", provider, llms.ErrIncompleteResponse)
 		m.recordError(ctx, span, err, attrs)
 		m.successRateWindow.Record(false)
 		return nil, err

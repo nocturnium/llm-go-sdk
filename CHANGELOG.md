@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- The observability metrics middleware returns `ErrIncompleteResponse` when a wrapped provider returns a nil response with no error, instead of panicking. The CodeQL workflow skips fork pull requests, which cannot upload SARIF with their read-only token.
 - `RunTools` returns an error for a nil `ToolRegistry` instead of panicking. The MCP client no longer keeps a partially decoded server-capabilities view when the server sends a malformed capabilities map.
 - The rate limiter removes credit that offset part of a token debt from that debt, so the covered tokens are not charged a second time. The Anthropic tool-result decoder accepts leading whitespace before a string `content` value. The llmadk tool bridge passes any string-keyed map result (for example `map[string]string`) through as its fields rather than as `{"result": ...}`.
 - `APIError.Is` no longer reports a match for a nil target, so `errors.Is(err, nil)` is false for an unclassified API error. A self-referential embedded struct no longer adds a phantom required property to the generated structured-output schema, which had rejected valid responses. Structured Langfuse output omits `usage` when the response reported none.

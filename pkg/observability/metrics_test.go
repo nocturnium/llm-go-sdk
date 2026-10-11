@@ -734,3 +734,17 @@ func assertMetricsAttribute(t *testing.T, attrs []attribute.KeyValue, key string
 	}
 	t.Errorf("attribute %s not found", key)
 }
+
+func TestMetricsMiddleware_NilResponseIsAnErrorNotAPanic(t *testing.T) {
+	llm := &mockMetricsLLM{provider: llms.ProviderOpenAI, model: "gpt-4o"} // genResp nil, genErr nil
+	mw, err := NewMetricsMiddleware(llm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mw.GenerateContent(context.Background(), []llms.Message{{Role: llms.RoleUser, Content: "hi"}}); !errors.Is(err, llms.ErrIncompleteResponse) {
+		t.Errorf("GenerateContent error = %v, want ErrIncompleteResponse", err)
+	}
+	if _, err := mw.Call(context.Background(), "hi"); !errors.Is(err, llms.ErrIncompleteResponse) {
+		t.Errorf("Call error = %v, want ErrIncompleteResponse", err)
+	}
+}
