@@ -228,6 +228,9 @@ func (e *APIError) underlyingError() error {
 
 // IsRetryable returns true if the error is likely transient and the request can be retried
 func (e *APIError) IsRetryable() bool {
+	if e == nil {
+		return false
+	}
 	// Quota exhaustion is a permanent billing failure regardless of the (often
 	// 429) status code; never report it as retryable.
 	switch e.Code {
@@ -509,7 +512,7 @@ func IsTemporary(err error) bool {
 
 	// Check APIError
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	if errors.As(err, &apiErr) && apiErr != nil {
 		return apiErr.IsRetryable()
 	}
 

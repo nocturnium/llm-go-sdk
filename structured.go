@@ -497,29 +497,6 @@ func jsonVisibleFields(typ reflect.Type) (map[string]struct{}, error) {
 	return names, nil
 }
 
-// extractScalarJSON finds the first valid JSON scalar (string, number, bool, or
-// null) embedded in s. Strings are found by their quotes; bare scalars are tried
-// at each position that could begin one. It returns ok=false when none parses.
-func extractScalarJSON(s string) (string, bool) {
-	candidates := extractScalarJSONCandidates(s)
-	if len(candidates) == 0 {
-		return "", false
-	}
-	return candidates[0], true
-}
-
-// extractScalarJSONOutsideStructures finds a scalar only outside balanced JSON
-// objects and arrays. Without that boundary a string schema could consume an
-// object key (for example `"name"` from `{"name":"Ada"}`) and report success
-// with a value that is not the response.
-func extractScalarJSONOutsideStructures(s string) (string, bool) {
-	candidates := extractScalarJSONCandidates(s)
-	if len(candidates) == 0 {
-		return "", false
-	}
-	return candidates[0], true
-}
-
 // extractScalarJSONCandidates returns every valid JSON scalar found outside
 // balanced objects and arrays, left to right. Callers with a typed target try
 // each in turn: the first scalar that parses into T is not necessarily the one

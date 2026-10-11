@@ -609,6 +609,11 @@ func TestIsTemporary(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "typed-nil APIError",
+			err:      (*APIError)(nil),
+			expected: false,
+		},
+		{
 			name:     "ErrRateLimited",
 			err:      ErrRateLimited,
 			expected: true,

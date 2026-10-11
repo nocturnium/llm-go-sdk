@@ -1002,3 +1002,13 @@ vision-capable.
 | `pkg/providers/featherless/featherless-options.go:107` handler not wired | Recurring (round 89): `speech.go` reads `c.options.SpeechUsageHandler` on the terminal event, and the media tests cover it. |
 | `pkg/providers/huggingface/huggingface.go:40` unsupported batch capability | Recurring convention: `Capabilities()` narrows the superset by deployment mode, and batch is advertised for embeddings/ambiguous modes like Infinity; no `BatchProcessor` is promised by the flag. |
 | `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82, 89); `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |
+
+Round 91 (2026-10-10) reported 4 errors. Fixed: `IsTemporary` and
+`APIError.IsRetryable` handle a typed-nil `*APIError`, and the dead scalar
+extractors that returned only the first embedded candidate are removed.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `pkg/providers/featherless/featherless-options.go:107` callback not wired | Recurring (rounds 89, 90): `speech.go` invokes `c.options.SpeechUsageHandler` on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/mistral/transcription.go:52` typed response format ignored | `llms.TranscribeOptions` has no `ResponseFormat` field, so there is no typed option to ignore; the response format is an explicit `Extra` key. |
+| `structured.go:181` scalar extraction returns the first quoted string | `parseTyped` iterates every candidate from `extractScalarJSONCandidates`; the two first-only helpers were unused and have been deleted. |
