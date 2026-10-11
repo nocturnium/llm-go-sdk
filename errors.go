@@ -457,20 +457,12 @@ func WrapProviderError(provider Provider, operation string, err error) error {
 // ProviderFromError extracts the provider from an error if it's a ProviderError or APIError.
 // Returns empty string if the error doesn't contain provider information.
 func ProviderFromError(err error) Provider {
-	// Walk the chain rather than using errors.As once: an outer ProviderError
-	// may carry an empty Provider when the caller only wanted to attach an
-	// operation, while an inner wrapper or APIError still names the provider
-	// that failed.
-	for cur := err; cur != nil; cur = errors.Unwrap(cur) {
-		if provErr, ok := cur.(*ProviderError); ok {
-			if provErr.Provider != "" {
-				return provErr.Provider
-			}
-			continue
-		}
-		if apiErr, ok := cur.(*APIError); ok && apiErr.Provider != "" {
-			return apiErr.Provider
-		}
+	// Walk the whole error tree rather than using errors.As once: an outer
+	// ProviderError may carry an empty Provider when the caller only wanted to
+	// attach an operation, while an inner wrapper, a sibling branch of a
+	// multi-wrapped error, or an APIError still names the provider that failed.
+	if p := providerInTree(err); p != "" {
+		return p
 	}
 	// The unwrap chain does not cover matches behind a custom As method, so
 	// fall back to errors.As for both types.
@@ -732,4 +724,35 @@ func rootCause(err error) error {
 		}
 		err = next
 	}
+}
+
+// providerInTree returns the first non-empty provider found depth-first in
+// err's wrap tree, following both Unwrap() error and Unwrap() []error.
+func providerInTree(err error) Provider {
+	for err != nil {
+		switch e := err.(type) {
+		case *ProviderError:
+			if e.Provider != "" {
+				return e.Provider
+			}
+		case *APIError:
+			if e.Provider != "" {
+				return e.Provider
+			}
+		}
+		switch u := err.(type) {
+		case interface{ Unwrap() error }:
+			err = u.Unwrap()
+		case interface{ Unwrap() []error }:
+			for _, child := range u.Unwrap() {
+				if p := providerInTree(child); p != "" {
+					return p
+				}
+			}
+			return ""
+		default:
+			return ""
+		}
+	}
+	return ""
 }

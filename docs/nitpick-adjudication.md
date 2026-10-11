@@ -723,3 +723,18 @@ declared as `github.com/nocturnium/llm-go-sdk/llmadk` in `llmadk/go.mod`.
 | `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64, 66); a zero-value config leaves reasoning unset by design. |
 | `pkg/mcp/stdio.go:262` response retains bufio's buffer | `readBoundedLine` does `append(line, fragment...)` onto a nil slice, which copies the fragment, so no slice aliases the reader's buffer. |
 | `structured.go:323`, `structured.go:450` | Recurring: case-insensitive matching and null pointers mirror `encoding/json` (rounds 53, 55). |
+
+Round 70 (2026-10-10) reported 7 errors. Fixed: `ProviderFromError` searches
+every branch of a multi-wrapped error (`%w: %w`, `errors.Join`) instead of
+stopping at the first chain; bare scalar extraction in `GenerateTyped` requires
+word boundaries, so `falsehood`, `trueish` and `v5` no longer parse as
+`false`, `true` and `5`; and the release workflow's tag cleanup no longer
+swallows a failed `git push` of the tag deletion, so a leftover baseline tag
+fails the job visibly.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `llmadk/config.go:57` `strings.EqualFold` on `genai.Modality` does not compile | `genai.Modality` is a string type and the call converts it; `go build ./...` succeeds in `llmadk`. |
+| `llmadk/config.go:182` empty `ThinkingConfig` skips the medium default | Recurring (rounds 62, 64, 66, 69); a zero-value config leaves reasoning unset by design. |
+| `pkg/providers/groq/options_coverage_test.go:334` lacks an API key | The test passes `APIKey` in `llms.Config`; it passes with no Groq key in the environment. |
+| `featherless-options.go:107`, `structured.go:450` | Recurring false positives (handler wired in `speech.go`; null pointers mirror `encoding/json`). |

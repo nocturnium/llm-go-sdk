@@ -156,7 +156,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          git push origin ":refs/tags/${VERSION}" || true
+          git push origin ":refs/tags/${VERSION}"
 
   # No changelog job: CHANGELOG.md is hand-written. A git-cliff regeneration
   # would replace the curated [Unreleased] prose with one line per commit, and

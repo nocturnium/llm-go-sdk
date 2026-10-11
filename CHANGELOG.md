@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `ProviderFromError` finds the provider in any branch of a multi-wrapped error. `GenerateTyped` no longer accepts a bare scalar that is only a fragment of a longer word, so a reply such as `falsehood` is repaired or rejected instead of parsing as `false`. The auto-release workflow reports a failed cleanup of a release tag instead of ignoring it.
 - `GetErrorDetails` reports the innermost cause for errors that wrap several errors (`fmt.Errorf("%w: %w", ...)`, `errors.Join`), instead of the outer wrapper.
 - The observability metrics middleware returns `ErrIncompleteResponse` when a wrapped provider returns a nil response with no error, instead of panicking. The CodeQL workflow skips fork pull requests, which cannot upload SARIF with their read-only token.
 - `RunTools` returns an error for a nil `ToolRegistry` instead of panicking. The MCP client no longer keeps a partially decoded server-capabilities view when the server sends a malformed capabilities map.

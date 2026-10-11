@@ -544,6 +544,11 @@ func extractScalarJSONCandidates(s string) []string {
 				continue
 			}
 		case 't', 'f', 'n', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			// A bare scalar must start at a word boundary: the "true" in
+			// "untrue" or the "5" in "v5" is part of a longer word.
+			if i > 0 && isScalarWordByte(s[i-1]) {
+				break
+			}
 			end := i
 			for end < len(s) && !isJSONScalarDelimiter(s[end]) {
 				end++
@@ -569,18 +574,31 @@ func extractScalarJSONCandidates(s string) []string {
 	return candidates
 }
 
+// isScalarWordByte reports whether c continues a word or number, so a scalar
+// cut at c would be a fragment of a longer token.
+func isScalarWordByte(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
 func isJSONScalarDelimiter(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',' || c == '}' || c == ']' || c == '`'
 }
 
 // longestValidScalarPrefix returns the longest prefix of a bare scalar run that
-// is itself valid JSON, or "" when none is. It bounds a run that swallowed
-// trailing prose punctuation, such as `true.` or `null)`.
+// is itself valid JSON and ends at a word boundary, or "" when none is. It
+// bounds a run that swallowed trailing prose punctuation, such as `true.` or
+// `null)`, but never cuts inside a word: `falsehood` is not `false`, and
+// `1.2.3` is not `1.2`.
 func longestValidScalarPrefix(run string) string {
 	for end := len(run) - 1; end > 0; end-- {
-		if json.Valid([]byte(run[:end])) {
-			return run[:end]
+		if !json.Valid([]byte(run[:end])) {
+			continue
 		}
+		next := run[end]
+		if isScalarWordByte(next) || (next == '.' && end+1 < len(run) && run[end+1] >= '0' && run[end+1] <= '9') {
+			continue
+		}
+		return run[:end]
 	}
 	return ""
 }
