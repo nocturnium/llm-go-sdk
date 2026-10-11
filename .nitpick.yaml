@@ -1,49 +1,72 @@
 # open-nitpick review configuration for llm-go-sdk.
 #
-# Full-review comparison (2026-09-16) against 525 files showed config-B
-# (laguna reviewer + luna flex triage) gives the best signal-to-noise ratio
-# and 12-minute wall time. See open-nitpick docs/full-review-comparison-llm-go-sdk.md.
+# Reviewers: deepseek-flash-latest and glm-flash-latest run as an ensemble on
+# every batch, so a finding one model misses the other can catch. Triage:
+# qwen3.8-27b, a small model that culls the raw findings down to the ones worth
+# acting on.
+#
+# The "~" prefix marks an OpenRouter "latest" alias that tracks the current
+# point release (deepseek-flash-latest -> deepseek-v4.1-flash,
+# glm-flash-latest -> glm-5.3-flash).
 #
 # To run:
 #   OPENROUTER_API_KEY=... nitpick full-review -repo .
-#
-# For the supplementary concurrency pass (luna reviewer + glm triage):
-#   OPENROUTER_API_KEY=... nitpick full-review -repo . -config .nitpick-concurrency.yaml
 
 models:
-  # Reviewer: laguna-s-2.1, R=0.87, N=0.09 on open-nitpick tuning corpus (2 runs).
-  # Cleanest noise floor of any model measured; recall matches deepseek at 10x lower cost.
-  # Context does not help on this corpus; leave related_context off.
-  #
-  # Pin review (not only default): a user-level models.review wins over repo
-  # models.default, which is how deepseek/deepseek-v4.1-flash took 55/88
-  # batches on the first full-review after a3d3d56.
-  #
-  # reasoning: off and max_tokens: 16384: under an inherited max_tokens: 8192
-  # laguna spent the budget on thinking twice (finish_reason=length, content
-  # empty) and left 12 files unreviewed. OpenRouter lists include_reasoning
-  # for this model; forcing reasoning off keeps the answer in content.
+  # reasoning: off and max_tokens: 16384: under an inherited max_tokens: 8192 a
+  # reasoning model spent the budget on thinking (finish_reason=length, content
+  # empty) and left files unreviewed. Forcing reasoning off keeps the answer in
+  # content; 16384 leaves room for a large batch's findings.
   default:
     provider: openrouter
-    model: poolside/laguna-s-2.1
+    model: "~deepseek/deepseek-flash-latest"
     timeout: 15m
     reasoning: off
     max_tokens: 16384
 
+  # Pin review (not only default): a user-level models.review overrides the
+  # repo's models.default, so the reviewer is named here rather than left to
+  # the default alone.
   review:
     provider: openrouter
-    model: poolside/laguna-s-2.1
+    model: "~deepseek/deepseek-flash-latest"
     timeout: 15m
     reasoning: off
     max_tokens: 16384
 
-  # Triage: luna flex, perfect precision and class accuracy; $0.0004/call.
-  # Cut 72 raw findings to 42 in the comparison run, preserving the high-signal ones.
+  # The second reviewer, run on every batch alongside the review model.
+  ensemble:
+    - provider: openrouter
+      model: "~z-ai/glm-flash-latest"
+      timeout: 15m
+      reasoning: off
+      max_tokens: 16384
+
+  # Triage: a small, fast model that cuts the raw findings to the high-signal
+  # ones. Temperature 0 so the same diff triages the same way twice.
+  #
+  # reasoning: off, like the reviewers: left at the model's default, qwen3.8-27b
+  # spends the whole budget thinking over a full-size finding list and never
+  # answers, so triage stalls until the call times out. With reasoning off the
+  # same list returns an answer.
+  #
+  # structured_output: json, not the default auto: qwen3.8-27b's endpoint never
+  # answers a strict json_schema request over a full review's finding list, while
+  # plain JSON mode returns. The schema still rides in the prompt, and a reply
+  # that does not parse is treated as a failed triage rather than a wrong one.
+  #
+  # max_tokens: 32768 covers a normal PR diff. A whole-tree review produces a
+  # finding list too large for one call: the reply does not parse as the expected
+  # shape, so triage fails and publishes the findings untriaged. CI reviews one
+  # PR diff at a time, which stays well under that.
   triage:
     provider: openrouter
-    model: openai/gpt-5.6-luna
-    service_tier: flex
+    model: qwen/qwen3.8-27b
+    timeout: 15m
     temperature: 0
+    reasoning: off
+    max_tokens: 32768
+    structured_output: json
 
 review:
   # The repository currently tracks over 600 reviewable files. A lower cap
