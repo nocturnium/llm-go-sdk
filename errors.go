@@ -735,7 +735,7 @@ func (e *ModerationError) Unwrap() error { return ErrContentFiltered }
 func rootCause(err error) error {
 	for {
 		var next error
-		switch u := err.(type) {
+		switch u := err.(type) { //nolint:errorlint // walks one unwrap level at a time; errors.As would skip levels
 		case interface{ Unwrap() error }:
 			next = u.Unwrap()
 		case interface{ Unwrap() []error }:
@@ -757,7 +757,7 @@ func rootCause(err error) error {
 // err's wrap tree, following both Unwrap() error and Unwrap() []error.
 func providerInTree(err error) Provider {
 	for err != nil {
-		switch e := err.(type) {
+		switch e := err.(type) { //nolint:errorlint // inspects this node before walking its children below
 		case *ProviderError:
 			if e == nil {
 				return ""
@@ -773,7 +773,7 @@ func providerInTree(err error) Provider {
 				return e.Provider
 			}
 		}
-		switch u := err.(type) {
+		switch u := err.(type) { //nolint:errorlint // walks one unwrap level at a time; errors.As would skip levels
 		case interface{ Unwrap() error }:
 			err = u.Unwrap()
 		case interface{ Unwrap() []error }:

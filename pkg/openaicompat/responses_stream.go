@@ -127,7 +127,6 @@ func ProcessResponsesStream(
 	}()
 
 	var accumulatedContent string
-	terminal := false
 
 	for {
 		select {
@@ -143,9 +142,9 @@ func ProcessResponsesStream(
 				sender.DeliverTerminal(llms.StreamChunk{Error: ctx.Err(), Done: true})
 				return
 			}
-			if !terminal {
-				sender.DeliverTerminal(llms.StreamChunk{Error: fmt.Errorf("%s: responses stream ended before terminal event", provider), Done: true})
-			}
+			// A completed/incomplete event returns above, so reaching EOF means
+			// the stream ended without one.
+			sender.DeliverTerminal(llms.StreamChunk{Error: fmt.Errorf("%s: responses stream ended before terminal event", provider), Done: true})
 			return
 		}
 		if err != nil {
@@ -175,7 +174,6 @@ func ProcessResponsesStream(
 			}
 
 		case "response.completed", "response.incomplete":
-			terminal = true
 			final := finalChunkFromResponse(env.Response, config, accumulatedContent)
 			sender.SendFinal(final)
 			return

@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	llms "github.com/nocturnium/llm-go-sdk/v6"
 	"github.com/nocturnium/llm-go-sdk/v6/internal/httpclient"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat"
-	"net/http"
 )
 
 // Transcribe uploads audio using the provider's multipart route. Options map to

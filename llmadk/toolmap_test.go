@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 
 	"context"
-	llms "github.com/nocturnium/llm-go-sdk/v6"
 	"reflect"
 	"testing"
+
+	llms "github.com/nocturnium/llm-go-sdk/v6"
 )
 
 func TestBridgeHandler_PreservesStringKeyedMaps(t *testing.T) {

@@ -86,7 +86,9 @@ func TestStreamWrappers_DrainAfterErrorChunk(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for range stream {
+			for chunk := range stream {
+				_ = chunk
+				// drain the stream so the producer's trailing send can complete
 			}
 		}()
 		// The wrapper closing its output only proves the consumer finished; the

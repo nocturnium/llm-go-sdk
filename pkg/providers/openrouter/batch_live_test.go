@@ -40,7 +40,7 @@ func TestLiveOpenRouter_UsageAccounting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Usage == nil || resp.Usage.Cost == nil {
+	if resp.Usage.Cost == nil {
 		t.Fatal("no cost reported with usage accounting enabled")
 	}
 	t.Logf("served tier %q cost $%g", resp.ServiceTier, *resp.Usage.Cost)

@@ -22,14 +22,14 @@ func TestAPIError_IsNilTarget(t *testing.T) {
 func TestGetErrorDetails_RootCauseThroughMultiWrap(t *testing.T) {
 	inner := errors.New("inner")
 	multi := fmt.Errorf("%w: %w", context.Canceled, inner)
-	if got := GetErrorDetails(multi).RootCause; got != context.Canceled {
+	if got := GetErrorDetails(multi).RootCause; got != context.Canceled { //nolint:errorlint // asserts the exact root, not a wrapper
 		t.Errorf("RootCause = %v, want the first wrapped error context.Canceled", got)
 	}
-	if got := GetErrorDetails(inner).RootCause; got != inner {
+	if got := GetErrorDetails(inner).RootCause; got != inner { //nolint:errorlint // asserts the exact root, not a wrapper
 		t.Errorf("RootCause of an unwrapped error = %v, want itself", got)
 	}
 	nested := fmt.Errorf("outer: %w", fmt.Errorf("mid: %w", inner))
-	if got := GetErrorDetails(nested).RootCause; got != inner {
+	if got := GetErrorDetails(nested).RootCause; got != inner { //nolint:errorlint // asserts the exact root, not a wrapper
 		t.Errorf("RootCause = %v, want inner", got)
 	}
 }

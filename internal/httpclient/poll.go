@@ -55,10 +55,7 @@ func Poll(ctx context.Context, p PollPolicy, fn func(ctx context.Context) (done 
 			// A callback that ignores its context can report success after the
 			// caller canceled. Caller cancellation wins: an abandoned operation
 			// must not look successful just because a late callback returned.
-			if parentErr := parent.Err(); parentErr != nil {
-				return parentErr
-			}
-			return nil
+			return parent.Err()
 		}
 		if err != nil {
 			// A callback that returns the context error it observed is reporting

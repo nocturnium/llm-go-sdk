@@ -44,13 +44,15 @@ func TestNewClient_WithRetryPolicy(t *testing.T) {
 
 func TestClient_LegacyDialTLSCannotBypassPrivateAddressCheck(t *testing.T) {
 	called := false
-	transport := &http.Transport{DialTLS: func(_, _ string) (net.Conn, error) {
+	//lint:ignore SA1019 exercises the deprecated field the client still guards
+	transport := &http.Transport{DialTLS: func(_, _ string) (net.Conn, error) { //nolint:staticcheck // see above
 		called = true
 		return nil, errors.New("should not dial")
 	}}
 	client := NewClient(WithHTTPClient(&http.Client{Transport: transport}))
 	guarded := client.httpClient.Transport.(*http.Transport)
-	if _, err := guarded.DialTLS("tcp", "127.0.0.1:443"); err == nil {
+	//lint:ignore SA1019 see above
+	if _, err := guarded.DialTLS("tcp", "127.0.0.1:443"); err == nil { //nolint:staticcheck // see above
 		t.Fatal("DialTLS allowed a loopback destination")
 	}
 	if called {

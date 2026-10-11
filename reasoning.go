@@ -130,10 +130,10 @@ func cloneMetadataValue(v any) any {
 // length (overlapping subslices) are treated as distinct values rather than one
 // returning the other's clone.
 type cloneKey struct {
-	ptr   uintptr
-	len   int
-	kind  reflect.Kind
-	type_ reflect.Type
+	ptr  uintptr
+	len  int
+	kind reflect.Kind
+	typ  reflect.Type
 }
 
 func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Value {
@@ -147,7 +147,7 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 		if v.IsNil() {
 			return v
 		}
-		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), type_: v.Type()}
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), typ: v.Type()}
 		if cp, ok := seen[key]; ok {
 			return cp
 		}
@@ -159,7 +159,7 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 		if v.IsNil() {
 			return v
 		}
-		key := cloneKey{ptr: v.Pointer(), len: v.Len(), kind: v.Kind(), type_: v.Type()}
+		key := cloneKey{ptr: v.Pointer(), len: v.Len(), kind: v.Kind(), typ: v.Type()}
 		if cp, ok := seen[key]; ok {
 			return cp
 		}
@@ -182,7 +182,7 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 		// The map type belongs in the key: two named map types can share the same
 		// underlying map, and reusing a clone of the wrong static type would
 		// either mis-assign or panic when the value is placed in a typed field.
-		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), type_: v.Type()}
+		key := cloneKey{ptr: v.Pointer(), kind: v.Kind(), typ: v.Type()}
 		if cp, ok := seen[key]; ok {
 			return cp
 		}
@@ -205,6 +205,7 @@ func deepCopyValue(v reflect.Value, seen map[cloneKey]reflect.Value) reflect.Val
 			switch v.Field(i).Kind() {
 			case reflect.Interface, reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
 				cp.Field(i).Set(deepCopyValue(v.Field(i), seen))
+			default: // scalars are copied by the whole-struct Set above
 			}
 		}
 		return cp

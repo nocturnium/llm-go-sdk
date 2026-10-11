@@ -148,8 +148,7 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 
 	options := llms.ApplyListModelsOptions(opts...)
 
-	models := make([]llms.ModelInfo, len(cachedModels))
-	models = ListModels()
+	models := ListModels()
 
 	// apply type filter if specified
 	if len(options.Types) > 0 {

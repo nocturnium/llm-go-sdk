@@ -59,6 +59,7 @@ func TestChain_OrderAndNilSkip(t *testing.T) {
 // when a wrapper cannot be used as its own map key.
 type selfWrapper struct {
 	LLM
+	//lint:ignore U1000 keeps the wrapper non-comparable for the fallback-identity test
 	pad []int
 }
 

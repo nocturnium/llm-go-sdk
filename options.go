@@ -428,29 +428,7 @@ func (o *CallOptions) Validate() error {
 		})
 	}
 
-	for i, tool := range o.Tools {
-		if tool.Type == "" {
-			errs = append(errs, ValidationError{
-				Field:   fmt.Sprintf("tools[%d].type", i),
-				Value:   tool.Type,
-				Message: "type is required",
-			})
-		}
-		if tool.Type == ToolTypeFunction && tool.Function == nil {
-			errs = append(errs, ValidationError{
-				Field:   fmt.Sprintf("tools[%d].function", i),
-				Value:   nil,
-				Message: "function definition is required for function type tools",
-			})
-		}
-		if tool.Function != nil && tool.Function.Name == "" {
-			errs = append(errs, ValidationError{
-				Field:   fmt.Sprintf("tools[%d].function.name", i),
-				Value:   "",
-				Message: "function name is required",
-			})
-		}
-	}
+	errs = append(errs, validateToolOptions(o.Tools)...)
 
 	if o.ResponseFormat != nil {
 		switch o.ResponseFormat.Type {
@@ -476,4 +454,34 @@ func (o *CallOptions) Validate() error {
 		return errs
 	}
 	return nil
+}
+
+// validateToolOptions checks each tool definition for the fields a provider
+// needs to serialize it.
+func validateToolOptions(tools []Tool) ValidationErrors {
+	var errs ValidationErrors
+	for i, tool := range tools {
+		if tool.Type == "" {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tools[%d].type", i),
+				Value:   tool.Type,
+				Message: "type is required",
+			})
+		}
+		if tool.Type == ToolTypeFunction && tool.Function == nil {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tools[%d].function", i),
+				Value:   nil,
+				Message: "function definition is required for function type tools",
+			})
+		}
+		if tool.Function != nil && tool.Function.Name == "" {
+			errs = append(errs, ValidationError{
+				Field:   fmt.Sprintf("tools[%d].function.name", i),
+				Value:   "",
+				Message: "function name is required",
+			})
+		}
+	}
+	return errs
 }

@@ -1,6 +1,7 @@
 package resilience
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -44,7 +45,7 @@ func TestRateLimiter_SettleIgnoresReplacedLimiter(t *testing.T) {
 	rl.tokenDebt = 40
 	rl.mu.Unlock()
 
-	rl.settleTokenDebt(nil, stale, time.Now())
+	rl.settleTokenDebt(context.TODO(), stale, time.Now())
 
 	rl.mu.RLock()
 	debt := rl.tokenDebt

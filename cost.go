@@ -79,11 +79,11 @@ type PricingTier struct {
 // Usage.PromptTokens excludes cache tokens by contract, so cache reads and cache
 // creations must be added back to recover the request's true input size.
 func totalInputTokens(usage Usage) int {
-	max := int(^uint(0) >> 1)
+	maxInt := int(^uint(0) >> 1)
 	total := usage.PromptTokens
 	for _, n := range []int{usage.CacheReadTokens, usage.CacheCreationTokens} {
-		if n > 0 && total > max-n {
-			return max
+		if n > 0 && total > maxInt-n {
+			return maxInt
 		}
 		total += n
 	}
@@ -500,6 +500,7 @@ var DefaultPricing = map[string]Pricing{
 	"mistral:ministral-3-3b":     {Input: 0.10, Output: 0.10, CacheRead: 0.01},
 	"mistral:codestral":          {Input: 0.30, Output: 0.90, CacheRead: 0.03},
 	"mistral:codestral-embed":    {Input: 0.15, CacheRead: 0.015},
+
 	"fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct": {Input: 0.90, Output: 0.90}, // Fireworks serverless (fireworks.ai/models/fireworks/llama-v3p1-70b-instruct), verified 2026-06
 	// Exact Fireworks serverless IDs, verified 2026-10-09. Priority/Fast/US
 	// residency have separate cards with no universal multiplier, so only the

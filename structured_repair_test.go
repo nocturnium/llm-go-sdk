@@ -113,6 +113,7 @@ func TestParseTyped_DirectObjectWithoutTargetFields(t *testing.T) {
 // one of them does not match the schema.
 func TestParseTyped_UnexportedFieldDoesNotMatch(t *testing.T) {
 	type hidden struct {
+		//lint:ignore U1000 the field must stay unexported to exercise schema matching
 		secret struct{ Value int }
 	}
 	if _, err := parseTyped[hidden](`{"Value":1}`); err == nil {

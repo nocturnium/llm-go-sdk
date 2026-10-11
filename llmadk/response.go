@@ -237,11 +237,11 @@ func usageMetadata(u llms.Usage) *genai.GenerateContentResponseUsageMetadata {
 }
 
 func saturatingAdd(values ...int) int {
-	max := int(^uint(0) >> 1)
+	maxInt := int(^uint(0) >> 1)
 	total := 0
 	for _, value := range values {
-		if value > 0 && total > max-value {
-			return max
+		if value > 0 && total > maxInt-value {
+			return maxInt
 		}
 		total += value
 	}

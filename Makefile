@@ -134,7 +134,7 @@ install-tools:
 	GOWORK=off go install golang.org/x/tools/cmd/goimports@latest
 	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
 	GOWORK=off go install honnef.co/go/tools/cmd/staticcheck@latest
-	GOWORK=off go install golang.org/x/exp/cmd/apidiff@latest
+	GOWORK=off go install golang.org/x/exp/cmd/apidiff@v0.0.0-20261011100332-faecfb24eb49
 	GOWORK=off go install github.com/goreleaser/goreleaser/v2@latest
 	GOWORK=off go install github.com/orhun/git-cliff/git-cliff@latest || echo "git-cliff install failed (optional)"
 	@echo "Tools installed successfully"

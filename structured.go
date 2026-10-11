@@ -481,13 +481,16 @@ func validateFieldValue(value json.RawMessage, typ reflect.Type, chain map[refle
 		elem := typ.Elem()
 		var items []json.RawMessage
 		if err := json.Unmarshal(value, &items); err != nil {
-			return nil
+			// Not a JSON array: the shape check upstream reports the type
+			// mismatch, so there is nothing to validate per element here.
+			return nil //nolint:nilerr // non-array value is reported by the caller's shape check
 		}
 		for _, item := range items {
 			if err := validateFieldValue(item, elem, chain); err != nil {
 				return err
 			}
 		}
+	default: // scalars and other kinds carry no nested required fields
 	}
 	return nil
 }
@@ -1071,7 +1074,11 @@ func marshalsAsJSONString(typ reflect.Type) (result bool) {
 			return false
 		}
 		v = reflect.New(typ)
-		m = v.Interface().(json.Marshaler)
+		asserted, ok := v.Interface().(json.Marshaler)
+		if !ok {
+			return false
+		}
+		m = asserted
 	}
 	data, err := m.MarshalJSON()
 	if err != nil || len(data) == 0 {

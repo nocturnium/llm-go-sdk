@@ -649,8 +649,8 @@ func MustNewWeightedFallbackChain(clients []llms.LLM, weights []int, opts ...Fal
 
 // Weights returns the weights in priority order
 func (wfc *WeightedFallbackChain) Weights() []int {
-	wfc.FallbackChain.mu.RLock()
-	defer wfc.FallbackChain.mu.RUnlock()
+	wfc.mu.RLock()
+	defer wfc.mu.RUnlock()
 	result := make([]int, len(wfc.weights))
 	copy(result, wfc.weights)
 	return result

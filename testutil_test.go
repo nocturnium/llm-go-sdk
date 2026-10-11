@@ -210,8 +210,8 @@ func (m *MockLLM) LastOptions() *CallOptions {
 	if m.lastOptions == nil {
 		return nil
 	}
-	copy := *m.lastOptions
-	return &copy
+	cloned := *m.lastOptions
+	return &cloned
 }
 
 // Reset resets the call count and last messages

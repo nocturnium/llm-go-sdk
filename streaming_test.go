@@ -25,7 +25,9 @@ func TestWrapStream_NilOptions(t *testing.T) {
 			}
 		}()
 		out := WrapStream(ctx, source, nil, nil)
-		for range out {
+		for chunk := range out {
+			_ = chunk
+			// drain
 		}
 	}()
 
@@ -39,7 +41,9 @@ func TestWrapStream_NilOptions(t *testing.T) {
 			}
 		}()
 		out := WrapStreamWithFinalizer(ctx, source2, nil, nil, nil)
-		for range out {
+		for chunk := range out {
+			_ = chunk
+			// drain
 		}
 	}()
 }

@@ -217,13 +217,6 @@ func assertToolCall(t *testing.T, got llms.ToolCall, wantID, wantName, wantArgs 
 	}
 }
 
-func assertJSONValueEqual(t *testing.T, got any, want json.RawMessage) {
-	t.Helper()
-	if err := jsonValueEqual(got, want); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // notifyHandlerError records the first failure a test HTTP handler observes;
 // handlers run on their own goroutine, where t.Fatal is invalid.
 func notifyHandlerError(mu *sync.Mutex, dst *error, err error) {

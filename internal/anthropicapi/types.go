@@ -83,7 +83,9 @@ var standardFields sync.Map // map[reflect.Type]map[string]bool
 
 func standardJSONFields(typ reflect.Type) map[string]bool {
 	if fields, ok := standardFields.Load(typ); ok {
-		return fields.(map[string]bool)
+		if known, ok := fields.(map[string]bool); ok {
+			return known
+		}
 	}
 	fields := make(map[string]bool, typ.NumField())
 	for i := 0; i < typ.NumField(); i++ {
@@ -94,7 +96,11 @@ func standardJSONFields(typ reflect.Type) map[string]bool {
 		fields[name] = true
 	}
 	actual, _ := standardFields.LoadOrStore(typ, fields)
-	return actual.(map[string]bool)
+	known, ok := actual.(map[string]bool)
+	if !ok {
+		return fields
+	}
+	return known
 }
 
 // ThinkingConfig configures Anthropic extended thinking. Type is one of

@@ -232,31 +232,31 @@ func (m *MockOpenAICompatibleServer) captureRequest(w http.ResponseWriter, r *ht
 		body = map[string]any{}
 		const maxMultipartBytes = 64 << 20 // bound the body before parsing (gosec)
 		r.Body = http.MaxBytesReader(w, r.Body, maxMultipartBytes)
+		// #nosec G120 -- MaxBytesReader above bounds the entire multipart body.
 		if err := r.ParseMultipartForm(32 << 20); err != nil {
 			http.Error(w, "mock server: invalid multipart request: "+err.Error(), http.StatusBadRequest)
 			return nil, false
-		} else { // #nosec G120 -- body bounded by MaxBytesReader above; test-only mock server
-			defer func() { _ = r.MultipartForm.RemoveAll() }()
-			for key, values := range r.MultipartForm.Value {
-				if len(values) == 1 {
-					body[key] = values[0]
-				} else {
-					body[key] = append([]string(nil), values...)
-				}
+		}
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
+		for key, values := range r.MultipartForm.Value {
+			if len(values) == 1 {
+				body[key] = values[0]
+			} else {
+				body[key] = append([]string(nil), values...)
 			}
-			for key, files := range r.MultipartForm.File {
-				var uploads []any
-				for _, file := range files {
-					opened, err := file.Open()
-					if err != nil {
-						continue
-					}
-					data, _ := io.ReadAll(opened)
-					_ = opened.Close()
-					uploads = append(uploads, map[string]any{"filename": file.Filename, "content_type": file.Header.Get("Content-Type"), "data": string(data)})
+		}
+		for key, files := range r.MultipartForm.File {
+			var uploads []any
+			for _, file := range files {
+				opened, err := file.Open()
+				if err != nil {
+					continue
 				}
-				body[key] = uploads
+				data, _ := io.ReadAll(opened)
+				_ = opened.Close()
+				uploads = append(uploads, map[string]any{"filename": file.Filename, "content_type": file.Header.Get("Content-Type"), "data": string(data)})
 			}
+			body[key] = uploads
 		}
 	} else if r.Body != nil {
 		// A body that does not decode is answered with 400 rather than captured

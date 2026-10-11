@@ -875,7 +875,8 @@ func (d *structuredCustomDecoder) UnmarshalJSON(b []byte) error {
 }
 
 type unexportedEmbedInner struct {
-	A      string `json:"a"`
+	A string `json:"a"`
+	//lint:ignore U1000 unexported fields must stay invisible to encoding/json
 	hidden string
 }
 

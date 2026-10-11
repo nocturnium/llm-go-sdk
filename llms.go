@@ -90,10 +90,10 @@ func llmIdentity(llm LLM) (any, bool) {
 			return nil, false
 		}
 		return struct {
-			kind  reflect.Kind
-			type_ reflect.Type
-			ptr   uintptr
-		}{kind: v.Kind(), type_: v.Type(), ptr: v.Pointer()}, true
+			kind reflect.Kind
+			typ  reflect.Type
+			ptr  uintptr
+		}{kind: v.Kind(), typ: v.Type(), ptr: v.Pointer()}, true
 	default:
 		return nil, false
 	}

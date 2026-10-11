@@ -1125,7 +1125,8 @@ func TestProcessStream_NilContextReturnsTerminalError(t *testing.T) {
 	chunks := make(chan llms.StreamChunk, 2)
 	sender := llms.NewStreamSender(context.Background(), chunks, time.Second)
 
-	ProcessStream(nil, stream, chunks, sender, "test", nil)
+	//lint:ignore SA1012 the test deliberately passes a nil context
+	ProcessStream(nil, stream, chunks, sender, "test", nil) //nolint:staticcheck // exercises nil-context handling
 
 	select {
 	case chunk := <-chunks:

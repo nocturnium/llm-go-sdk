@@ -62,6 +62,7 @@ func TestListModels_DeduplicatesAudioTypes(t *testing.T) {
 			audio++
 		case llms.ModelTypeChat:
 			chat++
+		default: // other model types are covered by their own discovery tests
 		}
 	}
 	if audio != 1 || chat != 1 {
