@@ -826,3 +826,11 @@ Round 77 (2026-10-10) reported 5 errors, all false positives; no code change.
 | `pkg/providers/openrouter/video.go:222` `input_references` never serialized | The typed `InputReferences` field is tagged `json:"input_references,omitempty"`; the reserved-key switch only stops `ExtraBody` from overriding it. The video test asserts the field reaches the wire. |
 | `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/...` | Recurring (rounds 72, 76); `video.go` strips the `/v1` suffix before joining the v2 route. |
 | `scripts/release-decide.sh:69` range parsed as an unexpected argument | In git-cliff `--context` takes no value and the range is a positional argument, so the call is valid. Not run locally: `git-cliff` is not installed in this environment, and CI installs it. |
+
+Round 78 (2026-10-10) reported 3 errors, all false positives; no code change.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `featherless-options.go:107` handler never invoked | Recurring; `speech.go` calls `c.options.SpeechUsageHandler` on the terminal event (`TestStreamSpeech_ReportedCharacters`). |
+| `reasoning.go:185` `reflect.Value.Pointer` panics on a map | `Pointer` supports `Map` kinds. Probed: `cloneMetadataValue` clones nested `map[string]any`, a named map type and a map inside a slice without panicking. |
+| `structured.go:771` `SchemaFrom[Node]` with `Next *Node` recurses forever | Probed: it returns `{"next":{},"v":{"type":"string"}}`. The pointer-field path goes through `schemaForType`, which sets `seen` and degrades the cycle to an unconstrained `{}`. |
