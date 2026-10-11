@@ -41,6 +41,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `StreamError.Error`, `Unwrap` and `Is` handle a typed-nil receiver instead of panicking, matching the other error types.
 - The tools example rejects a weather unit outside the tool schema's enum instead of reporting a Celsius value under an arbitrary unit name.
 - Every provider's option-apply loop skips a nil `Option`, so `New(nil, ...)` no longer panics while constructing a client.
 - Cost estimation clamps negative token counts and a negative provider-reported charge to zero, so malformed usage cannot refund tracked spend. The tools example JSON-encodes the model-supplied weather unit instead of splicing it into a string.

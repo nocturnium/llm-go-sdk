@@ -327,11 +327,17 @@ type StreamError struct {
 
 // Error implements the error interface.
 func (e *StreamError) Error() string {
+	if e == nil {
+		return ""
+	}
 	return fmt.Sprintf("stream error after %d chunks (%d bytes): %v", e.ChunksRead, e.BytesRead, e.Cause)
 }
 
 // Unwrap returns the underlying cause
 func (e *StreamError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.Cause
 }
 
@@ -344,6 +350,9 @@ func (e *StreamError) Unwrap() error {
 // answered yes to everything and IsTemporary told callers to retry a stream
 // the user had canceled.
 func (e *StreamError) Is(target error) bool {
+	if e == nil {
+		return false
+	}
 	if target == ErrStreamInterrupted {
 		return true
 	}

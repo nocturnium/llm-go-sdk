@@ -446,6 +446,21 @@ func TestStreamError_Unwrap(t *testing.T) {
 	}
 }
 
+// A typed-nil StreamError in an error interface must not panic the error
+// classification methods.
+func TestStreamError_TypedNil(t *testing.T) {
+	var err error = (*StreamError)(nil)
+	if got := err.Error(); got != "" {
+		t.Errorf("Error() = %q, want empty", got)
+	}
+	if errors.Is(err, ErrStreamInterrupted) {
+		t.Error("a typed-nil StreamError must not match ErrStreamInterrupted")
+	}
+	if errors.Is(err, errors.New("x")) {
+		t.Error("a typed-nil StreamError must not match an unrelated error")
+	}
+}
+
 func TestProviderError_Error(t *testing.T) {
 	tests := []struct {
 		name     string

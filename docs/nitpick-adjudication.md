@@ -1088,3 +1088,15 @@ weather unit outside the schema enum.
 | `pkg/providers/featherless/featherless-options.go:110` handler unused | Recurring (rounds 89–96): `speech.go` invokes the handler on the terminal event, covered by `media_review_test.go`. |
 | `pkg/providers/groq/options_coverage_test.go:333` missing API key | The test passes `APIKey: "test-key"` in `llms.Config`; with `GROQ_API_KEY` and `LLM_API_KEY` unset the test still passes. |
 | `structured.go:459` nested pointers accept null | Recurring (rounds 53, 55, 56, 61, 62, 65, 68, 89, 90, 94): a nil pointer is the field's natural zero, and the schema advertises the pointee because strict mode rejects nullable unions. |
+
+Round 98 (2026-10-10) reported 6 errors. Fixed: `StreamError.Error`, `Unwrap`
+and `Is` are nil-receiver safe, so a typed-nil `*StreamError` no longer panics
+error classification.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `models_test.go:244` chat count should be six for a five-model fixture | The fixture has six chat models; `TestFilterModelsByType` and `TestGroupModelsByType` both pass, and `.github/workflows/ci.yml:26` remains the recurring action-version false positive. |
+| `pkg/providers/featherless/featherless-options.go:110` handler unused | Recurring (rounds 89–97): `speech.go` invokes the handler on the terminal event, covered by `media_review_test.go`. |
+| `pkg/providers/huggingface/huggingface.go:40` batch capability without an interface | Recurring (round 90): `Capabilities()` narrows the batch flag by deployment mode like Infinity; `SupportsBatch` reads the flag, and no `BatchProcessor` is promised by it. |
+| `pkg/providers/mistral/transcription.go:71` typed response format ignored | Recurring (rounds 91–97): `llms.TranscribeOptions` has no response-format field; `response_format` is read from `Extra` and non-`json` values are rejected. |
+| `pkg/providers/togetherai/media_transport.go:32` `/v1/v2/videos` | Recurring (rounds 72, 76, 77, 82, 89, 90, 92, 95): `video.go` strips the `/v1` suffix before joining, and the proxy-prefix test expects `/v2/videos`. |
