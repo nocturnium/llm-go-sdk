@@ -158,7 +158,9 @@ type ToolResultContent struct {
 // MarshalJSON writes the string form when only Text is set, otherwise the array
 // form.
 func (c ToolResultContent) MarshalJSON() ([]byte, error) {
-	if c.useArray || len(c.Array) > 0 {
+	// A non-nil Array is an explicit array form, including an empty one: a caller
+	// that sets Array to an empty slice wants `[]`, not the empty string.
+	if c.useArray || c.Array != nil {
 		return json.Marshal(c.Array)
 	}
 	return json.Marshal(c.Text)

@@ -15,8 +15,10 @@ lint:
 # api.txt; re-baseline on an intended change and review the diff. Only the
 # package is compared, so example programs never count as API.
 apidiff:
-	@out="$$(apidiff api.txt $(MODULE) 2>&1 || true)"; \
-	if [ -n "$$out" ]; then echo "$$out"; exit 1; fi; echo "Public API matches api.txt."
+	@out="$$(apidiff api.txt $(MODULE) 2>&1)"; status=$$?; \
+	if [ $$status -ne 0 ]; then echo "$$out"; exit 1; fi; \
+	if [ -n "$$out" ]; then echo "Public API changed since baseline:"; echo "$$out"; exit 1; fi; \
+	echo "Public API matches api.txt."
 
 apidiff-baseline:
 	apidiff -w api.txt $(MODULE)

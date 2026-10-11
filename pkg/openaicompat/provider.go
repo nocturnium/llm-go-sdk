@@ -88,6 +88,13 @@ func NewBaseProvider(client *Client, config ProviderConfig) BaseProvider {
 	// Copy the client so route overrides do not mutate another provider's client.
 	if client != nil {
 		copied := *client
+		// embedding is a pointer so the struct copy stays lock-free, but a
+		// shared pointer would let a later SetEmbeddingBaseURL on either client
+		// change the other's route. Give the copy its own route (not a copy of
+		// the mutex, which would be a lock copy).
+		if client.embedding != nil {
+			copied.embedding = &embeddingRoute{url: client.embedding.get(client.baseURL)}
+		}
 		paths := []*string{&copied.mediaPaths.ImagesPath, &copied.mediaPaths.ImageEditsPath, &copied.mediaPaths.SpeechPath, &copied.mediaPaths.TranscriptionsPath, &copied.mediaPaths.VideosPath}
 		overrides := []string{config.Media.ImagesPath, config.Media.ImageEditsPath, config.Media.SpeechPath, config.Media.TranscriptionsPath, config.Media.VideosPath}
 		for i, override := range overrides {

@@ -421,3 +421,15 @@ func TestToolResultContent_UnmarshalLeadingWhitespace(t *testing.T) {
 		t.Errorf("Text = %q, want result", msg.Content.Text)
 	}
 }
+
+// A caller that sets Array to a non-nil empty slice wants the array form, not
+// the empty string the string form would produce.
+func TestToolResultContent_ExplicitEmptyArrayMarshalsAsArray(t *testing.T) {
+	data, err := json.Marshal(ToolResultContent{Array: []ContentPart{}})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(data) != "[]" {
+		t.Errorf("marshal = %s, want []", data)
+	}
+}

@@ -947,3 +947,18 @@ default.
 | `pkg/providers/featherless/featherless.go:44` handler not wired | Recurring; `speech.go` reads `c.options.SpeechUsageHandler` on the terminal event. |
 | `structured.go:450` nested pointers accept null | By design (round 53). |
 | `testutil_test.go:135` `GenerateContent` inherits `callError` | The fallback is deliberate (round 33): a mock configured only through `WithMockCallError` must still fail `GenerateContent`, and `genError` takes precedence when both are set. No test sets both to model a succeeding `GenerateContent` alongside a failing `Call`. |
+
+Round 87 (2026-10-10) reported 7 errors. Fixed: `openaicompat.NewBaseProvider`
+now copies the embedding route instead of sharing its pointer, so a later
+`SetEmbeddingBaseURL` on either client cannot change the other's embedding
+endpoint; an Anthropic `ToolResultContent` with an explicit empty `Array`
+marshals as `[]` rather than `""`; and `make -C llmadk apidiff` checks
+apidiff's exit status, so a missing tool or build error fails the target
+instead of being read as an unchanged API.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/ci.yml:26` unavailable `actions/checkout@v7` | Recurring (rounds 48, 50, 55, 64, 79, 84); `v7` is published for checkout, setup-go, upload-artifact and codecov, and the refs resolve. |
+| `pkg/providers/featherless/featherless-options.go:107` handler not applied | Recurring; `speech.go` reads `c.options.SpeechUsageHandler` on the terminal event. |
+| `structured.go:450` nested pointers accept null | By design (round 53). |
+| `pkg/middleware/resilience/ratelimit.go:566` `RecordTokens` mis-settles an explicit `WaitN` | Documented contract: `RecordTokens` settles only the estimate-sized `Wait`/`WaitN` charge and is not a per-request settlement for a different explicit count, as the method comment states (rounds 62, 63). |
