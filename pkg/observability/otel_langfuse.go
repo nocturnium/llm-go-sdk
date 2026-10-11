@@ -364,6 +364,15 @@ func (m *LangfuseOTelMiddleware) Stream(ctx context.Context, messages []llms.Mes
 		span.End()
 		return nil, err
 	}
+	// A nil stream with a nil error would block the processing goroutine's range
+	// forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", m.llm.Provider(), llms.ErrIncompleteResponse)
+		m.requestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
+		m.recordError(ctx, span, err, attrs)
+		span.End()
+		return nil, err
+	}
 
 	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)
 	sender := llms.NewStreamSender(ctx, wrappedStream, opts.StreamSendTimeout)

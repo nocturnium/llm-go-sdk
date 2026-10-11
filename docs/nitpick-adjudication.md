@@ -794,3 +794,14 @@ and was tested but was never called.
 | `pkg/providers/featherless/featherless.go:71` handler ignored | Recurring; `speech.go` reads `c.options.SpeechUsageHandler` directly. |
 | `structured.go:450` pointer fields accept null | By design (round 53). |
 | `structured_test.go:938` `reflect.StructOf` rejects an unnamed anonymous field | The test passes: Go accepts an anonymous field of an unnamed struct type when the type has no methods to promote. |
+
+Round 75 (2026-10-10) reported 7 errors. Fixed: the logging, metrics and
+Langfuse OTel middlewares return `ErrIncompleteResponse` when a provider's
+`Stream` returns a nil channel with no error (the plain OTel middleware already
+did), instead of returning a channel that never closes.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `.github/workflows/codeql.yml:45` unpublished action majors | Recurring false positive (rounds 50–72); `checkout@v7`, `setup-go@v7` and `codeql-action@v4` are published. |
+| `pkg/middleware/resilience/ratelimit_refund_test.go:23` test never records the charge | The test passes. Draining the bucket with `ReserveN` is deliberate: it leaves the bucket empty, so the refund clamp under test is the charged-amount clamp, not the full-bucket clamp (the comment says so). |
+| `structured.go:450`, `featherless.go:71` and similar | Recurring false positives listed in earlier rounds. |

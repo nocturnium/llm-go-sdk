@@ -952,3 +952,36 @@ func TestLoggingMiddleware_LogsCallOptions(t *testing.T) {
 		}
 	}
 }
+
+// A provider that returns (nil, nil) from Stream must fail the call rather than
+// hand back a channel that never closes.
+func TestStreamWrappers_NilStreamIsAnError(t *testing.T) {
+	nilStream := func(context.Context, []llms.Message, ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+		return nil, nil
+	}
+	msgs := []llms.Message{{Role: llms.RoleUser, Content: "hi"}}
+
+	wrappers := map[string]func() (llms.LLM, error){
+		"logging": func() (llms.LLM, error) {
+			return NewLoggingMiddleware(&mockLLM{provider: llms.ProviderOpenAI, model: "m", streamFn: nilStream}, &testLogger{}), nil
+		},
+		"metrics": func() (llms.LLM, error) {
+			return NewMetricsMiddleware(&mockLLM{provider: llms.ProviderOpenAI, model: "m", streamFn: nilStream})
+		},
+		"langfuse": func() (llms.LLM, error) {
+			return NewLangfuseOTelMiddleware(&mockLLM{provider: llms.ProviderOpenAI, model: "m", streamFn: nilStream})
+		},
+	}
+	for name, build := range wrappers {
+		t.Run(name, func(t *testing.T) {
+			w, err := build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream, err := w.Stream(context.Background(), msgs)
+			if !errors.Is(err, llms.ErrIncompleteResponse) || stream != nil {
+				t.Fatalf("Stream = %v, %v; want nil stream and ErrIncompleteResponse", stream, err)
+			}
+		})
+	}
+}

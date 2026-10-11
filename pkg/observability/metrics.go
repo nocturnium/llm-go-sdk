@@ -299,6 +299,15 @@ func (m *MetricsMiddleware) Stream(ctx context.Context, messages []llms.Message,
 		m.successRateWindow.Record(false)
 		return nil, err
 	}
+	// A nil stream with a nil error would block the processing goroutine's range
+	// forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", provider, llms.ErrIncompleteResponse)
+		m.requestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
+		m.recordError(ctx, span, err, attrs)
+		m.successRateWindow.Record(false)
+		return nil, err
+	}
 
 	opts := llms.ApplyOptions(options...)
 	wrappedStream := make(chan llms.StreamChunk, opts.StreamBufferSize)

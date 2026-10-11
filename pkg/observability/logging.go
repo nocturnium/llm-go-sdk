@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -469,6 +470,14 @@ func (m *LoggingMiddleware) Stream(ctx context.Context, messages []llms.Message,
 
 	stream, err := m.llm.Stream(ctx, messages, options...)
 	if err != nil {
+		entry.Duration = time.Since(start)
+		m.logger.LogError(ctx, m.scrubContent(entry), err)
+		return nil, err
+	}
+	// A nil stream with a nil error would block the processing goroutine's range
+	// forever, so the returned channel would never close. Reject it here.
+	if stream == nil {
+		err := fmt.Errorf("observability: provider %s returned a nil stream: %w", entry.Provider, llms.ErrIncompleteResponse)
 		entry.Duration = time.Since(start)
 		m.logger.LogError(ctx, m.scrubContent(entry), err)
 		return nil, err
