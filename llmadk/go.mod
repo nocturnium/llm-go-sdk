@@ -5,9 +5,9 @@ go 1.26.6
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/jsonschema-go v0.4.3
-	github.com/nocturnium/llm-go-sdk/v6 v6.11.0
-	google.golang.org/adk/v2 v2.4.0
-	google.golang.org/genai v1.70.0
+	github.com/nocturnium/llm-go-sdk/v6 v6.11.1
+	google.golang.org/adk/v2 v2.5.0
+	google.golang.org/genai v1.71.0
 	gorm.io/gorm v1.31.2
 )
 
@@ -46,9 +46,9 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	google.golang.org/api v0.295.0 // indirect
+	google.golang.org/api v0.298.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
