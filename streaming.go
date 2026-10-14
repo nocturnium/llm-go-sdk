@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -635,26 +636,32 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 
 // StartStreamWatchdog starts a goroutine that closes rc when ctx is canceled or
 // its deadline is exceeded, and returns a stop function. Calling stop stops the
-// goroutine without closing rc; deferred stop functions run before the caller's
-// own close defer when registered after it, mirroring the inline done-channel
-// pattern provider streams used.
+// goroutine and blocks until it can no longer close rc, so a caller that defers
+// stop before its own close defer never races the watchdog for the body; stop is
+// safe to call more than once, mirroring the inline done-channel pattern
+// provider streams used.
 func StartStreamWatchdog(ctx context.Context, rc io.Closer) func() {
 	done := make(chan struct{})
+	exited := make(chan struct{})
+	var stopOnce, closeOnce sync.Once
 	go func() {
+		defer close(exited)
 		select {
 		case <-ctx.Done():
-			// stop may race with an already-canceled context; once stopped the
-			// watchdog must not close rc, which absent a second close would
-			// race the caller own deferred Close.
+			// stop may race with an already-canceled context; once done is
+			// closed the watchdog must not close rc.
 			select {
 			case <-done:
 			default:
-				_ = rc.Close()
+				closeOnce.Do(func() { _ = rc.Close() })
 			}
 		case <-done:
 		}
 	}()
-	return func() { close(done) }
+	return func() {
+		stopOnce.Do(func() { close(done) })
+		<-exited
+	}
 }
 
 // StreamPanicError converts a recovered panic value from stream processing into
