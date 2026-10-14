@@ -640,22 +640,21 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 // pattern provider streams used.
 func StartStreamWatchdog(ctx context.Context, rc io.Closer) func() {
 	done := make(chan struct{})
-	var stopped atomic.Bool
 	go func() {
 		select {
 		case <-ctx.Done():
-			// stop may race with an already-canceled context; once stopped, the
-			// watchdog never closes rc.
-			if !stopped.Load() {
+			// stop may race with an already-canceled context; once stopped the
+			// watchdog must not close rc, which absent a second close would
+			// race the caller own deferred Close.
+			select {
+			case <-done:
+			default:
 				_ = rc.Close()
 			}
 		case <-done:
 		}
 	}()
-	return func() {
-		stopped.Store(true)
-		close(done)
-	}
+	return func() { close(done) }
 }
 
 // StreamPanicError converts a recovered panic value from stream processing into
