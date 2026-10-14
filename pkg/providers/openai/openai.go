@@ -26,8 +26,8 @@ var defaultProviderConfig = openaicompat.ProviderConfig{
 		Embeddings:       true,
 		Batch:            false, // OpenAI batch API is separate
 		JSONMode:         true,
-		MaxContextTokens: 128000, // GPT-4o context
-		MaxOutputTokens:  16384,  // GPT-4o max output
+		MaxContextTokens: 0, // Model dependent; use capability registry/model metadata
+		MaxOutputTokens:  0, // Model dependent; use capability registry/model metadata
 	},
 }
 

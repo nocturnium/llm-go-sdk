@@ -18,8 +18,8 @@ var providerConfig = openaicompat.ProviderConfig{
 		Embeddings:       false,
 		Batch:            false,
 		JSONMode:         true,
-		MaxContextTokens: 128000, // DeepSeek V3/R1 context window
-		MaxOutputTokens:  8192,
+		MaxContextTokens: 0, // Model dependent; use capability registry/model metadata
+		MaxOutputTokens:  0, // Model dependent; use capability registry/model metadata
 	},
 }
 

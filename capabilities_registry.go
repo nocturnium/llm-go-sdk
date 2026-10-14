@@ -486,7 +486,41 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsStreaming: true,
 		SupportsJSON:      true,
 	}
-
+	// Z.AI per-model entries: context/output limits come from the official model
+	// guides (see pkg/providers/zai/models.go). The ids are literals because this
+	// package cannot import the provider package (it imports this one). GLM models
+	// are text-only, so SupportsVision stays false.
+	r.capabilities["zai:glm-5.2"] = ModelCapabilities{
+		MaxContextTokens:  1000000,
+		MaxOutputTokens:   128000,
+		SupportsVision:    false,
+		SupportsTools:     true,
+		SupportsStreaming: true,
+		SupportsJSON:      true,
+		SupportsReasoning: true,
+	}
+	for _, model := range []string{"glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7", "glm-4.6"} {
+		r.capabilities["zai:"+model] = ModelCapabilities{
+			MaxContextTokens:  200000,
+			MaxOutputTokens:   128000,
+			SupportsVision:    false,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      true,
+			SupportsReasoning: true,
+		}
+	}
+	for _, model := range []string{"glm-4.5", "glm-4.5-air"} {
+		r.capabilities["zai:"+model] = ModelCapabilities{
+			MaxContextTokens:  128000,
+			MaxOutputTokens:   96000,
+			SupportsVision:    false,
+			SupportsTools:     true,
+			SupportsStreaming: true,
+			SupportsJSON:      true,
+			SupportsReasoning: true,
+		}
+	}
 	// llama.cpp capabilities depend on the local model and server build.
 	r.defaults[ProviderLlamaCpp] = ModelCapabilities{
 		MaxContextTokens:  8192,
@@ -592,7 +626,7 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 	}
 	// ...and providers whose chat surface is reasoning-capable as a whole. Only
 	// ZAI qualifies: its GLM-4.x chat models broadly expose a thinking toggle, and
-	// it is represented solely by a default. Reasoning is otherwise model-specific,
+	// its per-model entries already carry the flag above. Reasoning is otherwise model-specific,
 	// so flagging a provider default that also has exact model entries (Anthropic,
 	// Gemini, OpenAI) would disagree with those entries. DeepSeek is mixed
 	// (deepseek-reasoner reasons but the default deepseek-chat does not), so it is

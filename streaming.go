@@ -630,3 +630,35 @@ func WrapStreamWithFinalizer(ctx context.Context, source <-chan StreamChunk, opt
 
 	return wrapped
 }
+
+// StartStreamWatchdog starts a goroutine that closes rc when ctx is canceled or
+// its deadline is exceeded, and returns a stop function. Calling stop stops the
+// goroutine without closing rc; deferred stop functions run before the caller's
+// own close defer when registered after it, mirroring the inline done-channel
+// pattern provider streams used.
+func StartStreamWatchdog(ctx context.Context, rc io.Closer) func() {
+	done := make(chan struct{})
+	var stopped atomic.Bool
+	go func() {
+		select {
+		case <-ctx.Done():
+			// stop may race with an already-canceled context; once stopped, the
+			// watchdog never closes rc.
+			if !stopped.Load() {
+				_ = rc.Close()
+			}
+		case <-done:
+		}
+	}()
+	return func() {
+		stopped.Store(true)
+		close(done)
+	}
+}
+
+// StreamPanicError converts a recovered panic value from stream processing into
+// a terminal error carrying the provider name prefix, so a malformed or hostile
+// provider response never crashes the host process.
+func StreamPanicError(provider Provider, recovered any) error {
+	return fmt.Errorf("%s: panic during stream processing: %v", provider, recovered)
+}

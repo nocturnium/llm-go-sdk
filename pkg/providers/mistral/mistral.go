@@ -25,8 +25,8 @@ var providerConfig = openaicompat.ProviderConfig{
 		Embeddings:       true, // mistral-embed
 		Batch:            false,
 		JSONMode:         true,
-		MaxContextTokens: 131072, // 128k for latest models
-		MaxOutputTokens:  8192,
+		MaxContextTokens: 0, // Model dependent; use capability registry/model metadata
+		MaxOutputTokens:  0, // Model dependent; use capability registry/model metadata
 	},
 	// Mistral rejects tool-call IDs that are not nine characters of
 	// [a-zA-Z0-9], which is what an OpenAI or Anthropic ID left in history by a
