@@ -18,8 +18,8 @@ var providerConfig = openaicompat.ProviderConfig{
 		Embeddings:       false,
 		Batch:            false,
 		JSONMode:         true,
-		MaxContextTokens: 127072, // 128k context
-		MaxOutputTokens:  4096,
+		MaxContextTokens: 0, // Model dependent; use capability registry/model metadata
+		MaxOutputTokens:  0, // Model dependent; use capability registry/model metadata
 	},
 }
 

@@ -203,21 +203,15 @@ func (c *Client) Stream(ctx context.Context, messages []llms.Message, options ..
 		defer func() {
 			if r := recover(); r != nil {
 				sender.DeliverTerminal(llms.StreamChunk{
-					Error: fmt.Errorf("gemini: panic during stream processing: %v", r),
+					Error: llms.StreamPanicError(llms.ProviderGemini, r),
 				})
 			}
 		}()
 		defer func() { _ = stream.Close() }()
-
-		readDone := make(chan struct{})
-		defer close(readDone)
-		go func() {
-			select {
-			case <-ctx.Done():
-				_ = stream.Close()
-			case <-readDone:
-			}
-		}()
+		// Registered after the close above so this defer runs (and stops the
+		// watchdog goroutine) before the stream is closed, exactly as the
+		// previous inline done-channel defer did.
+		defer llms.StartStreamWatchdog(ctx, stream)()
 
 		var accumulatedToolCalls []llms.ToolCall
 		var accumulatedContent string // Full content for token estimation
