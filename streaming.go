@@ -2,6 +2,8 @@ package llms
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"strings"
 	"sync/atomic"
 	"time"
