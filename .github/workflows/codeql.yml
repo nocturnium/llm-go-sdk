@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Run gosec
-        uses: securego/gosec@v2.29.0
+        uses: securego/gosec@v2.30.0
         with:
           # G101 (hardcoded credentials) and G104 (unhandled errors) are excluded
           # to mirror .golangci.yml: G101 only fires on env-var-name and OTel
