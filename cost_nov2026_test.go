@@ -15,6 +15,7 @@ func TestDefaultPricing_Nov2026Models(t *testing.T) {
 		{"gemini:gemini-4-argon", 4.00, 20.00},
 		{"gemini:gemini-4-carbon", 4.00, 20.00},
 		{"zai:glm-5.3-flashx-legal", 0.37, 1.25},
+		{"deepseek:deepseek-flash", 0.30, 1.20},
 	}
 	for _, c := range cases {
 		p, ok := DefaultPricing[c.key]

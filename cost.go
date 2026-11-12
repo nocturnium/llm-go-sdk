@@ -488,6 +488,9 @@ var DefaultPricing = map[string]Pricing{
 	"deepseek:deepseek-reasoner": {Input: 0.55, Output: 2.19, CacheRead: 0.14},
 	// Current DeepSeek API aliases, read 2026-10-09. Recorded at peak rates;
 	// off-peak is 0.50x and is a time-window card a static map cannot express.
+	// deepseek-flash is the current name (V4.1-Flash-1017); the legacy v4-flash
+	// names below bill at its rate. api-docs.deepseek.com pricing, read 2026-11-11.
+	"deepseek:deepseek-flash":               {Input: 0.30, Output: 1.20, CacheRead: 0.006},
 	"deepseek:deepseek-v4-flash":            {Input: 0.30, Output: 1.20, CacheRead: 0.006},
 	"deepseek:deepseek-v4-flash-vision-exp": {Input: 0.30, Output: 1.20, CacheRead: 0.006},
 	"deepseek:deepseek-v4-pro":              {Input: 1.32, Output: 3.96, CacheRead: 0.044},
