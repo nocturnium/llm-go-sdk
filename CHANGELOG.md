@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Rate cards, capabilities and `ListModels` metadata for `claude-fable-5-2` (and `claude-mythos-5-2` pricing), `gpt-6.1-terra`, `gemini-4-argon`, `gemini-4-carbon` and `glm-5.3-flashx-legal`, from the providers' own pricing and model pages (2026-11-11). The GPT-6 family and the Claude Fable 5.1 and 5.5 models also gain capability entries, which they lacked and so fell back to provider defaults. The Gemini 4 rate recorded is Google's 2026-12-01 price ($4 input, $20 output, $0.20 cache read per 1M tokens); Google bills half that through 2026-11-30.
+
 ### Changed
 
 - The Gemini default model is now `gemini-3.8-flash`, Google's current stable Flash model (`gemini-3.5-flash` is labeled legacy). Its pricing is the rate Google bills through 2026-12-31 (0.75 input, 3.75 output, 0.075 cache read per 1M tokens), which doubles on 2027-01-01.

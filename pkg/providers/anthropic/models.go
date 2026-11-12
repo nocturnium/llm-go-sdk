@@ -26,6 +26,41 @@ func titleCase(s string) string {
 // Pricing is per million tokens (USD), verified against the official Anthropic
 // models overview and pricing pages (2026-08-02).
 var knownModels = map[string]modelMetadata{
+	"claude-fable-5-2": {
+		displayName:   "Claude Fable 5.2",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-fable-5-2"),
+	},
+	"claude-fable-5-1": {
+		displayName:   "Claude Fable 5.1",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-fable-5-1"),
+	},
+	"claude-opus-5-5": {
+		displayName:   "Claude Opus 5.5",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-opus-5-5"),
+	},
+	"claude-sonnet-5-5": {
+		displayName:   "Claude Sonnet 5.5",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-sonnet-5-5"),
+	},
+	"claude-haiku-5-5": {
+		displayName:   "Claude Haiku 5.5",
+		contextLength: 1000000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("claude-haiku-5-5"),
+	},
 	// Claude Fable 5 (most capable widely released model; includes the full
 	// 1M-token context window at standard pricing per the official long-context note).
 	"claude-fable-5": {

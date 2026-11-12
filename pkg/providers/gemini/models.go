@@ -43,6 +43,17 @@ var knownModels = map[string]modelMetadata{
 	"gemini-2.5-pro-preview-tts":    {displayName: "gemini-2.5-pro-preview-tts", types: []llms.ModelType{llms.ModelTypeAudio}},
 	"gemini-3.5-transcribe":         {displayName: "gemini-3.5-transcribe", types: []llms.ModelType{llms.ModelTypeAudio}},
 
+	// Gemini 4 (aistudio.google.com/docs/pricing, verified 2026-11-11); 1,048,576 context.
+	"gemini-4-carbon": {
+		displayName: "Gemini 4 Carbon",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     tokenPricing("gemini-4-carbon"),
+	},
+	"gemini-4-argon": {
+		displayName: "Gemini 4 Argon",
+		types:       []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:     tokenPricing("gemini-4-argon"),
+	},
 	// Gemini 3.x, current family (ai.google.dev pricing, verified 2026-08-02).
 	// Context follows the 2.5 family (1,048,576 in / 65,536 out).
 	"gemini-3.6-flash": {
