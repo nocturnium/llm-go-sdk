@@ -507,10 +507,10 @@ var DefaultPricing = map[string]Pricing{
 	"groq:meta-llama/llama-prompt-guard-2-22m": {Input: 0.03, Output: 0.03},
 	"groq:meta-llama/llama-prompt-guard-2-86m": {Input: 0.04, Output: 0.04},
 
-	// Mistral docs pricing, read 2026-10-09. The Large 4 promotional rate is a
-	// time-boxed launch card; the standard rate is recorded for the same reason
-	// Anthropic's Sonnet 5 promotion records its standard rate.
-	"mistral:mistral-large-4":    {Input: 1.36, Output: 4.18, CacheRead: 0.14},
+	// Mistral docs pricing, read 2026-10-09. Large 4 was re-read on 2026-11-11: its model and pricing
+	// pages list one rate with no promotion or end date, so that rate is recorded.
+	// The earlier $1.36/$4.18 card is no longer published.
+	"mistral:mistral-large-4":    {Input: 0.70, Output: 2.10, CacheRead: 0.07}, // docs.mistral.ai/models/mistral-large-4-0, read 2026-11-11
 	"mistral:mistral-large-3":    {Input: 0.50, Output: 1.50, CacheRead: 0.05},
 	"mistral:mistral-medium-3.5": {Input: 1.50, Output: 7.50, CacheRead: 0.15},
 	"mistral:mistral-small-4":    {Input: 0.15, Output: 0.60, CacheRead: 0.015},
@@ -524,6 +524,9 @@ var DefaultPricing = map[string]Pricing{
 	// Exact Fireworks serverless IDs, verified 2026-10-09. Priority/Fast/US
 	// residency have separate cards with no universal multiplier, so only the
 	// standard short-context rates are recorded here.
+	// fireworks.ai model pages, read 2026-11-11.
+	"fireworks:accounts/fireworks/models/kimi-k3p1-pro":                  {Input: 2.00, Output: 10.00, CacheRead: 0.20},
+	"fireworks:accounts/fireworks/models/muse-spark-open":                {Input: 1.25, Output: 4.25, CacheRead: 0.15},
 	"fireworks:accounts/fireworks/models/ember-1":                        {Input: 3.00, Output: 15.00, CacheRead: 0.30},
 	"fireworks:accounts/fireworks/models/kimi-k3":                        {Input: 3.00, Output: 15.00, CacheRead: 0.30},
 	"fireworks:accounts/fireworks/models/deepseek-v4p1-flash":            {Input: 0.30, Output: 1.20, CacheRead: 0.006},
@@ -564,18 +567,26 @@ var DefaultPricing = map[string]Pricing{
 	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {Input: 0.18, Output: 0.18},
 	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {Input: 0.60, Output: 0.60},
 	// Exact serverless IDs from docs.together.ai/docs/serverless/models, read
-	// 2026-10-09. Disputed cache rates (Qwen3.8-2.4T, Kimi-K3) are omitted rather
-	// than guessed; the standard input/output rates are not in dispute.
-	"togetherai:thinkingmachines/Inkling":      {Input: 1.00, Output: 4.05, CacheRead: 0.17},
-	"togetherai:Qwen/Qwen3.8-2.4T-A95B":        {Input: 2.00, Output: 6.00},
-	"togetherai:Qwen/Qwen3.7-Max":              {Input: 2.50, Output: 7.50, CacheRead: 0.50},
-	"togetherai:Qwen/Qwen3.6-Plus":             {Input: 0.50, Output: 3.00},
-	"togetherai:Qwen/Qwen3.7-Plus":             {Input: 0.32, Output: 1.28},
-	"togetherai:Qwen/Qwen3.8-Flash":            {Input: 0.15, Output: 0.47},
-	"togetherai:moonshotai/Kimi-K3":            {Input: 2.70, Output: 13.50},
-	"togetherai:meta-models/Muse-Glimmer-30B":  {Input: 0.35, Output: 1.50, CacheRead: 0.04},
-	"togetherai:Prism-ML/Ternary-Bonsai-27B":   {}, // Free
-	"togetherai:together/Tev1-4B-experimental": {Input: 0.042},
+	// 2026-10-09. Qwen3.8-2.4T has no published cache rate, so it is omitted rather
+	// than guessed. Kimi-K3 was re-read on 2026-11-11 and now lists $0.30 cache read.
+	"togetherai:thinkingmachines/Inkling": {Input: 1.00, Output: 4.05, CacheRead: 0.17},
+	"togetherai:Qwen/Qwen3.8-2.4T-A95B":   {Input: 2.00, Output: 6.00},
+	"togetherai:Qwen/Qwen3.7-Max":         {Input: 2.50, Output: 7.50, CacheRead: 0.50},
+	"togetherai:Qwen/Qwen3.6-Plus":        {Input: 0.50, Output: 3.00},
+	"togetherai:Qwen/Qwen3.7-Plus":        {Input: 0.32, Output: 1.28},
+	"togetherai:Qwen/Qwen3.8-Flash":       {Input: 0.15, Output: 0.47},
+	"togetherai:moonshotai/Kimi-K3":       {Input: 3.00, Output: 15.00, CacheRead: 0.30},
+	// Added from docs.together.ai/docs/serverless-models, read 2026-11-11.
+	"togetherai:moonshotai/Kimi-K3.1-Pro":              {Input: 2.00, Output: 10.00, CacheRead: 0.20},
+	"togetherai:MiniMaxAI/MiniMax-M3.1-Flash":          {Input: 0.15, Output: 0.60, CacheRead: 0.015},
+	"togetherai:meta-models/Muse-Spark-Open-816B-A42B": {Input: 1.25, Output: 4.25, CacheRead: 0.15},
+	"togetherai:reflection/Beam-1.0-501B-A23B":         {Input: 0.40, Output: 1.20, CacheRead: 0.04},
+	"togetherai:zai-org/GLM-5.2":                       {Input: 1.40, Output: 4.40, CacheRead: 0.26},
+	"togetherai:nvidia/NVIDIA-Nemotron-3.5-Super-VL":   {Input: 0.15, Output: 0.50, CacheRead: 0.02},
+	"togetherai:ricursive-ai/Ripple-65B-Preview":       {Input: 0.20, Output: 0.60},
+	"togetherai:meta-models/Muse-Glimmer-30B":          {Input: 0.35, Output: 1.50, CacheRead: 0.04},
+	"togetherai:Prism-ML/Ternary-Bonsai-27B":           {}, // Free
+	"togetherai:together/Tev1-4B-experimental":         {Input: 0.042},
 }
 
 // ModelTokenPricing returns the built-in per-token pricing (Input and Output, in
