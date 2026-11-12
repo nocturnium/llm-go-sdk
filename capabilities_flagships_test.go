@@ -39,6 +39,9 @@ func TestCapabilityRegistry_CurrentFlagships(t *testing.T) {
 		// DeepSeek V4, 1M/384k, reason; vision on Flash only.
 		{ProviderDeepSeek, "deepseek-flash", 1000000, 384000, true, true, true},
 		{ProviderDeepSeek, "deepseek-v4-pro", 1000000, 384000, true, false, true},
+		// Cerebras public endpoint limits.
+		{ProviderCerebras, "gpt-oss-120b", 131072, 40960, true, false, false},
+		{ProviderCerebras, "qwen-3.8-27b", 65536, 32768, true, true, false},
 		// Gemini 4, 1,048,576/65,536.
 		{ProviderGemini, "gemini-4-carbon", 1048576, 65536, true, true, true},
 		{ProviderGemini, "gemini-4-argon", 1048576, 65536, true, true, true},

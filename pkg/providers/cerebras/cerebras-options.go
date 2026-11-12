@@ -26,7 +26,7 @@ type options struct {
 // defaultOptions returns the default options for Cerebras.
 func defaultOptions() *options {
 	return &options{
-		Model:   "llama3.1-70b",
+		Model:   "gpt-oss-120b",
 		BaseURL: "https://api.cerebras.ai/v1",
 	}
 }

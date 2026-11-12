@@ -468,6 +468,20 @@ func (r *CapabilityRegistry) registerDefaults() {
 		SupportsJSON:      true,
 	}
 
+	// Cerebras models from the public models endpoint (api.cerebras.ai/public/v1/models,
+	// 2026-11-11): context and max completion tokens, vision and reasoning flags.
+	for id, c := range map[string]ModelCapabilities{
+		"gpt-oss-120b": {MaxContextTokens: 131072, MaxOutputTokens: 40960, SupportsReasoning: true},
+		"qwen-3.8-27b": {MaxContextTokens: 65536, MaxOutputTokens: 32768, SupportsVision: true, SupportsReasoning: true},
+	} {
+		cc := r.defaults[ProviderCerebras]
+		cc.MaxContextTokens = c.MaxContextTokens
+		cc.MaxOutputTokens = c.MaxOutputTokens
+		cc.SupportsVision = c.SupportsVision
+		cc.SupportsReasoning = c.SupportsReasoning
+		r.capabilities[r.makeKey(ProviderCerebras, id)] = cc
+	}
+
 	// Azure hosts OpenAI-compatible model deployments, so defaults mirror OpenAI.
 	r.defaults[ProviderAzure] = ModelCapabilities{
 		MaxContextTokens:  128000,

@@ -152,7 +152,7 @@ schema); "Native" providers implement a provider-specific wire format.
 | Gemini | `pkg/providers/gemini` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | **Native** (Gemini API) | `gemini-3.8-flash` (default); chat, streaming, tools, vision, embeddings (`text-embedding-004`), JSON mode, safety settings |
 | Azure OpenAI | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` or `AZURE_OPENAI_KEY`; `AZURE_OPENAI_ENDPOINT`; `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | Deployment-based; chat, streaming, tools, JSON mode, embeddings; API version default `2024-02-15-preview`; enterprise/PTU/content filtering |
 | Groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` (default); LPU ultra-low-latency; Llama/Mixtral/Gemma; tools, JSON mode |
-| Cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `llama3.1-70b` (default), `llama3.1-8b`; wafer-scale fast inference; tools, JSON mode |
+| Cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `gpt-oss-120b` (default), `qwen-3.8-27b`; wafer-scale fast inference; tools, JSON mode |
 | DeepSeek | `pkg/providers/deepseek` | `DEEPSEEK_API_KEY` | OpenAI-compatible | `deepseek-chat` (default), `deepseek-coder`, `deepseek-reasoner`; tools, JSON mode, chain-of-thought |
 | Mistral | `pkg/providers/mistral` | `MISTRAL_API_KEY` | OpenAI-compatible | `mistral-large-latest` (default), `codestral-latest`, `open-mistral-nemo`; tools, JSON mode, embeddings; EU data residency |
 | Fireworks AI | `pkg/providers/fireworks` | `FIREWORKS_API_KEY` | OpenAI-compatible | `accounts/fireworks/models/llama-v3p1-70b-instruct` (default); Llama/Mixtral/Qwen; tools, JSON mode, speculative decoding, fine-tunes |
