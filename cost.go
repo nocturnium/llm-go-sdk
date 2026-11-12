@@ -543,7 +543,8 @@ var DefaultPricing = map[string]Pricing{
 	"cerebras:gpt-oss-120b": {Input: 0.35, Output: 0.75},
 	"cerebras:qwen-3.8-27b": {Input: 0.99, Output: 1.49},
 	// docs.perplexity.ai/docs/agent-api/models.md lists perplexity/sonar at 0.25/2.50 with
-	// 0.0625 cache read (read 2026-11-11); Sonar chat completions now run on the Agent API.
+	// 0.0625 cache read (read 2026-11-11). Perplexity says Sonar chat-completions
+	// requests are being reformulated as Agent API requests; this card assumes they bill at that rate.
 	// Excludes per-request search fees. The earlier 1.00/1.00 came from an aggregator.
 	"perplexity:sonar":   {Input: 0.25, Output: 2.50, CacheRead: 0.0625}, //                 // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
 	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},   // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
