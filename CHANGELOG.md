@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `mistral-large-4` is priced at $0.70 input, $2.10 output and $0.07 cache read per 1M tokens (it was $1.36/$4.18/$0.14), and Together's `moonshotai/Kimi-K3` at $3.00/$15.00 with $0.30 cache read (it was $2.70/$13.50 with no cache rate). Both match the providers' own pages as read on 2026-11-11, so cost estimates for these models change.
+
+### Added
+
+- Rate cards for Together `moonshotai/Kimi-K3.1-Pro`, `MiniMaxAI/MiniMax-M3.1-Flash`, `meta-models/Muse-Spark-Open-816B-A42B`, `reflection/Beam-1.0-501B-A23B`, `zai-org/GLM-5.2`, `nvidia/NVIDIA-Nemotron-3.5-Super-VL` and `ricursive-ai/Ripple-65B-Preview`, and Fireworks `kimi-k3p1-pro` and `muse-spark-open`. Cerebras, Perplexity and the other Mistral models are unchanged: no readable first-party rate page.
+
 ### Added
 
 - Rate card and capabilities for `deepseek-flash`, DeepSeek's current name for V4.1 Flash, plus 1M-context, 384K-output limits for it, the legacy `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` names, and `deepseek-v4-pro` (vision on for the Flash names, off for Pro) (DeepSeek pricing page, 2026-11-11). Rates are the peak card, as for the other DeepSeek entries; off-peak is half.
