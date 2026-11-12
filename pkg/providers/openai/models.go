@@ -24,6 +24,41 @@ var knownModels = map[string]modelMetadata{
 	// window and so carries 922,000, the number a caller should size a prompt
 	// against. This is the first family where the two differ; earlier
 	// models publish a single figure, which is why every other entry mirrors.
+	"gpt-6.1-sol": {
+		displayName:   "GPT-6.1 Sol",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-6.1-sol"),
+	},
+	"gpt-6.1-terra": {
+		displayName:   "GPT-6.1 Terra",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-6.1-terra"),
+	},
+	"gpt-6-sol": {
+		displayName:   "GPT-6 Sol",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-6-sol"),
+	},
+	"gpt-6-astra": {
+		displayName:   "GPT-6 Astra",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-6-astra"),
+	},
+	"gpt-6-luna": {
+		displayName:   "GPT-6 Luna",
+		contextLength: 1050000,
+		maxOutput:     128000,
+		types:         []llms.ModelType{llms.ModelTypeChat, llms.ModelTypeVision},
+		pricing:       tokenPricing("gpt-6-luna"),
+	},
 	"gpt-5.6-sol": {
 		displayName:   "GPT-5.6 Sol",
 		contextLength: 1050000,

@@ -29,6 +29,16 @@ func TestCapabilityRegistry_CurrentFlagships(t *testing.T) {
 		{ProviderOpenAI, "gpt-5.6-sol", 922000, 128000, true, true, true},
 		{ProviderOpenAI, "gpt-5.6-terra", 922000, 128000, true, true, true},
 		{ProviderOpenAI, "gpt-5.6-luna", 922000, 128000, true, true, true},
+		// GPT-6, same 922k input / 128k out.
+		{ProviderOpenAI, "gpt-6.1-terra", 922000, 128000, true, true, true},
+		{ProviderOpenAI, "gpt-6-sol", 922000, 128000, true, true, true},
+		// Claude Fable 5.2 and the 5.5 generation, 1M/128k.
+		{ProviderAnthropic, "claude-fable-5-2", 1000000, 128000, true, true, true},
+		{ProviderAnthropic, "claude-opus-5-5", 1000000, 128000, true, true, true},
+		{ProviderAnthropic, "claude-haiku-5-5", 1000000, 128000, true, true, true},
+		// Gemini 4, 1,048,576/65,536.
+		{ProviderGemini, "gemini-4-carbon", 1048576, 65536, true, true, true},
+		{ProviderGemini, "gemini-4-argon", 1048576, 65536, true, true, true},
 		// Anthropic current flagships, 1M/128k, reason, JSON via tools (not flagged here).
 		{ProviderAnthropic, "claude-fable-5", 1000000, 128000, true, true, true},
 		{ProviderAnthropic, "claude-opus-5", 1000000, 128000, true, true, true},

@@ -293,6 +293,12 @@ var DefaultPricing = map[string]Pricing{
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
 			Input: 0.40, Output: 1.80, CacheRead: 0.04, CacheWrite: 0.50}},
 	},
+	// gpt-6.1-terra: developers.openai.com/api/docs/pricing, read 2026-11-11.
+	"openai:gpt-6.1-terra": {
+		Input: 1.00, Output: 5.00, CacheRead: 0.05, CacheWrite: 1.25,
+		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
+			Input: 2.00, Output: 7.50, CacheRead: 0.10, CacheWrite: 2.50}},
+	},
 	"openai:gpt-6.1-sol": {
 		Input: 2.00, Output: 10.00, CacheRead: 0.10, CacheWrite: 2.50,
 		Tiers: []PricingTier{{MinInputTokens: openAILongContextThreshold,
@@ -385,11 +391,15 @@ var DefaultPricing = map[string]Pricing{
 	// The table records the standard $3/$15 rate: a static map cannot express a
 	// time-boxed promotion, and estimates that silently expire are worse than
 	// estimates that are consistently conservative.
-	"anthropic:claude-fable-5":    {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
-	"anthropic:claude-mythos-5":   {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
-	"anthropic:claude-opus-5":     {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
-	"anthropic:claude-sonnet-5":   {Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50},
-	"anthropic:claude-fable-5-1":  {Input: 10.00, Output: 50.00, CacheRead: 0.25, CacheWrite: 12.50},
+	"anthropic:claude-fable-5":   {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-mythos-5":  {Input: 10.00, Output: 50.00, CacheRead: 1.00, CacheWrite: 12.50},
+	"anthropic:claude-opus-5":    {Input: 5.00, Output: 25.00, CacheRead: 0.50, CacheWrite: 6.25},
+	"anthropic:claude-sonnet-5":  {Input: 2.00, Output: 10.00, CacheRead: 0.20, CacheWrite: 2.50},
+	"anthropic:claude-fable-5-1": {Input: 10.00, Output: 50.00, CacheRead: 0.25, CacheWrite: 12.50},
+	// Fable 5.2 and Mythos 5.2: platform.claude.com pricing page, read 2026-11-11.
+	// Cache reads are 2.5% of base input; 5m cache write is 1.25x.
+	"anthropic:claude-fable-5-2":  {Input: 8.00, Output: 40.00, CacheRead: 0.20, CacheWrite: 10.00},
+	"anthropic:claude-mythos-5-2": {Input: 8.00, Output: 40.00, CacheRead: 0.20, CacheWrite: 10.00},
 	"anthropic:claude-opus-5-5":   {Input: 4.00, Output: 20.00, CacheRead: 0.20, CacheWrite: 5.00},
 	"anthropic:claude-sonnet-5-5": {Input: 2.00, Output: 10.00, CacheRead: 0.10, CacheWrite: 2.50},
 	"anthropic:claude-haiku-5-5": {
@@ -429,9 +439,15 @@ var DefaultPricing = map[string]Pricing{
 	// Gemini 3.8 Flash bills these rates through 2026-12-31 and doubles them from
 	// 2027-01-01 (Input 1.50, Output 7.50, CacheRead 0.15), per Google's pricing
 	// page; TestGemini38FlashRateChange fails from that date as the reminder.
-	"gemini:gemini-3.8-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
-	"gemini:gemini-3.6-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
-	"gemini:gemini-3.7-flash":      {Input: 0.75, Output: 3.75, CacheRead: 0.075},
+	"gemini:gemini-3.8-flash": {Input: 0.75, Output: 3.75, CacheRead: 0.075},
+	"gemini:gemini-3.6-flash": {Input: 0.75, Output: 3.75, CacheRead: 0.075},
+	"gemini:gemini-3.7-flash": {Input: 0.75, Output: 3.75, CacheRead: 0.075},
+	// Gemini 4 Argon and Carbon share one rate card (aistudio.google.com/docs/pricing,
+	// read 2026-11-11), with no prompt-size tiers. Google lists $2/$10/$0.10 through
+	// 2026-11-30 and $4/$20/$0.20 from 2026-12-01. A static map cannot express a
+	// dated step, so this records the durable December rate (conservative today).
+	"gemini:gemini-4-argon":        {Input: 4.00, Output: 20.00, CacheRead: 0.20},
+	"gemini:gemini-4-carbon":       {Input: 4.00, Output: 20.00, CacheRead: 0.20},
 	"gemini:gemini-3.5-flash":      {Input: 1.50, Output: 9.00, CacheRead: 0.15},
 	"gemini:gemini-3.5-flash-lite": {Input: 0.30, Output: 2.50, CacheRead: 0.03},
 	"gemini:gemini-3.1-pro-preview": {
@@ -527,9 +543,11 @@ var DefaultPricing = map[string]Pricing{
 	"zai:glm-5.3":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},
 	"zai:glm-5.3-flash":  {Input: 0.15, Output: 0.50, CacheRead: 0.03},
 	"zai:glm-5.3-flashx": {Input: 0.37, Output: 1.25, CacheRead: 0.075},
-	"zai:glm-4.7-flashx": {Input: 0.07, Output: 0.40, CacheRead: 0.01},
-	"zai:glm-4.6v":       {Input: 0.30, Output: 0.90, CacheRead: 0.05},
-	"zai:glm-4.7-Flash":  {}, // Free (Z.AI direct pricing, verified 2026-10)
+	// Priced identically to FlashX on docs.z.ai/guides/overview/pricing (2026-11-11).
+	"zai:glm-5.3-flashx-legal": {Input: 0.37, Output: 1.25, CacheRead: 0.075},
+	"zai:glm-4.7-flashx":       {Input: 0.07, Output: 0.40, CacheRead: 0.01},
+	"zai:glm-4.6v":             {Input: 0.30, Output: 0.90, CacheRead: 0.05},
+	"zai:glm-4.7-Flash":        {}, // Free (Z.AI direct pricing, verified 2026-10)
 
 	// TogetherAI (varies by model, these are examples)
 	"togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo":       {Input: 1.04, Output: 1.04},
