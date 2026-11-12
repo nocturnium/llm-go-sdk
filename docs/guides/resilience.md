@@ -2,7 +2,7 @@
 
 Network calls to LLM providers fail. APIs rate-limit you (HTTP 429), have transient
 outages (HTTP 5xx), get overloaded, or time out. This guide covers the
-opt-in resilience wrappers in `llms` that make your application robust against
+opt-in resilience wrappers in `llms` that keep your application running through
 these failures:
 
 - **Retries with exponential backoff**, re-issue requests that hit transient errors.

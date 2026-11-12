@@ -47,7 +47,7 @@ if err := json.Unmarshal([]byte(resp.Content), &data); err != nil {
     still expect your prompt to describe the desired fields. Spell out the
     structure you want in the system or user message.
 
-Under the hood this sets `ResponseFormat.Type` to `llms.ResponseFormatJSONObject`
+This sets `ResponseFormat.Type` to `llms.ResponseFormatJSONObject`
 (the wire value `"json_object"`).
 
 ## `WithJSONSchema()`, JSON constrained by a schema
