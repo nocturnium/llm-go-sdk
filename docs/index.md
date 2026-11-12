@@ -20,9 +20,9 @@ Streaming, tool calling, vision, embeddings, and built-in resilience, across **2
 </div>
 
 !!! info "At a glance"
-    **Module** `github.com/nocturnium/llm-go-sdk/v6` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v6"` · **Version** v6.9.0 · **License** Apache-2.0 · **Go** 1.25+
+    **Module** `github.com/nocturnium/llm-go-sdk/v6` · **Import** `llms "github.com/nocturnium/llm-go-sdk/v6"` · **Version** v6.11.3 · **License** Apache-2.0 · **Go** 1.26+
 
-## Why this SDK
+## What it includes
 
 <div class="grid cards" markdown>
 
@@ -66,7 +66,7 @@ Streaming, tool calling, vision, embeddings, and built-in resilience, across **2
 
     ---
 
-    First-class embeddings (`[]float32`) for semantic search and RAG, plus reranking.
+    Embeddings (`[]float32`) for semantic search and RAG, plus reranking.
 
 -   :material-shield-refresh:{ .lg .middle } __Resilience (opt-in)__
 
@@ -84,13 +84,13 @@ Streaming, tool calling, vision, embeddings, and built-in resilience, across **2
 
     ---
 
-    A first-class MCP client, tools, resources, prompts, and progress, that drops into `RunTools`.
+    An MCP client, tools, resources, prompts, and progress, that drops into `RunTools`.
 
--   :material-shield-lock:{ .lg .middle } __Secure by default__
+-   :material-shield-lock:{ .lg .middle } __SSRF protection__
 
     ---
 
-    SSRF protection blocks private/loopback/link-local/cloud-metadata targets and re-validates redirects.
+    On by default: blocks private/loopback/link-local/cloud-metadata targets and re-validates redirects.
 
 -   :material-layers-triple:{ .lg .middle } __Composable middleware__
 

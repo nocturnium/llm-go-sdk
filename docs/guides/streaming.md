@@ -253,7 +253,7 @@ fmt.Println(text)
 ```
 
 !!! tip
-    If you do not actually need incremental delivery, prefer `client.GenerateContent(ctx, messages)`, it returns a fully populated `*llms.Response` and avoids the bookkeeping entirely. Use `Stream` only when partial output, lower time-to-first-token, or early cancellation matter.
+    If you do not need incremental delivery, prefer `client.GenerateContent(ctx, messages)`, it returns a fully populated `*llms.Response` and avoids the bookkeeping entirely. Use `Stream` only when partial output, lower time-to-first-token, or early cancellation matter.
 
 ## Streaming reasoning and tool calls
 

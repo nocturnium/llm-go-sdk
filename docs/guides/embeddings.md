@@ -169,7 +169,7 @@ These providers implement `Embedder` and can be used with `llms.AsEmbedder`:
     so `llms.AsEmbedder` alone does not prove a provider can embed. The reliable
     check is configuring an embedding model and handling
     `llms.ErrEmbeddingModelRequired` from `Embed` / `EmbedQuery` /
-    `EmbedDocuments`. Native providers like anthropic may genuinely not
+    `EmbedDocuments`. Native providers like anthropic may not
     implement `Embedder`.
 
 ## Reranking
@@ -244,7 +244,7 @@ for _, r := range resp.Results {
 
 !!! tip "Infinity runs locally by default"
     The `infinity` provider defaults to `http://localhost:7997/v1` and relaxes
-    SSRF protection (private IPs and plain HTTP) out of the box, so a local
+    SSRF protection (private IPs and plain HTTP) by default, so a local
     Infinity server works with no extra flags. Point it elsewhere with
     `infinity.WithBaseURL(...)`. The default rerank model is
     `mixedbread-ai/mxbai-rerank-xsmall-v1`.

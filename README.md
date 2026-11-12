@@ -1015,7 +1015,7 @@ Common sentinel errors:
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for the
+Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for the
 development workflow, coding standards (see also [AGENTS.md](./AGENTS.md)), and the PR
 checklist. By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).
 

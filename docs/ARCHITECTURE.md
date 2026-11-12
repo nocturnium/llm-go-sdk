@@ -377,7 +377,7 @@ package's `converters.go`.
 
 ### Internal HTTP clients
 
-The `internal/` tree is not importable by external code; it is the engine room.
+The `internal/` tree is not importable by external code; it holds the provider API clients and shared HTTP code.
 
 - `internal/httpclient` is the shared transport for every provider. It wraps a
   `*http.Client` with a configurable `RetryPolicy`, exposes `DoJSON`, `DoRaw`,
@@ -546,7 +546,7 @@ channel and be guaranteed it ends in one of those two states. The `StreamSender`
 `time.Duration`, tunable per call via `WithStreamSendTimeout`) so a consumer that stops
 reading cannot leak the producing goroutine; it tracks timeout state and respects
 context cancellation. `StreamProcessor` allows middleware to transform chunks as they
-flow. Under the hood, OpenAI-compatible streaming is parsed by the
+flow. OpenAI-compatible streaming is parsed by the
 `internal/httpclient` `SSEReader`; native providers parse their own SSE event formats
 in their `internal/<name>api` clients.
 

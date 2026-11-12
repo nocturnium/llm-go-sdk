@@ -1,6 +1,6 @@
-# Roadmap, cutting-edge tracks
+# Roadmap
 
-This file tracks the "cutting edge of LLM SDKs" work identified in the v2 architecture
+This file tracks the SDK work identified in the v2 architecture
 teardown (CTO / 10x / Go-idioms review). Items are grouped by status.
 
 ## Shipped (v2.x, additive / non-breaking)
@@ -62,10 +62,9 @@ tools, and first-class reasoning items.
 **Risks:** distinct request/response shape and a new SSE event grammar; correctness needs
 live-API testing, hence the staged PRs rather than an inline build.
 
-### Track B, Best-in-class MCP client
+### Track B, MCP client
 
-**Why:** `pkg/mcp` already implements a client (jsonrpc + http/stdio transports), a genuine
-wedge, since few Go LLM SDKs have first-class MCP. Worth investing to make it best-in-class.
+**Why:** `pkg/mcp` already implements a client (jsonrpc + http/stdio transports), and few Go LLM SDKs include one.
 
 **Scope (sequence as separate PRs):**
 1. ✅ **Audit + error mapping.** *(Shipped.)* Audit found the transport layer already well-hardened
