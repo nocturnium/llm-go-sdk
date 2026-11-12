@@ -239,9 +239,9 @@ const (
 //
 // Some providers are deliberately left unpriced so lookups keep returning
 // ok=false: ollama and llamacpp run locally/free and have no per-token list price
-// (N/A); Cerebras no longer lists the default llama3.1-70b model on its public
-// 2026 per-token rate card (custom Dedicated Endpoint pricing only), so it is
-// not publicly verifiable; Mistral defaults are moving "latest" aliases with
+// (N/A); Cerebras is priced only for the two models its public models endpoint
+// (api.cerebras.ai/public/v1/models) reports a rate for, and any other Cerebras
+// model, including the retired llama3.1-70b, stays unpriced; Mistral defaults are moving "latest" aliases with
 // conflicting public prices for the current version; Azure, RunPod, Infinity,
 // Featherless, and Synthetic are BYO deployment/subscription or volatile model
 // ID surfaces without stable per-token list pricing.
@@ -510,7 +510,9 @@ var DefaultPricing = map[string]Pricing{
 	// Mistral docs pricing, read 2026-10-09. Large 4 was re-read on 2026-11-11: its model and pricing
 	// pages list one rate with no promotion or end date, so that rate is recorded.
 	// The earlier $1.36/$4.18 card is no longer published.
-	"mistral:mistral-large-4":    {Input: 0.70, Output: 2.10, CacheRead: 0.07}, // docs.mistral.ai/models/mistral-large-4-0, read 2026-11-11
+	"mistral:mistral-large-4": {Input: 0.70, Output: 2.10, CacheRead: 0.07}, // docs.mistral.ai/models/mistral-large-4-0, read 2026-11-11
+	// Large 3 and Medium 3.5 are deprecated (2026-10-31, retiring 2027-04-30) and no longer
+	// on Mistral's pricing page, so their last published rates are kept for existing callers.
 	"mistral:mistral-large-3":    {Input: 0.50, Output: 1.50, CacheRead: 0.05},
 	"mistral:mistral-medium-3.5": {Input: 1.50, Output: 7.50, CacheRead: 0.15},
 	"mistral:mistral-small-4":    {Input: 0.15, Output: 0.60, CacheRead: 0.015},
@@ -537,7 +539,14 @@ var DefaultPricing = map[string]Pricing{
 	"fireworks:accounts/fireworks/models/nemotron-3-ultra-nvfp4":         {Input: 0.60, Output: 2.40, CacheRead: 0.12},
 	"fireworks:accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {Input: 0.05, Output: 0.20, CacheRead: 0.01},
 	"fireworks:accounts/fireworks/models/gpt-oss-120b":                   {Input: 0.15, Output: 0.60, CacheRead: 0.015},
-	"perplexity:sonar":   {Input: 1.00, Output: 1.00},                  // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
+	// Cerebras public models endpoint, read 2026-11-11 (no cache rate published).
+	"cerebras:gpt-oss-120b": {Input: 0.35, Output: 0.75},
+	"cerebras:qwen-3.8-27b": {Input: 0.99, Output: 1.49},
+	// docs.perplexity.ai/docs/agent-api/models.md lists perplexity/sonar at 0.25/2.50 with
+	// 0.0625 cache read (read 2026-11-11). Perplexity says Sonar chat-completions
+	// requests are being reformulated as Agent API requests; this card assumes they bill at that rate.
+	// Excludes per-request search fees. The earlier 1.00/1.00 came from an aggregator.
+	"perplexity:sonar":   {Input: 0.25, Output: 2.50, CacheRead: 0.0625},
 	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
 	"zai:glm-5.1":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // docs.z.ai, verified 2026-10-09
 	"zai:glm-5":          {Input: 1.00, Output: 3.20, CacheRead: 0.20}, // docs.z.ai, verified 2026-10-09

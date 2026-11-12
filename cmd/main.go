@@ -264,7 +264,7 @@ func providersAction(out io.Writer) error {
 		{"openai", "gpt-4o", "OPENAI_API_KEY"},
 		{"anthropic", "claude-sonnet-5", "ANTHROPIC_API_KEY"},
 		{"azure", "(deployment)", "AZURE_OPENAI_API_KEY"},
-		{"cerebras", "llama3.1-70b", "CEREBRAS_API_KEY"},
+		{"cerebras", "gpt-oss-120b", "CEREBRAS_API_KEY"},
 		{"deepseek", "deepseek-chat", "DEEPSEEK_API_KEY"},
 		{"featherless", "Qwen/Qwen3-32B", "FEATHERLESS_API_KEY"},
 		{"fireworks", "llama-v3p1-70b-instruct", "FIREWORKS_API_KEY"},

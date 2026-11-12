@@ -32,14 +32,14 @@
 //
 //	client, err := cerebras.New(
 //	    cerebras.WithAPIKey("..."),
-//	    cerebras.WithModel("llama3.1-70b"),
+//	    cerebras.WithModel("qwen-3.8-27b"),
 //	    cerebras.WithHTTPClient(customHTTPClient),
 //	)
 //
 // # Popular Models
 //
-//   - llama3.1-70b (default)
-//   - llama3.1-8b
+//   - gpt-oss-120b (default)
+//   - qwen-3.8-27b
 //
 // # Thread Safety
 //

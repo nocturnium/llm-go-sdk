@@ -10,7 +10,7 @@ import (
 func TestDefaultOptions(t *testing.T) {
 	opts := defaultOptions()
 
-	if opts.Model != "llama3.1-70b" {
+	if opts.Model != "gpt-oss-120b" {
 		t.Errorf("unexpected default model: %s", opts.Model)
 	}
 

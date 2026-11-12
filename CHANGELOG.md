@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- The Cerebras default model is now `gpt-oss-120b`. The old default, `llama3.1-70b`, is deprecated and no longer in Cerebras's model list, so default calls would fail. Pass `WithModel` to keep another model.
+- `perplexity:sonar` is priced at $0.25 input, $2.50 output and $0.0625 cache read per 1M tokens (it was $1.00/$1.00 from a third-party site), per Perplexity's Agent API model page. Per-request search fees are still not included.
+
+### Added
+
+- Rate cards and capability limits for Cerebras `gpt-oss-120b` ($0.35/$0.75) and `qwen-3.8-27b` ($0.99/$1.49) from Cerebras's public models endpoint. Other Cerebras models stay unpriced.
+
+### Fixed
+
 - `mistral-large-4` is priced at $0.70 input, $2.10 output and $0.07 cache read per 1M tokens (it was $1.36/$4.18/$0.14), and Together's `moonshotai/Kimi-K3` at $3.00/$15.00 with $0.30 cache read (it was $2.70/$13.50 with no cache rate). Both match the providers' own pages as read on 2026-11-11, so cost estimates for these models change.
 
 ### Added
