@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Rate card and capabilities for `deepseek-flash`, DeepSeek's current name for V4.1 Flash, plus 1M-context, 384K-output limits for it and `deepseek-v4-pro` (DeepSeek pricing page, 2026-11-11). Rates are the peak card, as for the other DeepSeek entries; off-peak is half.
+- Rate card and capabilities for `deepseek-flash`, DeepSeek's current name for V4.1 Flash, plus 1M-context, 384K-output limits for it, the legacy `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` names, and `deepseek-v4-pro` (vision on for the Flash names, off for Pro) (DeepSeek pricing page, 2026-11-11). Rates are the peak card, as for the other DeepSeek entries; off-peak is half.
 
 ### Added
 

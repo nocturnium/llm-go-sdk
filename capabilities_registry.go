@@ -653,13 +653,21 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 		r.capabilities[r.makeKey(ProviderDeepSeek, "deepseek-reasoner")] = rc // ...with reasoning on
 
 		// V4 models: 1M context, 384K max output, thinking on by default
-		// (api-docs.deepseek.com pricing page, 2026-11-11). Flash accepts images; Pro does not.
-		for _, id := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro"} {
+		// (api-docs.deepseek.com pricing page, 2026-11-11). The page lists vision as
+		// supported on deepseek-flash and not on deepseek-v4-pro. The legacy
+		// deepseek-v4-flash and deepseek-v4-flash-vision-exp names are served by
+		// deepseek-flash on that page, so they share its limits and vision support.
+		for id, vision := range map[string]bool{
+			"deepseek-flash":               true,
+			"deepseek-v4-flash":            true,
+			"deepseek-v4-flash-vision-exp": true,
+			"deepseek-v4-pro":              false,
+		} {
 			v4 := caps
 			v4.MaxContextTokens = 1000000
 			v4.MaxOutputTokens = 384000
 			v4.SupportsReasoning = true
-			v4.SupportsVision = id != "deepseek-v4-pro"
+			v4.SupportsVision = vision
 			r.capabilities[r.makeKey(ProviderDeepSeek, id)] = v4
 		}
 	}

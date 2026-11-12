@@ -36,6 +36,9 @@ func TestCapabilityRegistry_CurrentFlagships(t *testing.T) {
 		{ProviderAnthropic, "claude-fable-5-2", 1000000, 128000, true, true, true},
 		{ProviderAnthropic, "claude-opus-5-5", 1000000, 128000, true, true, true},
 		{ProviderAnthropic, "claude-haiku-5-5", 1000000, 128000, true, true, true},
+		// DeepSeek V4, 1M/384k, reason; vision on Flash only.
+		{ProviderDeepSeek, "deepseek-flash", 1000000, 384000, true, true, true},
+		{ProviderDeepSeek, "deepseek-v4-pro", 1000000, 384000, true, false, true},
 		// Gemini 4, 1,048,576/65,536.
 		{ProviderGemini, "gemini-4-carbon", 1048576, 65536, true, true, true},
 		{ProviderGemini, "gemini-4-argon", 1048576, 65536, true, true, true},
