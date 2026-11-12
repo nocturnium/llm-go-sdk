@@ -19,6 +19,12 @@ func TestDefaultPricing_Nov2026Models(t *testing.T) {
 		{"mistral:mistral-large-4", 0.70, 2.10},
 		{"togetherai:moonshotai/Kimi-K3", 3.00, 15.00},
 		{"togetherai:moonshotai/Kimi-K3.1-Pro", 2.00, 10.00},
+		{"togetherai:MiniMaxAI/MiniMax-M3.1-Flash", 0.15, 0.60},
+		{"togetherai:meta-models/Muse-Spark-Open-816B-A42B", 1.25, 4.25},
+		{"togetherai:reflection/Beam-1.0-501B-A23B", 0.40, 1.20},
+		{"togetherai:zai-org/GLM-5.2", 1.40, 4.40},
+		{"togetherai:nvidia/NVIDIA-Nemotron-3.5-Super-VL", 0.15, 0.50},
+		{"togetherai:ricursive-ai/Ripple-65B-Preview", 0.20, 0.60},
 		{"fireworks:accounts/fireworks/models/kimi-k3p1-pro", 2.00, 10.00},
 		{"fireworks:accounts/fireworks/models/muse-spark-open", 1.25, 4.25},
 	}

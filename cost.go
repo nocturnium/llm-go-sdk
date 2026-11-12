@@ -507,9 +507,9 @@ var DefaultPricing = map[string]Pricing{
 	"groq:meta-llama/llama-prompt-guard-2-22m": {Input: 0.03, Output: 0.03},
 	"groq:meta-llama/llama-prompt-guard-2-86m": {Input: 0.04, Output: 0.04},
 
-	// Mistral docs pricing, read 2026-10-09. The Large 4 promotional rate is a
-	// time-boxed launch card; the standard rate is recorded for the same reason
-	// Anthropic's Sonnet 5 promotion records its standard rate.
+	// Mistral docs pricing, read 2026-10-09. Large 4 was re-read on 2026-11-11: its model and pricing
+	// pages list one rate with no promotion or end date, so that rate is recorded.
+	// The earlier $1.36/$4.18 card is no longer published.
 	"mistral:mistral-large-4":    {Input: 0.70, Output: 2.10, CacheRead: 0.07}, // docs.mistral.ai/models/mistral-large-4-0, read 2026-11-11
 	"mistral:mistral-large-3":    {Input: 0.50, Output: 1.50, CacheRead: 0.05},
 	"mistral:mistral-medium-3.5": {Input: 1.50, Output: 7.50, CacheRead: 0.15},
@@ -567,8 +567,8 @@ var DefaultPricing = map[string]Pricing{
 	"togetherai:meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo":   {Input: 0.18, Output: 0.18},
 	"togetherai:mistralai/Mixtral-8x7B-Instruct-v0.1":          {Input: 0.60, Output: 0.60},
 	// Exact serverless IDs from docs.together.ai/docs/serverless/models, read
-	// 2026-10-09. Disputed cache rates (Qwen3.8-2.4T, Kimi-K3) are omitted rather
-	// than guessed; the standard input/output rates are not in dispute.
+	// 2026-10-09. Qwen3.8-2.4T has no published cache rate, so it is omitted rather
+	// than guessed. Kimi-K3 was re-read on 2026-11-11 and now lists $0.30 cache read.
 	"togetherai:thinkingmachines/Inkling": {Input: 1.00, Output: 4.05, CacheRead: 0.17},
 	"togetherai:Qwen/Qwen3.8-2.4T-A95B":   {Input: 2.00, Output: 6.00},
 	"togetherai:Qwen/Qwen3.7-Max":         {Input: 2.50, Output: 7.50, CacheRead: 0.50},
