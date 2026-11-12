@@ -651,6 +651,17 @@ func (r *CapabilityRegistry) registerReasoningAndCaching() {
 		rc := caps // full copy of the provider defaults...
 		rc.SupportsReasoning = true
 		r.capabilities[r.makeKey(ProviderDeepSeek, "deepseek-reasoner")] = rc // ...with reasoning on
+
+		// V4 models: 1M context, 384K max output, thinking on by default
+		// (api-docs.deepseek.com pricing page, 2026-11-11). Flash accepts images; Pro does not.
+		for _, id := range []string{"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro"} {
+			v4 := caps
+			v4.MaxContextTokens = 1000000
+			v4.MaxOutputTokens = 384000
+			v4.SupportsReasoning = true
+			v4.SupportsVision = id != "deepseek-v4-pro"
+			r.capabilities[r.makeKey(ProviderDeepSeek, id)] = v4
+		}
 	}
 
 	// Prompt caching: Anthropic (explicit breakpoints), OpenAI/Azure/DeepSeek

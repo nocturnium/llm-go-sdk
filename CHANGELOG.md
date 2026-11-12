@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Rate card and capabilities for `deepseek-flash`, DeepSeek's current name for V4.1 Flash, plus 1M-context, 384K-output limits for it and `deepseek-v4-pro` (DeepSeek pricing page, 2026-11-11). Rates are the peak card, as for the other DeepSeek entries; off-peak is half.
+
+### Added
+
 - Rate cards, capabilities and `ListModels` metadata for `claude-fable-5-2` (and `claude-mythos-5-2` pricing), `gpt-6.1-terra`, `gemini-4-argon`, `gemini-4-carbon` and `glm-5.3-flashx-legal`, from the providers' own pricing and model pages (2026-11-11). The GPT-6 family and the Claude Fable 5.1 and 5.5 models also gain capability entries, which they lacked and so fell back to provider defaults. The Gemini 4 rate recorded is Google's 2026-12-01 price ($4 input, $20 output, $0.20 cache read per 1M tokens); Google bills half that through 2026-11-30.
 
 ### Changed
