@@ -110,3 +110,15 @@ func TestGetModelCapabilities_FlagshipPublicPath(t *testing.T) {
 			caps.MaxContextTokens, caps.SupportsReasoning)
 	}
 }
+
+// TestCapabilities_CerebrasKeepsProviderFlags pins that per-model Cerebras entries
+// inherit the provider defaults (tools, streaming, JSON) and only override limits.
+func TestCapabilities_CerebrasKeepsProviderFlags(t *testing.T) {
+	r := DefaultCapabilityRegistry()
+	for _, id := range []string{"gpt-oss-120b", "qwen-3.8-27b"} {
+		c := r.Get(ProviderCerebras, id)
+		if !c.SupportsTools || !c.SupportsStreaming || !c.SupportsJSON {
+			t.Errorf("%s: tools=%v streaming=%v json=%v, want all true", id, c.SupportsTools, c.SupportsStreaming, c.SupportsJSON)
+		}
+	}
+}

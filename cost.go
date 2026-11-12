@@ -546,15 +546,15 @@ var DefaultPricing = map[string]Pricing{
 	// 0.0625 cache read (read 2026-11-11). Perplexity says Sonar chat-completions
 	// requests are being reformulated as Agent API requests; this card assumes they bill at that rate.
 	// Excludes per-request search fees. The earlier 1.00/1.00 came from an aggregator.
-	"perplexity:sonar":   {Input: 0.25, Output: 2.50, CacheRead: 0.0625}, //                 // Perplexity Sonar token rates (pricepertoken.com/perplexity-sonar), excludes per-request search fee; verified 2026-06
-	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},   // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
-	"zai:glm-5.1":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},   // docs.z.ai, verified 2026-10-09
-	"zai:glm-5":          {Input: 1.00, Output: 3.20, CacheRead: 0.20},   // docs.z.ai, verified 2026-10-09
-	"zai:glm-5-turbo":    {Input: 1.20, Output: 4.00},                    // docs.z.ai, verified 2026-06
-	"zai:glm-4.7":        {Input: 0.60, Output: 2.20, CacheRead: 0.11},   // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-10-09
-	"zai:glm-4.6":        {Input: 0.60, Output: 2.20, CacheRead: 0.11},   // docs.z.ai, verified 2026-10-09
-	"zai:glm-4.5":        {Input: 0.60, Output: 2.20, CacheRead: 0.11},   // docs.z.ai, verified 2026-10-09
-	"zai:glm-4.5-air":    {Input: 0.20, Output: 1.10, CacheRead: 0.03},   // docs.z.ai, verified 2026-10-09
+	"perplexity:sonar":   {Input: 0.25, Output: 2.50, CacheRead: 0.0625},
+	"zai:glm-5.2":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // Z.AI GLM-5 series (docs.z.ai pricing), verified 2026-10-09
+	"zai:glm-5.1":        {Input: 1.40, Output: 4.40, CacheRead: 0.26}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5":          {Input: 1.00, Output: 3.20, CacheRead: 0.20}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-5-turbo":    {Input: 1.20, Output: 4.00},                  // docs.z.ai, verified 2026-06
+	"zai:glm-4.7":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // Z.AI GLM-4.7 direct (docs.z.ai; was 0.40/1.75 via openrouter), verified 2026-10-09
+	"zai:glm-4.6":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-4.5":        {Input: 0.60, Output: 2.20, CacheRead: 0.11}, // docs.z.ai, verified 2026-10-09
+	"zai:glm-4.5-air":    {Input: 0.20, Output: 1.10, CacheRead: 0.03}, // docs.z.ai, verified 2026-10-09
 	"zai:glm-5.3":        {Input: 1.40, Output: 4.40, CacheRead: 0.26},
 	"zai:glm-5.3-flash":  {Input: 0.15, Output: 0.50, CacheRead: 0.03},
 	"zai:glm-5.3-flashx": {Input: 0.37, Output: 1.25, CacheRead: 0.075},
