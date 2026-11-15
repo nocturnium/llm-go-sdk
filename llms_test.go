@@ -667,6 +667,7 @@ func TestHasMediaCapabilities(t *testing.T) {
 		{"video", HasVideoGeneration, Capabilities{VideoGeneration: true}},
 		{"speech", HasSpeech, Capabilities{Speech: true}},
 		{"transcription", HasTranscription, Capabilities{Transcription: true}},
+		{"decision", HasDecision, Capabilities{Decision: true}},
 	} {
 		t.Run(helper.name, func(t *testing.T) {
 			if helper.check(testPlainLLM{}) || helper.check(testMediaCapableLLM{}) {
@@ -676,7 +677,7 @@ func TestHasMediaCapabilities(t *testing.T) {
 			if !helper.check(testWrapper{LLM: client}) {
 				t.Fatal("lost wrapped capability flag")
 			}
-			if SupportsImageGeneration(client) || SupportsVideoGeneration(client) || SupportsSpeech(client) || SupportsTranscription(client) {
+			if SupportsImageGeneration(client) || SupportsVideoGeneration(client) || SupportsSpeech(client) || SupportsTranscription(client) || SupportsDecision(client) {
 				t.Fatal("flags confused with interface implementations")
 			}
 		})

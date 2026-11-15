@@ -1187,6 +1187,8 @@ staticcheck ./...
 | `MISTRAL_API_KEY` | Mistral | Mistral API key |
 | `DEEPSEEK_API_KEY` | DeepSeek | DeepSeek API key |
 | `CEREBRAS_API_KEY` | Cerebras | Cerebras API key |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare | Cloudflare API token (Workers AI) |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Cloudflare account ID (not a secret) |
 | `PERPLEXITY_API_KEY` | Perplexity | Perplexity API key |
 | `FEATHERLESS_API_KEY` | Featherless | Featherless API key |
 | `SYNTHETIC_API_KEY` | Synthetic | Synthetic API key |

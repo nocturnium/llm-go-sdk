@@ -16,6 +16,7 @@ import (
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/azure"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/cerebras"
+	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/cloudflare"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/deepseek"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/featherless"
 	"github.com/nocturnium/llm-go-sdk/v6/pkg/providers/fireworks"
@@ -265,6 +266,7 @@ func providersAction(out io.Writer) error {
 		{"anthropic", "claude-sonnet-5", "ANTHROPIC_API_KEY"},
 		{"azure", "(deployment)", "AZURE_OPENAI_API_KEY"},
 		{"cerebras", "gpt-oss-120b", "CEREBRAS_API_KEY"},
+		{"cloudflare", "@cf/openai/gpt-oss-120b", "CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID"},
 		{"deepseek", "deepseek-chat", "DEEPSEEK_API_KEY"},
 		{"featherless", "Qwen/Qwen3-32B", "FEATHERLESS_API_KEY"},
 		{"fireworks", "llama-v3p1-70b-instruct", "FIREWORKS_API_KEY"},
@@ -334,6 +336,8 @@ func createClient(provider, model string) (llms.LLM, error) {
 		return openrouter.New(modelOpts(model, openrouter.WithModel)...)
 	case "zai":
 		return zai.New(modelOpts(model, zai.WithModel)...)
+	case "cloudflare":
+		return cloudflare.New(modelOpts(model, cloudflare.WithModel)...)
 	default:
 		return nil, fmt.Errorf("unknown or non-chat provider: %s (note: infinity is embeddings/reranking only)", provider)
 	}

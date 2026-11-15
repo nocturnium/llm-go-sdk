@@ -97,6 +97,19 @@ type Client struct {
 	// resolveBeforeRequest is set when the transport could not take a dial
 	// guard, so URL validation resolves the host itself instead.
 	resolveBeforeRequest bool
+	// errorCodeMapper rewrites the Code of every APIError this client builds;
+	// see WithErrorCodeMapper.
+	errorCodeMapper func(status int, code, message string) string
+}
+
+// WithErrorCodeMapper sets a function that returns the Code to report on each
+// APIError, given the status, the provider's code, and the parsed message. It
+// lets a provider map its own codes (Cloudflare "2021") onto the canonical codes
+// the llms package classifies. Return code unchanged to keep it.
+func WithErrorCodeMapper(fn func(status int, code, message string) string) ClientOption {
+	return func(c *Client) {
+		c.errorCodeMapper = fn
+	}
 }
 
 // ClientOption configures the client.
@@ -472,6 +485,12 @@ type Request struct {
 	URL     string
 	Headers map[string]string
 	Body    any
+	// Sensitive keeps the request body and any error response body out of the
+	// LLM_DEBUG_REQUESTS log on every method that takes a Request (DoJSON,
+	// DoRaw, DoRawWithHeaders, DoStream). Only DoJSON logs request bodies; all
+	// four log error bodies. Set it when the body carries caller content that
+	// must never be logged, such as a decision model's state.
+	Sensitive bool
 }
 
 // DoJSON performs an HTTP request with JSON body and unmarshals the response.
@@ -489,7 +508,9 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	// Debug logging when LLM_DEBUG_REQUESTS is set
 	if debugEnabled() {
 		fmt.Printf("[DEBUG] LLM Request URL: %s %s\n", sanitizeLogValue(req.Method), sanitizeLogValue(req.URL))
-		if len(bodyBytes) > 0 {
+		if req.Sensitive && len(bodyBytes) > 0 {
+			fmt.Printf("[DEBUG] LLM Request Body: [redacted: sensitive, %d bytes]\n", len(bodyBytes))
+		} else if len(bodyBytes) > 0 {
 			// Pretty print the JSON for readability (truncate if too large)
 			var prettyJSON bytes.Buffer
 			if err := json.Indent(&prettyJSON, bodyBytes, "", "  "); err == nil {
@@ -524,7 +545,7 @@ func (c *Client) DoJSON(ctx context.Context, req Request, response any) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return c.handleErrorResponse(resp)
+		return c.handleError(resp, req.Sensitive)
 	}
 
 	if response != nil {
@@ -599,7 +620,7 @@ func (c *Client) DoRawWithHeaders(ctx context.Context, req Request) ([]byte, htt
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return nil, nil, c.handleErrorResponse(resp)
+		return nil, nil, c.handleError(resp, req.Sensitive)
 	}
 
 	if resp.ContentLength > maxResponseSize {
@@ -656,7 +677,7 @@ func (c *Client) DoStream(ctx context.Context, req Request) (io.ReadCloser, erro
 
 	if resp.StatusCode >= 400 {
 		defer func() { _ = resp.Body.Close() }()
-		return nil, c.handleErrorResponse(resp)
+		return nil, c.handleError(resp, req.Sensitive)
 	}
 
 	return resp.Body, nil
@@ -816,6 +837,7 @@ func IsRetryable(statusCode int, err error) bool {
 	switch statusCode {
 	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError,
 		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout,
+		524, // A Timeout Occurred (Cloudflare edge; no net/http constant).
 		529: // Site Overloaded (Anthropic; no net/http constant). Must match retry.go's policy list.
 		return true
 	}
@@ -823,6 +845,25 @@ func IsRetryable(statusCode int, err error) bool {
 }
 
 func (c *Client) handleErrorResponse(resp *http.Response) error {
+	return c.handleError(resp, false)
+}
+
+// handleError converts an error response to an APIError. When sensitive is set,
+// the debug log records the status but not the body, which can echo the request.
+func (c *Client) handleError(resp *http.Response, sensitive bool) error {
+	apiErr, fromProvider := c.buildAPIError(resp, sensitive)
+	// Only provider-authored errors are mapped; a local diagnostic (unreadable
+	// or oversized body) carries no provider code to interpret.
+	if c.errorCodeMapper != nil && fromProvider {
+		apiErr.Code = c.errorCodeMapper(apiErr.StatusCode, apiErr.Code, apiErr.Message)
+	}
+	return apiErr
+}
+
+// buildAPIError converts an error response. fromProvider reports whether the
+// body was read, so Message and Code come from the provider rather than from a
+// local read or size failure.
+func (c *Client) buildAPIError(resp *http.Response, sensitive bool) (apiErr *APIError, fromProvider bool) {
 	// Extract request context for debugging (if available)
 	var reqURL, reqMethod string
 	if resp.Request != nil {
@@ -839,7 +880,7 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 			Message:       fmt.Sprintf("error response too large: %d bytes exceeds limit of %d bytes", resp.ContentLength, maxErrorResponseSize),
 			RequestURL:    reqURL,
 			RequestMethod: reqMethod,
-		}
+		}, false
 	}
 
 	// Use LimitReader to prevent unbounded memory allocation from malicious servers
@@ -851,12 +892,16 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 			Message:       fmt.Sprintf("failed to read error response: %v", readErr),
 			RequestURL:    reqURL,
 			RequestMethod: reqMethod,
-		}
+		}, false
 	}
 
 	// Debug logging for error responses
 	if debugEnabled() {
-		fmt.Printf("[DEBUG] LLM Error Response (status %d) from %s %s:\n%s\n", resp.StatusCode, sanitizeLogValue(reqMethod), sanitizeLogValue(reqURL), sanitizeLogValue(string(body)))
+		if sensitive {
+			fmt.Printf("[DEBUG] LLM Error Response (status %d) from %s %s: [body redacted: sensitive]\n", resp.StatusCode, sanitizeLogValue(reqMethod), sanitizeLogValue(reqURL))
+		} else {
+			fmt.Printf("[DEBUG] LLM Error Response (status %d) from %s %s:\n%s\n", resp.StatusCode, sanitizeLogValue(reqMethod), sanitizeLogValue(reqURL), sanitizeLogValue(string(body)))
+		}
 	}
 
 	// Check if we hit the limit (response was truncated)
@@ -866,7 +911,7 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 			Message:       fmt.Sprintf("error response truncated: exceeded maximum size of %d bytes", maxErrorResponseSize),
 			RequestURL:    reqURL,
 			RequestMethod: reqMethod,
-		}
+		}, false
 	}
 
 	// Extract request ID from headers if present
@@ -889,7 +934,7 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 			RetryAfter:    retryAfter,
 			RequestURL:    reqURL,
 			RequestMethod: reqMethod,
-		}
+		}, true
 	}
 
 	return &APIError{
@@ -899,7 +944,7 @@ func (c *Client) handleErrorResponse(resp *http.Response) error {
 		RetryAfter:    retryAfter,
 		RequestURL:    reqURL,
 		RequestMethod: reqMethod,
-	}
+	}, true
 }
 
 type parsedAPIErrorBody struct {
@@ -914,6 +959,11 @@ func parseAPIErrorBody(body []byte) (parsedAPIErrorBody, bool) {
 		Error   json.RawMessage `json:"error"`
 		Message string          `json:"message"`
 		Type    string          `json:"type"`
+		// Errors is the Cloudflare v4 API envelope: {"errors":[{"code":2021,"message":"..."}]}.
+		Errors []struct {
+			Code    json.RawMessage `json:"code"`
+			Message string          `json:"message"`
+		} `json:"errors"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return parsedAPIErrorBody{}, false
@@ -943,6 +993,13 @@ func parseAPIErrorBody(body []byte) (parsedAPIErrorBody, bool) {
 		if err := json.Unmarshal(envelope.Error, &message); err == nil && message != "" {
 			return parsedAPIErrorBody{Message: sanitizeLogValue(message)}, true
 		}
+	}
+
+	if len(envelope.Errors) > 0 && envelope.Errors[0].Message != "" {
+		return parsedAPIErrorBody{
+			Message: sanitizeLogValue(envelope.Errors[0].Message),
+			Code:    sanitizeLogValue(decodeErrorCode(envelope.Errors[0].Code)),
+		}, true
 	}
 
 	if envelope.Message != "" {

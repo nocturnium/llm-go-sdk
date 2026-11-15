@@ -88,6 +88,7 @@ nav:
       - Reasoning: guides/reasoning.md
       - Prompt Caching: guides/caching.md
       - Embeddings & Reranking: guides/embeddings.md
+      - Decision Models: guides/decisions.md
       - Media Generation: guides/media.md
       - Vision: guides/vision.md
       - Resilience: guides/resilience.md

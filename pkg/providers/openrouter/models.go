@@ -83,7 +83,13 @@ func (c *Client) ListVideoModels(ctx context.Context) ([]VideoModel, error) {
 	return out.Data, err
 }
 
-// ListModels fetches /models. Limit and type filters are applied locally;
+// ListModels fetches /models?output_modalities=text,decisions: models that output
+// text, plus decision models typed ModelTypeDecision. Observed live on
+// 2026-11-14, the unfiltered /models returned 436 models, every one with text
+// output, and this query returned those 436 plus the 41 decision models, so
+// nothing the unfiltered call listed is lost. Image-only, speech-only and
+// video-only models are in neither; ListSpeechModels and ListVideoModels cover
+// those. Limit and type filters are applied locally;
 // cursors are unsupported and return ErrInvalidParameters. Each call returns
 // independent metadata, with no cached pointers or assumed token pricing.
 func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) (*llms.ListModelsResult, error) {
@@ -93,7 +99,7 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 	if o.Cursor != "" || o.Limit < 0 {
 		return nil, fmt.Errorf("openrouter: unsupported cursor or negative limit: %w", llms.ErrInvalidParameters)
 	}
-	entries, err := c.listCatalogModels(ctx, nil)
+	entries, err := c.listCatalogModels(ctx, url.Values{"output_modalities": {"text,decisions"}})
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +130,8 @@ func (c *Client) ListModels(ctx context.Context, opts ...llms.ListModelsOption) 
 				addType(llms.ModelTypeAudio)
 			case "video":
 				addType(llms.ModelTypeVideo)
+			case "decisions":
+				addType(llms.ModelTypeDecision)
 			}
 		}
 		for _, modality := range m.Architecture.InputModalities {

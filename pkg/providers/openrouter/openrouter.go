@@ -29,6 +29,9 @@ const (
 	// DefaultVideoModel has the lowest published per-second rate in discovery on 2026-09-05.
 	// Token-priced models cannot be compared without their token accounting formula.
 	DefaultVideoModel = "google/veo-3.1-lite"
+	// DefaultDecisionModel is TypeSafe Jev, pinned to a version rather than the
+	// ~typesafe/jev-latest alias; live-verified on /api/alpha/decisions 2026-11-14.
+	DefaultDecisionModel = "typesafe/jev-1.14"
 )
 
 var defaultProviderConfig = openaicompat.ProviderConfig{
@@ -39,7 +42,7 @@ var defaultProviderConfig = openaicompat.ProviderConfig{
 		ImagesPath: "/images", SpeechPath: "/audio/speech", TranscriptionsPath: "/audio/transcriptions"},
 	// These advertise routing support; individual models may support fewer features.
 	// Context and output limits remain unknown rather than assuming one model's limits.
-	Capabilities: llms.Capabilities{Streaming: true, Tools: true, Vision: true, Embeddings: true, JSONMode: true},
+	Capabilities: llms.Capabilities{Streaming: true, Tools: true, Vision: true, Embeddings: true, JSONMode: true, Decision: true},
 }
 
 // Client is an OpenRouter chat and media client, safe for concurrent use.
@@ -50,7 +53,9 @@ type Client struct {
 	baseURL   *url.URL
 	// betaURL is the base for endpoints published under /api/beta (batches).
 	betaURL *url.URL
-	headers map[string]string
+	// alphaURL is the base for endpoints published under /api/alpha (decisions).
+	alphaURL *url.URL
+	headers  map[string]string
 }
 
 // New constructs a client from options, returning ErrMissingAPIKey for missing
@@ -93,7 +98,7 @@ func New(opts ...Option) (*Client, error) {
 	for k, v := range headers {
 		nativeHeaders[k] = v
 	}
-	return &Client{BaseProvider: openaicompat.NewBaseProvider(compat, cfg), options: o, transport: transport, baseURL: u, betaURL: betaBaseURL(u), headers: nativeHeaders}, nil
+	return &Client{BaseProvider: openaicompat.NewBaseProvider(compat, cfg), options: o, transport: transport, baseURL: u, betaURL: betaBaseURL(u), alphaURL: siblingBaseURL(u, "alpha"), headers: nativeHeaders}, nil
 }
 
 // betaBaseURL maps the configured base onto OpenRouter's /api/beta tree, where
@@ -101,14 +106,20 @@ func New(opts ...Option) (*Client, error) {
 // beta (https://openrouter.ai/api/v1 becomes https://openrouter.ai/api/beta);
 // any other base has beta joined onto it.
 func betaBaseURL(u *url.URL) *url.URL {
+	return siblingBaseURL(u, "beta")
+}
+
+// siblingBaseURL swaps a trailing v1 path segment for segment (alpha, beta), or
+// joins segment onto a base that does not end in v1.
+func siblingBaseURL(u *url.URL, segment string) *url.URL {
 	trimmed := strings.TrimSuffix(u.Path, "/")
 	if !strings.HasSuffix(trimmed, "/v1") {
-		return u.JoinPath("beta")
+		return u.JoinPath(segment)
 	}
-	beta := *u
-	beta.Path = strings.TrimSuffix(trimmed, "v1") + "beta"
-	beta.RawPath = ""
-	return &beta
+	sibling := *u
+	sibling.Path = strings.TrimSuffix(trimmed, "v1") + segment
+	sibling.RawPath = ""
+	return &sibling
 }
 
 func (c *Client) endpoint(route string, query url.Values) string {

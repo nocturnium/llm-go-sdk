@@ -37,6 +37,8 @@ const (
 	ProviderZAI         Provider = "zai"
 	ProviderLlamaCpp    Provider = "llamacpp"
 	ProviderHuggingFace Provider = "huggingface"
+	// ProviderCloudflare is Cloudflare Workers AI.
+	ProviderCloudflare Provider = "cloudflare"
 )
 
 // LLM defines the interface that all LLM providers must implement
@@ -216,6 +218,8 @@ type Capabilities struct {
 	Speech bool
 	// Transcription indicates support for Transcription operations.
 	Transcription bool
+	// Decision indicates support for Decider operations.
+	Decision bool
 
 	// Streaming indicates the provider supports streaming responses
 	Streaming bool
@@ -351,4 +355,10 @@ func HasSpeech(llm LLM) bool {
 // For media, Supports*(any) asserts an interface; Has*(LLM) reads a Capabilities flag.
 func HasTranscription(llm LLM) bool {
 	return HasCapability(llm, func(c Capabilities) bool { return c.Transcription })
+}
+
+// HasDecision checks the Decision Capabilities flag.
+// Supports*(any) asserts an interface; Has*(LLM) reads a Capabilities flag.
+func HasDecision(llm LLM) bool {
+	return HasCapability(llm, func(c Capabilities) bool { return c.Decision })
 }

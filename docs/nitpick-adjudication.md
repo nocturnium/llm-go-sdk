@@ -1114,3 +1114,46 @@ point.
 Round 100 (2026-10-11) reported **0 errors** (90 warnings). The error count
 reached zero: every round 89–99 issue is fixed or recorded above as a false
 positive, and no new error appeared.
+
+## Decision models and the Cloudflare provider (2026-11-14, branch feat/decision-core)
+
+Seven `nitpick review` rounds over the working tree (`fail_on: warning`), each
+after fixing the previous round. The error count went 4, 1, 1, 0, 2, 1, 1; the
+non-zero tail is false positives listed below, each checked against the code or a
+live call. Warnings fell from 18 to 11, the remainder being the recurring items in
+the second table.
+
+Fixed from these rounds: `Request.Sensitive` honored on the DoRaw and DoStream
+error paths; `ErrorCodeMapper` runs only on provider-authored error bodies;
+System One `Extra` may not set `type`, `instructions` or `criteria`; Clairic field
+`Extra` may not set typed keys; `Decide` falls back to `DefaultDecisionModel`
+when the client option is empty; a `success:false` HTTP 200 envelope with an
+unmapped code classifies as `ErrInvalidParameters`; `http://` base URLs need
+`WithAllowHTTP` at construction; `Limit` stops catalog paging with or without a
+type filter and paging honors the server's `per_page`; image `steps` accepts an
+integral float64; session and user limits count runes; Synthesize refuses a
+non-audio body; GenerateImage refuses non-image bytes; question IDs are checked
+with `IndexFunc`; godoc names on `DecisionChoice`, `DecisionBox` and
+`DecisionEstimate`; provider counts and tables in README, docs/index.md,
+docs/providers.md, docs/ARCHITECTURE.md and the CLI; the design doc reconciled
+with its implementation notes.
+
+| Finding | Why it does not stand |
+| --- | --- |
+| `decision_test.go` / `llms_test.go`: `HasDecision` and `SupportsDecision` undefined (rounds 1, 2) | Both exist (`llms.go`, `decision.go`); `go test -race ./...` compiles and passes. |
+| `pkg/providers/openrouter/models.go`: `output_modalities=text,decisions` drops models the unfiltered call returned (rounds 1, 2) | Live 2026-11-14: unfiltered `/models` returned 436 models, every one with text output; the filtered call returned those 436 plus 41 decision models. |
+| `pkg/providers/cloudflare/decision.go`: route built by splitting the model ID on `/` is unverified (round 1) | `/ai/run/@cf/cloudflare/clef-flash` was live-called; allowlisted IDs only, so no `..` segment. |
+| `cost.go` / `cost_media.go`: Cloudflare rates do not match the page's neuron counts (rounds 1, 5, 6) | Every rate equals the page's neuron count × $0.011/1,000 (31,818 → $0.35, 2,727.27 → $0.030, 46.63 → $0.0005); the counts are quoted beside each row and a second reviewer re-read the page. The reviewer's alternative neuron figures do not appear on the page. |
+| `internal/decisionwire`: "No route for that URI" is OpenRouter's unknown-model message (round 2) | That is Cloudflare's message (code 7000), mapped by `mapErrorCode`; OpenRouter returns "Model X does not exist" (live). |
+| `pkg/providers/cloudflare/decision.go`: empty question ID passes `checkQuestionIDs`; IDs of only invalid runes pass (rounds 3, 6) | `ValidateRequest` rejects blank names first; `TrimFunc` left `###` intact, so it was rejected, and the check now uses `IndexFunc` with a `###` test. |
+| `pkg/providers/cloudflare/models.go`: layout `2006-01-02 15:04:05` rejects fractional seconds (rounds 3, 4) | `time.Parse` accepts a fractional second after the seconds field whatever the layout; `TestModelInfo_CreatedAt` pins the live value. |
+| `pkg/providers/cloudflare/cloudflare.go`: negative timeout unchecked on the account path (rounds 3, 7) | The check runs after both paths resolve `raw`; `TestNewClientInvalidBaseURL` covers it. |
+| `decision_test.go`: loop variable captured by goroutines (round 3) | The module is Go 1.26; loop variables are per-iteration. |
+| `pkg/providers/cloudflare/media.go`: rerank `meta` decoded at the wrong level (round 5) | The decode struct is the envelope `result`; `TestRerank` asserts `TotalTokens == 34` from the live body and passes. |
+| `decisionwire_test.go`: `TestClassify` table malformed, file does not compile (round 7) | The package compiles and the test passes. |
+| `decision_test.go:439`: byte/rune guard compares `[]byte` to `string` (round 7) | Slicing a `string` yields a `string`; the guard compiles and runs. |
+| `decisionwire.Classify` mutates the `*APIError` in place; leaves a named code alone on 402/413 (rounds 4 to 7) | Intended: the error is freshly built per request, and a named provider code is more specific than the status. Documented on `Classify`. |
+| `pkg/providers/*/decision_log_test.go`: redaction test passes vacuously (rounds 6, 7) | The test asserts the `[DEBUG] LLM Request URL` line is present (logging active) and the redaction marker is present; a logged body would contain the state string the test scans for. |
+| `pkg/providers/cloudflare/live_test.go`: live assertions on model output (rounds 4, 5) | Loosened to shape checks; the remaining rerank check is that two distinct indexes come back. |
+| `pkg/providers/cloudflare/decision.go`: four-image cap and MIME set applied to Clef models (rounds 4, 5) | From the Clef and Clairic model pages; PNG, JPEG and WebP each accepted live on clef-flash. |
+| `docs/design/decision-models.md`: gate-table rows contradict the implementation notes (rounds 4, 5) | The notes section is declared to override the rest; the superseded rows were still rewritten to say "resolved". |

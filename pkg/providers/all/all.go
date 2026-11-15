@@ -8,6 +8,7 @@ import (
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/anthropic"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/azure"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/cerebras"
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/cloudflare"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/deepseek"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/featherless"
 	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/fireworks"

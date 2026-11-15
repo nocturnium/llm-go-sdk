@@ -328,6 +328,9 @@ func (p *BaseProvider) Capabilities() llms.Capabilities {
 	caps.VideoGeneration = static.VideoGeneration || p.config.Media.Videos
 	caps.Speech = static.Speech || p.config.Media.Speech
 	caps.Transcription = static.Transcription || p.config.Media.Transcription
+	// Decision support is a provider-level declaration with no registry or Media
+	// counterpart, so it comes straight from the static config.
+	caps.Decision = static.Decision
 
 	return caps
 }
