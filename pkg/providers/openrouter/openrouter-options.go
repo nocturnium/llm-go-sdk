@@ -24,6 +24,8 @@ type options struct {
 	AllowPrivateIPs bool
 	// AllowHTTP allows plain-HTTP (non-HTTPS) requests.
 	AllowHTTP bool
+	// ReplayReasoning sends assistant reasoning back; see WithReplayReasoning.
+	ReplayReasoning bool
 }
 
 // defaultOptions returns the default options for OpenRouter.
@@ -109,6 +111,16 @@ func WithSiteURL(value string) Option { return func(o *options) { o.SiteURL = va
 
 // WithAppName sets the optional X-Title attribution header.
 func WithAppName(value string) Option { return func(o *options) { o.AppName = value } }
+
+// WithReplayReasoning sends each assistant message's reasoning back in its
+// "reasoning" field, which OpenRouter passes to the upstream model, so a model
+// that thinks between tool calls can continue its earlier thinking instead of
+// re-deriving it from the tool results. It is off by default because it is not
+// a gain for every model: a multi-turn tool loop over DeepSeek V4.1 Flash scored
+// worse with it than without (F1 0.378 against 0.415 on 20 pull requests, three
+// passes each). Reasoning another provider stamped is dropped first, as for any
+// replay.
+func WithReplayReasoning() Option { return func(o *options) { o.ReplayReasoning = true } }
 
 // WithUsageLookup enables a post-speech generation lookup for reported cost.
 // Lookup failures leave cost unknown and preserve successful audio.

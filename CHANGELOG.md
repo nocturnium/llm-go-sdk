@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- OpenRouter sends each assistant message's reasoning back in its `reasoning` field, so a model that thinks between tool calls keeps its earlier thinking instead of re-deriving it from the tool results. Reasoning another provider stamped is still dropped. Other OpenAI-compatible providers send none, as before; `openaicompat.ProviderConfig.ReplayReasoning` turns it on for an endpoint that reads the field.
+- `openrouter.WithReplayReasoning` sends each assistant message's reasoning back in its `reasoning` field, so a model that thinks between tool calls can continue its earlier thinking instead of re-deriving it from the tool results. Reasoning another provider stamped is still dropped. It is off by default, for OpenRouter and for every other OpenAI-compatible provider, because it is not a gain for every model: a multi-turn tool loop over DeepSeek V4.1 Flash scored lower with it (F1 0.378 against 0.415). `openaicompat.ProviderConfig.ReplayReasoning` turns it on for any endpoint that reads the field.
 
 ### Fixed
 

@@ -40,9 +40,6 @@ var defaultProviderConfig = openaicompat.ProviderConfig{
 	// These advertise routing support; individual models may support fewer features.
 	// Context and output limits remain unknown rather than assuming one model's limits.
 	Capabilities: llms.Capabilities{Streaming: true, Tools: true, Vision: true, Embeddings: true, JSONMode: true},
-	// OpenRouter reads an assistant message's "reasoning" and passes it to the
-	// upstream model, which then reasons from where its last turn left off.
-	ReplayReasoning: true,
 }
 
 // Client is an OpenRouter chat and media client, safe for concurrent use.
@@ -83,6 +80,7 @@ func New(opts ...Option) (*Client, error) {
 	cfg := defaultProviderConfig
 	cfg.DefaultModel = o.Model
 	cfg.DefaultEmbeddingModel = o.EmbeddingModel
+	cfg.ReplayReasoning = o.ReplayReasoning
 	transportOptions := []httpclient.ClientOption{httpclient.WithAllowPrivateIPs(o.AllowPrivateIPs), httpclient.WithAllowHTTP(o.AllowHTTP)}
 	if o.HTTPClient != nil {
 		transportOptions = append(transportOptions, httpclient.WithHTTPClient(o.HTTPClient))

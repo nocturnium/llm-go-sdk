@@ -662,25 +662,42 @@ func TestGenerateImage_ExtraCannotOverrideTypedFields(t *testing.T) {
 	}
 }
 
-// OpenRouter passes an assistant message's reasoning to the upstream model, so
-// the client sends it back.
-func TestOpenRouterSendsAssistantReasoningBack(t *testing.T) {
+// reasoningConversation is a conversation whose assistant turn carries reasoning.
+var reasoningConversation = []llms.Message{
+	{Role: llms.RoleUser, Content: "q"},
+	{Role: llms.RoleAssistant, Content: "a", Reasoning: &llms.ReasoningContent{Content: "checked the caller"}},
+	{Role: llms.RoleUser, Content: "go on"},
+}
+
+// requestBody answers every request with a plain completion and returns what
+// the last one carried.
+func requestBody(t *testing.T, opts ...Option) func() string {
+	t.Helper()
 	var body string
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		body = string(b)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"id":"c","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
-	})
-	msgs := []llms.Message{
-		{Role: llms.RoleUser, Content: "q"},
-		{Role: llms.RoleAssistant, Content: "a", Reasoning: &llms.ReasoningContent{Content: "checked the caller"}},
-		{Role: llms.RoleUser, Content: "go on"},
-	}
-	if _, err := c.GenerateContent(context.Background(), msgs); err != nil {
+	}, opts...)
+	if _, err := c.GenerateContent(context.Background(), reasoningConversation); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(body, `"reasoning":"checked the caller"`) {
-		t.Errorf("reasoning missing from the OpenRouter request: %s", body)
+	return func() string { return body }
+}
+
+// A caller who asks for it has an assistant message's reasoning sent back, in
+// the field OpenRouter passes to the upstream model.
+func TestOpenRouterSendsAssistantReasoningBackWhenAsked(t *testing.T) {
+	if got := requestBody(t, WithReplayReasoning())(); !strings.Contains(got, `"reasoning":"checked the caller"`) {
+		t.Errorf("reasoning missing from the request of a client that asked to replay it: %s", got)
+	}
+}
+
+// Replay is not a gain for every model, so a client sends no reasoning unless
+// it was asked to.
+func TestOpenRouterSendsNoAssistantReasoningByDefault(t *testing.T) {
+	if got := requestBody(t)(); strings.Contains(got, `"reasoning":`) {
+		t.Errorf("reasoning sent by a client that did not ask to replay it: %s", got)
 	}
 }
