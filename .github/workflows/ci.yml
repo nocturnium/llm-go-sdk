@@ -223,7 +223,10 @@ jobs:
         # -race matches the Makefile's test-integration target and the unit-test
         # job above; concurrency bugs in streaming/transport paths are most likely
         # to surface against real provider servers.
-        run: GOWORK=off go test -v -race -tags=integration ./...
+        # TestLiveCloudflare is skipped for now: the repository has no Cloudflare
+        # secrets, so those tests would only report SKIP. Remove -skip once
+        # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are added below.
+        run: GOWORK=off go test -v -race -tags=integration -skip 'TestLiveCloudflare' ./...
         env:
           # Provider API keys for integration tests (optional)
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

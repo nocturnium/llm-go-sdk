@@ -26,13 +26,30 @@ func (l *countingLogger) LogError(_ context.Context, _ *LogEntry, err error) {
 	l.lastErr.Store(&err)
 }
 
+// hangingStreamLLM sends one chunk and then holds its stream open until the
+// caller's context is canceled. A stream that closes on its own can finish
+// before the test cancels, and the middleware then correctly logs a completed
+// response, so only a stream that cannot end before the cancel makes the order
+// deterministic.
+type hangingStreamLLM struct{ mockLangfuseLLM }
+
+func (l *hangingStreamLLM) Stream(ctx context.Context, _ []llms.Message, _ ...llms.CallOption) (<-chan llms.StreamChunk, error) {
+	out := make(chan llms.StreamChunk, 1)
+	go func() {
+		defer close(out)
+		out <- llms.StreamChunk{Content: "half "}
+		<-ctx.Done()
+	}()
+	return out, nil
+}
+
 // TestLoggingMiddleware_CanceledStreamLogsError pins that an abandoned stream
 // is logged as a failure. It used to reach LogResponse with no error set, so a
 // canceled stream was indistinguishable from a clean one once the default
 // redaction stripped the marker appended to the content.
 func TestLoggingMiddleware_CanceledStreamLogsError(t *testing.T) {
 	logger := &countingLogger{}
-	base := &terminalTestLLM{}
+	base := &hangingStreamLLM{}
 	mw := NewLoggingMiddleware(base, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
