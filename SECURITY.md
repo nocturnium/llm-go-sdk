@@ -71,6 +71,11 @@ LLM providers using the standard library `net/http`. A few notes on scope:
   `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) or the `LLM_API_KEY`
   fallback. The SDK reads these; it does not store, persist, or transmit them
   anywhere other than the provider's API endpoint.
+- **Decision state is sensitive.** `DecisionRequest.State` is sent to the provider
+  verbatim, and providers can echo it back (`DecisionAnswer.Raw`, a `state_text`
+  entry in `DecisionResponse.Metadata`). The SDK never logs, traces, or places any
+  of these in its own error text; a provider's error message is passed through as
+  written.
 - **Never commit real keys.** Keep credentials out of source control. Use
   environment variables or your platform's secret manager, and base any local
   configuration on a non-secret template such as `.env.example` rather than

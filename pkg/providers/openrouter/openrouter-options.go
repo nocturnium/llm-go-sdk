@@ -16,6 +16,7 @@ type options struct {
 	APIKey         string
 	Model          string
 	EmbeddingModel string
+	DecisionModel  string
 	BaseURL        string
 	HTTPClient     *http.Client
 	Timeout        time.Duration
@@ -29,9 +30,10 @@ type options struct {
 // defaultOptions returns the default options for OpenRouter.
 func defaultOptions() *options {
 	return &options{
-		Model:   DefaultModel,
-		Timeout: 120 * time.Second,
-		BaseURL: defaultBaseURL,
+		Model:         DefaultModel,
+		DecisionModel: DefaultDecisionModel,
+		Timeout:       120 * time.Second,
+		BaseURL:       defaultBaseURL,
 	}
 }
 
@@ -53,6 +55,14 @@ func WithModel(model string) Option {
 func WithBaseURL(url string) Option {
 	return func(o *options) {
 		o.BaseURL = url
+	}
+}
+
+// WithDecisionModel sets the default decision model for Decide. A per-call
+// llms.WithDecisionModel overrides it.
+func WithDecisionModel(model string) Option {
+	return func(o *options) {
+		o.DecisionModel = model
 	}
 }
 

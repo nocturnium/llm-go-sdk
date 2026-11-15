@@ -9,7 +9,7 @@ hide:
 # One Go interface for <span class="accent">every LLM provider</span> { .noct-hero__title }
 
 <p class="noct-hero__tagline" markdown>
-Streaming, tool calling, vision, embeddings, and built-in resilience, across **21 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
+Streaming, tool calling, vision, embeddings, and built-in resilience, across **22 providers**, on the standard <code>net/http</code>. Switch from OpenAI to Anthropic to a local Ollama by changing one import and one constructor.
 </p>
 
 <div class="noct-hero__cta" markdown>
@@ -102,17 +102,17 @@ Streaming, tool calling, vision, embeddings, and built-in resilience, across **2
 
 ## Supported providers
 
-**21 providers**, 18 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct), ElevenLabs (media only) and Infinity (embeddings and reranking).
+**22 providers**, 19 chat providers auto-registered, plus HuggingFace (chat or embeddings, direct-construct), ElevenLabs (media only) and Infinity (embeddings and reranking).
 
 | Native | OpenAI-compatible | Local / self-hosted | Direct-construct |
 | --- | --- | --- | --- |
-| anthropic, gemini | openai, azure, groq, cerebras, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity |
+| anthropic, gemini | openai, azure, groq, cerebras, cloudflare, deepseek, mistral, fireworks, togetherai, featherless, synthetic, perplexity, zai, runpod | ollama, llamacpp | huggingface, infinity, elevenlabs |
 
 !!! tip "Construct by name"
-    Blank-import `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` to register the 18
+    Blank-import `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` to register the 19
     auto-registered chat providers, then build one with `llms.New(name, llms.Config{...})`. Call
-    `llms.RegisteredProviders()` for the live list. HuggingFace and Infinity are built directly
-    (`huggingface.New(...)` / `infinity.New(...)`).
+    `llms.RegisteredProviders()` for the live list. HuggingFace, Infinity and ElevenLabs are built
+    directly (`huggingface.New(...)` / `infinity.New(...)` / `elevenlabs.New(...)`).
 
 ## 60-second quickstart
 
@@ -194,7 +194,7 @@ fmt.Println(client.Provider(), client.Model())
 
     ---
 
-    Per-provider setup, models, and configuration for all 21.
+    Per-provider setup, models, and configuration for all 22.
 
 -   :material-tools:{ .lg .middle } __[Tool calling & agents](guides/tools.md)__
 

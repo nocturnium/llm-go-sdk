@@ -147,6 +147,7 @@ func TestAPIError_StatusClassification(t *testing.T) {
 		{502, ErrServiceUnavailable, true},
 		{503, ErrServiceUnavailable, true},
 		{504, ErrServiceUnavailable, true},
+		{524, ErrTimeout, true},
 		{529, ErrServiceUnavailable, true},
 	}
 

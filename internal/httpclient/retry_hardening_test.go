@@ -17,7 +17,7 @@ import (
 // and the policy list: 529 (Anthropic "Site Overloaded") has no net/http constant
 // and must be present in each one, or a real 529 is returned with zero retries.
 func TestDoWithRetry_RetriesTransientStatuses(t *testing.T) {
-	for _, status := range []int{408, 429, 500, 502, 503, 504, 529} {
+	for _, status := range []int{408, 429, 500, 502, 503, 504, 524, 529} {
 		t.Run(fmt.Sprintf("status_%d", status), func(t *testing.T) {
 			var attempts int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

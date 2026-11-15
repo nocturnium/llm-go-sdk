@@ -118,6 +118,9 @@ var apiStatusClassifications = map[int]apiStatusClassification{
 	502: {err: ErrServiceUnavailable, retryable: true},
 	503: {err: ErrServiceUnavailable, retryable: true},
 	504: {err: ErrServiceUnavailable, retryable: true},
+	// 524 is Cloudflare's "a timeout occurred": the edge reached the origin but
+	// the origin did not answer in time. OpenRouter and Workers AI both return it.
+	524: {err: ErrTimeout, retryable: true},
 	529: {err: ErrServiceUnavailable, retryable: true},
 }
 

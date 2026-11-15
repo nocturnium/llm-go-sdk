@@ -12,20 +12,21 @@ import (
 
 func TestListModels(t *testing.T) {
 	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/models" {
+		// The query is the contract: without it OpenRouter omits decision models.
+		if r.URL.Path != "/api/v1/models" || r.URL.Query().Get("output_modalities") != "text,decisions" {
 			t.Error(r.URL)
 		}
-		fmt.Fprint(w, `{"data":[{"id":"google/chat","name":"Chat","context_length":100,"created":123,"architecture":{"input_modalities":["image"],"output_modalities":["text"]},"pricing":{"prompt":"0.1"}},{"id":"image","architecture":{"output_modalities":["image","audio","speech","video"]}}]}`)
+		fmt.Fprint(w, `{"data":[{"id":"google/chat","name":"Chat","context_length":100,"created":123,"architecture":{"input_modalities":["image"],"output_modalities":["text"]},"pricing":{"prompt":"0.1"}},{"id":"image","architecture":{"output_modalities":["text","image","audio","speech","video"]}},{"id":"typesafe/jev-1.14","name":"TypeSafe: Jev 1.14","context_length":262144,"architecture":{"input_modalities":["text","image"],"output_modalities":["decisions"]}}]}`)
 	})
 	ctx := context.Background()
 	out, err := c.ListModels(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Models) != 2 || out.Models[0].DisplayName != "Chat" || out.Models[0].ContextLength != 100 || out.Models[0].CreatedAt.Unix() != 123 || out.Models[0].FromCache || !out.Models[0].IsVision() || !out.Models[0].IsChat() || out.Models[1].DisplayName != "image" {
+	if len(out.Models) != 3 || !out.Models[2].HasType(llms.ModelTypeDecision) || out.Models[2].IsChat() || out.Models[0].DisplayName != "Chat" || out.Models[0].ContextLength != 100 || out.Models[0].CreatedAt.Unix() != 123 || out.Models[0].FromCache || !out.Models[0].IsVision() || !out.Models[0].IsChat() || out.Models[1].DisplayName != "image" {
 		t.Fatal(out)
 	}
-	for _, opts := range [][]llms.ListModelsOption{{llms.WithModelLimit(1)}, {llms.WithModelTypes(llms.ModelTypeImage)}} {
+	for _, opts := range [][]llms.ListModelsOption{{llms.WithModelLimit(1)}, {llms.WithModelTypes(llms.ModelTypeImage)}, {llms.WithModelTypes(llms.ModelTypeDecision)}} {
 		out, err := c.ListModels(ctx, opts...)
 		if err != nil || len(out.Models) != 1 {
 			t.Fatal(out, err)

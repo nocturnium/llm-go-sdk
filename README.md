@@ -7,7 +7,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/nocturnium/llm-go-sdk/v6)](https://goreportcard.com/report/github.com/nocturnium/llm-go-sdk/v6)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/nocturnium/llm-go-sdk)](https://github.com/nocturnium/llm-go-sdk/blob/main/go.mod)
 
-> A unified, dependency-light Go SDK for **21 AI providers**, streaming, tool calling,
+> A unified, dependency-light Go SDK for **22 AI providers**, streaming, tool calling,
 > vision, embeddings, and built-in resilience over the standard `net/http`.
 
 One `LLM` interface across chat providers. Switch from OpenAI to Anthropic to a local
@@ -103,7 +103,7 @@ factory:
 ```go
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v6"
-	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 18 auto-registered chat providers
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 19 auto-registered chat providers
 )
 
 // By name. llms.Config carries the common construction settings.
@@ -134,7 +134,7 @@ Requires **Go 1.26+**.
 
 ## Supported Providers
 
-The SDK ships **21 providers** (18 chat-registered; HuggingFace, Infinity and ElevenLabs are
+The SDK ships **22 providers** (19 chat-registered; HuggingFace, Infinity and ElevenLabs are
 direct-construct, HuggingFace serves chat or embeddings per its deployed model,
 Infinity serves embeddings/reranking and ElevenLabs serves media only).
 Import each from its canonical path
@@ -147,12 +147,13 @@ schema); "Native" providers implement a provider-specific wire format.
 |----------|-------------------------------------------|------------------------|-----------|-------------------------------|
 | OpenAI | `pkg/providers/openai` | `OPENAI_API_KEY` | Native (OpenAI) | `gpt-4o` (default); chat, streaming, tools, vision, JSON mode, embeddings (`text-embedding-3-*`), custom base URL |
 | ElevenLabs | `pkg/providers/elevenlabs` | `ELEVENLABS_API_KEY` | Native media | Speech, Scribe transcription, SFX/music, Pro-plan Flows image/video; direct-construct, no chat |
-| OpenRouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` (default); images, speech, transcription, async video, model discovery |
+| OpenRouter | `pkg/providers/openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible chat + native media | `google/gemini-3.5-flash-lite` (default); images, speech, transcription, async video, decision models (`typesafe/jev-1.14` default), model discovery |
 | Anthropic | `pkg/providers/anthropic` | `ANTHROPIC_API_KEY` | **Native** (Messages API) | `claude-sonnet-5` (default); chat, streaming, tools, vision, extended thinking, prompt caching (`cache_control`) |
 | Gemini | `pkg/providers/gemini` | `GEMINI_API_KEY`, `GOOGLE_API_KEY` | **Native** (Gemini API) | `gemini-3.8-flash` (default); chat, streaming, tools, vision, embeddings (`text-embedding-004`), JSON mode, safety settings |
 | Azure OpenAI | `pkg/providers/azure` | `AZURE_OPENAI_API_KEY` or `AZURE_OPENAI_KEY`; `AZURE_OPENAI_ENDPOINT`; `AZURE_OPENAI_DEPLOYMENT` | OpenAI-compatible | Deployment-based; chat, streaming, tools, JSON mode, embeddings; API version default `2024-02-15-preview`; enterprise/PTU/content filtering |
 | Groq | `pkg/providers/groq` | `GROQ_API_KEY` | OpenAI-compatible | `llama-3.3-70b-versatile` (default); LPU ultra-low-latency; Llama/Mixtral/Gemma; tools, JSON mode |
 | Cerebras | `pkg/providers/cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible | `gpt-oss-120b` (default), `qwen-3.8-27b`; wafer-scale fast inference; tools, JSON mode |
+| Cloudflare Workers AI | `pkg/providers/cloudflare` | `CLOUDFLARE_API_TOKEN`; `CLOUDFLARE_ACCOUNT_ID` | OpenAI-compatible chat + native `/ai/run` | `@cf/openai/gpt-oss-120b` (default); streaming, embeddings (`@cf/baai/bge-m3`), decision models (Clef, Clef-flash, Clef-omni, Clairic), rerank, FLUX image, Aura speech, Whisper transcription, catalog model listing |
 | DeepSeek | `pkg/providers/deepseek` | `DEEPSEEK_API_KEY` | OpenAI-compatible | `deepseek-chat` (default), `deepseek-coder`, `deepseek-reasoner`; tools, JSON mode, chain-of-thought |
 | Mistral | `pkg/providers/mistral` | `MISTRAL_API_KEY` | OpenAI-compatible | `mistral-large-latest` (default), `codestral-latest`, `open-mistral-nemo`; tools, JSON mode, embeddings; EU data residency |
 | Fireworks AI | `pkg/providers/fireworks` | `FIREWORKS_API_KEY` | OpenAI-compatible | `accounts/fireworks/models/llama-v3p1-70b-instruct` (default); Llama/Mixtral/Qwen; tools, JSON mode, speculative decoding, fine-tunes |
@@ -185,6 +186,8 @@ via the provider's `WithAPIKey(...)` option. Copy [`.env.example`](./.env.exampl
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Google Gemini API key (either accepted) | Gemini |
 | `GROQ_API_KEY` | Groq API key | Groq |
 | `CEREBRAS_API_KEY` | Cerebras API key | Cerebras |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with Workers AI permission | Cloudflare |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (not a secret) | Cloudflare |
 | `DEEPSEEK_API_KEY` | DeepSeek API key | DeepSeek |
 | `MISTRAL_API_KEY` | Mistral AI API key | Mistral |
 | `FIREWORKS_API_KEY` | Fireworks AI API key | Fireworks |
@@ -221,7 +224,7 @@ Everything else lives under `internal/` and is not importable by external code.
 | Location | Role |
 |----------|------|
 | Root (`llms "github.com/nocturnium/llm-go-sdk/v6"`) | The core: `LLM` interface, `Message`/`Response`/`Tool` types, options, errors, streaming, cost-tracking and response-caching middleware, capability registry |
-| `pkg/providers/<name>` | **Provider implementations** (21 providers; 18 chat-registered) |
+| `pkg/providers/<name>` | **Provider implementations** (22 providers; 19 chat-registered) |
 | `pkg/openaicompat` | Shared OpenAI-compatible base client; the base for building custom providers |
 | `pkg/mcp` | Model Context Protocol client (`tools/list`, `tools/call`) |
 | `pkg/middleware/resilience` | Resilience middleware: retry, circuit breaker, fallback chain, rate limiting |
@@ -247,7 +250,7 @@ llm-go-sdk/
 │   │   └── resilience*.go ratelimit*.go fallback*.go
 │   ├── observability/                               # OTel / metrics / Langfuse / logging
 │   │   └── otel*.go metrics*.go langfuse*.go logging*.go
-│   └── providers/<name>/                            # provider impls (21)
+│   └── providers/<name>/                            # provider impls (22)
 ├── internal/                 # httpclient + per-provider API adapters (non-public)
 ├── cmd/                      # llms-cli CLI
 └── examples/                 # runnable examples
@@ -959,7 +962,7 @@ client, err = zai.New(zai.WithAPIKey("..."), zai.WithUseCodingAPI())
 
 ## CLI
 
-A CLI tool (`llms-cli`) is included for testing providers. It supports the **18
+A CLI tool (`llms-cli`) is included for testing providers. It supports the **19
 auto-registered chat providers** (every provider except HuggingFace, Infinity and ElevenLabs, which
 are constructed directly); run `./llms-cli providers` for the full list of providers,
 their default models, and the env vars they read.

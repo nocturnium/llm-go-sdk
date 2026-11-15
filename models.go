@@ -38,6 +38,10 @@ const (
 
 	// ModelTypeVision indicates models that can process images as input
 	ModelTypeVision ModelType = "vision"
+
+	// ModelTypeDecision indicates decision models that answer typed questions
+	// with calibrated probabilities instead of generating text (see Decider).
+	ModelTypeDecision ModelType = "decision"
 )
 
 // ModelInfo represents metadata about an available model.

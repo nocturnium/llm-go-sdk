@@ -37,6 +37,7 @@ func DefaultRetryPolicy() *RetryPolicy {
 			502, // Bad Gateway
 			503, // Service Unavailable
 			504, // Gateway Timeout
+			524, // A Timeout Occurred (Cloudflare edge; OpenRouter, Workers AI)
 			529, // Site Overloaded (Anthropic)
 		},
 	}

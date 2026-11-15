@@ -67,6 +67,12 @@ var MediaPricing = map[string]MediaRate{
 	"gemini:gemini-2.5-flash-preview-tts":  {Unit: MediaUnitMTokenOut, USD: 10},
 	"gemini:gemini-2.5-pro-preview-tts":    {Unit: MediaUnitMTokenOut, USD: 20},
 
+	// Cloudflare Workers AI pricing page, developers.cloudflare.com/workers-ai/platform/pricing, read 2026-11-14.
+	// Page figures: aura-2-en $0.030 per 1k characters (2,727.27 neurons);
+	// whisper-large-v3-turbo $0.0005 per audio minute (46.63 neurons).
+	"cloudflare:@cf/deepgram/aura-2-en":            {Unit: MediaUnitKChar, USD: 0.030},
+	"cloudflare:@cf/openai/whisper-large-v3-turbo": {Unit: MediaUnitMinute, USD: 0.0005},
+
 	// ElevenLabs API pricing, https://elevenlabs.io/pricing/api (2026-09-05).
 	"elevenlabs:eleven_v3": {Unit: MediaUnitKChar, USD: 0.08},
 	// eleven_v4 carries a promotional card through October 12, 2026; the

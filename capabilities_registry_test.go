@@ -480,6 +480,7 @@ func TestModelCapabilities_Media(t *testing.T) {
 		{"speech", ModelCapabilities{Speech: true}, ModelTypeAudio, Capabilities{Speech: true}},
 		{"transcription", ModelCapabilities{Transcription: true}, ModelTypeAudio, Capabilities{Transcription: true}},
 		{"both audio", ModelCapabilities{Speech: true, Transcription: true}, ModelTypeAudio, Capabilities{Speech: true, Transcription: true}},
+		{"decision", ModelCapabilities{Decision: true}, ModelTypeDecision, Capabilities{Decision: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if types := tc.caps.ModelTypes(); len(types) != 1 || types[0] != tc.wantType {

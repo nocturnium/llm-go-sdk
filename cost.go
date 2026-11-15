@@ -539,6 +539,21 @@ var DefaultPricing = map[string]Pricing{
 	"fireworks:accounts/fireworks/models/nemotron-3-ultra-nvfp4":         {Input: 0.60, Output: 2.40, CacheRead: 0.12},
 	"fireworks:accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {Input: 0.05, Output: 0.20, CacheRead: 0.01},
 	"fireworks:accounts/fireworks/models/gpt-oss-120b":                   {Input: 0.15, Output: 0.60, CacheRead: 0.015},
+	// Cloudflare Workers AI, developers.cloudflare.com/workers-ai/platform/pricing
+	// read 2026-11-14. Each USD rate is the page's neuron count for the model
+	// times $0.011 per 1,000 neurons, for example 31,818 neurons per M input
+	// tokens on gpt-oss-120b × $0.000011 = $0.35.
+	// Decision models bill input only. Clairic's reported input_tokens already
+	// counts every billing pass: on three live calls it equalled
+	// passes × (state_tokens + image_tokens) + schema_tokens (412 = 2×39 + 334,
+	// 254 = 2×11 + 232, 219 = 1×64 + 155), so these rates apply to it directly.
+	"cloudflare:@cf/openai/gpt-oss-120b":        {Input: 0.35, Output: 0.75},   // page: 31,818 in / 68,182 out neurons per M
+	"cloudflare:@cf/meta/llama-3.2-3b-instruct": {Input: 0.051, Output: 0.335}, // page: 4,625 in / 30,475 out neurons per M
+	"cloudflare:@cf/baai/bge-m3":                {Input: 0.012},                // page: 1,075 neurons per M input
+	"cloudflare:@cf/cloudflare/clef":            {Input: 0.24},                 // page: 21,818 neurons per M input; decision models bill no output
+	"cloudflare:@cf/cloudflare/clef-flash":      {Input: 0.038},                // page: 3,455 neurons per M input
+	"cloudflare:@cf/cloudflare/clef-omni":       {Input: 0.15},                 // page: 13,636 neurons per M input
+	"cloudflare:@cf/cloudflare/clairic":         {Input: 0.10},                 // page: 9,091 neurons per M input
 	// Cerebras public models endpoint, read 2026-11-11 (no cache rate published).
 	"cerebras:gpt-oss-120b": {Input: 0.35, Output: 0.75},
 	"cerebras:qwen-3.8-27b": {Input: 0.99, Output: 1.49},
