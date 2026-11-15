@@ -159,6 +159,7 @@ func TestDecide_ErrorMapping(t *testing.T) {
 		{"balance", 402, `{"errors":[{"message":"Insufficient balance; add money to your gateway or use BYOK","code":2021}],"success":false,"result":{},"messages":[]}`, llms.ErrQuotaExceeded},
 		{"unsuccessful 200", 200, `{"success":false,"errors":[{"code":5007,"message":"No such model"}],"result":null}`, llms.ErrModelNotFound},
 		{"unsuccessful 200 bad input", 200, `{"success":false,"errors":[{"code":5006,"message":"Bad input"}],"result":{}}`, llms.ErrInvalidParameters},
+		{"unsuccessful 200 balance", 200, `{"success":false,"errors":[{"code":2021,"message":"Insufficient balance"}],"result":{}}`, llms.ErrQuotaExceeded},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := mockClient(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -170,6 +171,21 @@ func TestDecide_ErrorMapping(t *testing.T) {
 				t.Fatalf("err = %v, want %v", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestDecide_UnsuccessfulEnvelopeStatus pins the StatusCode an HTTP 200 with
+// success:false reports, and that it is not retryable.
+func TestDecide_UnsuccessfulEnvelopeStatus(t *testing.T) {
+	for code, want := range map[string]int{"5006": 400, "7000": 400, "2021": 402} {
+		c := mockClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, `{"success":false,"errors":[{"code":`+code+`,"message":"x"}],"result":{}}`)
+		})
+		_, err := c.Decide(context.Background(), clefRequest())
+		var apiErr *llms.APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != want || apiErr.IsRetryable() {
+			t.Errorf("code %s: %+v (retryable %v)", code, apiErr, apiErr != nil && apiErr.IsRetryable())
+		}
 	}
 }
 

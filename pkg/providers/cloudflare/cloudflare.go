@@ -212,13 +212,17 @@ func (c *Client) send(ctx context.Context, method string, route []string, query 
 		if len(env.Errors) > 0 {
 			code, message = env.Errors[0].Code.String(), env.Errors[0].Message
 		}
-		apiErr := &llms.APIError{StatusCode: http.StatusOK, Code: mapErrorCode(http.StatusOK, code, message), Message: message, Provider: c.Provider(), RequestURL: u.String(), RequestMethod: method}
-		if apiErr.Code != decisionwire.CodeInsufficientQuota && apiErr.Code != decisionwire.CodeModelNotFound {
-			// No canonical code applies and a 200 status classifies nothing, so an
-			// unmapped failure reads as an invalid request rather than nothing.
-			apiErr.Type = "invalid_request_error"
+		// The HTTP status was 200, which says nothing about the failure, so
+		// StatusCode reports the status the Workers AI code implies: 402 for a
+		// balance failure, otherwise 400. Callers and retry policies that key on
+		// StatusCode then see a client error, which is not retryable.
+		mapped := mapErrorCode(http.StatusBadRequest, code, message)
+		status := http.StatusBadRequest
+		if mapped == decisionwire.CodeInsufficientQuota {
+			status = http.StatusPaymentRequired
 		}
-		return nil, apiErr
+		apiErr := &llms.APIError{StatusCode: status, Code: mapped, Message: message, Provider: c.Provider(), RequestURL: u.String(), RequestMethod: method}
+		return nil, decisionwire.Classify(apiErr)
 	}
 	return &env, nil
 }

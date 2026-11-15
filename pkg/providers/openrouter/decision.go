@@ -81,10 +81,6 @@ func (c *Client) buildDecisionBody(req llms.DecisionRequest, o *llms.DecisionOpt
 	if req.ReferenceDate != "" {
 		return nil, fmt.Errorf("ReferenceDate is not supported by the OpenRouter Decisions API: %w", llms.ErrInvalidParameters)
 	}
-	questions, err := decisionwire.BuildQuestions(req.Questions, decisionKinds...)
-	if err != nil {
-		return nil, err
-	}
 	model := o.Model
 	if model == "" {
 		model = c.options.DecisionModel
@@ -92,7 +88,11 @@ func (c *Client) buildDecisionBody(req llms.DecisionRequest, o *llms.DecisionOpt
 	if model == "" {
 		model = DefaultDecisionModel
 	}
-	body := map[string]any{"model": model, "state": req.State, "questions": questions}
+	wireQuestions, err := decisionwire.BuildQuestions(req.Questions, decisionKinds...)
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]any{"model": model, "state": req.State, "questions": wireQuestions}
 	if o.SessionID != "" {
 		if utf8.RuneCountInString(o.SessionID) > maxDecisionIDLength {
 			return nil, fmt.Errorf("session ID exceeds %d characters: %w", maxDecisionIDLength, llms.ErrInvalidParameters)
