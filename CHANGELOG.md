@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - OpenRouter implements `Decider` on its Decisions API (`/api/alpha/decisions`), defaulting to `typesafe/jev-1.14` (`WithDecisionModel` to change it).
 - A first-party Cloudflare Workers AI provider (`pkg/providers/cloudflare`, `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`): chat and streaming through the OpenAI-compatible routes (default `@cf/openai/gpt-oss-120b`), embeddings (`@cf/baai/bge-m3`), decisions on Clef, Clef-flash, Clef-omni and Clairic, reranking (`bge-reranker-base`), FLUX.1 [schnell] images, Aura 2 speech, Whisper large-v3 turbo transcription, and model listing from the account catalog. Rate cards for these models come from Cloudflare's pricing page.
 - `openaicompat.ClientConfig.ErrorCodeMapper` lets a provider map its own error codes onto the canonical codes `llms.APIError` classifies.
+- `openrouter.WithReplayReasoning` sends each assistant message's reasoning back in its `reasoning` field, so a model that thinks between tool calls can continue its earlier thinking instead of re-deriving it from the tool results. Reasoning another provider stamped is still dropped. It is off by default, for OpenRouter and for every other OpenAI-compatible provider, because it is not a gain for every model: a multi-turn tool loop over DeepSeek V4.1 Flash scored lower with it (F1 0.378 against 0.415). `openaicompat.ProviderConfig.ReplayReasoning` turns it on for any endpoint that reads the field.
 
 ### Changed
 

@@ -42,6 +42,14 @@ type ProviderConfig struct {
 	// with any ID rewritten reports "<provider>.tool_ids_rewritten" in its
 	// Response.Adjustments.
 	ToolCallIDFormat ToolCallIDFormat
+
+	// ReplayReasoning sends each assistant message's reasoning back in its
+	// "reasoning" field, so a model that thinks between tool calls keeps its
+	// earlier thinking instead of re-deriving it from the tool results alone.
+	// Off by default: an endpoint that does not read the field may reject a
+	// request that carries it. Reasoning another provider stamped is dropped
+	// first, as for every replay.
+	ReplayReasoning bool
 }
 
 // ToolCallIDFormat names a tool-call ID form a provider requires.
@@ -170,7 +178,7 @@ func (p *BaseProvider) GenerateContent(ctx context.Context, messages []llms.Mess
 		}
 		result = ConvertResponsesResponse(resp)
 	} else {
-		req := BuildChatRequest(model, prepared, opts, false)
+		req := p.buildChatRequest(model, prepared, opts, false)
 		resp, err := p.client.CreateChatCompletion(ctx, req)
 		if err != nil {
 			return nil, WrapError(p.config.Provider, "generate content", err)
@@ -243,7 +251,7 @@ func (p *BaseProvider) Stream(ctx context.Context, messages []llms.Message, opti
 		return chunks, nil
 	}
 
-	req := BuildChatRequest(model, prepared, opts, true)
+	req := p.buildChatRequest(model, prepared, opts, true)
 	stream, err := p.client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
 		return nil, WrapError(p.config.Provider, "stream", err)
@@ -378,4 +386,20 @@ func (p *BaseProvider) EmbedDocuments(ctx context.Context, texts []string, optio
 // Client returns the underlying HTTP client (for providers that need direct access).
 func (p *BaseProvider) Client() *Client {
 	return p.client
+}
+
+// buildChatRequest is BuildChatRequest with this provider's replay of
+// assistant reasoning applied. ConvertMessages builds one request message per
+// message, so the indexes of the two slices match.
+func (p *BaseProvider) buildChatRequest(model string, messages []llms.Message, opts *llms.CallOptions, stream bool) *ChatCompletionRequest {
+	req := BuildChatRequest(model, messages, opts, stream)
+	if !p.config.ReplayReasoning {
+		return req
+	}
+	for i, msg := range messages {
+		if msg.Role == llms.RoleAssistant && msg.Reasoning != nil && msg.Reasoning.Content != "" && i < len(req.Messages) {
+			req.Messages[i].Reasoning = msg.Reasoning.Content
+		}
+	}
+	return req
 }

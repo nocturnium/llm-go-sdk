@@ -85,6 +85,7 @@ func New(opts ...Option) (*Client, error) {
 	cfg := defaultProviderConfig
 	cfg.DefaultModel = o.Model
 	cfg.DefaultEmbeddingModel = o.EmbeddingModel
+	cfg.ReplayReasoning = o.ReplayReasoning
 	transportOptions := []httpclient.ClientOption{httpclient.WithAllowPrivateIPs(o.AllowPrivateIPs), httpclient.WithAllowHTTP(o.AllowHTTP)}
 	if o.HTTPClient != nil {
 		transportOptions = append(transportOptions, httpclient.WithHTTPClient(o.HTTPClient))
