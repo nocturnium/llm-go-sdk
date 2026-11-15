@@ -128,8 +128,9 @@ func resolveBase(o *options) (*url.URL, error) {
 	return u, nil
 }
 
-// isAccountID reports whether s is a plausible account ID. Cloudflare account
-// IDs are 32 hex digits; letters and digits only keeps the path segment safe.
+// isAccountID reports whether s is made of letters and digits only, which keeps
+// the account ID safe as one URL path segment. It does not check the length or
+// that the characters are hexadecimal; Cloudflare rejects an unknown account.
 func isAccountID(s string) bool {
 	for _, r := range s {
 		if (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {

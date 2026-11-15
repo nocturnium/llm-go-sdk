@@ -298,7 +298,7 @@ func (u Usage) Core() llms.Usage {
 // through unchanged.
 func Classify(err error) error {
 	var apiErr *llms.APIError
-	if !errors.As(err, &apiErr) || !overridable(apiErr.Code) {
+	if !errors.As(err, &apiErr) || apiErr == nil || !overridable(apiErr.Code) {
 		return err
 	}
 	switch apiErr.StatusCode {

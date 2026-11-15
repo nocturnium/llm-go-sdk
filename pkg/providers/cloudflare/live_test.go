@@ -53,7 +53,8 @@ func TestLiveCloudflare_Stream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Workers AI sends usage on every chunk; the final chunk carries the totals.
+	// Workers AI sends a usage object on every chunk; the collected usage must
+	// report non-zero prompt and completion tokens.
 	if resp.Usage == nil || resp.Usage.PromptTokens == 0 || resp.Usage.CompletionTokens == 0 {
 		t.Fatalf("stream usage %+v", resp.Usage)
 	}

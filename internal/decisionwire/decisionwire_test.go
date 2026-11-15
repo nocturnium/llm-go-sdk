@@ -234,4 +234,8 @@ func TestClassify(t *testing.T) {
 	if !errors.Is(Classify(plain), plain) {
 		t.Fatal("non-API error changed")
 	}
+	var typedNil *llms.APIError
+	if got := Classify(typedNil); got == nil {
+		t.Fatal("typed-nil error became nil")
+	}
 }

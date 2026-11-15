@@ -36,8 +36,8 @@ type decisionResponse struct {
 
 // Decide evaluates typed questions against req.State on OpenRouter's
 // Decisions API (POST /api/alpha/decisions, schema read 2026-11-14). The model is
-// the per-call llms.WithDecisionModel, else WithDecisionModel, else
-// DefaultDecisionModel. Noul, choice and score questions are supported; box
+// the per-call option llms.WithDecisionModel, else the client option
+// openrouter.WithDecisionModel, else DefaultDecisionModel. Noul, choice and score questions are supported; box
 // questions, Assets and ReferenceDate return ErrInvalidParameters. Usage.Cost is
 // OpenRouter's reported charge in USD.
 //
@@ -51,7 +51,7 @@ func (c *Client) Decide(ctx context.Context, req llms.DecisionRequest, opts ...l
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	body, questions, err := c.buildDecisionBody(req, llms.ApplyDecisionOptions(opts...))
+	body, err := c.buildDecisionBody(req, llms.ApplyDecisionOptions(opts...))
 	if err != nil {
 		return nil, fmt.Errorf("openrouter: %w", err)
 	}
@@ -68,22 +68,22 @@ func (c *Client) Decide(ctx context.Context, req llms.DecisionRequest, opts ...l
 		// errors.As; TestDecide_ErrorMapping pins 402, 413 and 400 through this path.
 		return nil, decisionwire.Classify(openaicompat.WrapError(c.Provider(), "decisions", err))
 	}
-	return convertDecisionResponse(&resp, questions)
+	return convertDecisionResponse(&resp, req.Questions)
 }
 
-func (c *Client) buildDecisionBody(req llms.DecisionRequest, o *llms.DecisionOptions) (map[string]any, map[string]llms.DecisionQuestion, error) {
+func (c *Client) buildDecisionBody(req llms.DecisionRequest, o *llms.DecisionOptions) (map[string]any, error) {
 	if err := decisionwire.ValidateRequest(req); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(req.Assets) > 0 {
-		return nil, nil, fmt.Errorf("decision assets are not supported until the asset reference syntax is confirmed: %w", llms.ErrInvalidParameters)
+		return nil, fmt.Errorf("decision assets are not supported until the asset reference syntax is confirmed: %w", llms.ErrInvalidParameters)
 	}
 	if req.ReferenceDate != "" {
-		return nil, nil, fmt.Errorf("ReferenceDate is not supported by the OpenRouter Decisions API: %w", llms.ErrInvalidParameters)
+		return nil, fmt.Errorf("ReferenceDate is not supported by the OpenRouter Decisions API: %w", llms.ErrInvalidParameters)
 	}
 	questions, err := decisionwire.BuildQuestions(req.Questions, decisionKinds...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	model := o.Model
 	if model == "" {
@@ -95,23 +95,23 @@ func (c *Client) buildDecisionBody(req llms.DecisionRequest, o *llms.DecisionOpt
 	body := map[string]any{"model": model, "state": req.State, "questions": questions}
 	if o.SessionID != "" {
 		if utf8.RuneCountInString(o.SessionID) > maxDecisionIDLength {
-			return nil, nil, fmt.Errorf("session ID exceeds %d characters: %w", maxDecisionIDLength, llms.ErrInvalidParameters)
+			return nil, fmt.Errorf("session ID exceeds %d characters: %w", maxDecisionIDLength, llms.ErrInvalidParameters)
 		}
 		body["session_id"] = o.SessionID
 	}
 	if o.User != "" {
 		if utf8.RuneCountInString(o.User) > maxDecisionIDLength {
-			return nil, nil, fmt.Errorf("user exceeds %d characters: %w", maxDecisionIDLength, llms.ErrInvalidParameters)
+			return nil, fmt.Errorf("user exceeds %d characters: %w", maxDecisionIDLength, llms.ErrInvalidParameters)
 		}
 		body["user"] = o.User
 	}
 	for k, v := range o.Extra {
 		if reservedDecisionKeys[k] {
-			return nil, nil, fmt.Errorf("decision Extra key %q is reserved for a typed field: %w", k, llms.ErrInvalidParameters)
+			return nil, fmt.Errorf("decision Extra key %q is reserved for a typed field: %w", k, llms.ErrInvalidParameters)
 		}
 		body[k] = v
 	}
-	return body, req.Questions, nil
+	return body, nil
 }
 
 func convertDecisionResponse(resp *decisionResponse, questions map[string]llms.DecisionQuestion) (*llms.DecisionResponse, error) {

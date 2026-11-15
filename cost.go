@@ -540,9 +540,9 @@ var DefaultPricing = map[string]Pricing{
 	"fireworks:accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {Input: 0.05, Output: 0.20, CacheRead: 0.01},
 	"fireworks:accounts/fireworks/models/gpt-oss-120b":                   {Input: 0.15, Output: 0.60, CacheRead: 0.015},
 	// Cloudflare Workers AI, developers.cloudflare.com/workers-ai/platform/pricing
-	// read 2026-11-14. Each USD rate is the page's neuron count for the model
-	// times $0.011 per 1,000 neurons, for example 31,818 neurons per M input
-	// tokens on gpt-oss-120b × $0.000011 = $0.35.
+	// read 2026-11-14. Each USD rate per million tokens is the page's neurons per
+	// million tokens times $0.000011 per neuron ($0.011 per 1,000 neurons), for
+	// example gpt-oss-120b input: 31,818 neurons × $0.000011 = $0.35 per M tokens.
 	// Decision models bill input only. Clairic's reported input_tokens already
 	// counts every billing pass: on three live calls it equalled
 	// passes × (state_tokens + image_tokens) + schema_tokens (412 = 2×39 + 334,
