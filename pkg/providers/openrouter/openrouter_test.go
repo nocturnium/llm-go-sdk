@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -658,5 +659,28 @@ func TestGenerateImage_ExtraCannotOverrideTypedFields(t *testing.T) {
 		if !errors.Is(err, llms.ErrInvalidParameters) {
 			t.Errorf("Extra %q: err = %v", key, err)
 		}
+	}
+}
+
+// OpenRouter passes an assistant message's reasoning to the upstream model, so
+// the client sends it back.
+func TestOpenRouterSendsAssistantReasoningBack(t *testing.T) {
+	var body string
+	c := mockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"c","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
+	})
+	msgs := []llms.Message{
+		{Role: llms.RoleUser, Content: "q"},
+		{Role: llms.RoleAssistant, Content: "a", Reasoning: &llms.ReasoningContent{Content: "checked the caller"}},
+		{Role: llms.RoleUser, Content: "go on"},
+	}
+	if _, err := c.GenerateContent(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, `"reasoning":"checked the caller"`) {
+		t.Errorf("reasoning missing from the OpenRouter request: %s", body)
 	}
 }

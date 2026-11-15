@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- OpenRouter sends each assistant message's reasoning back in its `reasoning` field, so a model that thinks between tool calls keeps its earlier thinking instead of re-deriving it from the tool results. Reasoning another provider stamped is still dropped. Other OpenAI-compatible providers send none, as before; `openaicompat.ProviderConfig.ReplayReasoning` turns it on for an endpoint that reads the field.
+
 ### Fixed
 
 - The Cerebras default model is now `gpt-oss-120b`. The old default, `llama3.1-70b`, is deprecated and no longer in Cerebras's model list, so default calls would fail. Pass `WithModel` to keep another model.
