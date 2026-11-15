@@ -445,7 +445,7 @@ all shared types live in the root package.
 | Resilience middleware | `github.com/nocturnium/llm-go-sdk/v6/pkg/middleware/resilience` | Retry, circuit breaker, rate limiting and fallback chains, moved out of the root in v3. |
 | Observability middleware | `github.com/nocturnium/llm-go-sdk/v6/pkg/observability` | OTel, Langfuse, metrics and logging middleware, moved out of the root in v3. |
 | Providers | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/<name>` | The 19 provider implementations (`openai`, `anthropic`, `gemini`, `groq`, …). Each exposes `New(...)` plus its own `WithX(...)` construction options. |
-| All-providers registry | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` | Blank-import only. Registers the 18 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
+| All-providers registry | `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all` | Blank-import only. Registers the 19 auto-registered chat providers' factories so `llms.New(name, llms.Config{...})` and `llms.NewFromEnv()` can construct them by name. |
 | OpenAI-compatible base | `github.com/nocturnium/llm-go-sdk/v6/pkg/openaicompat` | The shared base client for building your own OpenAI-compatible provider without forking the SDK. |
 
 Everything else lives under `internal/` and is not importable by external code.
@@ -498,7 +498,7 @@ factory, then call `llms.New` or `llms.NewFromEnv`:
 ```go
 import (
 	llms "github.com/nocturnium/llm-go-sdk/v6"
-	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 18 auto-registered chat providers
+	_ "github.com/nocturnium/llm-go-sdk/v6/pkg/providers/all" // registers the 19 auto-registered chat providers
 )
 
 client, err := llms.New("openai", llms.Config{Model: "gpt-4o-mini"})

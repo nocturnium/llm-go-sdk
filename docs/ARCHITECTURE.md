@@ -104,8 +104,8 @@ Providers can also be constructed by name through the package-level registry:
 `Timeout`, `AllowPrivateIPs`, `AllowHTTP`, `HTTPClient`) plus an `Extra map[string]string` for
 provider-specific construction params (e.g. RunPod `endpoint_id`, Z.AI `coding`).
 Each provider package registers its factory in `init()`; blank-importing
-`pkg/providers/all` wires up the 18 auto-registered chat providers at once
-(HuggingFace and Infinity are constructed directly).
+`pkg/providers/all` wires up the 19 auto-registered chat providers at once
+(HuggingFace, Infinity and ElevenLabs are constructed directly).
 
 ### Provider model
 
@@ -195,9 +195,10 @@ The public surface is exactly:
   each a drop-in `llms.LLM`.
 - **`pkg/observability`**, OpenTelemetry, Langfuse, and structured-logging
   middleware (`observability.NewOTelMiddleware`, `observability.NewLoggingMiddleware`, …).
-- **`pkg/providers/<name>`**, the 19 provider implementations (17 chat-registered;
-  HuggingFace and Infinity are direct-construct, HuggingFace does chat or
-  embeddings per its deployed model, Infinity is embeddings-only). Import the one
+- **`pkg/providers/<name>`**, the 22 provider implementations (19 chat-registered;
+  HuggingFace, Infinity and ElevenLabs are direct-construct, HuggingFace does chat
+  or embeddings per its deployed model, Infinity is embeddings-only, ElevenLabs is
+  media-only). Import the one
   you need, e.g. `github.com/nocturnium/llm-go-sdk/v6/pkg/providers/openai`.
 - **`pkg/openaicompat`**, the shared OpenAI-compatible base, public so external code
   can build custom providers on it (see [Extension points](#extension-points)).
@@ -265,7 +266,7 @@ llm-go-sdk/
 │   ├── observability/  # observability middleware (moved out of root in v3)
 │   │   ├── logging*.go / metrics*.go     # logging + metrics middleware
 │   │   └── otel*.go / langfuse*.go       # OTel + Langfuse tracing
-│   └── providers/<name>/   # provider implementations (21 providers)
+│   └── providers/<name>/   # provider implementations (22 providers)
 │
 ├── internal/           # not importable by external code
 │   ├── httpclient/     # shared HTTP client: retry, backoff, SSE, security

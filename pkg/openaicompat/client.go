@@ -72,6 +72,13 @@ type ClientConfig struct {
 	AllowPrivateIPs bool
 	// AllowHTTP allows plain-HTTP (non-HTTPS) requests.
 	AllowHTTP bool
+
+	// ErrorCodeMapper, when set, returns the code to report on every API error
+	// the client builds, given the HTTP status, the provider's own code and the
+	// message. A provider uses it to map vendor codes onto the canonical codes
+	// llms.APIError classifies, so chat, embeddings and native routes agree.
+	// Return code unchanged to keep it.
+	ErrorCodeMapper func(status int, code, message string) string
 }
 
 // NewClient creates a new OpenAI-compatible client
@@ -87,6 +94,9 @@ func NewClient(config ClientConfig) *Client {
 		httpclient.WithAllowPrivateIPs(config.AllowPrivateIPs),
 		httpclient.WithAllowHTTP(config.AllowHTTP),
 	)
+	if config.ErrorCodeMapper != nil {
+		hcOpts = append(hcOpts, httpclient.WithErrorCodeMapper(config.ErrorCodeMapper))
+	}
 	httpClient := httpclient.NewClient(hcOpts...)
 
 	return &Client{

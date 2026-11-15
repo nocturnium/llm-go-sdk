@@ -14,6 +14,7 @@ func TestAllRegistersChatProviders(t *testing.T) {
 		"anthropic",
 		"azure",
 		"cerebras",
+		"cloudflare",
 		"deepseek",
 		"featherless",
 		"fireworks",

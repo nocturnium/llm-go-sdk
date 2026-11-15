@@ -65,7 +65,12 @@ const (
 	EnvInfinityAPIKey    = "INFINITY_API_KEY"
 	EnvRunPodAPIKey      = "RUNPOD_API_KEY"
 	EnvZAIAPIKey         = "ZAI_API_KEY"
-	EnvLLMAPIKey         = "LLM_API_KEY"
+	// EnvCloudflareAPIToken is a Cloudflare API token with Workers AI permission.
+	EnvCloudflareAPIToken = "CLOUDFLARE_API_TOKEN"
+	// EnvCloudflareAccountID is the Cloudflare account that owns the Workers AI usage.
+	// It is an identifier, not a secret, and is read by the cloudflare provider.
+	EnvCloudflareAccountID = "CLOUDFLARE_ACCOUNT_ID"
+	EnvLLMAPIKey           = "LLM_API_KEY"
 	// EnvHuggingFaceAPIKey and EnvHuggingFaceToken are both consulted for the
 	// HuggingFace Inference Endpoints token (HF_TOKEN is HuggingFace's own
 	// conventional name).

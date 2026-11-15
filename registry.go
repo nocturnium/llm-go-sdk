@@ -19,6 +19,9 @@ import (
 //   - ollama, llamacpp: ExtraDisallowPrivateIPs / ExtraDisallowHTTP force the
 //     shared SSRF and HTTPS checks back on for a non-local deployment.
 //   - mistral: ExtraEmbeddingModel selects the default embedding model.
+//   - cloudflare: ExtraCloudflareAccountID sets the account ID when
+//     CLOUDFLARE_ACCOUNT_ID is not set; ExtraEmbeddingModel selects the default
+//     embedding model.
 type Config struct {
 	APIKey  string
 	Model   string
@@ -61,6 +64,9 @@ const (
 	// ExtraEmbeddingModel is the Config.Extra key for providers whose embedding
 	// model has no common Config field.
 	ExtraEmbeddingModel = "embedding_model"
+
+	// ExtraCloudflareAccountID is the Config.Extra key for the Cloudflare account ID.
+	ExtraCloudflareAccountID = "account_id"
 )
 
 // RequireExtra returns the non-blank Config.Extra value for key.

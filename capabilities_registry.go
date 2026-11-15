@@ -17,6 +17,8 @@ type ModelCapabilities struct {
 	Speech bool
 	// Transcription indicates support for Transcription operations.
 	Transcription bool
+	// Decision indicates support for Decider operations.
+	Decision bool
 
 	MaxContextTokens      int  // Maximum input context window
 	MaxOutputTokens       int  // Maximum output tokens
@@ -740,6 +742,9 @@ func (mc ModelCapabilities) ModelTypes() []ModelType {
 	if mc.Speech || mc.Transcription {
 		types = append(types, ModelTypeAudio)
 	}
+	if mc.Decision {
+		types = append(types, ModelTypeDecision)
+	}
 	return types
 }
 
@@ -751,6 +756,7 @@ func (mc ModelCapabilities) ToCapabilities() Capabilities {
 		VideoGeneration: mc.VideoGeneration,
 		Speech:          mc.Speech,
 		Transcription:   mc.Transcription,
+		Decision:        mc.Decision,
 
 		Streaming:        mc.SupportsStreaming,
 		Tools:            mc.SupportsTools,

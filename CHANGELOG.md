@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `llms.Decider`, an optional capability for decision models: typed questions (noul, choice, score, box, text, date, number, list, estimate) evaluated against a state, returning typed answers with probabilities instead of text. Detect it with `AsDecider`/`SupportsDecision`; `Capabilities.Decision`, `ModelCapabilities.Decision` and `ModelTypeDecision` report it. See `docs/guides/decisions.md`.
+- OpenRouter implements `Decider` on its Decisions API (`/api/alpha/decisions`), defaulting to `typesafe/jev-1.14` (`WithDecisionModel` to change it).
+- A first-party Cloudflare Workers AI provider (`pkg/providers/cloudflare`, `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`): chat and streaming through the OpenAI-compatible routes (default `@cf/openai/gpt-oss-120b`), embeddings (`@cf/baai/bge-m3`), decisions on Clef, Clef-flash, Clef-omni and Clairic, reranking (`bge-reranker-base`), FLUX.1 [schnell] images, Aura 2 speech, Whisper large-v3 turbo transcription, and model listing from the account catalog. Rate cards for these models come from Cloudflare's pricing page.
+- `openaicompat.ClientConfig.ErrorCodeMapper` lets a provider map its own error codes onto the canonical codes `llms.APIError` classifies.
+
+### Changed
+
+- OpenRouter `ListModels` now also returns decision models (it queries `output_modalities=text,decisions`), typed `ModelTypeDecision` and never `ModelTypeChat`. Callers that pick a chat model from the unfiltered list should pass `llms.WithModelTypes(llms.ModelTypeChat)` or check `IsChat()`.
+- HTTP 524 (a Cloudflare edge timeout, returned by OpenRouter and Workers AI) is now classified as a retryable `ErrTimeout`, and the shared HTTP client retries it when a retry policy is configured (retries are off by default). It was unclassified and not retried. As with 408 and 5xx, the origin may have processed a timed-out request, so a retried billable request can be billed twice.
+- Error responses in the Cloudflare v4 envelope (`{"errors":[{"code","message"}]}`) are now parsed, so their code and message reach `APIError`.
+
 ### Fixed
 
 - The Cerebras default model is now `gpt-oss-120b`. The old default, `llama3.1-70b`, is deprecated and no longer in Cerebras's model list, so default calls would fail. Pass `WithModel` to keep another model.
